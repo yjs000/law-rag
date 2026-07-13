@@ -1,0 +1,35 @@
+name: Sync legal corpus
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 18 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legal-corpus-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: [self-hosted, Windows, X64, law-rag-ingestion]
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: 0.11.28
+      - run: uv sync --frozen --python 3.14
+      - run: uv run alembic upgrade head
+      - run: uv run python -m scripts.sync
+        env:
+          LAW_OPEN_API_OC: ${{ secrets.LAW_OPEN_API_OC }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_MODE: ${{ vars.AI_MODE || 'auto' }}

@@ -9,6 +9,10 @@
 | [핵심 신념](core-beliefs.md) | 승인 전 초안 | 모든 구현 판단에 적용할 원칙 |
 | [RAG 파이프라인](rag-pipeline.md) | 승인 전 초안 | 수집, 색인, 검색, 답변 검증 |
 | [평가 전략](evaluation-strategy.md) | 승인 전 초안 | 검색과 답변의 오프라인/온라인 평가 |
+| [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
+| [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
+| [시간 효력 모델](temporal-validity.md) | 승인 | 공포일·시행일·기준일 계약 |
+| [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 
 ## 상태 정의

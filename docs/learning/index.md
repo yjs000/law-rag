@@ -1,0 +1,7 @@
+# 학습 노트
+
+각 마일스톤은 개념, 선택 이유, 데이터 흐름, 직접 실행 명령, 다음 학습 주제를 남긴다.
+
+- [01 런타임과 모노레포](01-runtime-and-monorepo.md)
+- [02 법령 수집과 시간 모델](02-ingestion-and-time.md)
+- [03 하이브리드 RAG와 인용](03-hybrid-rag-and-citations.md)

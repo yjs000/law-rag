@@ -1,30 +1,42 @@
 # law-rag
 
-대한민국 법령·판례 등 법률 자료를 검색하고, 근거와 출처를 명시한 답변을 생성하는 RAG(Retrieval-Augmented Generation) 프로젝트입니다.
+국가법령정보 공동활용 Open API 원문만 사용하는 분산에너지 법령 RAG 웹 워크벤치입니다. 질문 기준일의 유효 조문을 하이브리드 검색하고, 생성 답변의 주장과 체크리스트를 원문 인용 ID로 검증합니다. AI를 사용할 수 없으면 검색 전용 모드가 유지됩니다.
 
-현재 저장소는 구현 전 설계 단계입니다. 확정된 요구사항과 기술 선택은 문서와 실행 계획을 통해 버전 관리합니다.
+## 로컬 경로와 원격 저장소
+
+- 로컬: `C:\Users\Family\Documents\law-rag`
+- 원격: `https://github.com/yjs000/law-rag.git`
+
+## 시작
+
+```powershell
+pnpm.cmd install
+pnpm.cmd build
+
+cd apps/api
+uv sync --python 3.14
+uv run pytest
+uv run uvicorn app.main:app --reload
+```
+
+다른 터미널에서 `pnpm.cmd dev:web`을 실행한다. 환경변수는 `.env.example`, API는 `apps/api/.env.example`을 참고하되 실제 `.env`는 커밋하지 않는다.
+
+법령 수집은 `LAW_OPEN_API_OC`가 필요하다.
+
+```powershell
+cd apps/api
+uv run alembic upgrade head
+uv run python -m scripts.sync
+```
 
 ## 문서 시작점
 
-- [AGENTS.md](AGENTS.md): 사람과 코딩 에이전트가 저장소에서 작업하는 방법
-- [ARCHITECTURE.md](ARCHITECTURE.md): 시스템 경계, 구성 요소, 의존성 방향
-- [제품 명세 색인](docs/product-specs/index.md): 사용자 문제와 기능 요구사항
-- [설계 문서 색인](docs/design-docs/index.md): 기술 설계와 의사결정
-- [실행 계획 규칙](docs/PLANS.md): 큰 작업을 계획하고 기록하는 방법
+- [작업 계약](AGENTS.md)
+- [아키텍처](ARCHITECTURE.md)
+- [제품 명세](docs/product-specs/index.md)
+- [설계 문서](docs/design-docs/index.md)
+- [학습 노트](docs/learning/index.md)
+- [실행 계획](docs/exec-plans/active/0001-mvp-foundation.md)
+- [GitHub 이슈와 PR 운영](docs/GITHUB_WORKFLOW.md)
 
-## 목표
-
-1. 질문과 관련된 법률 자료를 재현 가능하게 검색한다.
-2. 모든 실질적 주장에 근거 문서와 정확한 위치를 연결한다.
-3. 검색 결과가 부족하거나 충돌하면 이를 숨기지 않는다.
-4. 개인정보와 민감한 법률 질문을 안전하게 다룬다.
-
-## 비목표
-
-- 변호사의 법률 자문을 대체하는 서비스
-- 출처 없는 법률 결론 생성
-- 원문 라이선스나 접근 통제를 우회한 데이터 수집
-
-## 예상 개발 흐름
-
-구체적인 런타임과 프레임워크는 첫 실행 계획에서 결정합니다. 구현 전에는 [초기 MVP 실행 계획](docs/exec-plans/active/0001-mvp-foundation.md)의 미결정을 먼저 닫아야 합니다.
+법률 자문을 대체하지 않으며 HTML 크롤링, PDF 기본 청킹, 다른 법률 사이트나 모델 기억을 근거로 사용하지 않습니다.

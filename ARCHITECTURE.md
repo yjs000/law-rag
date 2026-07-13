@@ -1,110 +1,100 @@
-# 아키텍처
+# 분산에너지 법령 RAG 아키텍처
 
-## 1. 목적과 현재 상태
-
-law-rag는 대한민국 법률 질문에 대해 관련 법령·판례를 검색하고 근거가 연결된 답변을 제공하는 시스템이다. 이 문서는 구현 기술보다 오래 유지되는 경계와 의존성 방향을 정의한다.
-
-상태: `초기 설계`  
+상태: `MVP 구현 중`
 최종 갱신: 2026-07-13
 
-## 2. 시스템 컨텍스트
+## 목적
+
+일반 사용자가 분산에너지 사업 규제를 질문하면 국가법령정보 공동활용 Open API 원문만으로 기준일에 유효한 의무·예외·인허가를 설명한다. 답변의 실질 주장은 조·항·호·목 인용으로 검증되며, 검증 실패나 AI 쿼터 소진 시 원문 검색만 제공한다.
+
+## 배포와 데이터 흐름
 
 ```text
-[법률 데이터 제공처] -> [수집/정규화] -> [원문 저장소]
-                                |              |
-                                v              v
-                           [색인 파이프라인] -> [검색 색인]
-                                                  |
-[웹/향후 API 사용자] -> [질의 API] -> [검색·재순위] -> [답변 조립/검증]
-                               |                       |
-                               +------ [정책/감사] <---+
+고정 출구 IP self-hosted Actions ── JSON 우선/XML 폴백 ──> 국가법령정보 Open API
+       │                    │
+       │                    └─ HTML·PDF·외부 법률 사이트 금지
+       v
+Supabase Storage(raw) ──> 정규화/해시/버전 ──> Supabase PostgreSQL
+                                                  │ PGroonga + pgvector
+                                                  v
+Browser ──> Next.js 16/Vercel ──> FastAPI/Vercel ──> RRF 검색
+                                      │                 │
+                                      └─ OpenAI ports <─┘
+                                         Responses + Structured Outputs
 ```
 
-외부 시스템은 법제처 국가법령정보센터, 법원 공개 판례 등 합법적으로 사용할 수 있는 제공처로 제한한다. 실제 데이터 제공처와 이용 조건은 도입 전에 별도 설계 검토로 확정한다.
+웹과 API는 같은 저장소에서 별도 Vercel 프로젝트로 배포한다. API는 Python 3.14 런타임, 웹은 Node 24/pnpm 11을 사용한다. DB 연결은 Supavisor transaction pooler를 전제로 prepared statement cache를 끈다.
 
-## 3. 핵심 도메인
+## 모듈 경계
 
-| 도메인 | 책임 | 주요 산출물 |
+의존성은 `domain -> application -> ports <- adapters -> delivery` 방향이다.
+
+- `domain`: 법령 버전, 조문, 공개 API 계약과 순수 검증 규칙
+- `application`: 수집, 검색, 답변 조립, 인용 검증 유스케이스
+- `ports`: 법령 저장소·임베딩·답변 모델·원문 저장소 계약
+- `adapters`: 국가법령 API, Supabase/PostgreSQL/Storage, OpenAI 구현
+- `delivery`: FastAPI 엔드포인트, GitHub Actions 수집, Next.js 워크벤치
+
+도메인 계층은 FastAPI, SQLAlchemy, OpenAI SDK를 import하지 않는다. 브라우저는 OpenAI와 Supabase service role에 직접 접근하지 않는다.
+
+## 수집 계약
+
+MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행정규칙은 `admrul&nw=1`을 사용한다.
+
+1. 같은 요청을 `type=JSON`으로 호출한다.
+2. JSON 문법뿐 아니라 법령명, ID/MST, 조문 구조를 도메인 객체까지 정규화한다.
+3. 지원되지 않는 형식 또는 스키마 검증 실패 때만 `type=XML`로 재호출한다.
+4. timeout/5xx는 같은 포맷으로 지수 백오프 재시도한 뒤 실패시킨다. 일시 장애를 XML 폴백으로 감추지 않는다.
+5. JSON/XML은 같은 `LegalDocumentRecord`가 되어야 하며 포맷, SHA-256, 파서 버전, 폴백 사유를 기록한다.
+6. 원문은 Supabase Storage에 보존한다. HTML과 PDF로 우회하지 않는다.
+
+## 저장과 검색
+
+- `legal_documents`: 안정적인 출처 ID와 정확 명칭
+- `document_versions`: MST, 공포/시행/종료일, 원문 포맷·해시·경로
+- `provisions`: 조·항·호·목 경로와 원문
+- `provision_embeddings`: 모델·차원·색인 버전별 512차원 벡터
+- `legal_relationships`: 상하위법·위임·인용 관계
+- `derived_obligations`: 행위자·조건·의무 유형과 검증 상태
+- `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태
+
+검색은 기준일 유효 버전을 먼저 제한하고 PGroonga 한국어 전문 검색과 pgvector 의미 검색을 병렬 수행한다. 두 순위를 RRF로 결합한다. 임베딩 API를 사용할 수 없으면 PGroonga 검색만 유지한다.
+
+## 답변 안전 게이트
+
+1. 질문의 기준일과 사업 단계를 검증한다.
+2. 하이브리드 검색으로 근거 후보를 구성한다.
+3. Responses API Structured Outputs로 답변·체크리스트·인용 ID를 받는다.
+4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다.
+5. 실패, quota 402/429, AI 비활성 시 검색 전용 응답으로 전환한다.
+
+현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다.
+
+## 공개 API
+
+- `POST /v1/questions`
+- `POST /v1/search`
+- `GET /v1/provisions/{id}`
+- `GET /v1/documents/{id}/changes`
+- `GET /v1/corpus/status`
+- `GET /health`
+
+연혁 본문 경로가 XML/JSON 계약 테스트를 통과하기 전 변경 API는 `supported=false`를 반환한다. HTML로 기능을 가장하지 않는다.
+
+## 운영 원칙
+
+- 키는 `.env`가 아닌 Vercel/GitHub Secrets에 둔다.
+- 질문 원문, IP, 원문 전문을 로그에 남기지 않는다.
+- AI 장애와 검색 장애를 분리한다.
+- 법제처에 등록한 고정 공인 IP의 GitHub self-hosted runner가 주 1회 및 수동 수집을 실행한다. 공용 runner와 Vercel에서 법령 API를 직접 호출하지 않는다.
+- 공개 서비스의 rate limit HMAC 저장과 평가셋 Recall@10 게이트는 배포 전 필수 잔여 작업이다.
+
+## 결정 기록
+
+| 날짜 | 결정 | 이유 |
 |---|---|---|
-| Sources | 출처 등록, 수집 이력, 라이선스/이용조건 | source, ingestion run |
-| Corpus | 원문 정규화, 버전, 문서 관계 | legal document, provision |
-| Indexing | 청킹, 임베딩, 키워드 색인 | chunk, embedding, index version |
-| Retrieval | 질의 분석, 하이브리드 검색, 필터, 재순위 | evidence candidate |
-| Answering | 근거 기반 답변, 인용, 불확실성 표현 | answer, citation |
-| Evaluation | 검색·답변 품질 측정과 회귀 차단 | dataset, evaluation run |
-| Governance | 개인정보, 보존, 감사, 접근 정책 | policy decision, audit event |
-
-## 4. 계층과 의존성
-
-각 도메인은 가능한 한 다음 방향만 따른다.
-
-```text
-contracts/types -> domain -> application -> ports <- adapters -> delivery
-```
-
-- `contracts/types`: 검증된 데이터 계약과 오류 코드
-- `domain`: 법률 문서, 인용, 검색 결과의 순수 규칙
-- `application`: 유스케이스 조정과 트랜잭션 경계
-- `ports`: 저장소, 검색 엔진, 모델, 데이터 제공처 인터페이스
-- `adapters`: DB, 벡터/키워드 검색, LLM, 외부 API 구현
-- `delivery`: HTTP API, 배치 작업, 웹 UI
-
-금지되는 의존성:
-
-- 도메인에서 프레임워크, DB, 벡터 저장소, 모델 SDK 직접 호출
-- 답변 생성기가 검색 없이 법률 사실 생성
-- UI가 데이터베이스나 모델 제공자에 직접 접근
-- 수집 데이터가 검증·정규화 없이 검색 색인으로 이동
-
-## 5. 핵심 데이터 흐름
-
-### 수집과 색인
-
-1. 데이터 제공처에서 원문과 메타데이터를 가져온다.
-2. 원본 해시와 수집 시각을 저장하고, 출처별 파서를 통해 정규화한다.
-3. 문서 유형별 의미 단위를 보존해 청크를 만든다.
-4. 키워드 색인과 벡터 색인을 동일한 `index_version`으로 생성한다.
-5. 샘플 검증과 품질 게이트를 통과한 버전만 검색에 승격한다.
-
-### 질의와 답변
-
-1. 질의 크기·문자·개인정보·정책을 경계에서 검사한다.
-2. 관할, 문서 유형, 기준일 등 검색 조건을 구조화한다.
-3. 키워드 및 벡터 후보를 합치고 재순위한다.
-4. 중복을 제거하고 답변 가능한 근거 묶음을 만든다.
-5. 모델은 제공된 근거만 사용해 답변과 인용을 구조화한다.
-6. 후처리 검증기가 모든 인용과 주장-근거 연결을 검사한다.
-7. 기준 미달이면 답변을 축소하거나 `근거 부족`으로 반환한다.
-
-## 6. 주요 품질 속성
-
-- 추적성: 답변 → 인용 → 청크 → 원문 버전 → 출처 수집 이력
-- 재현성: 질의, 필터, 검색/모델/프롬프트/색인 버전 기록
-- 최신성: 문서 유형별 갱신 SLA와 기준일 표시
-- 보안: 최소 수집, 암호화, 비밀 분리, 감사 가능성
-- 가용성: 검색과 생성 장애를 분리하고 근거 목록으로 성능 저하
-- 평가 가능성: 고정 평가셋과 운영 피드백을 분리하여 추세 측정
-
-## 7. 배포 단위 제안
-
-MVP는 운영 복잡도를 줄이기 위해 모듈형 모놀리스와 별도 비동기 워커를 기본 가정으로 한다.
-
-- API/Web 애플리케이션
-- 수집·색인 워커
-- 관계형 DB
-- 객체 저장소
-- 키워드/벡터 검색 저장소(단일 제품 또는 조합은 미결정)
-- 모델 게이트웨이
-
-트래픽, 장애 격리, 조직 경계가 실제로 요구할 때만 서비스를 분리한다.
-
-## 8. 미결정 사항
-
-- 초기 사용자: 일반인, 사내 법무, 법률 전문가 중 우선순위
-- 지원 관할과 문서 범위
-- 데이터 제공처별 API/저작권/재배포 조건
-- 구현 언어, 웹 프레임워크, 검색 저장소, 모델 제공자
-- 인증 방식, 테넌시, 배포 환경, 예산 상한
-- 답변 보존 기간과 사용자 사건자료 처리 여부
-
-이 항목은 [MVP 실행 계획](docs/exec-plans/active/0001-mvp-foundation.md)에서 결정한다.
+| 2026-07-13 | 국가법령정보 Open API만 법률 코퍼스로 사용 | 출처와 버전 추적을 단순하고 검증 가능하게 유지 |
+| 2026-07-13 | JSON 우선, 정규화 실패 시 XML 폴백 | 전송 효율과 개발 편의성을 얻되 XML 호환성을 보존 |
+| 2026-07-13 | Next.js/FastAPI/Supabase/Vercel/GitHub Actions | 무료 우선 공개 MVP와 학습 목적에 적합 |
+| 2026-07-13 | OpenAI를 포트 뒤에 배치하고 검색 전용 폴백 제공 | AI 비용·장애가 원문 조회를 중단하지 않게 함 |
+| 2026-07-13 | 법령 수집만 고정 출구 IP의 self-hosted runner 사용 | Open API가 등록 IP/도메인을 검증하며 공용 runner 출구 IP는 고정되지 않음 |
