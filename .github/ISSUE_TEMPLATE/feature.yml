@@ -1,0 +1,37 @@
+name: 기능 또는 개선
+description: 사용자 가치가 있는 기능·품질·문서 개선을 제안합니다.
+title: "[Feature] "
+labels:
+  - "type: feature"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 해결할 문제
+      description: 구현 방법보다 사용자 또는 운영자가 겪는 문제를 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 기대 결과
+      description: 완료 여부를 관찰할 수 있는 결과와 수용 기준을 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 범위
+      description: 포함할 내용과 명시적으로 제외할 내용을 적어 주세요.
+      placeholder: |
+        포함: ...
+        제외: ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 근거와 제약
+      description: 관련 제품 명세·설계 문서, 데이터 출처, 보안·신뢰성 제약을 연결해 주세요.
+    validations:
+      required: false

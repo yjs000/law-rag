@@ -1,0 +1,45 @@
+name: 버그
+description: 재현 가능한 오류나 회귀를 보고합니다.
+title: "[Bug] "
+labels:
+  - "type: bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        개인정보, 인증정보, 실제 사건 원문은 첨부하거나 로그에 붙이지 마세요.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 문제
+      description: 기대한 동작과 실제 동작을 함께 적어 주세요.
+      placeholder: |
+        기대: ...
+        실제: ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 방법
+      description: 최소 재현 단계와 입력 조건을 적어 주세요.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 증거와 환경
+      description: 비밀값과 원문 전문을 제거한 오류 메시지, 런타임, 브랜치 또는 커밋을 적어 주세요.
+      placeholder: "Node/Python 버전, 브라우저, 커밋, 정제된 로그"
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 영향
+      description: 검색, 인용, 데이터 추적성, 개인정보 또는 일반 UI 중 영향을 받는 영역을 적어 주세요.
+    validations:
+      required: true
