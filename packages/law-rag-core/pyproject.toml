@@ -1,0 +1,30 @@
+[project]
+name = "law-rag-core"
+version = "0.1.0"
+description = "API와 collector가 공유하는 법령 RAG 도메인 계약"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "defusedxml>=0.7,<1",
+  "pydantic>=2.11,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+

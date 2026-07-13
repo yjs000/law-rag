@@ -8,7 +8,7 @@
 
 ## 데이터 흐름
 
-브라우저 → Next.js → FastAPI이며 비밀키는 서버 계층에만 있다.
+브라우저 → Next.js → FastAPI이며 비밀키는 서버 계층에만 있다. Python 쪽은 루트 uv workspace 아래 `apps/api`, `apps/collector` 실행 프로젝트와 `packages/law-rag-core` 공용 패키지로 분리한다. 공용 패키지는 법령 DTO·파서·포트만 포함하고 FastAPI, OpenAI, 데이터베이스 SDK에는 의존하지 않는다.
 
 ## 직접 실행
 
@@ -18,8 +18,12 @@ pnpm.cmd build
 cd apps/api
 uv sync --python 3.14
 uv run uvicorn app.main:app --reload
+
+# 저장소 전체 검증
+cd ../..
+pnpm.cmd verify
 ```
 
 ## 다음 학습 주제
 
-환경변수 경계, 단일 클라우드 서버에서 Web/API/collector 프로세스를 분리하는 방법, Supavisor transaction pooler를 학습한다.
+환경변수 경계, uv workspace의 editable workspace dependency, 단일 클라우드 서버에서 Web/API/collector 프로세스를 분리하는 방법을 학습한다.
