@@ -1,53 +1,356 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  askQuestion,
+  deleteAccount,
+  deleteQuestionHistory,
+  downloadPdf,
+  getCorpusStatus,
+  getQuestionHistory,
+  getStoredUser,
+  listQuestionHistory,
+  logout,
+  mockGoogleLogin,
+} from "../lib/api-client";
+import {
+  downloadBlob,
+  downloadText,
+  type ExportFormat,
+  renderCsv,
+  renderMarkdown,
+} from "../lib/checklist-export";
+import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
+import type {
+  CorpusStatus,
+  MockUser,
+  QuestionHistoryItem,
+  QuestionResponse,
+} from "../lib/contracts";
 
-type Citation = { id:string; document_title:string; version_label:string; path:string; quote:string; source_url:string };
-type Response = { mode:"ai"|"search_only"; summary:string; scope:string; sections:{claim:string; explanation:string; citation_ids:string[]}[]; checklist:{label:string; status:string; citation_ids:string[]}[]; citations:Citation[]; limitations:string[] };
-type CorpusStatus = { last_successful_sync:string|null; ai_available:boolean; warnings:string[] };
+const STAGE_LABELS: Record<string, string> = {
+  planning: "기획",
+  permitting: "인허가",
+  construction: "시공",
+  operation: "운영",
+  change: "변경",
+};
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+function LoginPrompt({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
+  const loginButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    loginButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "Tab") {
+        const controls = dialog.current?.querySelectorAll<HTMLElement>("button, [href]");
+        if (!controls?.length) return;
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previous?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        aria-describedby="login-prompt-description"
+        aria-labelledby="login-prompt-title"
+        aria-modal="true"
+        className="modal"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+        ref={dialog}
+      >
+        <button aria-label="닫기" className="modal-close" onClick={onClose}>×</button>
+        <div className="eyebrow">질문 이력</div>
+        <h2 id="login-prompt-title">질문 기록을 남기려면 로그인하세요</h2>
+        <p id="login-prompt-description">
+          로그인 전 질문은 저장되지 않으며 로그인 후에도 소급 저장되지 않습니다. 팝업을 닫아도 계속 질문할 수 있습니다.
+        </p>
+        <button className="google-login" onClick={onLogin} ref={loginButton}>
+          <span aria-hidden="true">G</span> Google로 로그인
+        </button>
+      </section>
+    </div>
+  );
+}
 
 export default function Home() {
-  const [question,setQuestion]=useState("분산에너지 사업을 시작할 때 어떤 허가와 신고를 먼저 확인해야 하나요?");
-  const [stage,setStage]=useState("planning");
-  const [asOf,setAsOf]=useState(new Date().toISOString().slice(0,10));
-  const [result,setResult]=useState<Response|null>(null);
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-  const [corpus,setCorpus]=useState<CorpusStatus|null>(null);
+  const [question, setQuestion] = useState("분산에너지 사업을 시작할 때 어떤 허가와 신고를 먼저 확인해야 하나요?");
+  const [stage, setStage] = useState("planning");
+  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
+  const [result, setResult] = useState<QuestionResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [corpus, setCorpus] = useState<CorpusStatus | null>(null);
+  const [user, setUser] = useState<MockUser | null>(null);
+  const [history, setHistory] = useState<QuestionHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("md");
+  const [exporting, setExporting] = useState(false);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
 
-  useEffect(()=>{ fetch(`${API}/v1/corpus/status`).then(r=>r.ok?r.json():null).then(setCorpus).catch(()=>setCorpus(null)); },[]);
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    void Promise.resolve().then(() => setUser(storedUser));
+    getCorpusStatus().then(setCorpus).catch(() => setCorpus(null));
+  }, []);
 
-  async function submit(event:FormEvent){
-    event.preventDefault(); setLoading(true); setError("");
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
     try {
-      const response=await fetch(`${API}/v1/questions`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question,as_of_date:asOf,project_stage:stage})});
-      if(!response.ok) throw new Error("요청을 처리하지 못했습니다.");
-      setResult(await response.json());
-    } catch(e){ setError(e instanceof Error?e.message:"연결 오류"); } finally { setLoading(false); }
+      setHistory(await listQuestionHistory());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "질문 이력을 불러오지 못했습니다.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) void Promise.resolve().then(refreshHistory);
+  }, [refreshHistory, user]);
+
+  const closeLoginPrompt = useCallback(() => setShowLoginPrompt(false), []);
+
+  async function handleLogin() {
+    setError("");
+    try {
+      setUser(await mockGoogleLogin());
+      setShowLoginPrompt(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "목업 로그인에 실패했습니다.");
+    }
   }
 
-  return <main className="shell">
-    <header className="topbar"><div className="brand">ENERGY / LAW</div><div className="status">{corpus?.last_successful_sync?`원문 동기화 ${new Date(corpus.last_successful_sync).toLocaleDateString("ko-KR")}`:"국가법령정보센터 원문 전용"}</div></header>
-    <section className="hero"><div className="eyebrow">Distributed energy legal research</div><h1>규제의 경로를<br/>근거까지 추적합니다.</h1><p>일반적인 챗봇처럼 그럴듯한 결론을 만들지 않습니다. 질문 기준일의 법률·시행령·시행규칙·고시를 연결하고, 모든 핵심 주장 옆에 조문 원문을 붙입니다.</p></section>
-    <section className="workspace">
-      <form className="panel" onSubmit={submit}>
-        <div className="panel-head"><strong>사업 질문</strong><span className="mode">RAG WORKBENCH</span></div>
-        <div className="panel-body">
-          <label className="label" htmlFor="question">무엇을 확인할까요?</label>
-          <textarea id="question" value={question} onChange={e=>setQuestion(e.target.value)} maxLength={2000}/>
-          <div className="filters"><div><label className="label" htmlFor="stage">사업 단계</label><select id="stage" value={stage} onChange={e=>setStage(e.target.value)}><option value="planning">기획</option><option value="permitting">인허가</option><option value="construction">시공</option><option value="operation">운영</option><option value="change">변경</option></select></div><div><label className="label" htmlFor="date">법령 기준일</label><input id="date" type="date" value={asOf} onChange={e=>setAsOf(e.target.value)}/></div></div>
-          <button className="ask" disabled={loading}>{loading?"근거를 찾는 중…":"법령 근거 조사"}</button>
-          {error&&<div className="notice">{error}</div>}
-          <div className="notice">이 서비스는 법률 자문을 대체하지 않습니다. 현재 MVP 허용 목록만 검색합니다.</div>
+  async function handleLogout() {
+    await logout();
+    setUser(null);
+    setHistory([]);
+    setCurrentHistoryId(null);
+  }
+
+  async function handleDeleteAccount() {
+    if (!window.confirm("계정을 삭제하면 질문 이력과 관련 데이터가 모두 삭제됩니다. 계속할까요?")) return;
+    setError("");
+    try {
+      await deleteAccount();
+      setUser(null);
+      setHistory([]);
+      setCurrentHistoryId(null);
+      setResult(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "계정을 삭제하지 못했습니다.");
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const answer = await askQuestion({ question, as_of_date: asOf, project_stage: stage });
+      setResult(answer);
+      setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
+      if (user) {
+        await refreshHistory();
+      } else if (claimAnonymousLoginPrompt(sessionStorage)) {
+        setShowLoginPrompt(true);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "연결 오류");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openHistory(item: QuestionHistoryItem) {
+    setError("");
+    try {
+      const detail = item.response ? item : await getQuestionHistory(item.id);
+      setQuestion(detail.request.question);
+      setAsOf(detail.request.as_of_date);
+      setStage(detail.request.project_stage);
+      setResult(detail.response);
+      setCurrentHistoryId(detail.id);
+      document.querySelector<HTMLElement>("#answer-panel")?.focus();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "질문 이력을 열지 못했습니다.");
+    }
+  }
+
+  async function removeHistory(item: QuestionHistoryItem) {
+    if (!window.confirm("이 질문 기록을 삭제할까요?")) return;
+    try {
+      await deleteQuestionHistory(item.id);
+      if (currentHistoryId === item.id) {
+        setCurrentHistoryId(null);
+        setResult(null);
+      }
+      await refreshHistory();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "질문 기록을 삭제하지 못했습니다.");
+    }
+  }
+
+  function jumpToCitation(id: string) {
+    document.getElementById(`citation-${id}`)?.focus();
+    document.getElementById(`citation-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function exportChecklist() {
+    if (!result?.checklist.length) return;
+    const input = {
+      question,
+      asOfDate: asOf,
+      projectStage: STAGE_LABELS[stage] ?? stage,
+      checklist: result.checklist,
+    };
+    const filename = `법령-체크리스트-${asOf}`;
+    setExporting(true);
+    setError("");
+    try {
+      if (exportFormat === "md") {
+        downloadText(`${filename}.md`, renderMarkdown(input), "text/markdown;charset=utf-8");
+      } else if (exportFormat === "csv") {
+        downloadText(`${filename}.csv`, renderCsv(input), "text/csv;charset=utf-8");
+      } else {
+        if (!currentHistoryId) throw new Error("PDF 출력본은 로그인 후 저장된 질문에서 만들 수 있습니다.");
+        downloadBlob(`${filename}.pdf`, await downloadPdf(currentHistoryId));
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "체크리스트를 내보내지 못했습니다.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <main className="shell">
+      <header className="topbar">
+        <div className="brand">ENERGY / LAW</div>
+        <div className="top-actions">
+          <div className="status">
+            {corpus?.last_successful_sync
+              ? `원문 동기화 ${new Date(corpus.last_successful_sync).toLocaleDateString("ko-KR")}`
+              : "국가법령정보센터 원문 전용"}
+          </div>
+          {user ? (
+            <div className="user-menu"><span>{user.display_name}</span><button onClick={handleLogout}>로그아웃</button><button className="delete-account" onClick={handleDeleteAccount}>계정 삭제</button></div>
+          ) : (
+            <button className="header-login" onClick={handleLogin}>Google 목업 로그인</button>
+          )}
         </div>
-      </form>
-      <article className="panel">
-        <div className="panel-head"><strong>검증된 답변</strong>{result&&<span className="mode">{result.mode==="ai"?"AI + 인용 검증":"검색 전용"}</span>}</div>
-        {!result?<div className="result-empty">질문을 입력하면 답변과<br/>조문 원문을 함께 표시합니다.</div>:<div className="panel-body"><p className="summary">{result.summary}</p>{result.sections.map((section,i)=><section className="claim" key={i}><h3>{section.claim}{section.citation_ids.map(id=><button className="cite" key={id}>{id}</button>)}</h3><p>{section.explanation}</p></section>)}{result.checklist.length>0&&<section className="claim"><h3>사업 단계 체크리스트</h3>{result.checklist.map((item,i)=><p key={i}>□ {item.label} {item.citation_ids.map(id=><button className="cite" key={id}>{id}</button>)}</p>)}</section>}<section className="claim"><h3>범위와 한계</h3>{result.limitations.map((item,i)=><p key={i}>· {item}</p>)}</section></div>}
-      </article>
-      {result&&<aside className="panel" style={{gridColumn:"1 / -1"}}><div className="panel-head"><strong>원문 근거</strong><small>{result.scope}</small></div><div className="panel-body">{result.citations.map(c=><div className="source" key={c.id}><strong>{c.id} · {c.document_title} {c.path}</strong><small>{c.version_label}</small><blockquote>{c.quote}</blockquote></div>)}</div></aside>}
-    </section>
-  </main>;
+      </header>
+
+      <section className="hero">
+        <div className="eyebrow">Distributed energy legal research</div>
+        <h1>규제의 경로를<br />근거까지 추적합니다.</h1>
+        <p>질문 기준일의 법률·시행령·시행규칙·고시를 연결하고, 모든 핵심 주장 옆에 조문 원문을 붙입니다.</p>
+      </section>
+
+      <section className="workspace">
+        <div className="left-column">
+          <form className="panel" onSubmit={submit}>
+            <div className="panel-head"><strong>사업 질문</strong><span className="mode">RAG WORKBENCH</span></div>
+            <div className="panel-body">
+              <label className="label" htmlFor="question">무엇을 확인할까요?</label>
+              <textarea id="question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={2000} />
+              <div className="filters">
+                <div>
+                  <label className="label" htmlFor="stage">사업 단계</label>
+                  <select id="stage" value={stage} onChange={(event) => setStage(event.target.value)}>
+                    {Object.entries(STAGE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <div><label className="label" htmlFor="date">법령 기준일</label><input id="date" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></div>
+              </div>
+              <button className="ask" disabled={loading}>{loading ? "근거를 찾는 중…" : "법령 근거 조사"}</button>
+              {error && <div className="notice error" role="alert">{error}</div>}
+              <div className="notice legal-notice">이 서비스는 법률 자문을 대체하지 않습니다.</div>
+              {!user && <p className="privacy-note">익명 질문은 저장하지 않습니다.</p>}
+            </div>
+          </form>
+
+          {user && (
+            <section className="panel history-panel" aria-labelledby="history-title">
+              <div className="panel-head"><strong id="history-title">내 질문 이력</strong><span className="mode">1년 보존</span></div>
+              <div className="history-list">
+                {historyLoading && <p className="history-empty">불러오는 중…</p>}
+                {!historyLoading && history.length === 0 && <p className="history-empty">저장된 질문이 없습니다.</p>}
+                {history.map((item) => (
+                  <div className="history-item" key={item.id}>
+                    <button className="history-open" onClick={() => openHistory(item)}>
+                      <strong>{item.request.question}</strong>
+                      <small>{new Date(item.created_at).toLocaleDateString("ko-KR")} · {STAGE_LABELS[item.request.project_stage] ?? item.request.project_stage}</small>
+                    </button>
+                    <button aria-label={`질문 삭제: ${item.request.question}`} className="history-delete" onClick={() => removeHistory(item)}>삭제</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <article className="panel answer-panel" id="answer-panel" tabIndex={-1}>
+          <div className="panel-head"><strong>검증된 답변</strong>{result && <span className={`mode ${result.mode === "search_only" ? "search-mode" : ""}`}>{result.mode === "ai" ? "AI + 인용 검증" : "검색 전용"}</span>}</div>
+          {!result ? (
+            <div className="result-empty">질문을 입력하면 답변과<br />조문 원문을 함께 표시합니다.</div>
+          ) : (
+            <div className="panel-body">
+              {result.mode === "search_only" && <div className="search-only" role="status"><strong>검색 전용 결과</strong><span>AI 답변을 생성하지 않고 검색된 원문만 표시합니다.</span></div>}
+              <p className="summary">{result.summary}</p>
+              {result.sections.map((section, index) => (
+                <section className="claim" key={`${section.claim}-${index}`}>
+                  <h3>{section.claim}{section.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} className="cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</h3>
+                  <p>{section.explanation}</p>
+                </section>
+              ))}
+              {result.checklist.length > 0 && (
+                <section className="claim checklist">
+                  <div className="checklist-head"><h3>사업 단계 체크리스트</h3><div className="export-controls"><label className="sr-only" htmlFor="export-format">내보내기 형식</label><select id="export-format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button onClick={exportChecklist} disabled={exporting}>{exporting ? "생성 중…" : "내보내기"}</button></div></div>
+                  {result.checklist.map((item, index) => <p key={`${item.label}-${index}`}>□ {item.label} {item.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} className="cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</p>)}
+                </section>
+              )}
+              <section className="claim"><h3>범위와 한계</h3>{result.limitations.map((item, index) => <p key={`${item}-${index}`}>· {item}</p>)}</section>
+            </div>
+          )}
+        </article>
+
+        {result && (
+          <aside className="panel sources-panel">
+            <div className="panel-head"><strong>원문 근거</strong><small>{result.scope}</small></div>
+            <div className="panel-body">
+              {result.citations.map((citation) => (
+                <div className="source" id={`citation-${citation.id}`} key={citation.id} tabIndex={-1}>
+                  <strong>{citation.id} · {citation.document_title} {citation.path}</strong>
+                  <small>{citation.version_label}</small>
+                  <blockquote>{citation.quote}</blockquote>
+                  {citation.source_url && <a href={citation.source_url} rel="noreferrer" target="_blank">국가법령정보센터 원문 열기</a>}
+                </div>
+              ))}
+            </div>
+          </aside>
+        )}
+      </section>
+      {showLoginPrompt && <LoginPrompt onClose={closeLoginPrompt} onLogin={handleLogin} />}
+    </main>
+  );
 }

@@ -2,6 +2,13 @@ version = 1
 revision = 3
 requires-python = "==3.14.*"
 
+[manifest]
+members = [
+    "law-rag-api",
+    "law-rag-collector",
+    "law-rag-core",
+]
+
 [[package]]
 name = "alembic"
 version = "1.18.5"
@@ -277,18 +284,56 @@ wheels = [
 [[package]]
 name = "law-rag-api"
 version = "0.1.0"
-source = { virtual = "." }
+source = { virtual = "apps/api" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
-    { name = "defusedxml" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "law-rag-core" },
     { name = "openai" },
     { name = "pgvector" },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.16,<2" },
+    { name = "asyncpg", specifier = ">=0.30,<1" },
+    { name = "fastapi", specifier = ">=0.116,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "law-rag-core", editable = "packages/law-rag-core" },
+    { name = "openai", specifier = ">=1.99,<3" },
+    { name = "pgvector", specifier = ">=0.4,<1" },
+    { name = "pydantic-settings", specifier = ">=2.10,<3" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.41,<3" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.4,<9" },
+    { name = "pytest-asyncio", specifier = ">=1.1,<2" },
+    { name = "ruff", specifier = ">=0.12,<1" },
+]
+
+[[package]]
+name = "law-rag-collector"
+version = "0.1.0"
+source = { editable = "apps/collector" }
+dependencies = [
+    { name = "httpx" },
+    { name = "law-rag-core" },
+    { name = "pydantic-settings" },
 ]
 
 [package.dev-dependencies]
@@ -301,16 +346,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", specifier = ">=1.16,<2" },
-    { name = "asyncpg", specifier = ">=0.30,<1" },
-    { name = "defusedxml", specifier = ">=0.7,<1" },
-    { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "openai", specifier = ">=1.99,<3" },
-    { name = "pgvector", specifier = ">=0.4,<1" },
+    { name = "law-rag-core", editable = "packages/law-rag-core" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.41,<3" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.35,<1" },
 ]
 
 [package.metadata.requires-dev]
@@ -318,6 +356,33 @@ dev = [
     { name = "pytest", specifier = ">=8.4,<9" },
     { name = "pytest-asyncio", specifier = ">=1.1,<2" },
     { name = "respx", specifier = ">=0.22,<1" },
+    { name = "ruff", specifier = ">=0.12,<1" },
+]
+
+[[package]]
+name = "law-rag-core"
+version = "0.1.0"
+source = { editable = "packages/law-rag-core" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "defusedxml", specifier = ">=0.7,<1" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.4,<9" },
     { name = "ruff", specifier = ">=0.12,<1" },
 ]
 

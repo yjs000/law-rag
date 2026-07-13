@@ -50,7 +50,7 @@ def search_only_answer(
         citations=citations,
         limitations=[
             "국가법령정보 공동활용 Open API의 MVP 허용 목록만 검색했습니다.",
-            "검색 결과는 법률 자문을 대체하지 않습니다.",
+            "이 서비스는 법률 자문을 대체하지 않습니다.",
         ]
         + ([] if hits else ["질문을 뒷받침할 근거를 찾지 못했습니다."]),
         corpus_as_of=corpus_as_of,

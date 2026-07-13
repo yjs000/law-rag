@@ -13,21 +13,26 @@
 pnpm.cmd install
 pnpm.cmd build
 
-cd apps/api
-uv sync --python 3.14
-uv run pytest
-uv run uvicorn app.main:app --reload
+uv sync --all-packages --python 3.14
+uv run --project apps/api pytest
+uv run --project apps/api uvicorn app.main:app --reload
 ```
 
 다른 터미널에서 `pnpm.cmd dev:web`을 실행한다. 환경변수는 `.env.example`, API는 `apps/api/.env.example`을 참고하되 실제 `.env`는 커밋하지 않는다.
 
-법령 수집은 `LAW_OPEN_API_OC`가 필요하다.
+웹의 Google 로그인은 개발용 목업이며 실제 Google OAuth는 아직 연결하지 않는다. 익명 질문은 저장하지 않고, 목업 로그인 질문은 프로세스 메모리에만 저장한다. 이력은 1년 후 만료되고 계정 삭제 시 관련 목업 데이터가 함께 삭제된다.
+
+법령 수집은 API와 분리된 `apps/collector`가 담당하며 `LAW_OPEN_API_OC`가 필요하다. 현재는 `.collector-state/` 파일 목업 저장소를 사용한다.
 
 ```powershell
-cd apps/api
-uv run alembic upgrade head
-uv run python -m scripts.sync
+uv run --project apps/collector law-rag-collector sync-current
+uv run --project apps/collector law-rag-collector sync-history
+uv run --project apps/collector law-rag-collector status
 ```
+
+Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collector 운영 문서](apps/collector/README.md)를 참고한다. 설치나 테스트가 스케줄러를 자동 등록하지 않는다.
+
+전체 검증은 `pnpm.cmd verify`로 실행한다.
 
 ## 문서 시작점
 

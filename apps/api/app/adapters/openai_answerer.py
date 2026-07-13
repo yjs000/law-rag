@@ -13,6 +13,8 @@ class DraftAnswer(BaseModel):
 
 class OpenAIAnswerer:
     def __init__(self, *, api_key: str, model: str) -> None:
+        if model != "gpt-5.6-terra":
+            raise ValueError("답변 생성 모델은 gpt-5.6-terra만 허용됩니다")
         from openai import AsyncOpenAI
 
         self.client = AsyncOpenAI(api_key=api_key)

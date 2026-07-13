@@ -1,0 +1,39 @@
+[project]
+name = "law-rag-collector"
+version = "0.1.0"
+description = "국가법령정보 공동활용 Open API 전용 독립 수집기"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "httpx>=0.28,<1",
+  "law-rag-core",
+  "pydantic-settings>=2.10,<3",
+]
+
+[project.scripts]
+law-rag-collector = "law_rag_collector.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "respx>=0.22,<1",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+law-rag-core = { workspace = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

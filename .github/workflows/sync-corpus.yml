@@ -2,8 +2,14 @@ name: Sync legal corpus
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 18 * * 0"
+    inputs:
+      command:
+        description: Collector command
+        type: choice
+        options:
+          - sync-current
+          - sync-history
+        default: sync-history
 
 permissions:
   contents: read
@@ -17,19 +23,13 @@ jobs:
     runs-on: [self-hosted, Windows, X64, law-rag-ingestion]
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: apps/collector
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
         with:
           version: 0.11.28
       - run: uv sync --frozen --python 3.14
-      - run: uv run alembic upgrade head
-      - run: uv run python -m scripts.sync
+      - run: uv run law-rag-collector ${{ inputs.command }}
         env:
           LAW_OPEN_API_OC: ${{ secrets.LAW_OPEN_API_OC }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AI_MODE: ${{ vars.AI_MODE || 'auto' }}

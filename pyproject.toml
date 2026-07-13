@@ -1,3 +1,2 @@
 [tool.uv.workspace]
-members = ["apps/api", "packages/law-rag-core"]
-
+members = ["apps/api", "apps/collector", "packages/law-rag-core"]

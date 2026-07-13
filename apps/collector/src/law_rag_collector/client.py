@@ -6,15 +6,20 @@ from typing import Literal
 from urllib.parse import urlencode
 
 import httpx
+from law_rag_core.domain.catalog import SourceKind
+from law_rag_core.domain.entities import LegalDocumentRecord
+from law_rag_core.parsers import law_json, law_xml
 
-from app.domain.catalog import SourceKind
-from app.domain.entities import LegalDocumentRecord
-from app.parsers import law_json, law_xml
+from law_rag_collector.history import HistoryVersion
 
 WireFormat = Literal["JSON", "XML"]
 
 
 class LawOpenApiError(RuntimeError):
+    pass
+
+
+class RetryableLawOpenApiError(LawOpenApiError):
     pass
 
 
@@ -42,7 +47,7 @@ class ParsedResponse[T]:
 
 
 class LawOpenApiClient:
-    """JSON을 우선 사용하고 검증 실패 시에만 XML로 폴백한다."""
+    """JSON 도메인 검증 실패 때만 XML로 폴백하는 Open API 클라이언트."""
 
     def __init__(
         self,
@@ -68,15 +73,13 @@ class LawOpenApiClient:
         if self._owned_client:
             await self._client.aclose()
 
-    def url(self, operation: str, params: dict[str, str | int]) -> str:
-        safe = {**params, "OC": "[redacted]"}
-        return f"{self._base_url}/{operation}?{urlencode(safe)}"
+    def safe_url(self, operation: str, params: dict[str, str | int]) -> str:
+        return f"{self._base_url}/{operation}?{urlencode({**params, 'OC': '[redacted]'})}"
 
     async def _request_format(
         self, operation: str, wire_format: WireFormat, params: dict[str, str | int]
     ) -> RawResponse:
         request_params = {"OC": self._oc, "type": wire_format, **params}
-        last_error: Exception | None = None
         for attempt in range(self._retry_attempts):
             try:
                 response = await self._client.get(
@@ -89,7 +92,9 @@ class LawOpenApiClient:
                     },
                 )
                 if response.status_code >= 500:
-                    raise LawOpenApiError(f"Open API HTTP {response.status_code}: {operation}")
+                    raise RetryableLawOpenApiError(
+                        f"Open API HTTP {response.status_code}: {operation}"
+                    )
                 if response.status_code != 200:
                     raise LawOpenApiError(f"Open API HTTP {response.status_code}: {operation}")
                 body = response.text.lstrip("\ufeff\r\n\t ")
@@ -97,14 +102,17 @@ class LawOpenApiClient:
                     raise ValueError("JSON이 아닌 응답")
                 if wire_format == "XML" and not body.startswith("<"):
                     raise ValueError("XML이 아닌 응답")
-                return RawResponse(body, wire_format, self.url(operation, params))
-            except (httpx.TimeoutException, httpx.TransportError, LawOpenApiError) as exc:
-                last_error = exc
+                return RawResponse(body, wire_format, self.safe_url(operation, params))
+            except (
+                httpx.TimeoutException,
+                httpx.TransportError,
+                RetryableLawOpenApiError,
+            ) as exc:
                 if attempt + 1 < self._retry_attempts:
                     await asyncio.sleep(0.2 * (2**attempt))
                     continue
                 raise LawOpenApiError(f"Open API 요청 실패: {operation}") from exc
-        raise LawOpenApiError(f"Open API 요청 실패: {operation}") from last_error
+        raise AssertionError("retry loop exhausted")
 
     async def _parsed[T](
         self,
@@ -127,94 +135,87 @@ class LawOpenApiClient:
         except (ValueError, TypeError, KeyError) as exc:
             raise LawOpenApiError("JSON과 XML 응답을 모두 정규화할 수 없습니다") from exc
 
-    async def _search(
-        self, exact_title: str, source_kind: SourceKind, **params: str | int
+    async def search(
+        self, exact_title: str, source_kind: SourceKind, *, historical: bool = False
     ) -> ParsedResponse[list[SearchRecord]]:
         def records(items: list[dict[str, str]]) -> list[SearchRecord]:
             return [
                 SearchRecord(
-                    item["title"],
-                    item["id"],
-                    item["mst"],
-                    item["effective_date"],
-                    item["detail_link"],
+                    title=item["title"],
+                    source_id=item["id"],
+                    mst=item["mst"],
+                    effective_date=item["effective_date"],
+                    detail_link=item["detail_link"],
                 )
                 for item in items
             ]
 
-        parsed = await self._parsed(
+        target = "eflaw" if source_kind is SourceKind.LAW else "admrul"
+        params: dict[str, str | int] = {
+            "target": target,
+            "search": 1,
+            "query": exact_title,
+            "display": 100,
+            "nw": (
+                1
+                if source_kind is SourceKind.LAW and historical
+                else 3
+                if source_kind is SourceKind.LAW
+                else 2
+                if historical
+                else 1
+            ),
+        }
+        return await self._parsed(
             "lawSearch.do",
-            {"search": 1, "query": exact_title, "display": 100, **params},
+            params,
             lambda body: records(law_json.parse_search_results(body, source_kind)),
             lambda body: records(law_xml.parse_search_results(body, source_kind)),
         )
-        return parsed
 
-    async def search_current_law(self, exact_title: str) -> ParsedResponse[list[SearchRecord]]:
-        return await self._search(exact_title, SourceKind.LAW, target="eflaw", nw=3)
+    async def history(
+        self, *, exact_title: str, source_kind: SourceKind, source_id: str
+    ) -> ParsedResponse[list[HistoryVersion]]:
+        search = await self.search(exact_title, source_kind, historical=True)
+        versions = [
+            HistoryVersion(item.source_id, item.mst, _compact_date(item.effective_date))
+            for item in search.value
+            if item.title == exact_title
+        ]
+        if not versions:
+            raise LawOpenApiError("법령 연혁을 찾을 수 없습니다")
+        return ParsedResponse(versions, search.raw)
 
-    async def search_admin_rule(
-        self, exact_title: str, *, historical: bool = False
-    ) -> ParsedResponse[list[SearchRecord]]:
-        return await self._search(
-            exact_title, SourceKind.ADMIN_RULE, target="admrul", nw=2 if historical else 1
-        )
-
-    async def get_law_body(
-        self, *, source_id: str | None = None, mst: str | None = None, historical: bool = False
-    ) -> RawResponse:
-        if not source_id and not mst:
-            raise ValueError("source_id 또는 mst가 필요합니다")
-        params: dict[str, str | int] = {"target": "law" if historical else "eflaw"}
-        if source_id:
-            params["ID"] = source_id
-        elif mst:
-            params["MST"] = mst
-            if not historical:
-                params["efYd"] = date.today().strftime("%Y%m%d")
-        parsed = await self._parsed(
-            "lawService.do", params, law_json.load_json, lambda body: law_xml.ET.fromstring(body)
-        )
-        return parsed.raw
-
-    async def get_admin_rule_body(
-        self, *, serial_id: str | None = None, source_id: str | None = None
-    ) -> RawResponse:
-        if not serial_id and not source_id:
-            raise ValueError("serial_id 또는 source_id가 필요합니다")
-        params: dict[str, str | int] = {"target": "admrul"}
-        if serial_id:
-            params["ID"] = serial_id
-        if source_id:
-            params["LID"] = source_id
-        parsed = await self._parsed(
-            "lawService.do", params, law_json.load_json, lambda body: law_xml.ET.fromstring(body)
-        )
-        return parsed.raw
-
-    async def get_document(
+    async def document(
         self,
         *,
         expected_title: str,
         source_kind: SourceKind,
         source_id: str,
-        mst: str | None = None,
+        mst: str,
+        historical: bool,
+        effective_date: date | None = None,
     ) -> ParsedResponse[LegalDocumentRecord]:
         if source_kind is SourceKind.LAW:
-            params: dict[str, str | int] = {"target": "eflaw", "ID": source_id}
-        else:
-            params = {"target": "admrul"}
-            if mst:
-                params["ID"] = mst
+            if historical:
+                if effective_date is None:
+                    raise ValueError("과거 시행법령 본문 조회에는 시행일이 필요합니다")
+                params: dict[str, str | int] = {
+                    "target": "eflaw",
+                    "MST": mst,
+                    "efYd": effective_date.strftime("%Y%m%d"),
+                }
             else:
-                params["LID"] = source_id
+                params = {"target": "eflaw", "ID": source_id}
+        else:
+            params = {"target": "admrul", "ID": mst}
 
         def parse_json(body: str) -> LegalDocumentRecord:
             return law_json.parse_legal_document(
                 body,
                 expected_title=expected_title,
                 source_kind=source_kind,
-                source_url=self.url("lawService.do", params),
+                source_url=self.safe_url("lawService.do", params),
                 mst_override=mst,
             )
 
@@ -223,17 +224,16 @@ class LawOpenApiClient:
                 body,
                 expected_title=expected_title,
                 source_kind=source_kind,
-                source_url=self.url("lawService.do", params),
+                source_url=self.safe_url("lawService.do", params),
                 mst_override=mst,
             )
 
         parsed = await self._parsed("lawService.do", params, parse_json, parse_xml)
-        if parsed.raw.fallback_reason:
-            parsed.value.fallback_reason = parsed.raw.fallback_reason
+        parsed.value.fallback_reason = parsed.raw.fallback_reason
         return parsed
 
     async def article_history_msts(
-        self, source_id: str, article_code: str
+        self, *, source_id: str, article_code: str
     ) -> ParsedResponse[set[str]]:
         return await self._parsed(
             "lawService.do",
@@ -242,10 +242,19 @@ class LawOpenApiClient:
             law_xml.parse_history_msts,
         )
 
-    async def changed_laws(self, changed_on: date) -> ParsedResponse[set[str]]:
+    async def changed_law_msts(self, *, changed_on: date) -> ParsedResponse[set[str]]:
         return await self._parsed(
             "lawSearch.do",
             {"target": "lsHstInf", "regDt": changed_on.strftime("%Y%m%d"), "display": 100},
             law_json.parse_history_msts,
             law_xml.parse_history_msts,
         )
+
+
+def _compact_date(value: str):
+    from datetime import date
+
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) != 8:
+        return None
+    return date(int(digits[:4]), int(digits[4:6]), int(digits[6:]))

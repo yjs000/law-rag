@@ -19,6 +19,7 @@ coverage/
 
 # Local ingestion artifacts
 .data/
+.collector-state/
 
 # OS / editors
 .DS_Store

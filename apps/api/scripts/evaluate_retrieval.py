@@ -3,6 +3,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.openai_embedder import OpenAIEmbedder
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.settings import get_settings
@@ -10,19 +11,25 @@ from app.settings import get_settings
 
 async def main() -> None:
     settings = get_settings()
-    if not settings.database_url:
-        raise SystemExit("DATABASE_URL이 필요합니다")
     dataset = json.loads(
         (Path(__file__).parents[1] / "evaluation" / "retrieval-v1.json").read_text(encoding="utf-8")
     )
-    repository = PostgresLegalRepository(settings.database_url)
+    if settings.database_url:
+        repository = PostgresLegalRepository(settings.database_url)
+    else:
+        repository = MemoryLegalRepository()
+        loaded, errors = repository.load_collector_state(settings.collector_state_dir)
+        if not loaded:
+            raise SystemExit("평가할 collector 목업 코퍼스가 없습니다")
+        if errors:
+            raise SystemExit(f"collector 목업 코퍼스 {len(errors)}건을 읽지 못했습니다")
     embedder = (
         OpenAIEmbedder(
             api_key=settings.openai_api_key or "",
             model=settings.openai_embedding_model,
             dimensions=settings.embedding_dimensions,
         )
-        if settings.ai_enabled
+        if settings.ai_enabled and settings.database_url
         else None
     )
     passed = 0
