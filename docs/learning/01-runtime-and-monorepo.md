@@ -22,4 +22,4 @@ uv run uvicorn app.main:app --reload
 
 ## 다음 학습 주제
 
-환경변수 경계, Vercel 두 프로젝트 root 설정, Supavisor transaction pooler를 학습한다.
+환경변수 경계, 단일 클라우드 서버에서 Web/API/collector 프로세스를 분리하는 방법, Supavisor transaction pooler를 학습한다.
