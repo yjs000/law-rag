@@ -56,6 +56,13 @@
 4. 스키마 변경 시 마이그레이션 및 `docs/generated/db-schema.md` 갱신
 5. 사용자 동작 변경 시 제품 명세와 운영 문서 갱신
 
+## GitHub 인증 확인
+
+- sandbox 안에서 실행한 `gh auth status`가 token을 `invalid`로 보고해도 곧바로 실제 인증 실패로 단정하거나 사용자에게 재로그인을 요구하지 않는다. Windows Credential Manager/keyring 접근이 sandbox에 차단된 false negative일 수 있다.
+- 먼저 동일한 read-only 명령인 `gh auth status`를 승인된 권한 상승 실행으로 한 번 더 확인한다. 권한 상승 결과가 정상이라면 해당 결과를 기준으로 commit·push 작업을 계속한다.
+- 권한 상승 확인에서도 인증이 실패할 때만 사용자에게 `gh auth login -h github.com` 실행을 요청한다. device login 직후에도 같은 권한 상승 확인으로 새 인증이 보이는지 검증한다.
+- 인증 확인 과정에서 token 원문을 출력하거나 문서·로그·채팅에 기록하지 않는다.
+
 ## 금지 사항
 
 - `.env`, API 키, 접근 토큰, 개인 사건자료 커밋
