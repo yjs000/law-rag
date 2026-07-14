@@ -160,3 +160,95 @@ async def test_changed_law_history_contract() -> None:
     assert response.value == {"1000", "1001"}
     assert route.calls[0].request.url.params["target"] == "lsHstInf"
     assert route.calls[0].request.url.params["regDt"] == "20260713"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_deleted_records_prefers_json_and_uses_date_range() -> None:
+    route = respx.get("https://example.test/DRF/lawSearch.do").mock(
+        return_value=httpx.Response(
+            200, text=(FIXTURES / "deletions.json").read_text(encoding="utf-8")
+        )
+    )
+    async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
+        response = await client.deleted_records(
+            kind=1,
+            from_date=date(2026, 7, 7),
+            to_date=date(2026, 7, 14),
+        )
+
+    params = route.calls[0].request.url.params
+    assert params["target"] == "delHst"
+    assert params["knd"] == "1"
+    assert params["frmDt"] == "20260707"
+    assert params["toDt"] == "20260714"
+    assert params["type"] == "JSON"
+    assert [item.mst for item in response.value] == ["1001", "1002"]
+    assert "secret" not in response.raw.source_url
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_deleted_records_schema_failure_falls_back_to_xml() -> None:
+    route = respx.get("https://example.test/DRF/lawSearch.do").mock(
+        side_effect=[
+            httpx.Response(200, json={"unexpected": []}),
+            httpx.Response(
+                200, text=(FIXTURES / "deletions.xml").read_text(encoding="utf-8")
+            ),
+        ]
+    )
+    async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
+        response = await client.deleted_records(
+            kind=1,
+            from_date=date(2026, 7, 7),
+            to_date=date(2026, 7, 14),
+        )
+
+    assert response.raw.wire_format == "XML"
+    assert response.raw.fallback_reason == "JSON schema validation failed: ValueError"
+    assert [call.request.url.params["type"] for call in route.calls] == ["JSON", "XML"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_deleted_records_follows_pagination() -> None:
+    route = respx.get("https://example.test/DRF/lawSearch.do").mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "DataService": {
+                        "target": "delHst",
+                        "totalCnt": 101,
+                        "page": 1,
+                        "law": [
+                            {"일련번호": "1001", "구분명": "법령", "삭제일자": "20260710"}
+                        ],
+                    }
+                },
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "DataService": {
+                        "target": "delHst",
+                        "totalCnt": 101,
+                        "page": 2,
+                        "law": [
+                            {"일련번호": "1002", "구분명": "법령", "삭제일자": "20260711"}
+                        ],
+                    }
+                },
+            ),
+        ]
+    )
+    async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
+        response = await client.deleted_records(
+            kind=1,
+            from_date=date(2026, 7, 7),
+            to_date=date(2026, 7, 14),
+        )
+
+    assert [item.mst for item in response.value] == ["1001", "1002"]
+    assert [call.request.url.params["page"] for call in route.calls] == ["1", "2"]

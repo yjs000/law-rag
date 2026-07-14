@@ -6,6 +6,7 @@ export type Citation = {
   path: string;
   quote: string;
   source_url: string;
+  source_kind?: "law" | "decree" | "rule" | "administrative_rule";
 };
 
 export type ChecklistItem = {
@@ -30,6 +31,12 @@ export type CorpusStatus = {
   last_successful_sync: string | null;
   ai_available: boolean;
   warnings: string[];
+  items?: {
+    title: string;
+    source_kind: string;
+    state: "ready" | "missing" | "failed";
+    latest_effective_date?: string | null;
+  }[];
 };
 
 export type MockUser = {

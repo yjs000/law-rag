@@ -14,7 +14,10 @@ from law_rag_collector.settings import get_settings
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="국가법령정보 Open API 독립 수집기")
     parser.add_argument("command", choices=("sync-current", "sync-history", "status"))
-    parser.add_argument("--title", help="허용 목록의 한 문서만 수집·검증")
+    parser.add_argument(
+        "--title",
+        help="본문은 허용 목록의 한 문서만 수집한다. 삭제 목록은 전체 manifest에 적용한다.",
+    )
     return parser
 
 
@@ -48,14 +51,22 @@ async def _run(command: str, title: str | None = None) -> int:
             else await service.sync_history(entries)
         )
     failed = [item for item in results if item.state == "failed"]
+    reported = (
+        results
+        if len(results) <= 20
+        else [
+            item
+            for item in results
+            if item.state == "failed" or item.title.startswith("삭제 데이터")
+        ]
+    )
     payload = {
         "command": command,
         "ready": sum(item.state == "ready" for item in results),
         "unchanged": sum(item.state == "unchanged" for item in results),
         "failed": len(failed),
         "results": [
-            item.model_dump(mode="json")
-            for item in (results if len(results) <= 20 else failed)
+            item.model_dump(mode="json") for item in reported
         ],
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))

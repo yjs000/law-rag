@@ -52,6 +52,10 @@ class MemoryLegalRepository:
         errors: list[str] = []
         for metadata in state.get("documents", {}).values():
             try:
+                if metadata.get("lifecycle_state") in {"abolished", "deleted"}:
+                    continue
+                if metadata.get("source_record_state") == "deleted":
+                    continue
                 source_kind = next(
                     entry.source_kind
                     for entry in MVP_CATALOG

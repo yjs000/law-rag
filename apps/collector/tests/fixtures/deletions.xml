@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DataService>
+  <target>delHst</target><totalCnt>2</totalCnt><page>1</page>
+  <law id="1"><일련번호>1001</일련번호><구분명>법령</구분명><삭제일자>20260710</삭제일자></law>
+  <law id="2"><일련번호>1002</일련번호><구분명>법령</구분명><삭제일자>20260711</삭제일자></law>
+</DataService>

@@ -10,6 +10,12 @@ from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord
 from law_rag_core.parsers import law_json, law_xml
 
+from law_rag_collector.deletions import (
+    DeletionKind,
+    DeletionRecord,
+    parse_deletions_json,
+    parse_deletions_xml,
+)
 from law_rag_collector.history import HistoryVersion
 
 WireFormat = Literal["JSON", "XML"]
@@ -249,6 +255,49 @@ class LawOpenApiClient:
             law_json.parse_history_msts,
             law_xml.parse_history_msts,
         )
+
+    async def deleted_records(
+        self,
+        *,
+        kind: DeletionKind,
+        from_date: date,
+        to_date: date,
+    ) -> ParsedResponse[list[DeletionRecord]]:
+        if from_date > to_date:
+            raise ValueError("삭제 목록 시작일은 종료일보다 늦을 수 없습니다")
+        page_number = 1
+        records: list[DeletionRecord] = []
+        aggregate_raw: RawResponse | None = None
+        while True:
+            params: dict[str, str | int] = {
+                "target": "delHst",
+                "knd": kind,
+                "frmDt": from_date.strftime("%Y%m%d"),
+                "toDt": to_date.strftime("%Y%m%d"),
+                "display": 100,
+                "page": page_number,
+            }
+            response = await self._parsed(
+                "lawSearch.do",
+                params,
+                lambda body, page=page_number: parse_deletions_json(
+                    body, kind, expected_page=page
+                ),
+                lambda body, page=page_number: parse_deletions_xml(
+                    body, kind, expected_page=page
+                ),
+            )
+            records.extend(response.value.records)
+            if aggregate_raw is None or response.raw.fallback_reason:
+                aggregate_raw = response.raw
+            if page_number * 100 >= response.value.total_count:
+                break
+            page_number += 1
+        assert aggregate_raw is not None
+        unique = {
+            (record.source_kind, record.mst, record.deleted_on): record for record in records
+        }
+        return ParsedResponse(list(unique.values()), aggregate_raw)
 
 
 def _compact_date(value: str):

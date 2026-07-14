@@ -13,6 +13,7 @@
 | [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
 | [시간 효력 모델](temporal-validity.md) | 승인 | 공포일·시행일·기준일 계약 |
 | [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
+| [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 
 ## 상태 정의

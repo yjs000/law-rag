@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
   askQuestion,
   deleteAccount,
@@ -21,6 +22,14 @@ import {
   renderMarkdown,
 } from "../lib/checklist-export";
 import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
+import { dialogKeyAction, focusInitial, restoreFocus } from "../lib/dialog-focus";
+import {
+  citationDocumentKind,
+  DOCUMENT_KIND_LABELS,
+  filterCitations,
+  type DocumentKind,
+} from "../lib/source-filter";
+import { SafeText } from "./safe-text";
 import type {
   CorpusStatus,
   MockUser,
@@ -36,35 +45,42 @@ const STAGE_LABELS: Record<string, string> = {
   change: "변경",
 };
 
-function LoginPrompt({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
+function LoginPrompt({
+  onClose,
+  onLogin,
+  returnFocus,
+}: {
+  onClose: () => void;
+  onLogin: () => void;
+  returnFocus: RefObject<HTMLButtonElement | null>;
+}) {
   const loginButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    loginButton.current?.focus();
+    const focusReturnTarget = returnFocus.current ?? previous;
+    focusInitial(loginButton.current);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      if (event.key === "Tab") {
-        const controls = dialog.current?.querySelectorAll<HTMLElement>("button, [href]");
-        if (!controls?.length) return;
-        const first = controls[0];
-        const last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
+      const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button, [href]") ?? [])];
+      const action = dialogKeyAction({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        activeIndex: controls.indexOf(document.activeElement as HTMLElement),
+        controlCount: controls.length,
+      });
+      if (action.type === "close") onClose();
+      if (action.type === "focus") {
+        event.preventDefault();
+        controls[action.index]?.focus();
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      previous?.focus();
+      restoreFocus(focusReturnTarget);
     };
-  }, [onClose]);
+  }, [onClose, returnFocus]);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -106,6 +122,11 @@ export default function Home() {
   const [exportFormat, setExportFormat] = useState<ExportFormat>("md");
   const [exporting, setExporting] = useState(false);
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
+  const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(
+    () => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]),
+  );
+  const askButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -168,6 +189,7 @@ export default function Home() {
     try {
       const answer = await askQuestion({ question, as_of_date: asOf, project_stage: stage });
       setResult(answer);
+      setSelectedCitationId(null);
       setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
       if (user) {
         await refreshHistory();
@@ -189,6 +211,7 @@ export default function Home() {
       setAsOf(detail.request.as_of_date);
       setStage(detail.request.project_stage);
       setResult(detail.response);
+      setSelectedCitationId(null);
       setCurrentHistoryId(detail.id);
       document.querySelector<HTMLElement>("#answer-panel")?.focus();
     } catch (cause) {
@@ -211,9 +234,30 @@ export default function Home() {
   }
 
   function jumpToCitation(id: string) {
-    document.getElementById(`citation-${id}`)?.focus();
-    document.getElementById(`citation-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const citation = result?.citations.find((item) => item.id === id);
+    if (citation) {
+      const kind = citationDocumentKind(citation);
+      setDocumentKinds((current) => new Set([...current, kind]));
+    }
+    setSelectedCitationId(id);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(`citation-${id}`);
+      target?.focus();
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
+
+  function toggleDocumentKind(kind: DocumentKind) {
+    setDocumentKinds((current) => {
+      const next = new Set(current);
+      if (next.has(kind) && next.size > 1) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  }
+
+  const visibleCitations = result ? filterCitations(result.citations, documentKinds) : [];
+  const corpusProblems = corpus?.items?.filter((item) => item.state !== "ready") ?? [];
 
   async function exportChecklist() {
     if (!result?.checklist.length) return;
@@ -282,9 +326,23 @@ export default function Home() {
                 </div>
                 <div><label className="label" htmlFor="date">법령 기준일</label><input id="date" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></div>
               </div>
-              <button className="ask" disabled={loading}>{loading ? "근거를 찾는 중…" : "법령 근거 조사"}</button>
+              <fieldset className="document-filters">
+                <legend>원문 문서 종류</legend>
+                {Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => {
+                  const kind = value as DocumentKind;
+                  return <label key={kind}><input type="checkbox" checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} />{label}</label>;
+                })}
+              </fieldset>
+              <button className="ask" disabled={loading} ref={askButton}>{loading ? "근거를 찾는 중…" : "법령 근거 조사"}</button>
               {error && <div className="notice error" role="alert">{error}</div>}
               <div className="notice legal-notice">이 서비스는 법률 자문을 대체하지 않습니다.</div>
+              {(corpus?.warnings.length || corpusProblems.length) ? (
+                <div className="corpus-warning" role="status">
+                  <strong>코퍼스 최신성 확인 필요</strong>
+                  {corpus?.warnings.map((warning) => <span key={warning}><SafeText>{warning}</SafeText></span>)}
+                  {corpusProblems.map((item) => <span key={item.title}>{item.title}: {item.state === "missing" ? "누락" : "수집 실패"}</span>)}
+                </div>
+              ) : corpus ? <p className="corpus-ok">허용 목록 코퍼스가 준비되었습니다.</p> : <p className="corpus-warning compact">코퍼스 상태를 확인하지 못했습니다.</p>}
               {!user && <p className="privacy-note">익명 질문은 저장하지 않습니다.</p>}
             </div>
           </form>
@@ -298,7 +356,7 @@ export default function Home() {
                 {history.map((item) => (
                   <div className="history-item" key={item.id}>
                     <button className="history-open" onClick={() => openHistory(item)}>
-                      <strong>{item.request.question}</strong>
+                      <strong><SafeText>{item.request.question}</SafeText></strong>
                       <small>{new Date(item.created_at).toLocaleDateString("ko-KR")} · {STAGE_LABELS[item.request.project_stage] ?? item.request.project_stage}</small>
                     </button>
                     <button aria-label={`질문 삭제: ${item.request.question}`} className="history-delete" onClick={() => removeHistory(item)}>삭제</button>
@@ -309,48 +367,50 @@ export default function Home() {
           )}
         </div>
 
-        <article className="panel answer-panel" id="answer-panel" tabIndex={-1}>
-          <div className="panel-head"><strong>검증된 답변</strong>{result && <span className={`mode ${result.mode === "search_only" ? "search-mode" : ""}`}>{result.mode === "ai" ? "AI + 인용 검증" : "검색 전용"}</span>}</div>
-          {!result ? (
-            <div className="result-empty">질문을 입력하면 답변과<br />조문 원문을 함께 표시합니다.</div>
-          ) : (
-            <div className="panel-body">
-              {result.mode === "search_only" && <div className="search-only" role="status"><strong>검색 전용 결과</strong><span>AI 답변을 생성하지 않고 검색된 원문만 표시합니다.</span></div>}
-              <p className="summary">{result.summary}</p>
-              {result.sections.map((section, index) => (
-                <section className="claim" key={`${section.claim}-${index}`}>
-                  <h3>{section.claim}{section.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} className="cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</h3>
-                  <p>{section.explanation}</p>
-                </section>
-              ))}
-              {result.checklist.length > 0 && (
-                <section className="claim checklist">
-                  <div className="checklist-head"><h3>사업 단계 체크리스트</h3><div className="export-controls"><label className="sr-only" htmlFor="export-format">내보내기 형식</label><select id="export-format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button onClick={exportChecklist} disabled={exporting}>{exporting ? "생성 중…" : "내보내기"}</button></div></div>
-                  {result.checklist.map((item, index) => <p key={`${item.label}-${index}`}>□ {item.label} {item.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} className="cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</p>)}
-                </section>
-              )}
-              <section className="claim"><h3>범위와 한계</h3>{result.limitations.map((item, index) => <p key={`${item}-${index}`}>· {item}</p>)}</section>
-            </div>
-          )}
-        </article>
+        <div className="research-grid">
+          <article className="panel answer-panel" id="answer-panel" tabIndex={-1}>
+            <div className="panel-head"><strong>검증된 답변</strong>{result && <span className={`mode ${result.mode === "search_only" ? "search-mode" : ""}`}>{result.mode === "ai" ? "AI + 인용 검증" : "검색 전용"}</span>}</div>
+            {!result ? (
+              <div className="result-empty">질문을 입력하면 답변과<br />조문 원문을 함께 표시합니다.</div>
+            ) : (
+              <div className="panel-body">
+                <p className="answer-date">법령 기준일 {asOf}</p>
+                {result.mode === "search_only" && <div className="search-only" role="status"><strong>검색 전용 결과</strong><span>AI 답변을 생성하지 않고 검색된 원문만 표시합니다.</span></div>}
+                <p className="summary"><SafeText>{result.summary}</SafeText></p>
+                {result.sections.map((section, index) => (
+                  <section className="claim" key={`${section.claim}-${index}`}>
+                    <h3><SafeText>{section.claim}</SafeText>{section.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} aria-pressed={selectedCitationId === id} className={`cite ${selectedCitationId === id ? "selected" : ""}`} key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</h3>
+                    <p><SafeText>{section.explanation}</SafeText></p>
+                  </section>
+                ))}
+                {result.checklist.length > 0 && (
+                  <section className="claim checklist">
+                    <div className="checklist-head"><h3>사업 단계 체크리스트</h3><div className="export-controls"><label className="sr-only" htmlFor="export-format">내보내기 형식</label><select id="export-format" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button onClick={exportChecklist} disabled={exporting}>{exporting ? "생성 중…" : "내보내기"}</button></div></div>
+                    {result.checklist.map((item, index) => <p key={`${item.label}-${index}`}>□ <SafeText>{item.label}</SafeText> {item.citation_ids.map((id) => <button aria-label={`${id} 원문으로 이동`} aria-pressed={selectedCitationId === id} className={`cite ${selectedCitationId === id ? "selected" : ""}`} key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</p>)}
+                  </section>
+                )}
+                <section className="claim"><h3>범위와 한계</h3>{result.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}</section>
+              </div>
+            )}
+          </article>
 
-        {result && (
           <aside className="panel sources-panel">
-            <div className="panel-head"><strong>원문 근거</strong><small>{result.scope}</small></div>
-            <div className="panel-body">
-              {result.citations.map((citation) => (
-                <div className="source" id={`citation-${citation.id}`} key={citation.id} tabIndex={-1}>
-                  <strong>{citation.id} · {citation.document_title} {citation.path}</strong>
-                  <small>{citation.version_label}</small>
-                  <blockquote>{citation.quote}</blockquote>
+            <div className="panel-head"><strong>원문 근거</strong><small>{result ? `${visibleCitations.length}/${result.citations.length}건 · ${result.scope}` : `기준일 ${asOf}`}</small></div>
+            {!result ? <div className="result-empty">선택한 인용의 조문 원문이<br />이 패널에 표시됩니다.</div> : <div className="panel-body">
+              {visibleCitations.length === 0 && <p className="history-empty">선택한 문서 종류에 해당하는 원문이 없습니다.</p>}
+              {visibleCitations.map((citation) => (
+                <div className={`source ${selectedCitationId === citation.id ? "selected" : ""}`} id={`citation-${citation.id}`} key={citation.id} onClick={() => setSelectedCitationId(citation.id)} onFocus={() => setSelectedCitationId(citation.id)} tabIndex={0}>
+                  <strong>{citation.id} · <SafeText>{citation.document_title}</SafeText> <SafeText>{citation.path}</SafeText></strong>
+                  <small><SafeText>{citation.version_label}</SafeText></small>
+                  <blockquote><SafeText>{citation.quote}</SafeText></blockquote>
                   {citation.source_url && <a href={citation.source_url} rel="noreferrer" target="_blank">국가법령정보센터 원문 열기</a>}
                 </div>
               ))}
-            </div>
+            </div>}
           </aside>
-        )}
+        </div>
       </section>
-      {showLoginPrompt && <LoginPrompt onClose={closeLoginPrompt} onLogin={handleLogin} />}
+      {showLoginPrompt && <LoginPrompt onClose={closeLoginPrompt} onLogin={handleLogin} returnFocus={askButton} />}
     </main>
   );
 }

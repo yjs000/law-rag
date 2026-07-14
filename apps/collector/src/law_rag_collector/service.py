@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 
 from law_rag_core.domain.catalog import MVP_CATALOG, CatalogEntry
@@ -10,9 +10,16 @@ from law_rag_collector.repository import MockCorpusRepository
 
 
 class CollectorService:
-    def __init__(self, client: LawOpenApiClient, repository: MockCorpusRepository) -> None:
+    def __init__(
+        self,
+        client: LawOpenApiClient,
+        repository: MockCorpusRepository,
+        *,
+        today: Callable[[], date] = date.today,
+    ) -> None:
         self.client = client
         self.repository = repository
+        self._today = today
 
     async def sync_current(
         self, entries: Sequence[CatalogEntry] = MVP_CATALOG
@@ -34,9 +41,72 @@ class CollectorService:
                 results.append(
                     IngestionResult(title=entry.title, state="failed", detail=_safe_detail(exc))
                 )
+        results.extend(await self._sync_deletions())
         self.repository.record_run(
             "sync-history", [item.model_dump(mode="json") for item in results]
         )
+        return results
+
+    async def _sync_deletions(self) -> list[IngestionResult]:
+        today = self._today()
+        from_date, to_date = self.repository.deletion_window(today=today)
+        responses = {}
+        failures = {}
+        for kind, label in ((1, "법령"), (2, "행정규칙")):
+            try:
+                responses[kind] = await self.client.deleted_records(
+                    kind=kind, from_date=from_date, to_date=to_date
+                )
+            except Exception as exc:
+                failures[kind] = IngestionResult(
+                    title=f"삭제 데이터({label})",
+                    state="failed",
+                    detail=_safe_detail(exc),
+                )
+        if failures:
+            return [
+                failures.get(kind)
+                or IngestionResult(
+                    title=f"삭제 데이터({label})",
+                    state="failed",
+                    detail="다른 삭제 목록 조회 실패로 활성 manifest를 보존했습니다",
+                )
+                for kind, label in ((1, "법령"), (2, "행정규칙"))
+            ]
+
+        records = [record for response in responses.values() for record in response.value]
+        try:
+            stats = self.repository.apply_source_deletions(records, completed_on=to_date)
+        except Exception as exc:
+            detail = _safe_detail(exc)
+            return [
+                IngestionResult(
+                    title=f"삭제 데이터({label})",
+                    state="failed",
+                    detail=f"활성 manifest 원자 반영 실패: {detail}",
+                )
+                for label in ("법령", "행정규칙")
+            ]
+        results: list[IngestionResult] = []
+        for kind, label, source_kind in (
+            (1, "법령", "law"),
+            (2, "행정규칙", "administrative_rule"),
+        ):
+            response = responses[kind]
+            changed = stats[source_kind]["changed"]
+            matched = stats[source_kind]["matched"]
+            results.append(
+                IngestionResult(
+                    title=f"삭제 데이터({label})",
+                    state="ready" if changed else "unchanged",
+                    wire_format=response.raw.wire_format,
+                    fallback_reason=response.raw.fallback_reason,
+                    detail=(
+                        f"조회 {len(response.value)}건, "
+                        f"허용 코퍼스 {matched}건, 변경 {changed}건"
+                    ),
+                )
+            )
         return results
 
     async def _safe_current(self, entry: CatalogEntry) -> IngestionResult:

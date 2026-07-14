@@ -21,7 +21,9 @@ jobs:
           node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:web
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm build
 
   python:
@@ -37,3 +39,4 @@ jobs:
       - run: uv run --project apps/api pytest apps/api/tests packages/law-rag-core/tests
       - run: uv run --project apps/collector ruff check apps/collector/src apps/collector/tests
       - run: uv run --project apps/collector pytest apps/collector/tests
+      - run: uv run --project apps/api python scripts/check_docs.py

@@ -41,7 +41,8 @@ Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collecto
 - [제품 명세](docs/product-specs/index.md)
 - [설계 문서](docs/design-docs/index.md)
 - [학습 노트](docs/learning/index.md)
-- [실행 계획](docs/exec-plans/active/0001-mvp-foundation.md)
+- [현재 실행 계획](docs/exec-plans/active/0002-production-connections.md)
+- [완료된 MVP 계획](docs/exec-plans/completed/0001-mvp-foundation.md)
 - [GitHub 이슈와 PR 운영](docs/GITHUB_WORKFLOW.md)
 
 법률 자문을 대체하지 않으며 HTML 크롤링, PDF 기본 청킹, 다른 법률 사이트나 모델 기억을 근거로 사용하지 않습니다.

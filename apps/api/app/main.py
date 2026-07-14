@@ -29,6 +29,8 @@ from app.domain.schemas import (
     SearchHit,
     SearchRequest,
 )
+from app.domain.source_urls import is_allowed_source_url
+from app.observability import emit_question_outcome
 from app.settings import get_settings
 
 settings = get_settings()
@@ -105,7 +107,7 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     )
     if payload.source_kinds:
         hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
-    return hits
+    return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
 
 
 @app.post("/v1/questions", response_model=QuestionResponse)
@@ -124,6 +126,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         except Exception:
             query_embedding = None
     hits = await repository.search(payload.question, payload.as_of_date, 10, query_embedding)
+    hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
     corpus_as_of = await repository.last_sync()
     fallback = search_only_answer(payload, hits, corpus_as_of)
     if not _ai_available() or not hits:
@@ -138,7 +141,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
             global ai_quota_exhausted
             ai_quota_exhausted = True
         return _save_if_authenticated(user, payload, fallback)
-    if not validate_draft(draft, len(hits)):
+    if not validate_draft(draft, hits):
         return _save_if_authenticated(user, payload, fallback)
     citations = [
         Citation(
@@ -256,7 +259,7 @@ async def export_checklist(
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
     hit = await repository.provision(provision_id, as_of_date or date.today())
-    if hit is None:
+    if hit is None or not is_allowed_source_url(hit.source_url):
         raise HTTPException(status_code=404, detail="조문을 찾을 수 없습니다")
     return ProvisionResponse(hit=hit)
 
@@ -318,6 +321,7 @@ def _ai_available() -> bool:
 def _save_if_authenticated(
     user: MockUser | None, payload: QuestionRequest, response: QuestionResponse
 ) -> QuestionResponse:
+    emit_question_outcome(response.request_id, response.mode)
     if user is not None:
         identity_repository.save_question(user.id, payload, response)
     return response

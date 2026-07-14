@@ -8,3 +8,4 @@
 - [04 웹 인증·질문 이력·내보내기](04-web-auth-history-and-exports.md)
 - [05 독립 수집기와 시간 효력](05-independent-collector.md)
 - [06 목업 인증·이력과 검색 전용 폴백](06-mock-api-history-and-fallback.md)
+- [07 검색·원문 계보·답변 검증 기초](07-retrieval-storage-and-grounding-foundations.md)
