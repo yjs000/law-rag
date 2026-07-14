@@ -52,4 +52,19 @@
 - 백업·삭제·사고 대응 훈련
 - 데이터 제공처 이용조건 및 개인정보 법률 검토
 
+## 관리형 플랫폼과 애플리케이션 책임
+
+Vercel의 HTTPS·DDoS 완화·배포 격리와 Supabase의 관리형 DB·Auth·Storage는 애플리케이션 보안을 대신하지 않는다. 운영 전환 시 이 저장소와 운영자는 다음을 직접 구현하고 검증한다.
+
+- JWT 서명·issuer·audience·만료 검증, 자원 단위 인가와 Supabase RLS
+- 환경별 최소 권한 비밀, service role 브라우저 노출 금지와 키 회전
+- Next.js `/api/*` 동일 출처 프록시, 정확한 Production CORS와 wildcard 금지
+- 영속 rate limit, OpenAI 비용 상한, WAF 규칙과 우회 회귀 테스트
+- 입력 검증, XSS·SSRF·프롬프트 주입·허위 인용 차단
+- 질문·이메일·IP·원문 전문을 제외한 구조화 로그와 중앙 관측
+- migration 검토, 백업·복구, Storage·질문 이력·계정 삭제 전파
+- 의존성 고정·스캔, Preview와 Production 비밀·데이터 분리
+- 장애 시 키 폐기, 쓰기 경로 차단, AI 검색 전용 전환과 롤백
+
 구체적인 신뢰 경계와 공격 경로는 [위협 모델](design-docs/threat-model.md)을 따른다.
+Vercel 배포 전 세부 완료 조건과 사용자 선행 입력은 [Vercel·Supabase 운영 전환 설계](design-docs/vercel-supabase-deployment.md)를 따른다.

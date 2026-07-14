@@ -38,11 +38,13 @@
 ## 운영 준비 체크
 
 - 의존 서비스별 시간 제한, 제한된 재시도, 회로 차단
-- 단일 클라우드 서버 안에서 Web/API/collector를 독립 프로세스로 실행하고 collector 실패가 질문 API를 재시작하지 않도록 격리
-- 단일 서버 장애가 전체 서비스 장애가 되는 위험을 모니터링하고 후속 다중화 필요성을 운영 지표로 판단
+- Web과 stateless FastAPI를 Vercel의 독립 배포 단위로 운영하고 영속 상태는 Supabase에 둔다.
+- 고정 공인 IP Windows PC의 collector는 Open API와 Supabase로만 outbound 연결하며 실패가 질문 API를 재시작하지 않도록 격리한다.
+- Vercel, Supabase, OpenAI, collector 장애를 분리해 측정하고 각 의존성의 폴백·재시도·복구 절차를 검증한다.
 - 멱등적인 수집·색인 작업과 체크포인트
 - 색인 버전 원자적 승격 및 이전 버전 롤백
 - DB 백업/복구 시험과 목표 RPO/RTO
 - 장애 등급, 연락, 사용자 공지, 사후 분석 템플릿
 
 현재 목업 환경의 실행·장애 대응·롤백 절차는 [운영 런북](references/operations-runbook.md)에 기록한다.
+향후 운영 배포 조건은 [Vercel·Supabase 운영 전환 설계](design-docs/vercel-supabase-deployment.md)에 기록한다.

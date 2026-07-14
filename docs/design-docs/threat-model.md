@@ -7,14 +7,14 @@
 
 ```text
 Browser(untrusted input)
-  -> Next.js(untrusted display data)
-  -> FastAPI(validation/authz/rate limit)
+  -> Vercel Next.js(same-origin /api proxy, untrusted display data)
+  -> Vercel FastAPI(validation/authz/rate limit)
        -> OpenAI(minimum retrieved evidence only)
-       -> mock/Supabase(user ownership boundary)
+       -> Supabase(user ownership/RLS and persistence boundary)
 
 Law Open API(untrusted external document)
-  -> collector(exact allowlist/schema/hash)
-  -> active corpus(trusted only after validation)
+  -> fixed-public-IP Windows collector(exact allowlist/schema/hash)
+  -> Supabase active corpus(trusted only after validation)
 ```
 
 국가법령정보 Open API도 외부 입력이다. 공식 출처라는 이유로 구조와 문자열을 신뢰하지 않으며 정확 명칭, 문서 종류, MST, 시행일, 조문 구조와 원문 해시를 검증한 뒤에만 활성 코퍼스로 승격한다.
@@ -31,6 +31,8 @@ Law Open API(untrusted external document)
 | 비밀·개인정보 로그 노출 | 질문·OC·API 키·원문 전문 기록 | OC URL 치환, 질문/원문 없는 관측 이벤트 계약 | 중앙 로그 마스킹 검사 |
 | 오래된·부분 코퍼스 | 수집 일부 실패가 최신으로 표시 | 문서별 원자 승격, 마지막 성공·누락 경고 | 최신성 알림과 운영 호출 |
 | 과도한 사용 | 익명 API 반복 호출 | 일별 HMAC rate limit | 분산 저장소와 프록시 제한 |
+| Preview 경계 혼동 | 가변 Preview origin이 운영 API·데이터에 접근 | 목업은 외부 연결 없음 | Next.js 동일 출처 프록시, 환경별 자원·비밀 분리, wildcard CORS 금지 |
+| collector 공개 노출 | 집 PC의 포트포워딩·터널을 통한 침입 | collector는 CLI 전용 | 인바운드 포트 금지, Open API·Supabase outbound만 허용 |
 
 ## 개인정보 흐름
 
@@ -50,3 +52,4 @@ Law Open API(untrusted external document)
 ## 결정 기록
 
 - 2026-07-14: 목업 단계의 위협 경계를 코드 회귀 테스트와 연결한다. 실제 외부 서비스 통제는 자격정보가 준비된 후 별도 출시 게이트로 유지한다.
+- 2026-07-14: 운영 경계를 Vercel Web/FastAPI, Supabase 영속 계층, 고정 공인 IP Windows collector로 분리한다. Preview는 Next.js 동일 출처 프록시를 사용하고 collector는 공개 인바운드를 받지 않는다.
