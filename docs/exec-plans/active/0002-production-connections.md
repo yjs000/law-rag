@@ -37,6 +37,8 @@
 - [ ] 실제 Terra 구조화 출력에 결정적 인용 게이트 적용
 - [ ] quota·권한·모델 오류의 검색 전용 폴백과 영속 상태 검증
 - [ ] 사람 검토 평가셋으로 의미 게이트 오탐·미탐 측정
+- [ ] 실제 서비스 연결과 반복 가능한 검색 평가 실행 기반을 완성한 뒤, 같은 한국어 법령 조문·질의·모델·검색 설정으로 256·512·1024차원을 비교하고 Recall@10·nDCG@10·HNSW exact-search 대비 recall·지연시간·DB/인덱스 크기·인용 게이트 통과율을 기록하여 512차원을 유지하거나 migration·재임베딩 계획과 함께 변경
+  - 참고: [검색·원문 계보·답변 검증 기초](../../learning/07-retrieval-storage-and-grounding-foundations.md), [OpenAI embedding model 발표](https://openai.com/index/new-embedding-models-and-api-updates/), [Matryoshka Representation Learning](https://arxiv.org/abs/2205.13147), [pgvector 공식 문서](https://github.com/pgvector/pgvector)
 
 ### 단일 서버 배포와 운영
 

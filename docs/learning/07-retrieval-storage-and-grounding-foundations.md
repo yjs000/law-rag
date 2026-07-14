@@ -285,8 +285,48 @@ flowchart TD
 
 ## 다음 검증 과제
 
-- 256·512·1024차원 한국어 법령 검색 평가를 실행해 512 선택을 확정하거나 변경
+- 실제 서비스 연결과 반복 가능한 검색 평가 실행 기반을 완성한 후 256·512·1024차원 한국어 법령 검색 비교 실험을 실행해 512 선택을 확정하거나 변경한다. 실행 항목과 종료 조건은 [실행 계획 0002](../exec-plans/active/0002-production-connections.md)의 `OpenAI와 품질 게이트` TODO로 추적한다.
 - HNSW exact search 대비 Recall@10과 기준일 필터 후 결과 수 측정
 - `parser_schema_version`을 명시적 상수와 재처리 정책으로 승격
 - Supabase Storage 업로드와 DB 반영 사이 부분 실패 복구 절차 설계
 - 인용 게이트의 오탐·미탐을 사람 평가로 측정
+
+## 추후 재학습 목록
+
+아래 주제는 구현 완료로 학습을 끝낸 것으로 간주하지 않는다. 실제 Supabase·OpenAI 연결과 고정 평가 실행 기반이 준비되면 코드, 실데이터와 실패 사례를 함께 다시 학습하고 관련 `docs/learning/` 브리핑을 갱신한다.
+
+### HNSW와 법률 검색 평가
+
+- 다시 학습할 내용: exact nearest-neighbor search와 approximate search의 차이, multilayer graph 탐색, `m`·`ef_construction`·`ef_search`의 속도/recall/memory 교환관계, 기준일 필터가 approximate index 결과 수에 미치는 영향
+- 실습: 같은 query와 embedding으로 exact 결과를 기준선으로 만들고 HNSW Recall@10·지연시간·필터 후 반환 건수를 측정한다.
+- 참고 자료: [HNSW 원 논문](https://doi.org/10.1109/TPAMI.2018.2889473), [pgvector HNSW 공식 문서](https://github.com/pgvector/pgvector#hnsw), [현재 migration의 HNSW/RRF 구현](../../apps/api/migrations/versions/0001_legal_corpus.py)
+
+### Cosine similarity와 distance
+
+- 다시 학습할 내용: dot product, vector norm, cosine similarity와 `1 - similarity`인 cosine distance, normalized embedding에서 cosine·dot product·Euclidean ranking의 관계
+- 실습: 작은 2D/3D vector와 실제 OpenAI embedding으로 similarity/distance를 직접 계산하고 pgvector `<=>` 정렬 결과와 비교한다.
+- 참고 자료: [SciPy cosine distance 정의](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.cosine.html), [pgvector distance 연산자](https://github.com/pgvector/pgvector#distances), [OpenAI Vector embeddings 한국어 번역](../generated/translations/openai-vector-embeddings-ko.md)
+
+### RRF
+
+- 다시 학습할 내용: keyword score와 vector distance를 직접 합치기 어려운 이유, reciprocal rank 계산, `k`가 상위/하위 순위 차이에 주는 영향, 한 검색기에만 나타난 문서 처리
+- 실습: PGroonga와 pgvector 순위표를 따로 출력한 뒤 `k=20·60·100`으로 RRF 결과와 Recall@10·nDCG@10을 비교한다.
+- 참고 자료: [RRF 원 논문](https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf), [RRF 초록 한국어 번역](../generated/translations/research-and-standards-excerpts-ko.md), [현재 `hybrid_search` SQL](../../apps/api/migrations/versions/0001_legal_corpus.py)
+
+### 인용 ID와 인용 검증
+
+- 다시 학습할 내용: 요청 단위 표시 ID `C1..Cn`과 영구 `provision_id`의 차이, claim-to-evidence 연결, Structured Outputs가 보장하는 구조와 보장하지 않는 사실성, 결정적 검증 게이트의 오탐·미탐
+- 실습: 존재하지 않는 ID, 관련 없는 원문, 원문에 없는 규범어·숫자를 포함한 초안을 만들고 각 실패가 검색 전용 응답으로 전환되는지 확인한다.
+- 참고 자료: [RAG 답변 계약](../design-docs/rag-pipeline.md), [현재 인용 검증 구현](../../apps/api/app/adapters/openai_answerer.py), [인용 게이트 테스트](../../apps/api/tests/test_grounding_gate.py), [OpenAI Structured Outputs 안내](https://openai.com/index/introducing-structured-outputs-in-the-api/)
+
+### 검색 전용 답변
+
+- 다시 학습할 내용: 검색 성공과 생성 성공을 분리하는 이유, AI 비활성·quota·권한·모델 오류·인용 검증 실패별 fallback, 원문 후보를 보여주는 것과 법률 결론을 생성하는 것의 경계
+- 실습: AI off, 402/429, 빈 검색 결과, 인용 게이트 실패를 각각 재현하고 `mode=search_only`, limitation, citation 원문과 관측 event를 확인한다.
+- 참고 자료: [제품 명세의 실패 흐름](../product-specs/grounded-legal-qa.md), [질문 처리와 fallback 구현](../../apps/api/app/main.py), [검색 전용 응답 조립](../../apps/api/app/application/answering.py), [AI fallback 테스트](../../apps/api/tests/test_ai_fallback.py)
+
+### DB migration과 Alembic
+
+- 다시 학습할 내용: revision chain, `upgrade`/`downgrade`, `alembic_version`, schema migration과 data migration, autogenerate의 DB reflection ↔ SQLAlchemy `MetaData` 비교와 사람이 검토해야 하는 limitation, PostgreSQL extension·function·custom index의 수동 migration
+- 실습: 임시 DB에 `0001`을 적용하고 새 column/index revision을 추가한 뒤 upgrade·rollback·재적용을 검증한다. 현재 프로젝트가 `target_metadata` 없이 수동 SQL migration을 사용하는 이유도 다시 검토한다.
+- 참고 자료: [Alembic Autogenerate 공식 문서](https://alembic.sqlalchemy.org/en/latest/autogenerate.html), [Alembic 한국어 번역](../generated/translations/alembic-autogenerate-ko.md), [현재 Alembic 환경](../../apps/api/migrations/env.py), [현재 최초 migration](../../apps/api/migrations/versions/0001_legal_corpus.py)
