@@ -89,6 +89,18 @@ async def test_explicit_law_title_limits_ambiguous_path_query() -> None:
 
 
 @pytest.mark.asyncio
+async def test_common_law_abbreviation_limits_path_query_to_formal_title() -> None:
+    repository = MemoryLegalRepository()
+    formal_title = "신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법"
+    await repository.upsert_document(_document(formal_title, "1"))
+    await repository.upsert_document(_document("전기사업법", "2"))
+
+    hits = await repository.search("신재생에너지법 제1조", date(2026, 7, 15), 10)
+
+    assert [hit.document_title for hit in hits] == [formal_title]
+
+
+@pytest.mark.asyncio
 async def test_path_query_excludes_version_before_its_effective_date() -> None:
     repository = MemoryLegalRepository()
     await repository.upsert_document(_document("전기사업법", "1", "20270101"))

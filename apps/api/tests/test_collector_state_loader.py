@@ -38,6 +38,8 @@ async def test_collector_manifest_loads_and_applies_effective_range(tmp_path: Pa
     assert loaded == 1
     assert errors == []
     assert await repository.search("전기사업", date(2026, 7, 13), 10)
+    assert await repository.search("전기사업", date(2026, 12, 30), 10)
+    assert await repository.search("전기사업", date(2026, 12, 31), 10) == []
     assert await repository.search("전기사업", date(2027, 1, 1), 10) == []
 
 

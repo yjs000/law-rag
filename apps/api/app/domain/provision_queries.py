@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from app.domain.catalog import MVP_CATALOG
@@ -10,6 +11,13 @@ _PROVISION_REFERENCE = re.compile(
     r"(?:\s*(?:제\s*)?(?P<item>\d+)\s*호)?"
     r"(?:\s*(?P<subitem>[가-힣])\s*목)?"
 )
+
+_DOCUMENT_TITLE_ALIASES = {
+    "분산에너지법": "분산에너지 활성화 특별법",
+    "신재생에너지법": "신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법",
+    "nfpc607": "전기저장시설의 화재안전성능기준(NFPC 607)",
+    "nftc607": "전기저장시설의 화재안전기술기준(NFTC 607)",
+}
 
 
 @dataclass(frozen=True)
@@ -59,8 +67,25 @@ def parse_provision_reference(query: str) -> ProvisionReference | None:
         path += f"/호{int(item)}"
     if subitem := match.group("subitem"):
         path += f"/목{subitem}"
-    titles = [entry.title for entry in MVP_CATALOG if entry.title in query]
+    compact_query = _compact(query)
+    title_candidates = [
+        (_compact(entry.title), entry.title)
+        for entry in MVP_CATALOG
+        if _compact(entry.title) in compact_query
+    ]
+    title_candidates.extend(
+        (alias, title)
+        for alias, title in _DOCUMENT_TITLE_ALIASES.items()
+        if alias in compact_query
+    )
     return ProvisionReference(
         path=path,
-        document_title=max(titles, key=len) if titles else None,
+        document_title=max(title_candidates, key=lambda candidate: len(candidate[0]))[1]
+        if title_candidates
+        else None,
     )
+
+
+def _compact(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"[^0-9a-z가-힣]", "", normalized)

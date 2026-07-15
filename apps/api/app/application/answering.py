@@ -42,18 +42,28 @@ def search_only_answer(
         )
         for index, hit in enumerate(hits, 1)
     ]
+    evidence_count = len(citations)
+    evidence_summary = (
+        f"질문과 관련된 기준일 유효 근거 {evidence_count}건을 찾았습니다. "
+        "법적 결론을 생성하지 않고, 아래 원문과 확인 항목을 제공합니다."
+    )
     return QuestionResponse(
         request_id=str(uuid4()),
         mode="search_only",
         summary=(
-            "AI 답변을 사용하지 않고 기준일에 유효한 원문 검색 결과를 제공합니다."
+            evidence_summary
             if hits
             else f"검색 결과가 없습니다. {no_results_message}"
         ),
-        scope=f"기준일 {request.as_of_date.isoformat()} · 사업 단계 {request.project_stage.value}",
+        scope=(
+            f"기준일 {request.as_of_date.isoformat()} · 사업 단계 "
+            f"{request.project_stage.value} · 검색된 근거 {evidence_count}건"
+        ),
         sections=[
             AnswerSection(
-                claim=f"관련 근거 후보: {hit.document_title} {hit.path}",
+                claim=" · ".join(
+                    part for part in (hit.document_title, hit.path, hit.heading) if part
+                ),
                 explanation=hit.content,
                 citation_ids=[f"C{index}"],
             )
@@ -61,10 +71,14 @@ def search_only_answer(
         ],
         checklist=[
             ChecklistItem(
-                label="표시된 원문과 적용 조건을 확인하세요.",
+                label=(
+                    f"{hit.document_title} {hit.path} 원문에서 적용 주체, 요건과 예외를 "
+                    "현재 사업 사실관계에 대조하세요."
+                ),
                 status="check",
-                citation_ids=[citation.id for citation in citations],
+                citation_ids=[f"C{index}"],
             )
+            for index, hit in enumerate(hits, 1)
         ]
         if citations
         else [],
