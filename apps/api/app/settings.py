@@ -2,13 +2,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Process environment still has the highest priority. The second file
+        # overrides the first one, matching Vercel/Next.js local conventions.
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -16,12 +18,10 @@ class Settings(BaseSettings):
 
     app_name: str = "분산에너지 법령 RAG"
     environment: Literal["development", "test", "production"] = "development"
-    law_open_api_oc: str | None = None
-    law_open_api_base_url: str = "https://www.law.go.kr/DRF"
     collector_state_dir: Path = Path(".collector-state")
     database_url: str | None = None
     supabase_url: str | None = None
-    supabase_service_role_key: str | None = None
+    supabase_secret_key: str | None = None
     supabase_raw_bucket: str = "law-raw"
     openai_api_key: str | None = None
     ai_mode: Literal["auto", "off"] = "auto"
@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     search_daily_limit: int = 30
     web_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 30
+
+    @field_validator("supabase_secret_key", mode="before")
+    @classmethod
+    def validate_supabase_secret_key(cls, value: object) -> object:
+        if value in {None, ""}:
+            return None
+        if not isinstance(value, str) or not value.startswith("sb_secret_"):
+            raise ValueError("SUPABASE_SECRET_KEY must start with sb_secret_")
+        return value
 
     @property
     def ai_enabled(self) -> bool:
