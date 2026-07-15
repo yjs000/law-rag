@@ -43,7 +43,7 @@ def test_all_generation_failures_fall_back_without_another_model(monkeypatch, er
         effective_from=date(2025, 1, 1),
         effective_to=None,
         path="제1조",
-        content="분산에너지 관련 근거",
+        content="에너지 관련 근거",
         source_url="https://www.law.go.kr",
         score=1,
     )
@@ -74,7 +74,7 @@ def test_all_generation_failures_fall_back_without_another_model(monkeypatch, er
     response = TestClient(main_module.app).post(
         "/v1/questions",
         json={
-            "question": "분산에너지 근거를 알려주세요",
+            "question": "에너지 근거를 알려주세요",
             "as_of_date": "2026-07-13",
             "project_stage": "planning",
         },

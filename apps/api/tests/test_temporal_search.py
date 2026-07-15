@@ -15,7 +15,7 @@ async def test_future_version_is_excluded_before_effective_date() -> None:
           "법령ID": "1", "법령일련번호": "2",
           "법령명_한글": "전기사업법", "시행일자": "20270101"
         },
-        "조문": {"조문단위": [{"조문번호": "1", "조문내용": "분산에너지 사업"}]}
+        "조문": {"조문단위": [{"조문번호": "1", "조문내용": "에너지 사업"}]}
       }
     }"""
     document = parse_legal_document(
@@ -26,8 +26,8 @@ async def test_future_version_is_excluded_before_effective_date() -> None:
     )
     repository = MemoryLegalRepository()
     await repository.upsert_document(document)
-    assert await repository.search("분산에너지", date(2026, 12, 31), 10) == []
-    assert len(await repository.search("분산에너지", date(2027, 1, 1), 10)) == 1
+    assert await repository.search("에너지", date(2026, 12, 31), 10) == []
+    assert len(await repository.search("에너지", date(2027, 1, 1), 10)) == 1
 
 
 @pytest.mark.asyncio

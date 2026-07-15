@@ -235,7 +235,7 @@ async def export_checklist(
 ) -> StreamingResponse:
     entry = _owned_history(history_id, user)
     document = ChecklistDocument(
-        title="분산에너지 법령 체크리스트",
+        title="에너지 법령 체크리스트",
         as_of_date=entry.request.as_of_date,
         project_stage=entry.request.project_stage,
         items=entry.response.checklist,

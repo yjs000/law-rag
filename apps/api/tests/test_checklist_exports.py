@@ -23,7 +23,7 @@ def _document() -> ChecklistDocument:
         source_url="https://www.law.go.kr",
     )
     return ChecklistDocument(
-        title="분산에너지 법령 체크리스트",
+        title="에너지 법령 체크리스트",
         as_of_date=date(2026, 7, 13),
         project_stage=ProjectStage.PERMITTING,
         items=[ChecklistItem(label="허가 확인", status="required", citation_ids=["C1"])],
