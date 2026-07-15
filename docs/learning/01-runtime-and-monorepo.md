@@ -4,7 +4,7 @@
 
 모노레포는 웹과 API를 한 Git 저장소에서 관리하되 실행·배포 단위는 분리하는 구조다. lock 파일은 의존성 그래프를 재현한다. pnpm의 `allowBuilds`는 설치 스크립트를 실행할 의존성만 명시적으로 허용한다. Next.js와 FastAPI의 장점을 유지하면서 API 계약과 문서를 함께 검토하려고 선택했다.
 
-사용자가 설치한 Node 24.18.0, pnpm 11.12.0, Python 3.14.6, uv 0.11.28을 프로젝트와 CI에 고정했다. `sharp`, `unrs-resolver` 외 설치 스크립트는 허용하지 않는다.
+Node 24.18.0, pnpm 11.12.0, uv 0.11.28과 Python 3.14 계열을 프로젝트와 CI의 기준으로 삼는다. `.python-version`도 `3.14`로 지정해 개발과 Vercel 배포가 같은 마이너 런타임 계약을 사용한다. `sharp`, `unrs-resolver` 외 설치 스크립트는 허용하지 않는다.
 
 ## 데이터 흐름
 
