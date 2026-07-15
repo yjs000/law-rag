@@ -20,6 +20,7 @@ import {
   renderMarkdown,
 } from "../lib/checklist-export";
 import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
+import { consumeQuestionDraft } from "../lib/composer-state";
 import {
   type AnswerPreference,
   isTerraAvailabilityFailure,
@@ -298,11 +299,15 @@ export default function Home() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const trimmed = question.trim();
-    if (trimmed.length < 2 || loading) return;
+    if (loading) return;
+    const submission = consumeQuestionDraft(question);
+    if (!submission) return;
+    const { submittedQuestion: trimmed, nextDraft } = submission;
     setLoading(true);
     setError("");
     setSubmittedQuestion(trimmed);
+    setQuestion(nextDraft);
+    requestAnimationFrame(() => composer.current?.focus());
     const requestedAnswerMode = terraUnavailable ? "search_only" : answerPreference;
     try {
       const answer = await askQuestion({
