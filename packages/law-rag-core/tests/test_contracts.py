@@ -31,6 +31,24 @@ def test_terra_failure_requires_search_only_with_reason() -> None:
         AiRuntimeState(mode=AnswerMode.SEARCH_ONLY)
 
 
+def test_question_response_exposes_requested_mode_and_safe_fallback_reason() -> None:
+    response = QuestionResponse(
+        request_id="request-fallback",
+        mode=AnswerMode.SEARCH_ONLY,
+        summary="search-only",
+        scope="MVP",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=[],
+        requested_answer_mode="terra",
+        fallback_reason="billing_or_quota_error",
+    )
+
+    assert response.requested_answer_mode == "terra"
+    assert response.fallback_reason == "billing_or_quota_error"
+
+
 def test_mock_user_history_and_checklist_share_canonical_contracts() -> None:
     now = datetime.now(UTC)
     user = MockUser(

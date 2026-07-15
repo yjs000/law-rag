@@ -72,6 +72,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .login-button { padding: 8px 13px; border: 1px solid var(--line-strong); border-radius: 9px; color: var(--text); background: var(--surface); font-size: 13px; font-weight: 700; }
 .login-button:hover { border-color: #5d635d; background: var(--surface-2); }
 .avatar-button { width: 34px; height: 34px; border: 0; border-radius: 50%; color: #0c1711; background: var(--accent); font-size: 12px; font-weight: 900; }
+.mode-notice { z-index: 19; display: flex; min-height: 42px; padding: 9px 18px; align-items: center; justify-content: center; gap: 12px; border-bottom: 1px solid #685733; color: #e7c887; background: #282217; font-size: 13px; font-weight: 700; }
+.mode-notice button { display: inline-grid; width: 28px; height: 28px; padding: 0; place-items: center; border: 0; border-radius: 7px; color: #cfb98f; background: transparent; }
+.mode-notice button:hover { color: #f0d9a8; background: #332a1c; }
+.mode-notice .icon { width: 16px; height: 16px; }
 
 .chat-scroll { flex: 1; }
 .conversation { width: min(100%, 900px); min-height: calc(100vh - 230px); margin: 0 auto; padding: 42px 30px 240px; }
@@ -98,6 +102,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .mode-badge { padding: 4px 8px; border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-weight: 800; }
 .mode-badge.search { color: var(--warning); background: #332a1c; }
 .search-only-note { margin-bottom: 18px; padding: 10px 13px; border-left: 2px solid var(--warning); color: #cfb98f; background: #1f1c17; font-size: 13px; }
+.empty-result { margin: 0 0 24px; padding: 18px; border: 1px solid #6f5d37; border-radius: 12px; background: #1f1c17; }
+.empty-result h2 { margin: 0 0 10px; color: #f0d9a8; font-size: 17px; }
+.empty-result p { margin: 6px 0; color: #d4c7ae; font-size: 14px; }
+.empty-result p strong { margin-right: 6px; color: #f0d9a8; }
+.empty-result button { margin-top: 12px; padding: 8px 11px; border: 1px solid #806d43; border-radius: 8px; color: #f0d9a8; background: transparent; font-weight: 750; }
 .summary { margin: 0 0 28px; color: #f0f2ef; font-family: Georgia, "Noto Serif KR", serif; font-size: 22px; line-height: 1.55; white-space: pre-wrap; }
 .claim { margin: 0 0 28px; }
 .claim h2, .checklist h2, .sources h2, .limitations h2 { margin: 0 0 10px; color: #f0f2ef; font-size: 16px; line-height: 1.5; }

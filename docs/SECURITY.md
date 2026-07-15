@@ -68,3 +68,10 @@ Vercel의 HTTPS·DDoS 완화·배포 격리와 Supabase의 관리형 DB·Auth·S
 
 구체적인 신뢰 경계와 공격 경로는 [위협 모델](design-docs/threat-model.md)을 따른다.
 Vercel 배포 전 세부 완료 조건과 사용자 선행 입력은 [Vercel·Supabase 운영 전환 설계](design-docs/vercel-supabase-deployment.md)를 따른다.
+
+## 익명 rate-limit IP 신뢰 경계
+
+- Production Vercel Function에서는 플랫폼이 위조 방지를 위해 덮어쓰는 단일 `x-forwarded-for`만 익명 주체로 사용한다.
+- 개발·테스트에서는 전달 헤더를 신뢰하지 않고 소켓 peer를 사용한다. Production의 헤더가 없거나 IP 하나로 검증되지 않으면 모든 해당 요청을 같은 실패 폐쇄 주체로 집계한다.
+- 원문 IP는 저장하거나 로그에 남기지 않고 날짜별 HMAC으로 즉시 변환한다. AI와 검색 전용 사용량 종류는 별도 카운터를 유지한다.
+- IP별 제한은 소규모 베타의 비용 완화책이다. 이동통신 재접속·VPN 등 IP 순환 우회와 회사·학교·가정 NAT의 다중 사용자 오탐을 모두 막을 수 없으므로 OpenAI 비용 상한, WAF, 인증 사용자 정책을 후속으로 함께 적용한다.

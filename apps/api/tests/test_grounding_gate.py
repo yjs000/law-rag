@@ -151,3 +151,5 @@ def test_unrelated_generated_claim_falls_back_to_search_only(monkeypatch, hit: S
     )
     assert response.status_code == 200
     assert response.json()["mode"] == "search_only"
+    assert response.json()["requested_answer_mode"] == "terra"
+    assert response.json()["fallback_reason"] == "grounding_failed"

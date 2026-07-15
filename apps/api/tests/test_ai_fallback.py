@@ -24,16 +24,22 @@ class QuotaFailure(Exception):
     status_code = 429
 
 
+class BillingFailure(Exception):
+    status_code = 402
+
+
 @pytest.mark.parametrize(
-    "error",
+    ("error", "expected_reason"),
     [
-        RuntimeError("runtime"),
-        PermissionError("authorization"),
-        LookupError("model unavailable"),
-        QuotaFailure("quota"),
+        (RuntimeError("runtime"), "generation_error"),
+        (PermissionError("authorization"), "generation_error"),
+        (LookupError("model unavailable"), "generation_error"),
+        (QuotaFailure("quota"), "billing_or_quota_error"),
     ],
 )
-def test_all_generation_failures_fall_back_without_another_model(monkeypatch, error) -> None:
+def test_all_generation_failures_fall_back_without_another_model(
+    monkeypatch, error, expected_reason
+) -> None:
     hit = SearchHit(
         provision_id=uuid4(),
         document_id=uuid4(),
@@ -81,7 +87,126 @@ def test_all_generation_failures_fall_back_without_another_model(monkeypatch, er
     )
     assert response.status_code == 200
     assert response.json()["mode"] == "search_only"
+    assert response.json()["requested_answer_mode"] == "terra"
+    assert response.json()["fallback_reason"] == expected_reason
     assert FailingAnswerer.models == ["gpt-5.6-terra"]
+
+
+@pytest.mark.parametrize("error", [BillingFailure("billing"), QuotaFailure("quota")])
+def test_billing_or_quota_failure_disables_terra_for_later_requests(
+    monkeypatch, error
+) -> None:
+    hit = SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2025, 1, 1),
+        effective_to=None,
+        path="제1조",
+        content="전기사업에 관한 근거",
+        source_url="https://www.law.go.kr",
+        score=1,
+    )
+
+    async def search(*args, **kwargs):
+        return [hit]
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    async def corpus_items():
+        return []
+
+    class NoopEmbedder:
+        async def embed(self, texts):
+            return [[0.0] * 512]
+
+    FailingAnswerer.models = []
+    FailingAnswerer.error = error
+    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module.repository, "corpus_items", corpus_items)
+    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+    client = TestClient(main_module.app)
+    request = {"question": "전기사업 근거를 알려주세요", "answer_mode": "terra"}
+
+    first = client.post("/v1/questions", json=request)
+    second = client.post("/v1/questions", json=request)
+    status = client.get("/v1/corpus/status")
+
+    assert first.json()["fallback_reason"] == "billing_or_quota_error"
+    assert second.json()["fallback_reason"] == "quota_exhausted"
+    assert second.json()["requested_answer_mode"] == "terra"
+    assert status.json()["ai_available"] is False
+    assert status.json()["ai_unavailable_reason"] == "quota_exhausted"
+    assert FailingAnswerer.models == ["gpt-5.6-terra"]
+
+
+def test_disabled_ai_reports_safe_reason_without_calling_openai(monkeypatch) -> None:
+    async def search(*args, **kwargs):
+        return []
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    FailingAnswerer.models = []
+    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(main_module.settings, "ai_mode", "off")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions", json={"question": "전기사업 근거", "answer_mode": "terra"}
+    )
+
+    assert response.json()["requested_answer_mode"] == "terra"
+    assert response.json()["fallback_reason"] == "ai_disabled"
+    assert FailingAnswerer.models == []
+
+
+def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) -> None:
+    async def search(*args, **kwargs):
+        return []
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    class FailingEmbedder:
+        async def embed(self, texts):
+            raise RuntimeError("must not be returned to clients")
+
+    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: FailingEmbedder())
+    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions", json={"question": "전기사업 근거", "answer_mode": "terra"}
+    )
+
+    assert response.json()["fallback_reason"] == "embedding_error"
+    assert "must not be returned" not in response.text
 
 
 def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> None:
@@ -113,6 +238,8 @@ def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> 
 
     assert response.status_code == 200
     assert response.json()["mode"] == "search_only"
+    assert response.json()["requested_answer_mode"] == "search_only"
+    assert response.json()["fallback_reason"] is None
     assert FailingAnswerer.models == []
 
 

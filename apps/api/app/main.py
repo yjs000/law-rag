@@ -14,8 +14,9 @@ from app.adapters.postgres_repository import PostgresLegalRepository
 from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
-from app.domain.privacy import daily_subject_hash
+from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.schemas import (
+    AiFallbackReason,
     ChecklistDocument,
     ChecklistExportFormat,
     Citation,
@@ -114,6 +115,7 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
     user = _optional_user(request.headers.get("authorization"))
     use_ai = payload.answer_mode == "terra" and _ai_available()
+    fallback_reason = _initial_fallback_reason(payload)
     await _check_quota(
         request,
         "ai" if use_ai else "search",
@@ -121,15 +123,24 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         authenticated=user is not None,
     )
     query_embedding = None
+    embedding_failed = False
     if use_ai:
         try:
             query_embedding = (await _embedder().embed([payload.question]))[0]
         except Exception:
-            query_embedding = None
+            embedding_failed = True
     hits = await repository.search(payload.question, payload.as_of_date, 10, query_embedding)
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
     corpus_as_of = await repository.last_sync()
-    fallback = search_only_answer(payload, hits, corpus_as_of)
+    if use_ai and not hits:
+        fallback_reason = (
+            AiFallbackReason.EMBEDDING_ERROR
+            if embedding_failed
+            else AiFallbackReason.NO_EVIDENCE
+        )
+    fallback = search_only_answer(
+        payload, hits, corpus_as_of, fallback_reason=fallback_reason
+    )
     if not use_ai or not hits:
         return _save_if_authenticated(user, payload, fallback)
     try:
@@ -141,8 +152,12 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         if status_code in {402, 429}:
             global ai_quota_exhausted
             ai_quota_exhausted = True
+            fallback.fallback_reason = AiFallbackReason.BILLING_OR_QUOTA_ERROR
+        else:
+            fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
         return _save_if_authenticated(user, payload, fallback)
     if not validate_draft(draft, hits):
+        fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         return _save_if_authenticated(user, payload, fallback)
     citations = [
         Citation(
@@ -166,6 +181,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         citations=citations,
         limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
         corpus_as_of=corpus_as_of,
+        requested_answer_mode=payload.answer_mode,
     )
     return _save_if_authenticated(user, payload, answer)
 
@@ -290,6 +306,7 @@ async def corpus_status() -> CorpusStatus:
     return CorpusStatus(
         last_successful_sync=await repository.last_sync(),
         ai_available=_ai_available(),
+        ai_unavailable_reason=_ai_unavailable_reason(),
         items=items,
         warnings=warnings,
     )
@@ -309,7 +326,11 @@ async def _check_quota(
     if authenticated:
         return
     today = date.today()
-    subject = request.client.host if request.client else "unknown"
+    subject = anonymous_rate_limit_subject(
+        request.headers,
+        request.client.host if request.client else None,
+        trust_vercel_proxy=settings.environment == "production",
+    )
     subject_hash = daily_subject_hash(subject, settings.rate_limit_secret, today)
     if not await repository.consume_quota(subject_hash, today, kind, limit):
         raise HTTPException(status_code=429, detail="오늘의 익명 사용 한도를 초과했습니다")
@@ -317,6 +338,21 @@ async def _check_quota(
 
 def _ai_available() -> bool:
     return settings.ai_enabled and not ai_quota_exhausted
+
+
+def _ai_unavailable_reason() -> str | None:
+    if not settings.ai_enabled:
+        return AiFallbackReason.AI_DISABLED.value
+    if ai_quota_exhausted:
+        return AiFallbackReason.QUOTA_EXHAUSTED.value
+    return None
+
+
+def _initial_fallback_reason(payload: QuestionRequest) -> AiFallbackReason | None:
+    if payload.answer_mode == "search_only":
+        return None
+    unavailable_reason = _ai_unavailable_reason()
+    return AiFallbackReason(unavailable_reason) if unavailable_reason else None
 
 
 def _save_if_authenticated(

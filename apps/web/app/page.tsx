@@ -21,6 +21,14 @@ import {
 } from "../lib/checklist-export";
 import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
 import {
+  type AnswerPreference,
+  isTerraAvailabilityFailure,
+  isTerraUnavailable,
+  resolveCorpusAnswerMode,
+  resolveResponseAnswerMode,
+} from "../lib/answer-mode";
+import { getEmptyResultMessage } from "../lib/empty-result";
+import {
   citationDocumentKind,
   DOCUMENT_KIND_LABELS,
   filterCitations,
@@ -34,7 +42,6 @@ import type {
 } from "../lib/contracts";
 import { SafeText } from "./safe-text";
 
-type AnswerPreference = "terra" | "search_only";
 type AuthDocument = "privacy" | "terms";
 type AuthView = "login" | "signup";
 type IconName = "account" | "arrow" | "close" | "menu" | "new" | "search" | "trash";
@@ -186,7 +193,9 @@ export default function Home() {
   const [result, setResult] = useState<QuestionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [modeNotice, setModeNotice] = useState("");
   const [corpus, setCorpus] = useState<CorpusStatus | null>(null);
+  const [terraUnavailableFromResponse, setTerraUnavailableFromResponse] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
   const [history, setHistory] = useState<QuestionHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -208,7 +217,11 @@ export default function Home() {
     void Promise.resolve().then(() => setUser(getStoredUser()));
     getCorpusStatus().then((status) => {
       setCorpus(status);
-      if (!status.ai_available) setAnswerPreference("search_only");
+      const resolution = resolveCorpusAnswerMode(status);
+      if (!status.ai_available) {
+        setModeNotice(resolution.notice ?? "");
+        setAnswerPreference(resolution.preference);
+      }
     }).catch(() => setCorpus(null));
   }, []);
 
@@ -290,13 +303,25 @@ export default function Home() {
     setLoading(true);
     setError("");
     setSubmittedQuestion(trimmed);
+    const requestedAnswerMode = terraUnavailable ? "search_only" : answerPreference;
     try {
       const answer = await askQuestion({
         question: trimmed,
         as_of_date: asOf,
         project_stage: "planning",
-        answer_mode: answerPreference,
+        answer_mode: requestedAnswerMode,
       });
+      const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer);
+      setModeNotice(resolution.notice ?? "");
+      setAnswerPreference(resolution.preference);
+      if (isTerraAvailabilityFailure(answer.fallback_reason)) {
+        setTerraUnavailableFromResponse(true);
+        setCorpus((current) => current ? {
+          ...current,
+          ai_available: false,
+          ai_unavailable_reason: answer.fallback_reason === "ai_disabled" ? "ai_disabled" : "quota_exhausted",
+        } : current);
+      }
       setResult(answer);
       setSelectedCitationId(null);
       setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
@@ -323,7 +348,10 @@ export default function Home() {
       setQuestion(detail.request.question);
       setSubmittedQuestion(detail.request.question);
       setAsOf(detail.request.as_of_date);
-      setAnswerPreference(detail.request.answer_mode ?? (detail.response.mode === "ai" ? "terra" : "search_only"));
+      const requestedAnswerMode = detail.request.answer_mode ?? (detail.response.mode === "ai" ? "terra" : "search_only");
+      const resolution = resolveResponseAnswerMode(requestedAnswerMode, detail.response);
+      setModeNotice(resolution.notice ?? "");
+      setAnswerPreference(resolution.preference);
       setResult(detail.response);
       setSelectedCitationId(null);
       setCurrentHistoryId(detail.id);
@@ -382,6 +410,16 @@ export default function Home() {
   }
 
   const visibleCitations = result ? filterCitations(result.citations, documentKinds) : [];
+  const emptyResult = result ? getEmptyResultMessage(result, submittedQuestion) : null;
+  const terraUnavailable = terraUnavailableFromResponse || isTerraUnavailable(corpus);
+
+  function refineQuestion() {
+    setShowAnonymousNudge(false);
+    requestAnimationFrame(() => {
+      composer.current?.focus();
+      composer.current?.setSelectionRange(0, composer.current.value.length);
+    });
+  }
 
   return (
     <main className="app-shell">
@@ -410,13 +448,15 @@ export default function Home() {
       <section className="main-column">
         <header className="chat-header">
           <button aria-label="메뉴 열기" className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
-          <label className="model-picker"><span className="sr-only">응답 모델</span><select aria-label="응답 모델" value={answerPreference} onChange={(event) => setAnswerPreference(event.target.value as AnswerPreference)}>
-            <option disabled={corpus?.ai_available === false} value="terra">{MODEL_LABELS.terra}{corpus && !corpus.ai_available ? " · 현재 사용 불가" : ""}</option>
+          <label className="model-picker"><span className="sr-only">응답 모델</span><select aria-label="응답 모델" value={answerPreference} onChange={(event) => { setAnswerPreference(event.target.value as AnswerPreference); setModeNotice(""); }}>
+            <option disabled={terraUnavailable} value="terra">{MODEL_LABELS.terra}{terraUnavailable ? " · 현재 사용 불가" : ""}</option>
             <option value="search_only">{MODEL_LABELS.search_only}</option>
             <option disabled>다른 생성 모델 · 미지원</option>
           </select></label>
           <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : <button className="login-button" onClick={() => openAuth("login")}>로그인</button>}</div>
         </header>
+
+        {modeNotice && <div aria-live="polite" className="mode-notice" role="status"><span>{modeNotice}</span><button aria-label="모델 전환 알림 닫기" onClick={() => setModeNotice("")}><Icon name="close" /></button></div>}
 
         <div className={`chat-scroll ${result || loading ? "has-conversation" : ""}`}>
           <section className="conversation" id="conversation" tabIndex={-1}>
@@ -437,8 +477,9 @@ export default function Home() {
                   <div className="message-content">
                     {loading ? <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div> : result && <>
                       <div className="answer-meta"><span className={result.mode === "ai" ? "mode-badge" : "mode-badge search"}>{result.mode === "ai" ? "Terra · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
-                      {result.mode === "search_only" && <div className="search-only-note">생성 답변 없이 검색된 원문과 근거 후보만 표시합니다.</div>}
-                      <p className="summary"><SafeText>{result.summary}</SafeText></p>
+                      {result.mode === "search_only" && <div className="search-only-note">{emptyResult ? "검색을 완료했지만 표시할 원문 근거를 찾지 못했습니다." : "생성 답변 없이 검색된 원문과 근거 후보만 표시합니다."}</div>}
+                      {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={refineQuestion}>질문 구체화하기</button></section>}
+                      {!emptyResult && <p className="summary"><SafeText>{result.summary}</SafeText></p>}
                       {result.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === id ? "selected" : ""} key={id} onClick={() => jumpToCitation(id)}>{id} 원문</button>)}</div></section>)}
                       {result.checklist.length > 0 && <section className="checklist"><div className="section-title-row"><h2>확인 체크리스트</h2><div className="export-controls"><select aria-label="내보내기 형식" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button disabled={exporting} onClick={exportChecklist}>{exporting ? "생성 중" : "내보내기"}</button></div></div>{result.checklist.map((item, index) => <div className="check-item" key={`${item.label}-${index}`}><span aria-hidden="true">□</span><p><SafeText>{item.label}</SafeText>{item.citation_ids.map((id) => <button className="inline-cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</p></div>)}</section>}
                       {visibleCitations.length > 0 && <section className="sources"><h2>원문 근거 <span>{visibleCitations.length}건</span></h2>{visibleCitations.map((citation) => <details className={selectedCitationId === citation.id ? "source selected" : "source"} id={`citation-${citation.id}`} key={citation.id} open={selectedCitationId === citation.id}><summary><span><strong>{citation.id} · <SafeText>{citation.document_title}</SafeText> <SafeText>{citation.path}</SafeText></strong><small><SafeText>{citation.version_label}</SafeText></small></span></summary><blockquote><SafeText>{citation.quote}</SafeText></blockquote>{citation.source_url && <a href={citation.source_url} rel="noreferrer" target="_blank">국가법령정보센터에서 열기</a>}</details>)}</section>}
@@ -446,7 +487,9 @@ export default function Home() {
                     </>}
                   </div>
                 </article>
-                {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}
+                {showAnonymousNudge && !user && (emptyResult
+                  ? <aside className="login-nudge"><div><strong>질문을 조금 더 구체화해 보세요</strong><p>{emptyResult.guidance}</p></div><button onClick={refineQuestion}>질문 수정</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>
+                  : <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>)}
               </>
             )}
           </section>

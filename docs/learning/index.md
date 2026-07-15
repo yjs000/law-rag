@@ -13,3 +13,8 @@
 - [09 인증 UI와 구현 경계](09-auth-ui-and-implementation-boundary.md)
 - [10 Supavisor 런타임과 마이그레이션 연결](10-supavisor-runtime-and-migrations.md)
 - [11 Supabase collector 영속화](11-supabase-collector-persistence.md)
+- [12 웹의 빈 검색 결과 상태](12-web-empty-search-results.md)
+- [13 조문 경로 검색과 빈 결과 계약](13-provision-path-and-empty-results.md)
+- [14 Vercel 익명 IP rate limit](14-vercel-anonymous-rate-limit.md)
+- [15 Terra 런타임 폴백 계약](15-terra-runtime-fallback-contract.md)
+- [16 Web Terra 폴백 상태 동기화](16-web-terra-fallback-state.md)

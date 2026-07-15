@@ -6,6 +6,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.domain.catalog import MVP_CATALOG
 from app.domain.entities import LegalDocumentRecord
+from app.domain.provision_queries import parse_provision_reference
 from app.domain.schemas import CorpusItemStatus, SearchHit
 from app.parsers.law_json import parse_legal_document as parse_json_document
 from app.parsers.law_xml import parse_legal_document as parse_xml_document
@@ -109,18 +110,26 @@ class MemoryLegalRepository:
         query_embedding: list[float] | None = None,
     ) -> list[SearchHit]:
         terms = _query_terms(query)
+        reference = parse_provision_reference(query)
         hits: list[SearchHit] = []
         for key, document in self._documents.items():
             if document.effective_from and document.effective_from > as_of_date:
                 continue
             if self._effective_to.get(key) and self._effective_to[key] < as_of_date:
                 continue
+            if reference and reference.document_title not in {None, document.title}:
+                continue
             for provision in document.provisions:
                 haystack = (
                     f"{document.title} {provision.heading or ''} {provision.content}".casefold()
                 )
                 matched = sum(1 for term in terms if term in haystack)
-                if not matched:
+                path_matched = (
+                    reference is not None and provision.path in reference.storage_paths
+                )
+                if reference is not None and not path_matched:
+                    continue
+                if reference is None and not matched:
                     continue
                 hits.append(
                     SearchHit(
@@ -135,7 +144,8 @@ class MemoryLegalRepository:
                         heading=provision.heading,
                         content=provision.content,
                         source_url=document.source_url,
-                        score=matched / max(len(terms), 1),
+                        score=(2.0 if path_matched else 0.0)
+                        + matched / max(len(terms), 1),
                     )
                 )
         return sorted(hits, key=lambda hit: (-hit.score, hit.document_title, hit.path))[:limit]

@@ -30,6 +30,18 @@ class AiFailureCategory(StrEnum):
     RUNTIME = "runtime"
 
 
+class AiFallbackReason(StrEnum):
+    """Public, non-sensitive reason why a Terra request returned search-only results."""
+
+    AI_DISABLED = "ai_disabled"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    BILLING_OR_QUOTA_ERROR = "billing_or_quota_error"
+    EMBEDDING_ERROR = "embedding_error"
+    GENERATION_ERROR = "generation_error"
+    GROUNDING_FAILED = "grounding_failed"
+    NO_EVIDENCE = "no_evidence"
+
+
 class AiRuntimeState(BaseModel):
     """Terra 이외 생성 모델로 자동 전환하지 않는 런타임 계약."""
 
@@ -121,6 +133,10 @@ class QuestionResponse(BaseModel):
     citations: list[Citation]
     limitations: list[str]
     corpus_as_of: datetime | None = None
+    result_status: Literal["results", "no_results"] = "results"
+    no_results_reason: Literal["requested_path_not_found", "no_matching_evidence"] | None = None
+    requested_answer_mode: Literal["terra", "search_only"] = "search_only"
+    fallback_reason: AiFallbackReason | None = None
 
 
 class MockUser(BaseModel):
@@ -150,6 +166,7 @@ class CorpusItemStatus(BaseModel):
 class CorpusStatus(BaseModel):
     last_successful_sync: datetime | None
     ai_available: bool
+    ai_unavailable_reason: Literal["ai_disabled", "quota_exhausted"] | None = None
     source: Literal["국가법령정보 공동활용 Open API"] = "국가법령정보 공동활용 Open API"
     items: list[CorpusItemStatus]
     warnings: list[str]

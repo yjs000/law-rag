@@ -30,7 +30,7 @@ Law Open API(untrusted external document)
 | 인증·소유권 우회 | 다른 사용자의 이력 ID 열거 | 서버측 사용자 ID 검사, 실패 시 동일한 404 | 실제 Supabase RLS |
 | 비밀·개인정보 로그 노출 | 질문·OC·API 키·원문 전문 기록 | OC URL 치환, 질문/원문 없는 관측 이벤트 계약 | 중앙 로그 마스킹 검사 |
 | 오래된·부분 코퍼스 | 수집 일부 실패가 최신으로 표시 | 문서별 원자 승격, 마지막 성공·누락 경고 | 최신성 알림과 운영 호출 |
-| 과도한 사용 | 익명 API 반복 호출 | 일별 HMAC rate limit | 분산 저장소와 프록시 제한 |
+| 과도한 사용 | 익명 API 반복 호출·전달 헤더 위조 | Vercel이 덮어쓰는 단일 `x-forwarded-for`를 운영에서만 신뢰하고 일별 HMAC rate limit | IP 순환·공유 NAT 대응, 계정·기기 신호, WAF·비용 상한 |
 | Preview 경계 혼동 | 가변 Preview origin이 운영 API·데이터에 접근 | 목업은 외부 연결 없음 | Next.js 동일 출처 프록시, 환경별 자원·비밀 분리, wildcard CORS 금지 |
 | collector 공개 노출 | 집 PC의 포트포워딩·터널을 통한 침입 | collector는 CLI 전용 | 인바운드 포트 금지, Open API·Supabase outbound만 허용 |
 
@@ -53,3 +53,4 @@ Law Open API(untrusted external document)
 
 - 2026-07-14: 목업 단계의 위협 경계를 코드 회귀 테스트와 연결한다. 실제 외부 서비스 통제는 자격정보가 준비된 후 별도 출시 게이트로 유지한다.
 - 2026-07-14: 운영 경계를 Vercel Web/FastAPI, Supabase 영속 계층, 고정 공인 IP Windows collector로 분리한다. Preview는 Next.js 동일 출처 프록시를 사용하고 collector는 공개 인바운드를 받지 않는다.
+- 2026-07-15: 운영 익명 quota의 주체는 Vercel이 위조 방지를 위해 덮어쓰는 단일 `x-forwarded-for` 공개 IP로 정한다. 운영 외 환경은 소켓 peer만 사용하고, 누락·비정상·복수 주소는 하나의 실패 폐쇄 주체로 합쳐 임의 문자열로 quota를 회피하지 못하게 한다. IP 순환과 공유 NAT 오탐은 이 통제만으로 해결되지 않는다.

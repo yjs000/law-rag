@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 from uuid import UUID
 
@@ -7,6 +8,7 @@ from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.entities import LegalDocumentRecord
+from app.domain.provision_queries import parse_provision_reference
 from app.domain.schemas import CorpusItemStatus, SearchHit
 
 
@@ -136,23 +138,68 @@ class PostgresLegalRepository:
         self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
     ) -> list[SearchHit]:
         embedding = str(query_embedding) if query_embedding else None
+        reference = parse_provision_reference(query)
         async with self.engine.connect() as connection:
-            rows = (
-                (
-                    await connection.execute(
-                        text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
-                        {
-                            "query": query,
-                            "as_of": as_of_date,
-                            "embedding": embedding,
-                            "limit": limit,
-                        },
+            path_rows = []
+            if reference is not None:
+                path_rows = (
+                    (
+                        await connection.execute(
+                            text(
+                                """SELECT p.id provision_id,d.id document_id,
+                                d.exact_title document_title,d.source_kind,
+                                'MST '||v.mst version_label,v.effective_from,v.effective_to,
+                                p.path,p.heading,p.content,v.source_url,2.0 score
+                                FROM provisions p
+                                JOIN document_versions v ON v.id=p.version_id
+                                JOIN legal_documents d ON d.id=v.document_id
+                                WHERE p.path IN (
+                                  SELECT jsonb_array_elements_text(CAST(:paths AS jsonb))
+                                )
+                                  AND (
+                                    CAST(:title AS text) IS NULL
+                                    OR d.exact_title=CAST(:title AS text)
+                                  )
+                                  AND (v.effective_from IS NULL OR v.effective_from<=:as_of)
+                                  AND (v.effective_to IS NULL OR v.effective_to>:as_of)
+                                ORDER BY d.exact_title,p.path LIMIT :limit"""
+                            ),
+                            {
+                                "paths": json.dumps(reference.storage_paths),
+                                "title": reference.document_title,
+                                "as_of": as_of_date,
+                                "limit": limit,
+                            },
+                        )
                     )
+                    .mappings()
+                    .all()
                 )
-                .mappings()
-                .all()
-            )
-        return [self._hit(row) for row in rows]
+            rows = []
+            if reference is None:
+                rows = (
+                    (
+                        await connection.execute(
+                            text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
+                            {
+                                "query": query,
+                                "as_of": as_of_date,
+                                "embedding": embedding,
+                                "limit": limit,
+                            },
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+        merged = []
+        seen = set()
+        for row in [*path_rows, *rows]:
+            if row["provision_id"] in seen:
+                continue
+            seen.add(row["provision_id"])
+            merged.append(self._hit(row))
+        return merged[:limit]
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         async with self.engine.connect() as connection:
