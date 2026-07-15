@@ -1,6 +1,6 @@
 # 실행 계획 0002: 실제 서비스 연결
 
-상태: 1차 Vercel·Supabase 연결 검증 중
+상태: 1차 Vercel·Supabase 연결 완료, 코퍼스 영속화 후속
 작성일: 2026-07-14
 소유자: 사용자와 Codex
 
@@ -64,14 +64,14 @@
 - [x] `apps/web`과 `apps/api`를 각각 별도 Vercel Project로 연결한다.
 - [x] API Production `/health`를 bypass token 없는 일반 HTTP 요청으로 확인한다.
 - [x] Web Production의 `NEXT_PUBLIC_API_URL`을 안정적인 API Production domain으로 확정한다.
-- [ ] 사용자 승인 후 변경을 커밋·푸시하고 Web/API Production을 재배포한다.
-- [ ] 재배포 후 API health, corpus status, Web 화면의 실제 요청을 순서대로 검증한다.
+- [x] 사용자 승인 후 변경을 커밋·푸시하고 Web/API Production을 재배포한다.
+- [x] 재배포 후 API health, corpus status, Web 화면의 실제 요청을 순서대로 검증한다.
 
 #### Web 통합 에이전트
 
 - [x] 현재 Production의 별도 도메인 REST 호출과 정확한 `WEB_ORIGIN` CORS preflight 구성을 확인한다.
 - [ ] Preview에서 운영 API를 실수로 호출하지 않도록 상대 `/api/*` 프록시 도입 범위를 후속 작업으로 분리한다.
-- [ ] 브라우저 클릭 검증은 로컬·API 단독 검증이 끝난 뒤 최종 사용자 경로 확인에만 사용한다.
+- [x] 브라우저 클릭 검증은 로컬·API 단독 검증이 끝난 뒤 최종 사용자 경로 확인에만 사용한다.
 
 ## 단계
 
@@ -128,7 +128,7 @@
 
 ## 차단 요소
 
-로컬 DB 입력 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖는다. Production API도 공개되어 있으므로 Deployment Protection은 현재 차단 요소가 아니다. 다음 승인 지점은 검증된 로컬 변경의 `main` 커밋·푸시와 Production 자동 배포다.
+로컬 DB 입력과 Web/API Production 배포 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖고, Production Web에서 Production API 호출이 성공했다. 현재 사용자 기능의 다음 차단 요소는 collector가 아직 로컬 mock 저장소만 사용하여 Production 코퍼스 9개가 모두 `missing`인 것이다.
 
 세부 준비 목록, 플랫폼과 애플리케이션 책임, 완료 조건은 [Vercel·Supabase 운영 전환 설계](../../design-docs/vercel-supabase-deployment.md)를 따른다. 커스텀 도메인, Vercel Static IP, 집 PC 포트포워딩은 선행 입력이 아니다.
 
@@ -146,3 +146,6 @@
 - 2026-07-15: 사용자 작업과 에이전트별 TODO를 분리하고 현재 집중 범위를 DB 구성, Web→API 경로, 검증·재배포 세 항목으로 제한했다.
 - 2026-07-15: `https://law-rag-web.vercel.app` origin의 일반 CORS preflight가 API에서 정확한 `Access-Control-Allow-Origin`과 허용 메서드를 반환함을 확인했다.
 - 2026-07-15: 두 `.env.local`의 값을 노출하지 않고 다시 파싱해 `DATABASE_URL` 6543과 `DIRECT_URL` 5432가 모두 설정되었음을 확인했다. 최초 키 누락 보고는 PowerShell 자동 변수 `$Matches`와 검사 변수 이름의 충돌로 발생한 오판이어서 정정했다.
+- 2026-07-15: 전체 검증에서 core 2개, API 58개, collector 29개, Web 11개 테스트와 Python/Web lint, TypeScript, Next.js Production build가 통과했다. Supabase Alembic revision은 `0001 (head)`다.
+- 2026-07-15: 제품 표기 변경 `a426356`과 Supavisor runtime·migration 변경 `3588c5f`를 기능별로 `main`에 푸시했다. Web deployment `dpl_HC8czToc9t7Tw6Hu859HJDr5vWVA`와 API deployment `dpl_nXvidJDHyWXNtJbUqJjcSxYHG6fz`가 Ready 상태가 되었다.
+- 2026-07-15: `https://law-rag-web.vercel.app`에서 질문을 전송해 `https://law-rag-api-opal.vercel.app`의 응답이 화면에 표시되는 종단 연결을 확인했다. API `/health`는 `ok`, Web은 HTTP 200이다. `/v1/corpus/status`의 9개 항목은 모두 `missing`이므로 화면은 정상적으로 검색 전용·근거 부족 상태를 표시했다.
