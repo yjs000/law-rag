@@ -1,6 +1,6 @@
 # 실행 계획 0002: 실제 서비스 연결
 
-상태: 1차 Vercel·Supabase 연결 완료, 코퍼스 영속화 후속
+상태: Vercel·Supabase·Google OAuth·현재 코퍼스 연결 완료, 운영 영속화·실제 Terra 평가 후속
 작성일: 2026-07-14
 소유자: 사용자와 Codex
 
@@ -35,17 +35,21 @@
 
 ## 현재 집중 범위와 역할
 
-이번 대화에서는 다음 세 항목만 우선 완료한다.
+완료된 1차 연결 범위는 Supavisor DB 구성, Web→API 공개 경로, Vercel 재배포, Production 코퍼스 현재 버전 9개 적재, Google 가입·로그인·이력 E2E다.
 
-1. 로컬과 Vercel의 DB 연결 구성을 확정한다.
-2. Web에서 Production API를 호출할 수 있는 공개 경로와 환경변수를 검증한다.
-3. 현재 로컬 변경을 검증하고 승인 후 Production에 배포한다.
+현재 우선순위는 다음과 같다.
+
+1. 활성 계획의 완료 상태를 실제 진행 기록과 일치시킨다.
+2. 다음 작업일에 실제 Production 코퍼스와 Terra 답변 품질 평가를 실행한다.
+3. 이후 코퍼스 연혁·삭제 격리·런타임 상태·보존 및 복구를 영속 운영 경계로 전환한다.
 
 ### 사용자가 해야 할 일
 
 - [x] 루트 `.env.local`과 `apps/api/.env.local`에 `DATABASE_URL` transaction pooler(6543) URL과 `DIRECT_URL` session pooler(5432) URL을 등록한다.
 - [x] 아래 에이전트 검증 결과를 확인한 뒤 `main` 커밋·푸시와 Production 자동 배포를 승인한다.
-- [ ] 비밀번호, API 키, bypass secret은 채팅이나 Git에 올리지 않는다.
+- [x] 비밀번호, API 키, bypass secret은 채팅이나 Git에 올리지 않는다.
+
+현재 즉시 필요한 사용자 작업은 없다. 실제 Terra 평가를 시작할 때 모델 권한·비용 한도를 확인하고, 공개 확대 전 개인정보 정책과 법률 전문가 표본 검토를 별도로 승인한다.
 
 현재 Production API 주소는 일반 인터넷 요청의 `/health`에서 `200 OK`이므로 Deployment Protection 변경은 사용자 작업이 아니다.
 
@@ -86,8 +90,8 @@
 
 ### Google OAuth와 사용자 경계
 
-- [ ] Google 공급자만 노출하고 ID 토큰·redirect·세션 회전 검증
-- [ ] 내부 사용자 ID 분리와 질문 이력 RLS·교차 사용자 접근 차단
+- [x] Google 공급자만 노출하고 ID 토큰·redirect·세션 회전 검증
+- [x] 내부 사용자 ID 분리와 질문 이력 RLS·교차 사용자 접근 차단
 - [ ] Preview와 Production OAuth client·redirect·비밀·사용자 데이터 경계 검증
 - [ ] 개인정보 처리방침, 국외 이전, 보유·삭제 정책 검토
 
@@ -101,7 +105,8 @@
 
 ### Vercel Web/FastAPI 배포와 운영
 
-- [ ] `apps/web`, `apps/api` 별도 Vercel Project 연결과 Production API 공개 health 검증 완료; Function 리전·최종 환경변수·재배포 검증 잔여
+- [x] `apps/web`, `apps/api` 별도 Vercel Project 연결과 Production API 공개 health 검증
+- [ ] Function 리전·최종 환경변수·다음 변경 재배포 검증
 - [ ] Preview 브라우저는 Next.js 상대 `/api/*` 동일 출처 프록시만 사용하고 FastAPI wildcard CORS와 운영 API 기본 연결이 없음을 검증
 - [ ] FastAPI 함수의 stateless 재시작·동시 인스턴스·streaming·번들 크기·`maxDuration` 검증
 - [ ] collector PC의 고정 공인 IP를 법제처에 등록하고 인바운드 포트 없이 주 1회 작업·Supabase 원자 반영 검증
@@ -128,7 +133,9 @@
 
 ## 차단 요소
 
-로컬 DB 입력과 Web/API Production 배포 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖고, Production Web에서 Production API 호출이 성공했다. 현재 사용자 기능의 다음 차단 요소는 collector가 아직 로컬 mock 저장소만 사용하여 Production 코퍼스 9개가 모두 `missing`인 것이다.
+로컬 DB 입력, Web/API Production 배포, 현재 코퍼스 적재와 Google OAuth 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖고, Production Web에서 Production API 호출이 성공했다. Production 코퍼스는 현재 버전 9개가 `ready`이며 Google 가입·로그인·세션 복원·질문 이력 E2E도 완료했다.
+
+다음 작업의 외부 의존성은 실제 Terra 평가를 위한 모델 권한·비용 한도와 법률 전문가 표본 검토다. 외부 의존성 없이 진행 가능한 후속은 235개 연혁 이관, 출처 삭제 격리, `runtime_flags`·rate limit·평가 상태 영속화, Storage·질문 이력 삭제 수명주기와 복구 훈련이다.
 
 세부 준비 목록, 플랫폼과 애플리케이션 책임, 완료 조건은 [Vercel·Supabase 운영 전환 설계](../../design-docs/vercel-supabase-deployment.md)를 따른다. 커스텀 도메인, Vercel Static IP, 집 PC 포트포워딩은 선행 입력이 아니다.
 
@@ -152,3 +159,4 @@
 - 2026-07-15: collector Supabase 어댑터를 연결해 현재 버전 9문서, 9버전, 3,050조문과 content-addressed private Storage 객체 9개를 적재했다. 재실행은 9개 모두 `unchanged`, 실패 0으로 완료됐다.
 - 2026-07-15: Production API는 corpus `ready 9`, `missing 0`을 반환했다. 분산에너지와 전기저장시설 검색 각각 5건, 조문 상세 ID 왕복, 검색 전용 질문 10개 section·10개 인용을 확인했다.
 - 2026-07-15: Supabase `sync-history`는 출처 삭제 격리와 체크포인트 스키마가 완성될 때까지 명시적으로 차단한다. 현재 버전 적재 목표는 완료했지만 235개 연혁 이관 항목은 미완료로 유지한다.
+- 2026-07-15: 완료 계획 0004·0005와 Production 진행 기록을 대조해 Google OAuth·내부 사용자 경계·현재 코퍼스·Vercel 공개 health를 완료 처리했다. 실제 Terra 품질 평가는 다음 작업일로 미루고, 연혁·삭제·런타임 상태·보존·복구를 실제 잔여 TODO로 정리했다.
