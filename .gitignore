@@ -14,6 +14,7 @@ dist/
 # Node / Next.js
 node_modules/
 .next/
+.vercel/
 coverage/
 *.tsbuildinfo
 

@@ -10,3 +10,5 @@
 - [06 목업 인증·이력과 검색 전용 폴백](06-mock-api-history-and-fallback.md)
 - [07 검색·원문 계보·답변 검증 기초](07-retrieval-storage-and-grounding-foundations.md)
 - [08 채팅 UI와 모델 선택 경계](08-chat-ui-and-model-choice.md)
+- [09 인증 UI와 구현 경계](09-auth-ui-and-implementation-boundary.md)
+- [10 Supavisor 런타임과 마이그레이션 연결](10-supavisor-runtime-and-migrations.md)

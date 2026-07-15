@@ -27,4 +27,3 @@ MVP_CATALOG: tuple[CatalogEntry, ...] = (
 )
 
 CATALOG_BY_TITLE = {entry.title: entry for entry in MVP_CATALOG}
-

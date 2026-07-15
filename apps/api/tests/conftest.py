@@ -4,6 +4,7 @@ import os
 # them merely because pytest was started from a developer checkout.
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = ""
+os.environ["DIRECT_URL"] = ""
 os.environ["SUPABASE_URL"] = ""
 os.environ["SUPABASE_SECRET_KEY"] = ""
 os.environ["OPENAI_API_KEY"] = ""

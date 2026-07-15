@@ -16,10 +16,11 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    app_name: str = "분산에너지 법령 RAG"
+    app_name: str = "에너지 법령 RAG"
     environment: Literal["development", "test", "production"] = "development"
     collector_state_dir: Path = Path(".collector-state")
     database_url: str | None = None
+    direct_url: str | None = None
     supabase_url: str | None = None
     supabase_secret_key: str | None = None
     supabase_raw_bucket: str = "law-raw"

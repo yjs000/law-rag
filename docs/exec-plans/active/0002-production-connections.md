@@ -1,12 +1,12 @@
 # 실행 계획 0002: 실제 서비스 연결
 
-상태: 사용자 자격정보 준비 대기
+상태: 1차 Vercel·Supabase 연결 검증 중
 작성일: 2026-07-14
-소유자: 미지정
+소유자: 사용자와 Codex
 
 ## 목적
 
-목업 경계로 검증한 분산에너지 법령 RAG를 실제 Supabase, Google OAuth, OpenAI, Vercel Web/FastAPI에 연결한다. collector는 등록된 고정 공인 IP Windows PC에서 독립 실행한다.
+목업 경계로 검증한 에너지 법령 RAG를 실제 Supabase, Google OAuth, OpenAI, Vercel Web/FastAPI에 연결한다. collector는 등록된 고정 공인 IP Windows PC에서 독립 실행한다.
 
 사용자 결과는 Vercel 발급 공개 URL에서 로그인, 기준일 검색, 근거 기반 답변, 인용 원문, 이력과 내보내기를 사용할 수 있고 collector 장애 중에도 마지막 검증 코퍼스로 질문을 계속 처리하는 것이다.
 
@@ -33,12 +33,53 @@
 
 비밀값은 채팅·Git에 전달하지 않고 서버 또는 CI Secret에 직접 등록한다.
 
+## 현재 집중 범위와 역할
+
+이번 대화에서는 다음 세 항목만 우선 완료한다.
+
+1. 로컬과 Vercel의 DB 연결 구성을 확정한다.
+2. Web에서 Production API를 호출할 수 있는 공개 경로와 환경변수를 검증한다.
+3. 현재 로컬 변경을 검증하고 승인 후 Production에 배포한다.
+
+### 사용자가 해야 할 일
+
+- [x] 루트 `.env.local`과 `apps/api/.env.local`에 `DATABASE_URL` transaction pooler(6543) URL과 `DIRECT_URL` session pooler(5432) URL을 등록한다.
+- [x] 아래 에이전트 검증 결과를 확인한 뒤 `main` 커밋·푸시와 Production 자동 배포를 승인한다.
+- [ ] 비밀번호, API 키, bypass secret은 채팅이나 Git에 올리지 않는다.
+
+현재 Production API 주소는 일반 인터넷 요청의 `/health`에서 `200 OK`이므로 Deployment Protection 변경은 사용자 작업이 아니다.
+
+### 에이전트별 TODO
+
+#### DB·마이그레이션 에이전트
+
+- [x] Supavisor transaction mode(6543)와 session mode(5432) 연결을 각각 검증한다.
+- [x] 초기 Alembic migration을 session pooler로 적용하고 revision `0001`을 확인한다.
+- [x] SQLAlchemy runtime에 transaction pooler 제약을 반영한다.
+- [x] 사용자가 추가한 `DATABASE_URL`의 호스트·포트만 비밀 노출 없이 재확인한다.
+- [x] API 전체 테스트, 린트와 migration contract 테스트를 실행한다.
+
+#### Vercel·배포 에이전트
+
+- [x] `apps/web`과 `apps/api`를 각각 별도 Vercel Project로 연결한다.
+- [x] API Production `/health`를 bypass token 없는 일반 HTTP 요청으로 확인한다.
+- [x] Web Production의 `NEXT_PUBLIC_API_URL`을 안정적인 API Production domain으로 확정한다.
+- [ ] 사용자 승인 후 변경을 커밋·푸시하고 Web/API Production을 재배포한다.
+- [ ] 재배포 후 API health, corpus status, Web 화면의 실제 요청을 순서대로 검증한다.
+
+#### Web 통합 에이전트
+
+- [x] 현재 Production의 별도 도메인 REST 호출과 정확한 `WEB_ORIGIN` CORS preflight 구성을 확인한다.
+- [ ] Preview에서 운영 API를 실수로 호출하지 않도록 상대 `/api/*` 프록시 도입 범위를 후속 작업으로 분리한다.
+- [ ] 브라우저 클릭 검증은 로컬·API 단독 검증이 끝난 뒤 최종 사용자 경로 확인에만 사용한다.
+
 ## 단계
 
 ### Supabase와 데이터 수명주기
 
-- [ ] PostgreSQL·pgvector·PGroonga·Storage·Supavisor 연결
-- [ ] Vercel runtime은 Supavisor transaction mode와 prepared statement cache 비활성화, migration은 별도 관리용 연결로 검증
+- [x] PostgreSQL·pgvector·PGroonga·Supavisor 연결과 초기 스키마 적용
+- [ ] Storage bucket과 원문 저장 수명주기 검증
+- [x] Vercel runtime은 Supavisor transaction mode와 prepared statement cache 비활성화, migration은 session mode 연결로 검증
 - [ ] 목업 manifest 235개 버전을 트랜잭션과 불변 원문 객체로 이관
 - [ ] 질문 이력 1년 자동 삭제와 계정 삭제의 DB·Storage·백업 전파 검증
 - [ ] `runtime_flags`, rate limit, 수집 실행, 평가 실행 상태 영속화하고 API의 로컬 manifest·프로세스 상태 의존 제거
@@ -60,7 +101,7 @@
 
 ### Vercel Web/FastAPI 배포와 운영
 
-- [ ] `apps/web`, `apps/api`를 별도 Vercel Project로 연결하고 Supabase와 가장 가까운 Function 리전·환경변수·배포 보호 구성
+- [ ] `apps/web`, `apps/api` 별도 Vercel Project 연결과 Production API 공개 health 검증 완료; Function 리전·최종 환경변수·재배포 검증 잔여
 - [ ] Preview 브라우저는 Next.js 상대 `/api/*` 동일 출처 프록시만 사용하고 FastAPI wildcard CORS와 운영 API 기본 연결이 없음을 검증
 - [ ] FastAPI 함수의 stateless 재시작·동시 인스턴스·streaming·번들 크기·`maxDuration` 검증
 - [ ] collector PC의 고정 공인 IP를 법제처에 등록하고 인바운드 포트 없이 주 1회 작업·Supabase 원자 반영 검증
@@ -87,7 +128,7 @@
 
 ## 차단 요소
 
-현재 코드는 외부 자격정보 없이 계속 테스트할 수 있지만, 위 단계의 실제 연결과 공개 배포는 선행 입력이 준비될 때 시작한다.
+로컬 DB 입력 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖는다. Production API도 공개되어 있으므로 Deployment Protection은 현재 차단 요소가 아니다. 다음 승인 지점은 검증된 로컬 변경의 `main` 커밋·푸시와 Production 자동 배포다.
 
 세부 준비 목록, 플랫폼과 애플리케이션 책임, 완료 조건은 [Vercel·Supabase 운영 전환 설계](../../design-docs/vercel-supabase-deployment.md)를 따른다. 커스텀 도메인, Vercel Static IP, 집 PC 포트포워딩은 선행 입력이 아니다.
 
@@ -99,3 +140,9 @@
 ## 진행 기록
 
 - 2026-07-14: FastAPI Vercel 배포 조건, 사용자 선행 입력, 보안·운영 책임과 완료 조건을 설계 문서로 확정했다. 외부 프로젝트 생성과 구현은 시작하지 않았다.
+- 2026-07-15: Web/API Vercel Project를 연결하고 API 빌드와 `/health`를 확인했다. API Production domain은 bypass token 없는 일반 HTTP 요청에서도 `200 OK`를 반환했다.
+- 2026-07-15: Supavisor session pooler로 초기 migration `0001`을 적용했다. runtime은 transaction pooler, migration은 session pooler를 사용하도록 분리했다.
+- 2026-07-15: `vercel curl`은 보호된 배포 진단에는 유효하지만 공개 사용자 경로 증명으로 사용하지 않기로 했다. 공개 경로는 일반 HTTP 요청과 최종 Web 동작으로 검증한다.
+- 2026-07-15: 사용자 작업과 에이전트별 TODO를 분리하고 현재 집중 범위를 DB 구성, Web→API 경로, 검증·재배포 세 항목으로 제한했다.
+- 2026-07-15: `https://law-rag-web.vercel.app` origin의 일반 CORS preflight가 API에서 정확한 `Access-Control-Allow-Origin`과 허용 메서드를 반환함을 확인했다.
+- 2026-07-15: 두 `.env.local`의 값을 노출하지 않고 다시 파싱해 `DATABASE_URL` 6543과 `DIRECT_URL` 5432가 모두 설정되었음을 확인했다. 최초 키 누락 보고는 PowerShell 자동 변수 `$Matches`와 검사 변수 이름의 충돌로 발생한 오판이어서 정정했다.

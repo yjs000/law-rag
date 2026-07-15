@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.entities import LegalDocumentRecord
@@ -18,7 +19,9 @@ def _async_url(url: str) -> str:
 class PostgresLegalRepository:
     def __init__(self, database_url: str) -> None:
         self.engine: AsyncEngine = create_async_engine(
-            _async_url(database_url), pool_pre_ping=True, connect_args={"statement_cache_size": 0}
+            _async_url(database_url),
+            poolclass=NullPool,
+            connect_args={"statement_cache_size": 0},
         )
 
     async def consume_quota(self, subject_hash: str, day: date, kind: str, limit: int) -> bool:

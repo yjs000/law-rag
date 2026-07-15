@@ -11,8 +11,9 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 settings = get_settings()
-if settings.database_url:
-    url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+migration_url = settings.direct_url or settings.database_url
+if migration_url:
+    url = migration_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
 
