@@ -10,7 +10,9 @@ from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.openai_answerer import OpenAIAnswerer, validate_draft
 from app.adapters.openai_embedder import OpenAIEmbedder
+from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
+from app.adapters.supabase_auth import SupabaseAuth, SupabaseAuthError
 from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
@@ -39,6 +41,20 @@ ai_quota_exhausted = False
 repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
 )
+supabase_auth = (
+    SupabaseAuth(
+        settings.supabase_url,
+        settings.supabase_secret_key,
+        settings.request_timeout_seconds,
+    )
+    if settings.supabase_url and settings.supabase_secret_key
+    else None
+)
+postgres_identity = (
+    PostgresIdentityRepository(repository.engine)
+    if isinstance(repository, PostgresLegalRepository) and supabase_auth
+    else None
+)
 collector_load_errors: list[str] = []
 if repository is memory_repository:
     _, collector_load_errors = memory_repository.load_collector_state(
@@ -50,7 +66,7 @@ app.add_middleware(
     allow_origins=[settings.web_origin],
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Terms-Version", "X-Privacy-Version"],
 )
 
 
@@ -68,20 +84,37 @@ def _bearer_token(authorization: str | None) -> str:
     return token
 
 
-def _optional_user(authorization: str | None) -> MockUser | None:
+async def _optional_user(authorization: str | None) -> MockUser | None:
     if authorization is None:
         return None
-    _require_mock_auth()
     token = _bearer_token(authorization)
+    if supabase_auth and postgres_identity:
+        try:
+            return await postgres_identity.ensure_profile(await supabase_auth.verify_user(token))
+        except ConsentRequiredError as exc:
+            raise HTTPException(status_code=409, detail="회원가입 동의가 필요합니다.") from exc
+        except SupabaseAuthError as exc:
+            raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
+    _require_mock_auth()
     user = identity_repository.user_for_token(token)
     if user is None:
         raise HTTPException(status_code=401, detail="유효하지 않은 세션입니다")
     return user
 
 
-def _authenticated_user(
+async def _authenticated_user(
     authorization: Annotated[str | None, Header()] = None,
+    x_terms_version: Annotated[str | None, Header()] = None,
+    x_privacy_version: Annotated[str | None, Header()] = None,
 ) -> MockUser:
+    if supabase_auth and postgres_identity:
+        try:
+            user = await supabase_auth.verify_user(_bearer_token(authorization))
+            return await postgres_identity.ensure_profile(user, x_terms_version, x_privacy_version)
+        except ConsentRequiredError as exc:
+            raise HTTPException(status_code=409, detail="회원가입 동의가 필요합니다.") from exc
+        except SupabaseAuthError as exc:
+            raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
     _require_mock_auth()
     user = identity_repository.user_for_token(_bearer_token(authorization))
     if user is None:
@@ -113,14 +146,14 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
-    user = _optional_user(request.headers.get("authorization"))
+    user = await _optional_user(request.headers.get("authorization"))
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     await _check_quota(
         request,
         "ai" if use_ai else "search",
         settings.ai_daily_limit if use_ai else settings.search_daily_limit,
-        authenticated=user is not None,
+        user=user,
     )
     query_embedding = None
     embedding_failed = False
@@ -142,7 +175,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         payload, hits, corpus_as_of, fallback_reason=fallback_reason
     )
     if not use_ai or not hits:
-        return _save_if_authenticated(user, payload, fallback)
+        return await _save_if_authenticated(user, payload, fallback)
     try:
         draft = await OpenAIAnswerer(
             api_key=settings.openai_api_key or "", model=settings.openai_answer_model
@@ -155,10 +188,10 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
             fallback.fallback_reason = AiFallbackReason.BILLING_OR_QUOTA_ERROR
         else:
             fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
-        return _save_if_authenticated(user, payload, fallback)
+        return await _save_if_authenticated(user, payload, fallback)
     if not validate_draft(draft, hits):
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
-        return _save_if_authenticated(user, payload, fallback)
+        return await _save_if_authenticated(user, payload, fallback)
     citations = [
         Citation(
             id=f"C{index}",
@@ -183,7 +216,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
     )
-    return _save_if_authenticated(user, payload, answer)
+    return await _save_if_authenticated(user, payload, answer)
 
 
 @app.post("/v1/auth/mock/google", response_model=MockLoginResponse)
@@ -202,6 +235,12 @@ async def current_user(
 
 @app.post("/v1/auth/logout", status_code=204)
 async def logout(authorization: Annotated[str | None, Header()] = None) -> Response:
+    if supabase_auth and postgres_identity:
+        try:
+            await supabase_auth.verify_user(_bearer_token(authorization))
+        except SupabaseAuthError as exc:
+            raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
+        return Response(status_code=204)
     _require_mock_auth()
     token = _bearer_token(authorization)
     if identity_repository.user_for_token(token) is None:
@@ -214,6 +253,13 @@ async def logout(authorization: Annotated[str | None, Header()] = None) -> Respo
 async def delete_account(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> Response:
+    if supabase_auth and postgres_identity:
+        try:
+            await supabase_auth.delete_user(await postgres_identity.auth_user_id(user.id))
+            await postgres_identity.delete_account_data(user.id)
+        except SupabaseAuthError as exc:
+            raise HTTPException(status_code=502, detail="계정 삭제를 완료하지 못했습니다.") from exc
+        return Response(status_code=204)
     identity_repository.delete_account(user.id)
     return Response(status_code=204)
 
@@ -222,6 +268,8 @@ async def delete_account(
 async def question_history(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> list[QuestionHistoryEntry]:
+    if postgres_identity:
+        return await postgres_identity.list_history(user.id)
     return identity_repository.list_history(user.id)
 
 
@@ -229,14 +277,19 @@ async def question_history(
 async def question_history_detail(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> QuestionHistoryEntry:
-    return _owned_history(history_id, user)
+    return await _owned_history(history_id, user)
 
 
 @app.delete("/v1/questions/history/{history_id}", status_code=204)
 async def delete_question_history(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> Response:
-    if not identity_repository.delete_history(history_id, user.id):
+    deleted = (
+        await postgres_identity.delete_history(history_id, user.id)
+        if postgres_identity
+        else identity_repository.delete_history(history_id, user.id)
+    )
+    if not deleted:
         raise HTTPException(status_code=404, detail="질문 이력을 찾을 수 없습니다")
     return Response(status_code=204)
 
@@ -249,7 +302,7 @@ async def export_checklist(
         ChecklistExportFormat.MARKDOWN
     ),
 ) -> StreamingResponse:
-    entry = _owned_history(history_id, user)
+    entry = await _owned_history(history_id, user)
     document = ChecklistDocument(
         title="에너지 법령 체크리스트",
         as_of_date=entry.request.as_of_date,
@@ -264,7 +317,10 @@ async def export_checklist(
     }
     renderer, media_type = renderers[export_format]
     content = renderer(document)
-    identity_repository.record_export(user.id, history_id, export_format.value)
+    if postgres_identity:
+        await postgres_identity.record_export(user.id, history_id, export_format.value)
+    else:
+        identity_repository.record_export(user.id, history_id, export_format.value)
     filename = f"checklist-{history_id}.{export_format.value}"
     return StreamingResponse(
         iter([content]),
@@ -321,9 +377,18 @@ def _embedder() -> OpenAIEmbedder:
 
 
 async def _check_quota(
-    request: Request, kind: str, limit: int, *, authenticated: bool = False
+    request: Request, kind: str, limit: int, *, user: MockUser | None = None
 ) -> None:
-    if authenticated:
+    if user is not None and postgres_identity:
+        account_limit = (
+            settings.authenticated_ai_daily_limit
+            if kind == "ai"
+            else settings.authenticated_search_daily_limit
+        )
+        if not await postgres_identity.consume_quota(user.id, date.today(), kind, account_limit):
+            raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
+        return
+    if user is not None:
         return
     today = date.today()
     subject = anonymous_rate_limit_subject(
@@ -355,17 +420,24 @@ def _initial_fallback_reason(payload: QuestionRequest) -> AiFallbackReason | Non
     return AiFallbackReason(unavailable_reason) if unavailable_reason else None
 
 
-def _save_if_authenticated(
+async def _save_if_authenticated(
     user: MockUser | None, payload: QuestionRequest, response: QuestionResponse
 ) -> QuestionResponse:
     emit_question_outcome(response.request_id, response.mode)
     if user is not None:
-        identity_repository.save_question(user.id, payload, response)
+        if postgres_identity:
+            await postgres_identity.save_question(user.id, payload, response)
+        else:
+            identity_repository.save_question(user.id, payload, response)
     return response
 
 
-def _owned_history(history_id: UUID, user: MockUser) -> QuestionHistoryEntry:
-    entry = identity_repository.get_history(history_id, user.id)
+async def _owned_history(history_id: UUID, user: MockUser) -> QuestionHistoryEntry:
+    entry = (
+        await postgres_identity.get_history(history_id, user.id)
+        if postgres_identity
+        else identity_repository.get_history(history_id, user.id)
+    )
     if entry is None:
         # 존재 여부를 숨겨 다른 사용자의 ID 열거를 막는다.
         raise HTTPException(status_code=404, detail="질문 이력을 찾을 수 없습니다")

@@ -1,6 +1,6 @@
 # Google OAuth·Supabase Auth 연결 설계
 
-상태: 승인 전 초안
+상태: 승인
 작성일: 2026-07-15
 
 ## 목적
@@ -119,7 +119,7 @@ FastAPI + Supabase PostgreSQL
 - `/auth/callback`은 `code` 존재 여부와 오류를 검사하고 `exchangeCodeForSession`을 한 번만 수행한다.
 - callback 이후 이동할 `next` 값은 `/`로 시작하는 내부 상대 경로만 허용해 open redirect를 막는다.
 - OAuth `state`, PKCE verifier와 세션 cookie는 프레임워크/Supabase SDK의 검증 경로를 사용하며 임의로 생략하지 않는다.
-- Production cookie는 `Secure`, `HttpOnly`, 적절한 `SameSite`를 적용한다.
+- `@supabase/ssr`의 cookie 기반 세션을 사용하고 Production에서는 HTTPS `Secure`와 적절한 `SameSite`를 유지한다. 브라우저 SDK가 refresh token을 갱신해야 하므로 HttpOnly를 임의로 강제하지 않으며 CSP·출력 인코딩으로 XSS 경계를 함께 보호한다.
 - FastAPI는 JWT payload를 단순 decode하지 않고 Supabase JWKS 서명, `iss`, `aud`, `exp`를 검증한다.
 - Google provider ID와 애플리케이션 내부 사용자 ID를 분리한다. 소유권 판단은 이메일 문자열이 아니라 검증된 내부 user ID로 한다.
 - 로그인 성공만으로 약관 동의가 생긴 것으로 간주하지 않는다. 신규 가입 UI에서 받은 동의 버전과 시각을 별도 저장한다.
@@ -149,9 +149,9 @@ FastAPI + Supabase PostgreSQL
 | callback은 왔지만 로그인 세션이 없음 | PKCE verifier cookie 유실, code 중복 교환 또는 callback 구현 오류 | Next.js `/auth/callback` |
 | API만 401 | Supabase session은 있으나 FastAPI JWT 검증/전달 미구현 | Web API client와 FastAPI auth adapter |
 
-## Production 전 결정
+## Production 결정
 
-현재 `vercel.app` 주소로 베타 테스트는 가능하지만, 공개 서비스의 Google branding/verification과 피싱 방어를 위해서는 운영자가 소유한 custom domain을 권장한다. custom domain을 도입하면 Google JavaScript origin, Supabase Site URL/Redirect URLs와 Web 환경변수를 같은 변경에서 갱신한다. Google redirect URI는 Supabase Auth custom domain을 별도로 도입하지 않는 한 기존 Supabase callback을 유지한다.
+베타와 현재 운영의 최종 도메인은 `https://law-rag-web.vercel.app`로 유지한다. custom domain은 현재 범위에 포함하지 않는다. Google JavaScript origin, Supabase Site URL과 Redirect URLs도 이 주소를 권위 값으로 사용한다.
 
 ## 공식 참고
 
@@ -165,3 +165,5 @@ FastAPI + Supabase PostgreSQL
 
 - 2026-07-15: Google은 identity provider, Supabase Auth는 OAuth confidential client와 session issuer, Next.js는 PKCE client/callback, FastAPI는 Supabase JWT resource server 역할로 분리한다. Client Secret과 Google code 교환을 브라우저·FastAPI에 중복 구현하지 않기 위함이다.
 - 2026-07-15: Production Google redirect URI는 hosted Supabase callback 하나로 고정하고, Production/localhost Web callback은 Supabase redirect allowlist에서 관리한다. 두 redirect 계층을 혼동해 callback mismatch나 open redirect를 만들지 않기 위함이다.
+- 2026-07-15: 운영자가 Google OAuth client, Supabase Google provider와 Production/localhost redirect 설정을 완료했다.
+- 2026-07-15: 별도 custom domain 없이 `https://law-rag-web.vercel.app`를 최종 운영 도메인으로 사용한다.

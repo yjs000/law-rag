@@ -11,6 +11,7 @@ import {
   getStoredUser,
   listQuestionHistory,
   logout,
+  startGoogleAuth,
 } from "../lib/api-client";
 import {
   downloadBlob,
@@ -215,7 +216,10 @@ export default function Home() {
   const composer = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    void Promise.resolve().then(() => setUser(getStoredUser()));
+    void getStoredUser().then(setUser).catch((cause) => {
+      setUser(null);
+      setError(cause instanceof Error ? cause.message : "로그인 정보를 확인하지 못했습니다.");
+    });
     getCorpusStatus().then((status) => {
       setCorpus(status);
       const resolution = resolveCorpusAnswerMode(status);
@@ -258,11 +262,13 @@ export default function Home() {
     setAuthNotice("");
   }
 
-  function handleGoogleAuth(view: AuthView) {
-    // TODO(auth): Supabase Google OAuth 시작, callback 검증, 세션 교환을 연결한다.
-    setAuthNotice(view === "signup"
-      ? "Google 가입과 약관 동의 기록 저장은 인증 백엔드 연결 작업에서 구현합니다."
-      : "Google 로그인과 기존 계정 복원은 인증 백엔드 연결 작업에서 구현합니다.");
+  async function handleGoogleAuth(view: AuthView) {
+    setAuthNotice("Google 인증 화면으로 이동합니다.");
+    try {
+      await startGoogleAuth(view);
+    } catch (cause) {
+      setAuthNotice(cause instanceof Error ? cause.message : "Google 로그인을 시작하지 못했습니다.");
+    }
   }
 
   async function handleLogout() {

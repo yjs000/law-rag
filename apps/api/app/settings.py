@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
     ai_daily_limit: int = 3
     search_daily_limit: int = 30
+    authenticated_ai_daily_limit: int = 10
+    authenticated_search_daily_limit: int = 100
     web_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 30
 

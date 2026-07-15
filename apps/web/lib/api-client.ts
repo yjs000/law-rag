@@ -5,33 +5,31 @@ import type {
   QuestionInput,
   QuestionResponse,
 } from "./contracts";
+import { createClient } from "./supabase/client";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const SESSION_KEY = "law-rag-mock-session";
+const CONSENT_KEY = "law-rag-pending-consent";
+export const TERMS_VERSION = "beta-2026-07-15";
+export const PRIVACY_VERSION = "beta-2026-07-15";
 
-type SessionEnvelope = { access_token: string; user: MockUser };
-
-function readSession(): SessionEnvelope | null {
-  if (typeof window === "undefined") return null;
-  const value = window.localStorage.getItem(SESSION_KEY);
-  if (!value) return null;
+async function accessToken(): Promise<string | null> {
   try {
-    return JSON.parse(value) as SessionEnvelope;
+    const { data } = await createClient().auth.getSession();
+    return data.session?.access_token ?? null;
   } catch {
-    window.localStorage.removeItem(SESSION_KEY);
     return null;
   }
 }
 
-function authHeaders(): HeadersInit {
-  const session = readSession();
-  return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+async function authHeaders(): Promise<HeadersInit> {
+  const token = await accessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     ...init,
-    headers: { ...authHeaders(), ...init?.headers },
+    headers: { ...(await authHeaders()), ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -41,31 +39,44 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getStoredUser(): MockUser | null {
-  return readSession()?.user ?? null;
+export async function getStoredUser(): Promise<MockUser | null> {
+  if (!(await accessToken())) return null;
+  const consent = typeof window !== "undefined"
+    ? window.sessionStorage.getItem(CONSENT_KEY)
+    : null;
+  try {
+    const user = await request<MockUser>("/v1/auth/me", {
+      headers: consent ? {
+        "X-Terms-Version": TERMS_VERSION,
+        "X-Privacy-Version": PRIVACY_VERSION,
+      } : undefined,
+    });
+    if (consent) window.sessionStorage.removeItem(CONSENT_KEY);
+    return user;
+  } catch (error) {
+    throw error;
+  }
 }
 
-export async function mockGoogleLogin(): Promise<MockUser> {
-  const session = await request<SessionEnvelope>("/v1/auth/mock/google", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "researcher@example.com", display_name: "법령 연구자" }),
+export async function startGoogleAuth(view: "login" | "signup"): Promise<void> {
+  if (view === "signup") window.sessionStorage.setItem(CONSENT_KEY, "accepted");
+  else window.sessionStorage.removeItem(CONSENT_KEY);
+  const redirectTo = `${window.location.origin}/auth/callback`;
+  const { error } = await createClient().auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
   });
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  return session.user;
+  if (error) throw error;
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await request<void>("/v1/auth/logout", { method: "POST" });
-  } finally {
-    window.localStorage.removeItem(SESSION_KEY);
-  }
+  const { error } = await createClient().auth.signOut();
+  if (error) throw error;
 }
 
 export async function deleteAccount(): Promise<void> {
   await request<void>("/v1/account", { method: "DELETE" });
-  window.localStorage.removeItem(SESSION_KEY);
+  await createClient().auth.signOut({ scope: "local" });
 }
 
 export function getCorpusStatus(): Promise<CorpusStatus> {
@@ -89,15 +100,13 @@ export function getQuestionHistory(id: string): Promise<QuestionHistoryItem> {
 }
 
 export function deleteQuestionHistory(id: string): Promise<void> {
-  return request(`/v1/questions/history/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
+  return request(`/v1/questions/history/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function downloadPdf(historyId: string): Promise<Blob> {
   const response = await fetch(
     `${API}/v1/questions/history/${encodeURIComponent(historyId)}/checklist?format=pdf`,
-    { headers: authHeaders() },
+    { headers: await authHeaders() },
   );
   if (!response.ok) throw new Error("PDF 출력본을 만들지 못했습니다.");
   return response.blob();

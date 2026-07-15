@@ -5,9 +5,17 @@ import {
   downloadPdf,
   getStoredUser,
   listQuestionHistory,
-  mockGoogleLogin,
+  startGoogleAuth,
 } from "./api-client";
 import type { QuestionHistoryItem, QuestionResponse } from "./contracts";
+
+const auth = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  signInWithOAuth: vi.fn(),
+  signOut: vi.fn(),
+}));
+
+vi.mock("./supabase/client", () => ({ createClient: () => ({ auth }) }));
 
 const answer: QuestionResponse = {
   request_id: "history-1",
@@ -32,21 +40,26 @@ const history: QuestionHistoryItem = {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  auth.getSession.mockReset();
+  auth.signInWithOAuth.mockReset();
 });
 
-describe("mock authenticated question workflow", () => {
-  it("logs in, asks, lists history, exports PDF, and deletes with the bearer session", async () => {
+describe("Supabase authenticated question workflow", () => {
+  it("starts PKCE login and sends the Supabase bearer token to API calls", async () => {
     const values = new Map<string, string>();
     vi.stubGlobal("window", {
-      localStorage: {
+      location: { origin: "http://localhost:3000" },
+      sessionStorage: {
         getItem: (key: string) => values.get(key) ?? null,
         setItem: (key: string, value: string) => values.set(key, value),
         removeItem: (key: string) => values.delete(key),
       },
     });
+    auth.getSession.mockResolvedValue({ data: { session: { access_token: "token-1" } } });
+    auth.signInWithOAuth.mockResolvedValue({ error: null });
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
-      if (url.endsWith("/v1/auth/mock/google")) return Response.json({ access_token: "token-1", user: { id: "user-1", email: "researcher@example.com", display_name: "법령 연구자", auth_provider: "google", created_at: "2026-07-14T00:00:00Z" } });
+      if (url.endsWith("/v1/auth/me")) return Response.json({ id: "user-1", email: "researcher@example.com", display_name: "법령 연구자", auth_provider: "google", created_at: "2026-07-14T00:00:00Z" });
       if (url.endsWith("/v1/questions") && init?.method === "POST") return Response.json(answer);
       if (url.endsWith("/v1/questions/history")) return Response.json([history]);
       if (url.includes("/checklist?format=pdf")) return new Response(new Uint8Array([37, 80, 68, 70]), { headers: { "Content-Type": "application/pdf" } });
@@ -55,16 +68,18 @@ describe("mock authenticated question workflow", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const user = await mockGoogleLogin();
-    expect(user.auth_provider).toBe("google");
-    expect(getStoredUser()?.id).toBe("user-1");
+    await startGoogleAuth("signup");
+    expect(auth.signInWithOAuth).toHaveBeenCalledWith({ provider: "google", options: { redirectTo: "http://localhost:3000/auth/callback" } });
+    expect((await getStoredUser())?.id).toBe("user-1");
     expect((await askQuestion(history.request)).request_id).toBe("history-1");
     expect(await listQuestionHistory()).toEqual([history]);
     expect((await downloadPdf(history.id)).type).toBe("application/pdf");
     await deleteQuestionHistory(history.id);
 
-    for (const [, init] of fetchMock.mock.calls.slice(1)) {
+    for (const [, init] of fetchMock.mock.calls) {
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-1");
     }
+    const meHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(meHeaders.get("X-Terms-Version")).toBe("beta-2026-07-15");
   });
 });
