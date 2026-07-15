@@ -6,9 +6,11 @@ from collections.abc import Sequence
 from law_rag_core.domain.catalog import MVP_CATALOG
 
 from law_rag_collector.client import LawOpenApiClient
+from law_rag_collector.ports import resolve
 from law_rag_collector.repository import MockCorpusRepository
 from law_rag_collector.service import CollectorService
 from law_rag_collector.settings import get_settings
+from law_rag_collector.supabase_repository import SupabaseCurrentCorpusRepository
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -23,10 +25,37 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _run(command: str, title: str | None = None) -> int:
     settings = get_settings()
-    repository = MockCorpusRepository(settings.collector_state_dir)
+    repository = (
+        SupabaseCurrentCorpusRepository(
+            database_url=settings.direct_url or settings.database_url or "",
+            supabase_url=settings.supabase_url or "",
+            supabase_secret_key=settings.supabase_secret_key or "",
+            bucket=settings.supabase_raw_bucket,
+        )
+        if settings.supabase_enabled
+        else MockCorpusRepository(settings.collector_state_dir)
+    )
     if command == "status":
-        print(json.dumps(repository.status(), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                await resolve(repository.status()),
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        )
+        if isinstance(repository, SupabaseCurrentCorpusRepository):
+            await repository.close()
         return 0
+    if command == "sync-history" and isinstance(repository, SupabaseCurrentCorpusRepository):
+        print(
+            json.dumps(
+                {"error": "Supabase 연혁·삭제 동기화는 아직 활성화되지 않았습니다"},
+                ensure_ascii=False,
+            )
+        )
+        await repository.close()
+        return 2
     if not settings.law_open_api_oc:
         print(
             json.dumps(
@@ -35,21 +64,30 @@ async def _run(command: str, title: str | None = None) -> int:
             )
         )
         return 2
-    async with LawOpenApiClient(
-        oc=settings.law_open_api_oc,
-        base_url=settings.law_open_api_base_url,
-        timeout=settings.collector_request_timeout_seconds,
-    ) as client:
-        service = CollectorService(client, repository)
-        entries = [entry for entry in MVP_CATALOG if title is None or entry.title == title]
-        if not entries:
-            print(json.dumps({"error": "허용 목록에 없는 정확 명칭입니다"}, ensure_ascii=False))
-            return 2
-        results = (
-            await service.sync_current(entries)
-            if command == "sync-current"
-            else await service.sync_history(entries)
-        )
+    try:
+        async with LawOpenApiClient(
+            oc=settings.law_open_api_oc,
+            base_url=settings.law_open_api_base_url,
+            timeout=settings.collector_request_timeout_seconds,
+        ) as client:
+            service = CollectorService(client, repository)
+            entries = [entry for entry in MVP_CATALOG if title is None or entry.title == title]
+            if not entries:
+                print(
+                    json.dumps(
+                        {"error": "허용 목록에 없는 정확 명칭입니다"},
+                        ensure_ascii=False,
+                    )
+                )
+                return 2
+            results = (
+                await service.sync_current(entries)
+                if command == "sync-current"
+                else await service.sync_history(entries)
+            )
+    finally:
+        if isinstance(repository, SupabaseCurrentCorpusRepository):
+            await repository.close()
     failed = [item for item in results if item.state == "failed"]
     reported = (
         results
@@ -65,9 +103,7 @@ async def _run(command: str, title: str | None = None) -> int:
         "ready": sum(item.state == "ready" for item in results),
         "unchanged": sum(item.state == "unchanged" for item in results),
         "failed": len(failed),
-        "results": [
-            item.model_dump(mode="json") for item in reported
-        ],
+        "results": [item.model_dump(mode="json") for item in reported],
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 1 if failed else 0

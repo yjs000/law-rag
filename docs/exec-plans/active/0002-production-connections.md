@@ -149,3 +149,6 @@
 - 2026-07-15: 전체 검증에서 core 2개, API 58개, collector 29개, Web 11개 테스트와 Python/Web lint, TypeScript, Next.js Production build가 통과했다. Supabase Alembic revision은 `0001 (head)`다.
 - 2026-07-15: 제품 표기 변경 `a426356`과 Supavisor runtime·migration 변경 `3588c5f`를 기능별로 `main`에 푸시했다. Web deployment `dpl_HC8czToc9t7Tw6Hu859HJDr5vWVA`와 API deployment `dpl_nXvidJDHyWXNtJbUqJjcSxYHG6fz`가 Ready 상태가 되었다.
 - 2026-07-15: `https://law-rag-web.vercel.app`에서 질문을 전송해 `https://law-rag-api-opal.vercel.app`의 응답이 화면에 표시되는 종단 연결을 확인했다. API `/health`는 `ok`, Web은 HTTP 200이다. `/v1/corpus/status`의 9개 항목은 모두 `missing`이므로 화면은 정상적으로 검색 전용·근거 부족 상태를 표시했다.
+- 2026-07-15: collector Supabase 어댑터를 연결해 현재 버전 9문서, 9버전, 3,050조문과 content-addressed private Storage 객체 9개를 적재했다. 재실행은 9개 모두 `unchanged`, 실패 0으로 완료됐다.
+- 2026-07-15: Production API는 corpus `ready 9`, `missing 0`을 반환했다. 분산에너지와 전기저장시설 검색 각각 5건, 조문 상세 ID 왕복, 검색 전용 질문 10개 section·10개 인용을 확인했다.
+- 2026-07-15: Supabase `sync-history`는 출처 삭제 격리와 체크포인트 스키마가 완성될 때까지 명시적으로 차단한다. 현재 버전 적재 목표는 완료했지만 235개 연혁 이관 항목은 미완료로 유지한다.

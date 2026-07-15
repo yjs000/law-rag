@@ -36,9 +36,7 @@ class DeletionClient:
         if kind == 2 and self.fail_admin:
             raise RuntimeError("simulated deletion lookup failure")
         records = (
-            [DeletionRecord("1001", SourceKind.LAW, "법령", date(2026, 7, 10))]
-            if kind == 1
-            else []
+            [DeletionRecord("1001", SourceKind.LAW, "법령", date(2026, 7, 10))] if kind == 1 else []
         )
         return ParsedResponse(
             records,

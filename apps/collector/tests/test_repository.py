@@ -54,12 +54,8 @@ def test_mock_repository_preserves_staged_effective_dates_for_same_mst(tmp_path)
     repository = MockCorpusRepository(tmp_path, today=lambda: date(2026, 7, 14))
     first_body = json.dumps({"version": "first"})
     second_body = json.dumps({"version": "second"})
-    first_raw = RawResponse(
-        first_body, "JSON", "https://example.test?OC=%5Bredacted%5D"
-    )
-    second_raw = RawResponse(
-        second_body, "JSON", "https://example.test?OC=%5Bredacted%5D"
-    )
+    first_raw = RawResponse(first_body, "JSON", "https://example.test?OC=%5Bredacted%5D")
+    second_raw = RawResponse(second_body, "JSON", "https://example.test?OC=%5Bredacted%5D")
     first = _document(first_body)
     second = _document(second_body)
     second.effective_from = date(2020, 3, 1)

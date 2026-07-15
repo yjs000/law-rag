@@ -78,8 +78,7 @@ def parse_history_xml(body: str) -> list[HistoryVersion]:
     versions: dict[str, HistoryVersion] = {}
     for node in root.iter():
         values = {
-            child.tag.rsplit("}", 1)[-1]: _text(" ".join(child.itertext()))
-            for child in node.iter()
+            child.tag.rsplit("}", 1)[-1]: _text(" ".join(child.itertext())) for child in node.iter()
         }
         mst = values.get("법령일련번호") or values.get("행정규칙일련번호") or ""
         if not mst:
@@ -108,9 +107,7 @@ def effective_periods(versions: list[HistoryVersion]) -> list[EffectiveVersion]:
         raise ValueError("동일 MST와 시행일이 중복되었습니다")
     distinct_dates = sorted({item.effective_from for item in ordered})
     next_date = {
-        effective_from: distinct_dates[index + 1]
-        if index + 1 < len(distinct_dates)
-        else None
+        effective_from: distinct_dates[index + 1] if index + 1 < len(distinct_dates) else None
         for index, effective_from in enumerate(distinct_dates)
     }
     return [

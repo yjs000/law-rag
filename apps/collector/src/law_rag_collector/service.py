@@ -6,14 +6,14 @@ from law_rag_core.domain.schemas import IngestionResult
 
 from law_rag_collector.client import LawOpenApiClient, SearchRecord
 from law_rag_collector.history import HistoryVersion, effective_periods
-from law_rag_collector.repository import MockCorpusRepository
+from law_rag_collector.ports import CollectorRepository, resolve
 
 
 class CollectorService:
     def __init__(
         self,
         client: LawOpenApiClient,
-        repository: MockCorpusRepository,
+        repository: CollectorRepository,
         *,
         today: Callable[[], date] = date.today,
     ) -> None:
@@ -25,8 +25,10 @@ class CollectorService:
         self, entries: Sequence[CatalogEntry] = MVP_CATALOG
     ) -> list[IngestionResult]:
         results = [await self._safe_current(entry) for entry in entries]
-        self.repository.record_run(
-            "sync-current", [item.model_dump(mode="json") for item in results]
+        await resolve(
+            self.repository.record_run(
+                "sync-current", [item.model_dump(mode="json") for item in results]
+            )
         )
         return results
 
@@ -42,14 +44,16 @@ class CollectorService:
                     IngestionResult(title=entry.title, state="failed", detail=_safe_detail(exc))
                 )
         results.extend(await self._sync_deletions())
-        self.repository.record_run(
-            "sync-history", [item.model_dump(mode="json") for item in results]
+        await resolve(
+            self.repository.record_run(
+                "sync-history", [item.model_dump(mode="json") for item in results]
+            )
         )
         return results
 
     async def _sync_deletions(self) -> list[IngestionResult]:
         today = self._today()
-        from_date, to_date = self.repository.deletion_window(today=today)
+        from_date, to_date = await resolve(self.repository.deletion_window(today=today))
         responses = {}
         failures = {}
         for kind, label in ((1, "법령"), (2, "행정규칙")):
@@ -76,7 +80,9 @@ class CollectorService:
 
         records = [record for response in responses.values() for record in response.value]
         try:
-            stats = self.repository.apply_source_deletions(records, completed_on=to_date)
+            stats = await resolve(
+                self.repository.apply_source_deletions(records, completed_on=to_date)
+            )
         except Exception as exc:
             detail = _safe_detail(exc)
             return [
@@ -102,8 +108,7 @@ class CollectorService:
                     wire_format=response.raw.wire_format,
                     fallback_reason=response.raw.fallback_reason,
                     detail=(
-                        f"조회 {len(response.value)}건, "
-                        f"허용 코퍼스 {matched}건, 변경 {changed}건"
+                        f"조회 {len(response.value)}건, 허용 코퍼스 {matched}건, 변경 {changed}건"
                     ),
                 )
             )
@@ -119,7 +124,9 @@ class CollectorService:
                 mst=search_item.mst,
                 historical=False,
             )
-            changed = self.repository.upsert(parsed.value, parsed.raw, effective_to=None)
+            changed = await resolve(
+                self.repository.upsert(parsed.value, parsed.raw, effective_to=None)
+            )
             return IngestionResult(
                 title=entry.title,
                 state="ready" if changed else "unchanged",
@@ -153,10 +160,12 @@ class CollectorService:
             # eflaw는 최신 MST 본문을 과거 efYd로 조회할 수 있어 본문 메타데이터의
             # 시행일과 조회 스냅샷 시작일이 다를 수 있다. 효력 경계는 목록의 efYd가 권위다.
             parsed.value.effective_from = period.effective_from
-            changed = self.repository.upsert(
-                parsed.value,
-                parsed.raw,
-                effective_to=period.effective_to,
+            changed = await resolve(
+                self.repository.upsert(
+                    parsed.value,
+                    parsed.raw,
+                    effective_to=period.effective_to,
+                )
             )
             results.append(
                 IngestionResult(

@@ -58,9 +58,7 @@ async def test_schema_failure_falls_back_to_xml() -> None:
     route = respx.get("https://example.test/DRF/lawSearch.do").mock(
         side_effect=[
             httpx.Response(200, json={"unexpected": []}),
-            httpx.Response(
-                200, text=(FIXTURES / "search-history.xml").read_text(encoding="utf-8")
-            ),
+            httpx.Response(200, text=(FIXTURES / "search-history.xml").read_text(encoding="utf-8")),
         ]
     )
     async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
@@ -113,9 +111,7 @@ async def test_client_error_is_not_retried_or_changed_to_xml() -> None:
 @respx.mock
 async def test_historical_law_body_uses_effective_law_mst_and_date() -> None:
     route = respx.get("https://example.test/DRF/lawService.do").mock(
-        return_value=httpx.Response(
-            200, text=(FIXTURES / "law.json").read_text(encoding="utf-8")
-        )
+        return_value=httpx.Response(200, text=(FIXTURES / "law.json").read_text(encoding="utf-8"))
     )
     async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
         response = await client.document(
@@ -193,9 +189,7 @@ async def test_deleted_records_schema_failure_falls_back_to_xml() -> None:
     route = respx.get("https://example.test/DRF/lawSearch.do").mock(
         side_effect=[
             httpx.Response(200, json={"unexpected": []}),
-            httpx.Response(
-                200, text=(FIXTURES / "deletions.xml").read_text(encoding="utf-8")
-            ),
+            httpx.Response(200, text=(FIXTURES / "deletions.xml").read_text(encoding="utf-8")),
         ]
     )
     async with LawOpenApiClient(oc="secret", base_url="https://example.test/DRF") as client:
@@ -222,9 +216,7 @@ async def test_deleted_records_follows_pagination() -> None:
                         "target": "delHst",
                         "totalCnt": 101,
                         "page": 1,
-                        "law": [
-                            {"일련번호": "1001", "구분명": "법령", "삭제일자": "20260710"}
-                        ],
+                        "law": [{"일련번호": "1001", "구분명": "법령", "삭제일자": "20260710"}],
                     }
                 },
             ),
@@ -235,9 +227,7 @@ async def test_deleted_records_follows_pagination() -> None:
                         "target": "delHst",
                         "totalCnt": 101,
                         "page": 2,
-                        "law": [
-                            {"일련번호": "1002", "구분명": "법령", "삭제일자": "20260711"}
-                        ],
+                        "law": [{"일련번호": "1002", "구분명": "법령", "삭제일자": "20260711"}],
                     }
                 },
             ),

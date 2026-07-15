@@ -78,8 +78,7 @@ def _markers(raw: RawResponse) -> dict[str, bool]:
         except ET.ParseError as exc:
             raise ValueError("활성화 검사에서 XML을 파싱할 수 없습니다") from exc
         values = [
-            (node.tag.rsplit("}", 1)[-1], _clean(" ".join(node.itertext())))
-            for node in root.iter()
+            (node.tag.rsplit("}", 1)[-1], _clean(" ".join(node.itertext()))) for node in root.iter()
         ]
     return {
         "deleted": any(_truthy(value) for key, value in values if "삭제여부" in key),

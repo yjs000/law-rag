@@ -280,12 +280,8 @@ class LawOpenApiClient:
             response = await self._parsed(
                 "lawSearch.do",
                 params,
-                lambda body, page=page_number: parse_deletions_json(
-                    body, kind, expected_page=page
-                ),
-                lambda body, page=page_number: parse_deletions_xml(
-                    body, kind, expected_page=page
-                ),
+                lambda body, page=page_number: parse_deletions_json(body, kind, expected_page=page),
+                lambda body, page=page_number: parse_deletions_xml(body, kind, expected_page=page),
             )
             records.extend(response.value.records)
             if aggregate_raw is None or response.raw.fallback_reason:
@@ -294,9 +290,7 @@ class LawOpenApiClient:
                 break
             page_number += 1
         assert aggregate_raw is not None
-        unique = {
-            (record.source_kind, record.mst, record.deleted_on): record for record in records
-        }
+        unique = {(record.source_kind, record.mst, record.deleted_on): record for record in records}
         return ParsedResponse(list(unique.values()), aggregate_raw)
 
 

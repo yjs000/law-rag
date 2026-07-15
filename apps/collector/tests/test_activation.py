@@ -48,9 +48,7 @@ def test_branch_supplement_future_and_missing_optional_fields_are_preserved(tmp_
 
 def test_source_deleted_and_legally_abolished_markers_are_separate() -> None:
     deleted, deleted_raw = _json_document("law-deleted.json")
-    deleted_metadata = validate_for_activation(
-        deleted, deleted_raw, today=date(2026, 7, 14)
-    )
+    deleted_metadata = validate_for_activation(deleted, deleted_raw, today=date(2026, 7, 14))
     assert deleted_metadata.lifecycle_state == "active"
     assert deleted_metadata.source_record_state == "deleted"
 
@@ -62,9 +60,7 @@ def test_source_deleted_and_legally_abolished_markers_are_separate() -> None:
         source_kind=SourceKind.LAW,
         source_url=raw.source_url,
     )
-    abolished_metadata = validate_for_activation(
-        abolished, raw, today=date(2026, 7, 14)
-    )
+    abolished_metadata = validate_for_activation(abolished, raw, today=date(2026, 7, 14))
     assert abolished_metadata.lifecycle_state == "abolished"
     assert abolished_metadata.source_record_state == "available"
 

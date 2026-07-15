@@ -10,12 +10,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_json_and_xml_deletion_contracts_match() -> None:
-    json_page = parse_deletions_json(
-        (FIXTURES / "deletions.json").read_text(encoding="utf-8"), 1
-    )
-    xml_page = parse_deletions_xml(
-        (FIXTURES / "deletions.xml").read_text(encoding="utf-8"), 1
-    )
+    json_page = parse_deletions_json((FIXTURES / "deletions.json").read_text(encoding="utf-8"), 1)
+    xml_page = parse_deletions_xml((FIXTURES / "deletions.xml").read_text(encoding="utf-8"), 1)
 
     assert json_page == xml_page
     assert json_page.total_count == 2
@@ -25,9 +21,7 @@ def test_json_and_xml_deletion_contracts_match() -> None:
 
 
 def test_empty_deletion_page_is_valid() -> None:
-    page = parse_deletions_json(
-        (FIXTURES / "deletions-empty.json").read_text(encoding="utf-8"), 1
-    )
+    page = parse_deletions_json((FIXTURES / "deletions-empty.json").read_text(encoding="utf-8"), 1)
     assert page.total_count == 0
     assert page.records == []
 
