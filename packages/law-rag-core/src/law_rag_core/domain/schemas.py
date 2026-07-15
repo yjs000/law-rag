@@ -48,6 +48,7 @@ class QuestionRequest(BaseModel):
     question: Annotated[str, Field(min_length=2, max_length=2000)]
     as_of_date: date = Field(default_factory=date.today)
     project_stage: ProjectStage = ProjectStage.PLANNING
+    answer_mode: Literal["terra", "search_only"] = "terra"
     business_type: Annotated[str | None, Field(max_length=120)] = None
     facility_type: Annotated[str | None, Field(max_length=120)] = None
 

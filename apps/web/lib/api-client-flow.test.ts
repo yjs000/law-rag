@@ -23,7 +23,7 @@ const answer: QuestionResponse = {
 const history: QuestionHistoryItem = {
   id: "history-1",
   user_id: "user-1",
-  request: { question: "허가를 확인해줘", as_of_date: "2026-07-14", project_stage: "permitting" },
+  request: { question: "허가를 확인해줘", as_of_date: "2026-07-14", project_stage: "permitting", answer_mode: "terra" },
   response: answer,
   created_at: "2026-07-14T00:00:00Z",
   expires_at: "2027-07-14T00:00:00Z",

@@ -113,14 +113,15 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
     user = _optional_user(request.headers.get("authorization"))
+    use_ai = payload.answer_mode == "terra" and _ai_available()
     await _check_quota(
         request,
-        "ai" if _ai_available() else "search",
-        settings.ai_daily_limit if _ai_available() else settings.search_daily_limit,
+        "ai" if use_ai else "search",
+        settings.ai_daily_limit if use_ai else settings.search_daily_limit,
         authenticated=user is not None,
     )
     query_embedding = None
-    if _ai_available():
+    if use_ai:
         try:
             query_embedding = (await _embedder().embed([payload.question]))[0]
         except Exception:
@@ -129,7 +130,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
     corpus_as_of = await repository.last_sync()
     fallback = search_only_answer(payload, hits, corpus_as_of)
-    if not _ai_available() or not hits:
+    if not use_ai or not hits:
         return _save_if_authenticated(user, payload, fallback)
     try:
         draft = await OpenAIAnswerer(

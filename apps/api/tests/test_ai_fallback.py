@@ -82,3 +82,47 @@ def test_all_generation_failures_fall_back_without_another_model(monkeypatch, er
     assert response.status_code == 200
     assert response.json()["mode"] == "search_only"
     assert FailingAnswerer.models == ["gpt-5.6-terra"]
+
+
+def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> None:
+    async def search(*args, **kwargs):
+        return []
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    FailingAnswerer.models = []
+    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "원문만 검색해 주세요",
+            "as_of_date": "2026-07-14",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "search_only"
+    assert FailingAnswerer.models == []
+
+
+def test_unknown_answer_mode_is_rejected_at_boundary() -> None:
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "지원하지 않는 모델을 사용해 주세요",
+            "answer_mode": "other-model",
+        },
+    )
+
+    assert response.status_code == 422

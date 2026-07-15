@@ -60,4 +60,5 @@ export type QuestionInput = {
   question: string;
   as_of_date: string;
   project_stage: string;
+  answer_mode?: "terra" | "search_only";
 };

@@ -9,3 +9,4 @@
 - [05 독립 수집기와 시간 효력](05-independent-collector.md)
 - [06 목업 인증·이력과 검색 전용 폴백](06-mock-api-history-and-fallback.md)
 - [07 검색·원문 계보·답변 검증 기초](07-retrieval-storage-and-grounding-foundations.md)
+- [08 채팅 UI와 모델 선택 경계](08-chat-ui-and-model-choice.md)
