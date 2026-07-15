@@ -11,7 +11,6 @@ import {
   getStoredUser,
   listQuestionHistory,
   logout,
-  mockGoogleLogin,
 } from "../lib/api-client";
 import {
   downloadBlob,
@@ -36,6 +35,8 @@ import type {
 import { SafeText } from "./safe-text";
 
 type AnswerPreference = "terra" | "search_only";
+type AuthDocument = "privacy" | "terms";
+type AuthView = "login" | "signup";
 type IconName = "account" | "arrow" | "close" | "menu" | "new" | "search" | "trash";
 
 const MODEL_LABELS: Record<AnswerPreference, string> = {
@@ -44,7 +45,7 @@ const MODEL_LABELS: Record<AnswerPreference, string> = {
 };
 
 const SUGGESTED_QUESTIONS = [
-  "분산에너지 사업 허가 절차를 알려주세요",
+  "에너지 사업 허가 절차를 알려주세요",
   "전기저장시설 설치 시 확인할 기준은?",
   "사업 변경 시 다시 신고해야 하는 사항은?",
 ];
@@ -85,15 +86,67 @@ function Dialog({ children, onClose, titleId }: { children: ReactNode; onClose: 
   );
 }
 
-function AuthDialog({ onClose, onLogin }: { onClose: () => void; onLogin: () => Promise<void> }) {
+function AuthDialog({ notice, onClose, onGoogleContinue, onSwitch, view }: {
+  notice: string;
+  onClose: () => void;
+  onGoogleContinue: (view: AuthView) => void;
+  onSwitch: (view: AuthView) => void;
+  view: AuthView;
+}) {
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [documentView, setDocumentView] = useState<AuthDocument | null>(null);
+  const signupReady = acceptTerms && acceptPrivacy;
+  const documentTitle = documentView === "terms" ? "서비스 이용약관" : "개인정보 처리방침";
+
   return (
     <Dialog onClose={onClose} titleId="auth-title">
-      <div className="modal-mark">EL</div>
-      <p className="eyebrow">Energy Law Research System</p>
-      <h2 id="auth-title">질문의 맥락을 이어가세요</h2>
-      <p className="modal-copy">Google 계정으로 처음 로그인하면 별도 입력 없이 계정이 만들어집니다. 저장된 질문은 1년 뒤 자동 삭제됩니다.</p>
-      <button className="google-login" onClick={onLogin}><span aria-hidden="true">G</span> Google로 계속하기</button>
-      <p className="fine-print">로그인 전 질문과 답변은 계정에 소급 저장되지 않습니다.</p>
+      <div className="auth-brand"><div className="modal-mark">EL</div><span>Energy Law</span></div>
+      {documentView ? <>
+        <p className="eyebrow">Policy preview</p>
+        <h2 id="auth-title">{documentTitle}</h2>
+        <div className="policy-preview">
+          <span>UI 초안 · 본문 미확정</span>
+          <p>최종 법률 검토를 거친 문서와 버전이 인증 구현 단계에서 연결됩니다.</p>
+          <h3>이 화면에서 안내할 내용</h3>
+          <ul>{documentView === "terms" ? <>
+            <li>서비스의 법률 조사 범위와 법률 자문 대체 불가</li>
+            <li>사용자 입력 책임과 허용되지 않는 사용</li>
+            <li>서비스 변경·중단·계정 종료 조건</li>
+          </> : <>
+            <li>Google 계정 식별정보와 질문 이력의 처리 목적</li>
+            <li>질문 기록 1년 보관 및 계정 삭제 전파</li>
+            <li>사용자 권리, 국외 이전, 문의 경로</li>
+          </>}</ul>
+        </div>
+        <button className="auth-back" onClick={() => setDocumentView(null)}>회원가입으로 돌아가기</button>
+      </> : view === "login" ? <>
+        <p className="eyebrow">Welcome back</p>
+        <h2 id="auth-title">다시 만나 반갑습니다</h2>
+        <p className="modal-copy">Google 계정으로 로그인하고 저장한 질문, 인용 원문, 체크리스트를 이어서 확인하세요.</p>
+        <button className="google-login" onClick={() => onGoogleContinue("login")}><span aria-hidden="true">G</span> Google로 로그인</button>
+        <div className="auth-assurances" aria-label="로그인 데이터 정책">
+          <span>질문 기록 1년 보관</span><span>익명 질문 소급 저장 안 함</span>
+        </div>
+        <p className="auth-switch">처음 방문하셨나요? <button onClick={() => onSwitch("signup")}>계정 만들기</button></p>
+      </> : <>
+        <p className="eyebrow">Create account</p>
+        <h2 id="auth-title">연구 기록을 이어갈 계정을 만드세요</h2>
+        <p className="modal-copy">별도의 비밀번호 없이 Google 계정으로 가입합니다. 로그인 후 질문부터 계정에 저장됩니다.</p>
+        <div className="signup-benefits">
+          <div><strong>질문 이력</strong><span>왼쪽 목록에서 이전 조사를 다시 엽니다.</span></div>
+          <div><strong>내 데이터 통제</strong><span>계정 삭제 시 연결된 질문과 내보내기를 함께 삭제합니다.</span></div>
+        </div>
+        <fieldset className="consent-list">
+          <legend>필수 동의</legend>
+          <label><input checked={acceptTerms} onChange={(event) => setAcceptTerms(event.target.checked)} type="checkbox" /><span><strong>서비스 이용약관 동의</strong><small>서비스 범위와 사용자 책임을 확인했습니다.</small></span><button aria-label="서비스 이용약관 보기" onClick={() => setDocumentView("terms")} type="button">보기</button></label>
+          <label><input checked={acceptPrivacy} onChange={(event) => setAcceptPrivacy(event.target.checked)} type="checkbox" /><span><strong>개인정보 처리방침 동의</strong><small>질문 이력의 1년 보관 및 삭제 정책을 확인했습니다.</small></span><button aria-label="개인정보 처리방침 보기" onClick={() => setDocumentView("privacy")} type="button">보기</button></label>
+        </fieldset>
+        <button className="google-login" disabled={!signupReady} onClick={() => onGoogleContinue("signup")}><span aria-hidden="true">G</span> Google로 계정 만들기</button>
+        <p className="auth-switch">이미 계정이 있나요? <button onClick={() => onSwitch("login")}>로그인</button></p>
+      </>}
+      {!documentView && notice && <div className="auth-notice" role="status"><strong>연결 준비 중</strong><span>{notice}</span></div>}
+      {!documentView && <p className="fine-print">이 서비스는 법률 자문을 대체하지 않습니다.</p>}
     </Dialog>
   );
 }
@@ -138,6 +191,8 @@ export default function Home() {
   const [history, setHistory] = useState<QuestionHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [authView, setAuthView] = useState<AuthView>("login");
+  const [authNotice, setAuthNotice] = useState("");
   const [showAccount, setShowAccount] = useState(false);
   const [showAnonymousNudge, setShowAnonymousNudge] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -172,18 +227,28 @@ export default function Home() {
     if (user) void Promise.resolve().then(refreshHistory);
   }, [refreshHistory, user]);
 
-  const closeAuth = useCallback(() => setShowAuth(false), []);
+  const closeAuth = useCallback(() => {
+    setShowAuth(false);
+    setAuthNotice("");
+  }, []);
   const closeAccount = useCallback(() => setShowAccount(false), []);
 
-  async function handleLogin() {
-    setError("");
-    try {
-      setUser(await mockGoogleLogin());
-      setShowAuth(false);
-      setShowAnonymousNudge(false);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "목업 로그인에 실패했습니다.");
-    }
+  function openAuth(view: AuthView = "login") {
+    setAuthView(view);
+    setAuthNotice("");
+    setShowAuth(true);
+  }
+
+  function switchAuthView(view: AuthView) {
+    setAuthView(view);
+    setAuthNotice("");
+  }
+
+  function handleGoogleAuth(view: AuthView) {
+    // TODO(auth): Supabase Google OAuth 시작, callback 검증, 세션 교환을 연결한다.
+    setAuthNotice(view === "signup"
+      ? "Google 가입과 약관 동의 기록 저장은 인증 백엔드 연결 작업에서 구현합니다."
+      : "Google 로그인과 기존 계정 복원은 인증 백엔드 연결 작업에서 구현합니다.");
   }
 
   async function handleLogout() {
@@ -326,7 +391,7 @@ export default function Home() {
         <button className="new-chat" onClick={() => startNewChat()}><Icon name="new" />새 질문</button>
         <div className="history-heading"><span>질문 기록</span>{user && <small>1년 보존</small>}</div>
         <nav aria-label="저장된 질문" className="history-list">
-          {!user && <div className="sidebar-empty"><p>로그인하면 이전 질문을 다시 열 수 있습니다.</p><button onClick={() => setShowAuth(true)}>로그인</button></div>}
+          {!user && <div className="sidebar-empty"><p>로그인하면 이전 질문을 다시 열 수 있습니다.</p><button onClick={() => openAuth("login")}>로그인</button></div>}
           {user && historyLoading && <p className="history-empty">불러오는 중…</p>}
           {user && !historyLoading && history.length === 0 && <p className="history-empty">저장된 질문이 없습니다.</p>}
           {user && history.map((item) => (
@@ -338,7 +403,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-footer">
           {user ? <button className="account-button" onClick={() => setShowAccount(true)}><div className="avatar small">{user.display_name.slice(0, 1)}</div><span><strong>{user.display_name}</strong><small>계정 및 모델 정책</small></span></button>
-            : <button className="account-button" onClick={() => setShowAuth(true)}><Icon name="account" /><span><strong>로그인</strong><small>질문 기록 저장</small></span></button>}
+            : <button className="account-button" onClick={() => openAuth("login")}><Icon name="account" /><span><strong>로그인</strong><small>질문 기록 저장</small></span></button>}
         </div>
       </aside>
 
@@ -350,7 +415,7 @@ export default function Home() {
             <option value="search_only">{MODEL_LABELS.search_only}</option>
             <option disabled>다른 생성 모델 · 미지원</option>
           </select></label>
-          <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : <button className="login-button" onClick={() => setShowAuth(true)}>로그인</button>}</div>
+          <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : <button className="login-button" onClick={() => openAuth("login")}>로그인</button>}</div>
         </header>
 
         <div className={`chat-scroll ${result || loading ? "has-conversation" : ""}`}>
@@ -381,7 +446,7 @@ export default function Home() {
                     </>}
                   </div>
                 </article>
-                {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => setShowAuth(true)}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}
+                {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}
               </>
             )}
           </section>
@@ -390,7 +455,7 @@ export default function Home() {
         <div className="composer-wrap">
           {error && <div className="error-banner" role="alert">{error}<button aria-label="오류 닫기" onClick={() => setError("")}><Icon name="close" /></button></div>}
           <form className="composer" onSubmit={submit}>
-            <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="분산에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
+            <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
             <div className="composer-footer">
               <fieldset className="document-filters"><legend className="sr-only">원문 문서 종류</legend>{Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => { const kind = value as DocumentKind; return <label key={kind}><input checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} type="checkbox" />{label}</label>; })}</fieldset>
               <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" onChange={(event) => setAsOf(event.target.value)} type="date" value={asOf} /></label><button aria-label="법령 근거 조사" className="send-button" disabled={loading || question.trim().length < 2}><Icon name={loading ? "search" : "arrow"} /></button></div>
@@ -400,7 +465,7 @@ export default function Home() {
         </div>
       </section>
 
-      {showAuth && <AuthDialog onClose={closeAuth} onLogin={handleLogin} />}
+      {showAuth && <AuthDialog notice={authNotice} onClose={closeAuth} onGoogleContinue={handleGoogleAuth} onSwitch={switchAuthView} view={authView} />}
       {showAccount && user && <AccountDialog corpus={corpus} onClose={closeAccount} onDelete={handleDeleteAccount} onLogout={handleLogout} user={user} />}
     </main>
   );
