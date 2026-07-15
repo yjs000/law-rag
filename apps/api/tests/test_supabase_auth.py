@@ -4,7 +4,11 @@ from uuid import UUID
 import httpx
 import pytest
 
-from app.adapters.supabase_auth import SupabaseAuth, SupabaseAuthError
+from app.adapters.supabase_auth import (
+    SupabaseAuth,
+    SupabaseAuthError,
+    SupabaseAuthUnavailableError,
+)
 
 
 @pytest.mark.asyncio
@@ -63,3 +67,62 @@ async def test_missing_email_is_rejected_at_the_boundary() -> None:
     )
     with pytest.raises(SupabaseAuthError):
         await auth.verify_user("user-jwt")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"id": "not-a-uuid", "email": "user@example.com"},
+        {
+            "id": "4cc78d08-f2bd-490b-9619-b9ec35b6672c",
+            "email": "user@example.com",
+            "created_at": "not-a-date",
+        },
+        {
+            "id": "4cc78d08-f2bd-490b-9619-b9ec35b6672c",
+            "email": "user@example.com",
+            "user_metadata": {"full_name": 123},
+        },
+        [],
+    ],
+)
+async def test_malformed_verified_user_payload_is_rejected(payload: object) -> None:
+    auth = SupabaseAuth(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
+    )
+
+    with pytest.raises(SupabaseAuthError):
+        await auth.verify_user("user-jwt")
+
+
+@pytest.mark.asyncio
+async def test_auth_provider_network_failure_is_distinct_from_invalid_token() -> None:
+    def unavailable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=request)
+
+    auth = SupabaseAuth(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(unavailable),
+    )
+
+    with pytest.raises(SupabaseAuthUnavailableError):
+        await auth.verify_user("user-jwt")
+
+
+@pytest.mark.asyncio
+async def test_delete_user_network_failure_is_a_controlled_auth_error() -> None:
+    def unavailable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=request)
+
+    auth = SupabaseAuth(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(unavailable),
+    )
+
+    with pytest.raises(SupabaseAuthError):
+        await auth.delete_user(UUID("4cc78d08-f2bd-490b-9619-b9ec35b6672c"))

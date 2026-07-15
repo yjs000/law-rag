@@ -12,7 +12,11 @@ from app.adapters.openai_answerer import OpenAIAnswerer, validate_draft
 from app.adapters.openai_embedder import OpenAIEmbedder
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
-from app.adapters.supabase_auth import SupabaseAuth, SupabaseAuthError
+from app.adapters.supabase_auth import (
+    SupabaseAuth,
+    SupabaseAuthError,
+    SupabaseAuthUnavailableError,
+)
 from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
@@ -57,9 +61,7 @@ postgres_identity = (
 )
 collector_load_errors: list[str] = []
 if repository is memory_repository:
-    _, collector_load_errors = memory_repository.load_collector_state(
-        settings.collector_state_dir
-    )
+    _, collector_load_errors = memory_repository.load_collector_state(settings.collector_state_dir)
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -79,7 +81,13 @@ def _bearer_token(authorization: str | None) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
     scheme, separator, token = authorization.partition(" ")
-    if not separator or scheme.casefold() != "bearer" or not token:
+    token = token.strip()
+    if (
+        not separator
+        or scheme.casefold() != "bearer"
+        or not token
+        or any(char.isspace() for char in token)
+    ):
         raise HTTPException(status_code=401, detail="유효하지 않은 인증 헤더입니다")
     return token
 
@@ -93,6 +101,10 @@ async def _optional_user(authorization: str | None) -> MockUser | None:
             return await postgres_identity.ensure_profile(await supabase_auth.verify_user(token))
         except ConsentRequiredError as exc:
             raise HTTPException(status_code=409, detail="회원가입 동의가 필요합니다.") from exc
+        except SupabaseAuthUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail="인증 서비스를 일시적으로 사용할 수 없습니다."
+            ) from exc
         except SupabaseAuthError as exc:
             raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
     _require_mock_auth()
@@ -110,9 +122,20 @@ async def _authenticated_user(
     if supabase_auth and postgres_identity:
         try:
             user = await supabase_auth.verify_user(_bearer_token(authorization))
+            if (x_terms_version is None) != (x_privacy_version is None):
+                raise ConsentRequiredError
+            if x_terms_version is not None and (
+                x_terms_version != settings.terms_version
+                or x_privacy_version != settings.privacy_version
+            ):
+                raise ConsentRequiredError
             return await postgres_identity.ensure_profile(user, x_terms_version, x_privacy_version)
         except ConsentRequiredError as exc:
             raise HTTPException(status_code=409, detail="회원가입 동의가 필요합니다.") from exc
+        except SupabaseAuthUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail="인증 서비스를 일시적으로 사용할 수 없습니다."
+            ) from exc
         except SupabaseAuthError as exc:
             raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
     _require_mock_auth()
@@ -136,9 +159,15 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
             query_embedding = (await _embedder().embed([payload.query]))[0]
         except Exception:
             query_embedding = None
-    hits = await repository.search(
-        payload.query, payload.as_of_date, payload.limit, query_embedding
-    )
+    try:
+        hits = await repository.search(
+            payload.query, payload.as_of_date, payload.limit, query_embedding
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="법령 검색을 일시적으로 사용할 수 없습니다.",
+        ) from exc
     if payload.source_kinds:
         hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
@@ -162,18 +191,20 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
             query_embedding = (await _embedder().embed([payload.question]))[0]
         except Exception:
             embedding_failed = True
-    hits = await repository.search(payload.question, payload.as_of_date, 10, query_embedding)
+    try:
+        hits = await repository.search(payload.question, payload.as_of_date, 10, query_embedding)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="법령 검색을 일시적으로 사용할 수 없습니다.",
+        ) from exc
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
     corpus_as_of = await repository.last_sync()
     if use_ai and not hits:
         fallback_reason = (
-            AiFallbackReason.EMBEDDING_ERROR
-            if embedding_failed
-            else AiFallbackReason.NO_EVIDENCE
+            AiFallbackReason.EMBEDDING_ERROR if embedding_failed else AiFallbackReason.NO_EVIDENCE
         )
-    fallback = search_only_answer(
-        payload, hits, corpus_as_of, fallback_reason=fallback_reason
-    )
+    fallback = search_only_answer(payload, hits, corpus_as_of, fallback_reason=fallback_reason)
     if not use_ai or not hits:
         return await _save_if_authenticated(user, payload, fallback)
     try:
@@ -238,6 +269,10 @@ async def logout(authorization: Annotated[str | None, Header()] = None) -> Respo
     if supabase_auth and postgres_identity:
         try:
             await supabase_auth.verify_user(_bearer_token(authorization))
+        except SupabaseAuthUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail="인증 서비스를 일시적으로 사용할 수 없습니다."
+            ) from exc
         except SupabaseAuthError as exc:
             raise HTTPException(status_code=401, detail="유효하지 않은 인증 세션입니다.") from exc
         return Response(status_code=204)

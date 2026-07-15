@@ -1,15 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { authErrorPath, callbackBaseUrl, safeAuthNextPath } from "../../../lib/auth-callback";
 
 export async function GET(request: NextRequest) {
   const { origin, searchParams } = request.nextUrl;
   const code = searchParams.get("code");
-  let next = searchParams.get("next") ?? "/?auth=success";
-  if (!next.startsWith("/")) next = "/?auth=success";
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const base = process.env.NODE_ENV === "development" || !forwardedHost
-    ? origin
-    : `https://${forwardedHost}`;
+  const next = safeAuthNextPath(searchParams.get("next"));
+  const base = callbackBaseUrl(origin, process.env.NEXT_PUBLIC_SITE_URL);
   const response = NextResponse.redirect(`${base}${next}`);
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,5 +28,5 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) return response;
   }
-  return NextResponse.redirect(`${origin}/?auth=error`);
+  return NextResponse.redirect(`${base}${authErrorPath(searchParams.get("error"))}`);
 }

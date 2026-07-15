@@ -30,10 +30,19 @@ class PostgresIdentityRepository:
                 (
                     await connection.execute(
                         text(
-                            """SELECT id,email,display_name,created_at FROM user_profiles
+                            """SELECT id,email,display_name,created_at,
+                        EXISTS(SELECT 1 FROM user_consents
+                          WHERE user_id=user_profiles.id
+                            AND (:terms='' OR terms_version=:terms)
+                            AND (:privacy='' OR privacy_version=:privacy)) AS consented
+                        FROM user_profiles
                         WHERE auth_user_id=:auth_user_id"""
                         ),
-                        {"auth_user_id": identity.auth_user_id},
+                        {
+                            "auth_user_id": identity.auth_user_id,
+                            "terms": terms_version or "",
+                            "privacy": privacy_version or "",
+                        },
                     )
                 )
                 .mappings()
@@ -70,6 +79,16 @@ class PostgresIdentityRepository:
                     {"id": row["id"], "terms": terms_version, "privacy": privacy_version},
                 )
             else:
+                if not exists["consented"]:
+                    if not terms_version or not privacy_version:
+                        raise ConsentRequiredError
+                    await connection.execute(
+                        text(
+                            """INSERT INTO user_consents(user_id,terms_version,privacy_version)
+                            VALUES(:id,:terms,:privacy)"""
+                        ),
+                        {"id": exists["id"], "terms": terms_version, "privacy": privacy_version},
+                    )
                 await connection.execute(
                     text(
                         """UPDATE user_profiles SET email=:email,display_name=:name,updated_at=now()

@@ -30,10 +30,12 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-large"
     embedding_dimensions: int = 512
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
-    ai_daily_limit: int = 3
-    search_daily_limit: int = 30
-    authenticated_ai_daily_limit: int = 10
-    authenticated_search_daily_limit: int = 100
+    ai_daily_limit: int = Field(default=3, ge=1)
+    search_daily_limit: int = Field(default=30, ge=1)
+    authenticated_ai_daily_limit: int = Field(default=10, ge=1)
+    authenticated_search_daily_limit: int = Field(default=100, ge=1)
+    terms_version: str = "beta-2026-07-15"
+    privacy_version: str = "beta-2026-07-15"
     web_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 30
 

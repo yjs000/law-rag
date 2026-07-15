@@ -136,7 +136,7 @@ FastAPI + Supabase PostgreSQL
 7. 다른 사용자의 질문 이력 접근이 FastAPI 인가와 RLS 양쪽에서 거부되는지 확인한다.
 8. 계정 삭제 후 질문·세션·내보내기 등 사용자 연결 데이터 삭제 전파를 확인한다.
 
-설정만 완료해도 현재 화면의 Google 버튼이 바로 동작하는 것은 아니다. 저장소에는 아직 실제 Supabase OAuth 시작과 `/auth/callback` session 교환 코드가 없으며, 구현은 실행 계획 `0004-google-authentication.md`의 다음 단계다.
+설정과 애플리케이션 구현을 함께 완료했다. 현재 Google 버튼은 Supabase OAuth를 시작하고 `/auth/callback`에서 PKCE session을 교환한다. 완료 결과와 가짜 ID 회귀 범위는 [실행 계획 0004](../exec-plans/completed/0004-google-authentication.md)에 기록한다.
 
 ## 대표 오류
 

@@ -1,5 +1,6 @@
 "use client";
 
+import type { AuthChangeEvent } from "@supabase/supabase-js";
 import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   askQuestion,
@@ -42,10 +43,12 @@ import type {
   QuestionHistoryItem,
   QuestionResponse,
 } from "../lib/contracts";
+import { createClient } from "../lib/supabase/client";
 import { SafeText } from "./safe-text";
 
 type AuthDocument = "privacy" | "terms";
 type AuthView = "login" | "signup";
+type AuthStatus = "checking" | "ready";
 type IconName = "account" | "arrow" | "close" | "menu" | "new" | "search" | "trash";
 
 const MODEL_LABELS: Record<AnswerPreference, string> = {
@@ -58,6 +61,18 @@ const SUGGESTED_QUESTIONS = [
   "전기저장시설 설치 시 확인할 기준은?",
   "사업 변경 시 다시 신고해야 하는 사항은?",
 ];
+
+export function oauthRedirectMessage(search: string): string | null {
+  const status = new URLSearchParams(search).get("auth");
+  if (status !== "error") return null;
+  return "Google 로그인을 완료하지 못했습니다. 인증을 취소했거나 요청이 만료되었을 수 있습니다. 다시 시도해 주세요.";
+}
+
+export function authEventAction(event: string): "clear" | "hydrate" | "ignore" {
+  if (event === "SIGNED_OUT") return "clear";
+  if (event === "SIGNED_IN" || event === "USER_UPDATED") return "hydrate";
+  return "ignore";
+}
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -181,7 +196,7 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
         <div><dt>생성 모델</dt><dd>gpt-5.6-terra 전용</dd></div>
         <div><dt>현재 상태</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "Terra 사용 가능" : "검색 전용"}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
-        <div><dt>계정 사용 한도</dt><dd>미결정</dd></div>
+        <div><dt>계정 사용 한도</dt><dd>AI 10회/일 · 검색 100회/일 (베타)</dd></div>
       </dl>
       <div className="account-actions"><button onClick={onLogout}>로그아웃</button><button className="danger" onClick={onDelete}>계정 삭제</button></div>
     </Dialog>
@@ -199,6 +214,7 @@ export default function Home() {
   const [corpus, setCorpus] = useState<CorpusStatus | null>(null);
   const [terraUnavailableFromResponse, setTerraUnavailableFromResponse] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [history, setHistory] = useState<QuestionHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -214,11 +230,63 @@ export default function Home() {
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
+  const authEpoch = useRef(0);
+
+  const clearAuthenticatedWorkspace = useCallback(() => {
+    authEpoch.current += 1;
+    setUser(null);
+    setHistory([]);
+    setHistoryLoading(false);
+    setQuestion("");
+    setSubmittedQuestion("");
+    setResult(null);
+    setCurrentHistoryId(null);
+    setSelectedCitationId(null);
+    setShowAccount(false);
+    setShowAnonymousNudge(false);
+    setAuthStatus("ready");
+  }, []);
 
   useEffect(() => {
-    void getStoredUser().then(setUser).catch((cause) => {
-      setUser(null);
-      setError(cause instanceof Error ? cause.message : "로그인 정보를 확인하지 못했습니다.");
+    let active = true;
+    const hydrateUser = async () => {
+      const epoch = ++authEpoch.current;
+      setAuthStatus("checking");
+      try {
+        const storedUser = await getStoredUser();
+        if (active && authEpoch.current === epoch) setUser(storedUser);
+      } catch (cause) {
+        if (active && authEpoch.current === epoch) {
+          setUser(null);
+          setError(cause instanceof Error ? cause.message : "로그인 정보를 확인하지 못했습니다.");
+        }
+      } finally {
+        if (active && authEpoch.current === epoch) setAuthStatus("ready");
+      }
+    };
+
+    const oauthMessage = oauthRedirectMessage(window.location.search);
+    if (oauthMessage) {
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setError(oauthMessage);
+        setAuthNotice(oauthMessage);
+        setAuthView("login");
+        setShowAuth(true);
+      });
+    }
+    if (new URLSearchParams(window.location.search).has("auth")) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+    }
+
+    void hydrateUser();
+    const { data: { subscription } } = createClient().auth.onAuthStateChange((event: AuthChangeEvent) => {
+      const action = authEventAction(event);
+      if (action === "clear") {
+        clearAuthenticatedWorkspace();
+      } else if (action === "hydrate") {
+        void Promise.resolve().then(hydrateUser);
+      }
     });
     getCorpusStatus().then((status) => {
       setCorpus(status);
@@ -228,16 +296,22 @@ export default function Home() {
         setAnswerPreference(resolution.preference);
       }
     }).catch(() => setCorpus(null));
-  }, []);
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [clearAuthenticatedWorkspace]);
 
   const refreshHistory = useCallback(async () => {
+    const epoch = authEpoch.current;
     setHistoryLoading(true);
     try {
-      setHistory(await listQuestionHistory());
+      const nextHistory = await listQuestionHistory();
+      if (authEpoch.current === epoch) setHistory(nextHistory);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "질문 이력을 불러오지 못했습니다.");
+      if (authEpoch.current === epoch) setError(cause instanceof Error ? cause.message : "질문 이력을 불러오지 못했습니다.");
     } finally {
-      setHistoryLoading(false);
+      if (authEpoch.current === epoch) setHistoryLoading(false);
     }
   }, []);
 
@@ -272,11 +346,12 @@ export default function Home() {
   }
 
   async function handleLogout() {
-    await logout();
-    setUser(null);
-    setHistory([]);
-    setCurrentHistoryId(null);
-    setShowAccount(false);
+    try {
+      await logout();
+      clearAuthenticatedWorkspace();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "로그아웃하지 못했습니다.");
+    }
   }
 
   async function handleDeleteAccount() {
@@ -440,7 +515,8 @@ export default function Home() {
         <button className="new-chat" onClick={() => startNewChat()}><Icon name="new" />새 질문</button>
         <div className="history-heading"><span>질문 기록</span>{user && <small>1년 보존</small>}</div>
         <nav aria-label="저장된 질문" className="history-list">
-          {!user && <div className="sidebar-empty"><p>로그인하면 이전 질문을 다시 열 수 있습니다.</p><button onClick={() => openAuth("login")}>로그인</button></div>}
+          {authStatus === "checking" && <p aria-live="polite" className="history-empty">로그인 상태 확인 중…</p>}
+          {authStatus === "ready" && !user && <div className="sidebar-empty"><p>로그인하면 이전 질문을 다시 열 수 있습니다.</p><button onClick={() => openAuth("login")}>로그인</button></div>}
           {user && historyLoading && <p className="history-empty">불러오는 중…</p>}
           {user && !historyLoading && history.length === 0 && <p className="history-empty">저장된 질문이 없습니다.</p>}
           {user && history.map((item) => (
@@ -452,7 +528,9 @@ export default function Home() {
         </nav>
         <div className="sidebar-footer">
           {user ? <button className="account-button" onClick={() => setShowAccount(true)}><div className="avatar small">{user.display_name.slice(0, 1)}</div><span><strong>{user.display_name}</strong><small>계정 및 모델 정책</small></span></button>
-            : <button className="account-button" onClick={() => openAuth("login")}><Icon name="account" /><span><strong>로그인</strong><small>질문 기록 저장</small></span></button>}
+            : authStatus === "checking"
+              ? <button aria-label="로그인 상태 확인 중" className="account-button" disabled><Icon name="account" /><span><strong>확인 중…</strong><small>로그인 상태 복원</small></span></button>
+              : <button className="account-button" onClick={() => openAuth("login")}><Icon name="account" /><span><strong>로그인</strong><small>질문 기록 저장</small></span></button>}
         </div>
       </aside>
 
@@ -464,7 +542,7 @@ export default function Home() {
             <option value="search_only">{MODEL_LABELS.search_only}</option>
             <option disabled>다른 생성 모델 · 미지원</option>
           </select></label>
-          <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : <button className="login-button" onClick={() => openAuth("login")}>로그인</button>}</div>
+          <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : authStatus === "checking" ? <button aria-label="로그인 상태 확인 중" className="login-button" disabled>확인 중…</button> : <button className="login-button" onClick={() => openAuth("login")}>로그인</button>}</div>
         </header>
 
         {modeNotice && <div aria-live="polite" className="mode-notice" role="status"><span>{modeNotice}</span><button aria-label="모델 전환 알림 닫기" onClick={() => setModeNotice("")}><Icon name="close" /></button></div>}

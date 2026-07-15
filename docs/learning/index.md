@@ -18,3 +18,5 @@
 - [14 Vercel 익명 IP rate limit](14-vercel-anonymous-rate-limit.md)
 - [15 Terra 런타임 폴백 계약](15-terra-runtime-fallback-contract.md)
 - [16 Web Terra 폴백 상태 동기화](16-web-terra-fallback-state.md)
+- [16 Supabase Google 인증과 질문 이력](16-supabase-google-auth-and-history.md)
+- [17 로그인·익명 전체 흐름의 인증 경계](17-authenticated-and-anonymous-flow-edges.md)

@@ -6,7 +6,7 @@
 
 Google 단일 공급자 정책 안에서 로그인과 신규 계정 화면을 분리했다. 로그인 화면은 질문 기록 보존과 익명 질문 비소급 저장을 설명한다. 회원가입 화면은 질문 이력·데이터 삭제 효과와 필수 약관·개인정보 동의를 먼저 보여준다.
 
-이번 변경은 UI만 다룬다. Google 버튼은 OAuth나 목업 API를 호출하지 않고 실제 연결이 남아 있음을 인라인 상태로 알린다. 인증 백엔드·Supabase·세션·RLS 작업은 실행 계획 `0004-google-authentication.md`의 TODO다.
+이 브리핑이 기록한 당시 변경은 UI만 다뤘다. 이후 인증 백엔드·Supabase·세션·RLS와 실제 OAuth 연결은 [완료된 실행 계획 0004](../exec-plans/completed/0004-google-authentication.md)에서 구현·검증했다.
 
 ## 왜 로그인과 가입을 나누나
 

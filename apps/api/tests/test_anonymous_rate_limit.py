@@ -1,8 +1,12 @@
+from datetime import date
+
 import pytest
 from fastapi import HTTPException, Request
+from pydantic import ValidationError
 
 from app import main
 from app.adapters.memory_repository import MemoryLegalRepository
+from app.settings import Settings
 
 
 def _vercel_request(ip: str) -> Request:
@@ -55,3 +59,41 @@ async def test_spoofed_forwarded_chain_cannot_rotate_quota_subject(
             _vercel_request("198.51.100.4, 203.0.113.8"), "ai", 3
         )
     assert exc_info.value.status_code == 429
+
+
+async def test_invalid_and_missing_forwarded_ips_share_fail_closed_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main.settings, "environment", "production")
+    monkeypatch.setattr(main, "repository", MemoryLegalRepository())
+
+    for invalid_ip in ("not-an-ip", "198.51.100.1, 203.0.113.8", ""):
+        await main._check_quota(_vercel_request(invalid_ip), "search", 3)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await main._check_quota(_vercel_request("still-not-an-ip"), "search", 3)
+
+    assert exc_info.value.status_code == 429
+
+
+async def test_quota_resets_on_next_day() -> None:
+    repository = MemoryLegalRepository()
+    subject = "fake-subject-hash"
+
+    assert await repository.consume_quota(subject, date(2026, 7, 15), "search", 1)
+    assert not await repository.consume_quota(subject, date(2026, 7, 15), "search", 1)
+    assert await repository.consume_quota(subject, date(2026, 7, 16), "search", 1)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "ai_daily_limit",
+        "search_daily_limit",
+        "authenticated_ai_daily_limit",
+        "authenticated_search_daily_limit",
+    ),
+)
+def test_daily_limits_must_be_positive(field: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{field: 0})
