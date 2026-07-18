@@ -641,16 +641,19 @@ async def _save_if_authenticated(
             "citations_count": len(response.citations),
         }
     if user is not None:
+        # Previous turns are transient model input. Persisting them on every new
+        # history row would duplicate prior answers and expand retained user data.
+        stored_payload = payload.model_copy(update={"conversation_context": []})
         if postgres_identity:
             try:
                 await postgres_identity.save_question(
-                    user.id, payload, response, diagnostics=diagnostics
+                    user.id, stored_payload, response, diagnostics=diagnostics
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다") from exc
         else:
             try:
-                identity_repository.save_question(user.id, payload, response)
+                identity_repository.save_question(user.id, stored_payload, response)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다") from exc
     return response

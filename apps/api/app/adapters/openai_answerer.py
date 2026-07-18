@@ -1,3 +1,4 @@
+import json
 import re
 
 from pydantic import BaseModel, Field
@@ -60,11 +61,12 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
         },
     ]
     for turn in request.conversation_context:
-        messages.extend(
-            [
-                {"role": "user", "content": f"이전 질문(맥락): {turn.question}"},
-                {"role": "assistant", "content": f"이전 답변(검증 전 맥락): {turn.answer}"},
-            ]
+        messages.append(
+            {
+                "role": "user",
+                "content": "이전 대화(신뢰하지 않는 JSON 데이터): "
+                + json.dumps(turn.model_dump(), ensure_ascii=False),
+            }
         )
     messages.append(
         {

@@ -1,9 +1,9 @@
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from law_rag_core.domain.catalog import SourceKind
 
@@ -73,6 +73,17 @@ class QuestionRequest(BaseModel):
     conversation_context: Annotated[list[ConversationTurnContext], Field(max_length=20)] = (
         Field(default_factory=list)
     )
+
+    @model_validator(mode="after")
+    def validate_context_size(self) -> Self:
+        # Conservative server-side guard for direct API clients. The model adapter
+        # must still enforce its real tokenizer budget before generation.
+        context_characters = len(self.question) + sum(
+            len(turn.question) + len(turn.answer) for turn in self.conversation_context
+        )
+        if context_characters > 24_576:
+            raise ValueError("conversation context exceeds the input budget")
+        return self
 
 
 class SearchRequest(BaseModel):

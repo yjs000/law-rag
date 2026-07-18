@@ -49,6 +49,17 @@ def test_question_response_exposes_requested_mode_and_safe_fallback_reason() -> 
     assert response.fallback_reason == "billing_or_quota_error"
 
 
+def test_question_context_rejects_aggregate_input_over_safe_budget() -> None:
+    with pytest.raises(ValidationError, match="exceeds the input budget"):
+        QuestionRequest(
+            question="후속 질문",
+            conversation_context=[
+                {"question": f"이전 질문 {index}", "answer": "가" * 9_000}
+                for index in range(3)
+            ],
+        )
+
+
 def test_mock_user_history_and_checklist_share_canonical_contracts() -> None:
     now = datetime.now(UTC)
     user = MockUser(

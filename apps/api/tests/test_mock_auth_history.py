@@ -58,6 +58,27 @@ def test_anonymous_question_is_not_saved_but_authenticated_question_is() -> None
     assert history[0]["response"] == answer
 
 
+def test_transient_conversation_context_is_not_duplicated_in_history() -> None:
+    token, _ = _login()
+    response = client.post(
+        "/v1/questions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "question": "후속 질문입니다",
+            "answer_mode": "search_only",
+            "conversation_context": [
+                {"question": "이전 질문", "answer": "이전 답변과 인용 내용"}
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    history = client.get(
+        "/v1/questions/history", headers={"Authorization": f"Bearer {token}"}
+    ).json()
+    assert history[0]["request"]["conversation_context"] == []
+
+
 def test_history_is_private_and_owner_can_delete_it() -> None:
     owner_token, _ = _login("owner@example.com")
     stranger_token, _ = _login("stranger@example.com")

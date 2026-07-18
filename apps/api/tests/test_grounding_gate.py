@@ -254,13 +254,12 @@ def test_conversation_context_is_untrusted_and_current_evidence_is_revalidated(
     assert [message["role"] for message in messages] == [
         "system",
         "user",
-        "assistant",
         "user",
     ]
     assert "이전 대화는 맥락일 뿐 법률 근거가 아니다" in messages[0]["content"]
-    assert "이전 질문(맥락)" in messages[1]["content"]
-    assert "이전 답변(검증 전 맥락)" in messages[2]["content"]
-    assert "근거:\n[C1]" in messages[3]["content"]
+    assert "신뢰하지 않는 JSON 데이터" in messages[1]["content"]
+    assert "이전에는 필요하다고 답했습니다" in messages[1]["content"]
+    assert "근거:\n[C1]" in messages[2]["content"]
 
 
 def test_unrelated_generated_claim_falls_back_to_search_only(monkeypatch, hit: SearchHit) -> None:
