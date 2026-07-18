@@ -26,7 +26,7 @@ def _login(email: str = "user@example.com") -> tuple[str, dict]:
     return payload["access_token"], payload["user"]
 
 
-def _ask(token: str | None = None) -> dict:
+def _ask(token: str | None = None, *, conversation_id: str | None = None) -> dict:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     response = client.post(
         "/v1/questions",
@@ -35,6 +35,7 @@ def _ask(token: str | None = None) -> dict:
             "question": "근거가 없는 질문입니다",
             "as_of_date": "2026-07-13",
             "project_stage": "planning",
+            **({"conversation_id": conversation_id} if conversation_id else {}),
         },
     )
     assert response.status_code == 200
@@ -142,6 +143,66 @@ def test_unknown_or_missing_session_is_rejected() -> None:
     assert client.get(
         "/v1/auth/me", headers={"Authorization": f"Bearer {uuid4()}"}
     ).status_code == 401
+
+
+def test_conversation_summary_and_turn_cursors_do_not_duplicate_items() -> None:
+    token, _ = _login()
+    headers = {"Authorization": f"Bearer {token}"}
+    first = _ask(token)
+    second = _ask(token, conversation_id=first["conversation_id"])
+    _ask(token)
+
+    page_one = client.get("/v1/conversations?limit=1", headers=headers).json()
+    assert page_one["has_more"] is True
+    assert "response" not in page_one["items"][0]
+    page_two = client.get(
+        "/v1/conversations",
+        params={"limit": 1, "cursor": page_one["next_cursor"]},
+        headers=headers,
+    ).json()
+    assert page_two["items"][0]["id"] != page_one["items"][0]["id"]
+
+    turns = client.get(
+        f"/v1/conversations/{first['conversation_id']}/turns?limit=1", headers=headers
+    ).json()
+    assert turns["items"][0]["id"] == second["request_id"]
+    older = client.get(
+        f"/v1/conversations/{first['conversation_id']}/turns",
+        params={"limit": 1, "cursor": turns["next_cursor"]},
+        headers=headers,
+    ).json()
+    assert older["items"][0]["id"] == first["request_id"]
+    assert older["has_more"] is False
+
+
+def test_conversation_is_owner_scoped_and_delete_cascades_legacy_history() -> None:
+    owner_token, _ = _login("conversation-owner@example.com")
+    stranger_token, _ = _login("conversation-stranger@example.com")
+    first = _ask(owner_token)
+    _ask(owner_token, conversation_id=first["conversation_id"])
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    stranger_headers = {"Authorization": f"Bearer {stranger_token}"}
+
+    path = f"/v1/conversations/{first['conversation_id']}"
+    assert client.get(f"{path}/turns", headers=stranger_headers).status_code == 404
+    assert client.delete(path, headers=stranger_headers).status_code == 404
+    assert client.delete(path, headers=owner_headers).status_code == 204
+    assert client.get(f"{path}/turns", headers=owner_headers).status_code == 404
+    assert client.get("/v1/questions/history", headers=owner_headers).json() == []
+
+
+def test_invalid_or_wrong_cursor_kind_is_rejected() -> None:
+    token, _ = _login()
+    answer = _ask(token)
+    _ask(token)
+    headers = {"Authorization": f"Bearer {token}"}
+    page = client.get("/v1/conversations?limit=1", headers=headers).json()
+
+    assert client.get(
+        f"/v1/conversations/{answer['conversation_id']}/turns",
+        params={"cursor": page["next_cursor"]},
+        headers=headers,
+    ).status_code == 400
 
 
 def test_mock_auth_is_disabled_in_production(monkeypatch) -> None:

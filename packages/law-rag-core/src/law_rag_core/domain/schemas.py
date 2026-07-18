@@ -63,6 +63,7 @@ class QuestionRequest(BaseModel):
     answer_mode: Literal["terra", "search_only"] = "terra"
     business_type: Annotated[str | None, Field(max_length=120)] = None
     facility_type: Annotated[str | None, Field(max_length=120)] = None
+    conversation_id: UUID | None = None
 
 
 class SearchRequest(BaseModel):
@@ -137,6 +138,7 @@ class QuestionResponse(BaseModel):
     no_results_reason: Literal["requested_path_not_found", "no_matching_evidence"] | None = None
     requested_answer_mode: Literal["terra", "search_only"] = "search_only"
     fallback_reason: AiFallbackReason | None = None
+    conversation_id: UUID | None = None
 
 
 class MockUser(BaseModel):
@@ -154,6 +156,29 @@ class QuestionHistoryEntry(BaseModel):
     response: QuestionResponse
     created_at: datetime
     expires_at: datetime
+    conversation_id: UUID | None = None
+    turn_index: int | None = None
+
+
+class ConversationSummary(BaseModel):
+    id: UUID
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    turn_count: int
+    last_turn_id: UUID
+
+
+class ConversationPage(BaseModel):
+    items: list[ConversationSummary]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+
+class ConversationTurnPage(BaseModel):
+    items: list[QuestionHistoryEntry]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class CorpusItemStatus(BaseModel):

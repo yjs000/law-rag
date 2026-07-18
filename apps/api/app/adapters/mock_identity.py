@@ -5,7 +5,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from app.domain.schemas import MockUser, QuestionHistoryEntry, QuestionRequest, QuestionResponse
+from app.domain.schemas import (
+    ConversationSummary,
+    MockUser,
+    QuestionHistoryEntry,
+    QuestionRequest,
+    QuestionResponse,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +28,7 @@ class MockIdentityRepository:
         self._users_by_email: dict[str, UUID] = {}
         self._sessions: dict[str, MockSession] = {}
         self._history: dict[UUID, QuestionHistoryEntry] = {}
+        self._conversations: dict[UUID, tuple[UUID, ConversationSummary]] = {}
         self._related_data: dict[UUID, dict[str, list[object]]] = {}
 
     def login_google(
@@ -66,6 +73,14 @@ class MockIdentityRepository:
         now: datetime | None = None,
     ) -> QuestionHistoryEntry:
         created_at = now or datetime.now(UTC)
+        conversation_id = request.conversation_id or uuid4()
+        existing = self._conversations.get(conversation_id)
+        if existing is not None and existing[0] != user_id:
+            raise ValueError("대화를 찾을 수 없습니다")
+        if existing is None and request.conversation_id is not None:
+            raise ValueError("대화를 찾을 수 없습니다")
+        turn_index = existing[1].turn_count + 1 if existing else 1
+        response.conversation_id = conversation_id
         entry = QuestionHistoryEntry(
             id=UUID(response.request_id),
             user_id=user_id,
@@ -73,9 +88,74 @@ class MockIdentityRepository:
             response=response,
             created_at=created_at,
             expires_at=_one_year_after(created_at),
+            conversation_id=conversation_id,
+            turn_index=turn_index,
         )
         self._history[entry.id] = entry
+        title = " ".join(request.question.split())[:120]
+        self._conversations[conversation_id] = (
+            user_id,
+            ConversationSummary(
+                id=conversation_id,
+                title=existing[1].title if existing else title,
+                created_at=existing[1].created_at if existing else created_at,
+                updated_at=created_at,
+                turn_count=turn_index,
+                last_turn_id=entry.id,
+            ),
+        )
         return entry
+
+    def list_conversations(
+        self,
+        user_id: UUID,
+        limit: int,
+        cursor: tuple[datetime, UUID] | None = None,
+    ) -> tuple[list[ConversationSummary], bool]:
+        self.purge_expired()
+        items = [summary for owner, summary in self._conversations.values() if owner == user_id]
+        items.sort(key=lambda item: (item.updated_at, item.id), reverse=True)
+        if cursor:
+            items = [item for item in items if (item.updated_at, item.id) < cursor]
+        return items[:limit], len(items) > limit
+
+    def list_conversation_turns(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        limit: int,
+        cursor: tuple[int, UUID] | None = None,
+    ) -> tuple[list[QuestionHistoryEntry], bool] | None:
+        conversation = self._conversations.get(conversation_id)
+        if conversation is None or conversation[0] != user_id:
+            return None
+        items = [
+            entry
+            for entry in self._history.values()
+            if entry.user_id == user_id and entry.conversation_id == conversation_id
+        ]
+        items.sort(key=lambda item: (item.turn_index or 0, item.id), reverse=True)
+        if cursor:
+            items = [item for item in items if ((item.turn_index or 0), item.id) < cursor]
+        return items[:limit], len(items) > limit
+
+    def delete_conversation(self, conversation_id: UUID, user_id: UUID) -> bool:
+        conversation = self._conversations.get(conversation_id)
+        if conversation is None or conversation[0] != user_id:
+            return False
+        history_ids = {
+            entry.id for entry in self._history.values() if entry.conversation_id == conversation_id
+        }
+        self._history = {
+            history_id: entry
+            for history_id, entry in self._history.items()
+            if history_id not in history_ids
+        }
+        related = self._related_data.get(user_id)
+        if related:
+            related["exports"] = [item for item in related["exports"] if item[0] not in history_ids]
+        del self._conversations[conversation_id]
+        return True
 
     def list_history(
         self, user_id: UUID, *, now: datetime | None = None
@@ -99,7 +179,32 @@ class MockIdentityRepository:
         if entry is None or entry.user_id != user_id:
             return False
         del self._history[history_id]
+        if entry.conversation_id is not None:
+            self._refresh_conversation(entry.conversation_id, user_id)
         return True
+
+    def _refresh_conversation(self, conversation_id: UUID, user_id: UUID) -> None:
+        turns = [
+            entry
+            for entry in self._history.values()
+            if entry.conversation_id == conversation_id
+        ]
+        if not turns:
+            self._conversations.pop(conversation_id, None)
+            return
+        latest = max(turns, key=lambda entry: (entry.created_at, entry.id))
+        owner, summary = self._conversations[conversation_id]
+        if owner == user_id:
+            self._conversations[conversation_id] = (
+                owner,
+                summary.model_copy(
+                    update={
+                        "updated_at": latest.created_at,
+                        "turn_count": len(turns),
+                        "last_turn_id": latest.id,
+                    }
+                ),
+            )
 
     def record_export(self, user_id: UUID, history_id: UUID, export_format: str) -> None:
         self._related_data.setdefault(user_id, {"exports": [], "feedback": []})[
@@ -120,6 +225,11 @@ class MockIdentityRepository:
             for history_id, entry in self._history.items()
             if entry.user_id != user_id
         }
+        self._conversations = {
+            conversation_id: value
+            for conversation_id, value in self._conversations.items()
+            if value[0] != user_id
+        }
         self._related_data.pop(user_id, None)
 
     def purge_expired(self, *, now: datetime | None = None) -> int:
@@ -130,7 +240,9 @@ class MockIdentityRepository:
             if entry.expires_at <= boundary
         ]
         for history_id in expired:
-            del self._history[history_id]
+            entry = self._history.pop(history_id)
+            if entry.conversation_id is not None:
+                self._refresh_conversation(entry.conversation_id, entry.user_id)
         expired_set = set(expired)
         for related in self._related_data.values():
             related["exports"] = [
@@ -143,6 +255,7 @@ class MockIdentityRepository:
         self._users_by_email.clear()
         self._sessions.clear()
         self._history.clear()
+        self._conversations.clear()
         self._related_data.clear()
 
 

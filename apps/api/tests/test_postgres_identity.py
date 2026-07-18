@@ -74,6 +74,15 @@ def _identity() -> SupabaseIdentity:
     )
 
 
+def _unchanged_identity() -> SupabaseIdentity:
+    return SupabaseIdentity(
+        auth_user_id=AUTH_ID,
+        email="old@example.com",
+        display_name="old",
+        created_at=datetime(2026, 7, 15, tzinfo=UTC),
+    )
+
+
 @pytest.mark.asyncio
 async def test_existing_profile_without_consent_is_rejected() -> None:
     engine = FakeEngine(_existing(consented=False))
@@ -114,6 +123,17 @@ async def test_existing_consented_profile_does_not_require_headers_again() -> No
 
     assert user.email == "new@example.com"
     assert not any("INSERT INTO user_consents" in sql for sql, _ in engine.connection.calls)
+
+
+@pytest.mark.asyncio
+async def test_unchanged_profile_is_not_updated() -> None:
+    engine = FakeEngine(_existing(consented=True))
+    repository = PostgresIdentityRepository(engine)
+
+    user = await repository.ensure_profile(_unchanged_identity())
+
+    assert user.email == "old@example.com"
+    assert not any("UPDATE user_profiles" in sql for sql, _ in engine.connection.calls)
 
 
 @pytest.mark.asyncio

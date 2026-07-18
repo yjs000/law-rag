@@ -1,4 +1,7 @@
-from datetime import date
+import base64
+import json
+from contextlib import asynccontextmanager
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -26,6 +29,8 @@ from app.domain.schemas import (
     ChecklistDocument,
     ChecklistExportFormat,
     Citation,
+    ConversationPage,
+    ConversationTurnPage,
     CorpusStatus,
     DocumentChangesResponse,
     MockUser,
@@ -62,7 +67,14 @@ postgres_identity = (
 collector_load_errors: list[str] = []
 if repository is memory_repository:
     _, collector_load_errors = memory_repository.load_collector_state(settings.collector_state_dir)
-app = FastAPI(title=settings.app_name, version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    if supabase_auth:
+        await supabase_auth.aclose()
+
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin],
@@ -360,6 +372,65 @@ async def question_history(
     return identity_repository.list_history(user.id)
 
 
+@app.get("/v1/conversations", response_model=ConversationPage)
+async def conversations(
+    user: Annotated[MockUser, Depends(_authenticated_user)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    cursor: str | None = None,
+) -> ConversationPage:
+    decoded = _decode_conversation_cursor(cursor) if cursor else None
+    items, has_more = (
+        await postgres_identity.list_conversations(user.id, limit, decoded)
+        if postgres_identity
+        else identity_repository.list_conversations(user.id, limit, decoded)
+    )
+    next_cursor = (
+        _encode_cursor("conversation", items[-1].updated_at.isoformat(), items[-1].id)
+        if has_more and items
+        else None
+    )
+    return ConversationPage(items=items, has_more=has_more, next_cursor=next_cursor)
+
+
+@app.get("/v1/conversations/{conversation_id}/turns", response_model=ConversationTurnPage)
+async def conversation_turns(
+    conversation_id: UUID,
+    user: Annotated[MockUser, Depends(_authenticated_user)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    cursor: str | None = None,
+) -> ConversationTurnPage:
+    decoded = _decode_turn_cursor(cursor) if cursor else None
+    result = (
+        await postgres_identity.list_conversation_turns(conversation_id, user.id, limit, decoded)
+        if postgres_identity
+        else identity_repository.list_conversation_turns(conversation_id, user.id, limit, decoded)
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다")
+    items, has_more = result
+    next_cursor = (
+        _encode_cursor("turn", items[-1].turn_index or 0, items[-1].id)
+        if has_more and items
+        else None
+    )
+    return ConversationTurnPage(items=items, has_more=has_more, next_cursor=next_cursor)
+
+
+@app.delete("/v1/conversations/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: UUID,
+    user: Annotated[MockUser, Depends(_authenticated_user)],
+) -> Response:
+    deleted = (
+        await postgres_identity.delete_conversation(conversation_id, user.id)
+        if postgres_identity
+        else identity_repository.delete_conversation(conversation_id, user.id)
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다")
+    return Response(status_code=204)
+
+
 @app.get("/v1/questions/history/{history_id}", response_model=QuestionHistoryEntry)
 async def question_history_detail(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
@@ -527,12 +598,52 @@ async def _save_if_authenticated(
         }
     if user is not None:
         if postgres_identity:
-            await postgres_identity.save_question(
-                user.id, payload, response, diagnostics=diagnostics
-            )
+            try:
+                await postgres_identity.save_question(
+                    user.id, payload, response, diagnostics=diagnostics
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다") from exc
         else:
-            identity_repository.save_question(user.id, payload, response)
+            try:
+                identity_repository.save_question(user.id, payload, response)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail="대화를 찾을 수 없습니다") from exc
     return response
+
+
+def _encode_cursor(kind: str, value: str | int, item_id: UUID) -> str:
+    payload = json.dumps(
+        {"v": 1, "kind": kind, "value": value, "id": str(item_id)},
+        separators=(",", ":"),
+    )
+    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+
+
+def _decode_cursor(cursor: str, kind: str) -> tuple[object, UUID]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode())
+        if payload != {"v": 1, "kind": kind, "value": payload["value"], "id": payload["id"]}:
+            raise ValueError
+        return payload["value"], UUID(payload["id"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="유효하지 않은 페이지 커서입니다") from exc
+
+
+def _decode_conversation_cursor(cursor: str) -> tuple[datetime, UUID]:
+    value, item_id = _decode_cursor(cursor, "conversation")
+    try:
+        return datetime.fromisoformat(str(value)), item_id
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="유효하지 않은 페이지 커서입니다") from exc
+
+
+def _decode_turn_cursor(cursor: str) -> tuple[int, UUID]:
+    value, item_id = _decode_cursor(cursor, "turn")
+    if not isinstance(value, int) or value < 1:
+        raise HTTPException(status_code=400, detail="유효하지 않은 페이지 커서입니다")
+    return value, item_id
 
 
 async def _owned_history(history_id: UUID, user: MockUser) -> QuestionHistoryEntry:
