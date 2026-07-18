@@ -1,2 +1,7 @@
 [tool.uv.workspace]
 members = ["apps/api", "apps/collector", "packages/law-rag-core"]
+
+[tool.uv]
+# Codex sandbox cannot write to the Windows user-level uv cache. Keep the
+# workspace cache on the same filesystem as the virtual environment.
+cache-dir = ".uv-cache"

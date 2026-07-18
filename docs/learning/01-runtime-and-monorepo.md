@@ -6,6 +6,8 @@
 
 Node 24.18.0, pnpm 11.12.0, uv 0.11.28과 Python 3.14 계열을 프로젝트와 CI의 기준으로 삼는다. `.python-version`도 `3.14`로 지정해 개발과 Vercel 배포가 같은 마이너 런타임 계약을 사용한다. `sharp`, `unrs-resolver` 외 설치 스크립트는 허용하지 않는다.
 
+루트 `pyproject.toml`의 `tool.uv.cache-dir`은 `.uv-cache`로 지정한다. Windows의 사용자 기본 캐시는 Codex sandbox에서 읽기 전용일 수 있어 반복 실행이 실패하기 때문이다. 프로젝트 내부 캐시는 Git에서 제외하며 가상환경과 같은 파일시스템에 있어 uv의 링크 동작도 유지한다.
+
 ## 데이터 흐름
 
 브라우저 → Next.js → FastAPI이며 비밀키는 서버 계층에만 있다. Python 쪽은 루트 uv workspace 아래 `apps/api`, `apps/collector` 실행 프로젝트와 `packages/law-rag-core` 공용 패키지로 분리한다. 공용 패키지는 법령 DTO·파서·포트만 포함하고 FastAPI, OpenAI, 데이터베이스 SDK에는 의존하지 않는다.
