@@ -1,7 +1,9 @@
 # NVIDIA 로컬 추론과 Vercel 연결 검토
 
-기준 시점: 2026-07-18  
-조사 범위: NVIDIA 공식 문서·NVIDIA 개발자 블로그·NVIDIA Research만 사용  
+기준 시점: 2026-07-18
+
+조사 범위: NVIDIA 공식 문서·NVIDIA 개발자 블로그·NVIDIA Research만 사용
+
 목적: Windows PC의 무료 로컬 모델과 Vercel API 연결 대안을 결정하기 위한 1차 자료 메모
 
 ## 결론
