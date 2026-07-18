@@ -108,6 +108,14 @@ def test_provision_query_rejects_unsafe_ranges(question: str, reason: str) -> No
     assert parsed.invalid_reason == reason
 
 
+def test_provision_query_accepts_twenty_article_boundary() -> None:
+    parsed = parse_provision_references("제1조부터 제20조")
+
+    assert parsed is not None
+    assert len(parsed.references) == 20
+    assert parsed.references[-1].path == "제20조"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("question", "expected_paths"),
@@ -143,6 +151,8 @@ def test_postgres_path_query_types_nullable_title_parameter_explicitly() -> None
 
     assert "CAST(:title AS text) IS NULL" in source
     assert "d.exact_title=CAST(:title AS text)" in source
+    assert "WITH ORDINALITY requested(path, ordinal)" in source
+    assert "ORDER BY requested.ordinal" in source
 
 
 @pytest.mark.asyncio
@@ -308,3 +318,24 @@ def test_question_api_explains_unrecognized_law_without_searching_all_laws(monke
     assert payload["result_status"] == "no_results"
     assert payload["citations"] == []
     assert any("입력한 법령명(가짜에너지법)" in item for item in payload["limitations"])
+
+
+def test_question_api_explains_range_limit_without_partial_results(monkeypatch) -> None:
+    repository = MemoryLegalRepository()
+    monkeypatch.setattr(main_module, "repository", repository)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "전기사업법 제1조부터 제21조",
+            "as_of_date": "2026-07-15",
+            "project_stage": "planning",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_status"] == "no_results"
+    assert payload["citations"] == []
+    assert any("20개 조까지" in item for item in payload["limitations"])
