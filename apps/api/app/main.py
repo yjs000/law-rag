@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
+from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.openai_answerer import OpenAIAnswerer, validate_draft
 from app.adapters.openai_embedder import OpenAIEmbedder
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
@@ -298,9 +299,7 @@ async def _answer_question(
     assert isinstance(generation_stage, dict)
     generation_stage.update({"attempted": True, "status": "started"})
     try:
-        draft = await OpenAIAnswerer(
-            api_key=settings.openai_api_key or "", model=settings.openai_answer_model
-        ).answer(payload, hits)
+        draft = await _answerer().answer(payload, hits)
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         if status_code in {402, 429}:
@@ -607,6 +606,18 @@ def _question_owner(request: Request, user: MockUser | None) -> str:
     )
 
 
+def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
+    if settings.answer_provider == "nvidia_nim":
+        return NvidiaNimAnswerer(
+            api_key=settings.nvidia_api_key or "",
+            base_url=settings.nvidia_base_url,
+            model=settings.nvidia_answer_model,
+            timeout_seconds=settings.answer_timeout_seconds,
+            max_output_tokens=settings.answer_max_output_tokens,
+        )
+    return OpenAIAnswerer(
+        api_key=settings.openai_api_key or "", model=settings.openai_answer_model
+    )
 def _ai_unavailable_reason() -> str | None:
     if not settings.ai_enabled:
         return AiFallbackReason.AI_DISABLED.value

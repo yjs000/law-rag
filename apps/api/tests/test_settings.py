@@ -72,3 +72,26 @@ def test_production_accepts_explicit_dependencies_and_rate_limit_secret() -> Non
     )
 
     assert settings.environment == "production"
+
+
+def test_nvidia_provider_uses_its_own_key_without_enabling_openai_embedding() -> None:
+    settings = Settings(
+        answer_provider="nvidia_nim",
+        nvidia_api_key="nvapi-test",
+        openai_api_key=None,
+        _env_file=None,
+    )
+
+    assert settings.ai_enabled
+    assert settings.answer_max_output_tokens == 4096
+
+
+def test_nvidia_provider_without_key_keeps_ai_disabled() -> None:
+    settings = Settings(
+        answer_provider="nvidia_nim",
+        nvidia_api_key=None,
+        openai_api_key="openai-embedding-only",
+        _env_file=None,
+    )
+
+    assert not settings.ai_enabled

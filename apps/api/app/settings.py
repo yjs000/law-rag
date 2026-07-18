@@ -26,7 +26,13 @@ class Settings(BaseSettings):
     supabase_raw_bucket: str = "law-raw"
     openai_api_key: str | None = None
     ai_mode: Literal["auto", "off"] = "auto"
+    answer_provider: Literal["openai", "nvidia_nim"] = "openai"
     openai_answer_model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
+    nvidia_api_key: str | None = None
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
+    answer_timeout_seconds: float = Field(default=30, gt=0, le=120)
     openai_embedding_model: str = "text-embedding-3-large"
     embedding_dimensions: int = 512
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
@@ -69,7 +75,12 @@ class Settings(BaseSettings):
 
     @property
     def ai_enabled(self) -> bool:
-        return self.ai_mode == "auto" and bool(self.openai_api_key)
+        provider_key = (
+            self.openai_api_key
+            if self.answer_provider == "openai"
+            else self.nvidia_api_key
+        )
+        return self.ai_mode == "auto" and bool(provider_key)
 
 
 @lru_cache
