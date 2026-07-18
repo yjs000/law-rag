@@ -2,7 +2,7 @@ import type { CorpusStatus, QuestionResponse } from "./contracts";
 
 export type AnswerPreference = "terra" | "search_only";
 
-export const TERRA_FALLBACK_NOTICE = "Terra 한도 초과로 검색 전용으로 전환합니다.";
+export const TERRA_FALLBACK_NOTICE = "AI 생성 한도 또는 연결 문제로 검색 전용으로 전환합니다.";
 
 export type AnswerModeResolution = {
   preference: AnswerPreference;

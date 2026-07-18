@@ -64,7 +64,7 @@ type AuthStatus = "checking" | "ready";
 type IconName = "account" | "arrow" | "close" | "menu" | "new" | "search" | "trash";
 
 const MODEL_LABELS: Record<AnswerPreference, string> = {
-  terra: "Terra · 근거 답변",
+  terra: "NVIDIA Nemotron · 근거 답변",
   search_only: "검색 전용 · 원문만",
 };
 
@@ -200,7 +200,7 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
         <div><dt>로그인</dt><dd>Google</dd></div>
         <div><dt>질문 보존</dt><dd>생성일로부터 1년</dd></div>
         <div><dt>생성 모델</dt><dd>gpt-5.6-terra 전용</dd></div>
-        <div><dt>현재 상태</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "Terra 사용 가능" : "검색 전용"}</dd></div>
+        <div><dt>현재 상태</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "NVIDIA AI 사용 가능" : "검색 전용"}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
         <div><dt>계정 사용 한도</dt><dd>AI 10회/일 · 검색 100회/일 (베타)</dd></div>
       </dl>
@@ -239,7 +239,7 @@ function AnswerView({
   const emptyResult = getEmptyResultMessage(response, question);
   const citations = filterCitations(response.citations, documentKinds);
   return <>
-    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{response.mode === "ai" ? "Terra · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
+    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{response.mode === "ai" ? "NVIDIA Nemotron · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
     {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={onRefine}>질문 구체화하기</button></section>}
     {!emptyResult && <p className="summary"><SafeText>{response.summary}</SafeText></p>}
     {response.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === `${messageId}:${id}` ? "selected" : ""} key={id} onClick={() => onCitation(messageId, response, id)}>{id} 원문</button>)}</div></section>)}
