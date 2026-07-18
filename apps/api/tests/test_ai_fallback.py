@@ -238,10 +238,16 @@ def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> 
         return True
 
     FailingAnswerer.models = []
+
+    class ForbiddenEmbedder:
+        async def embed(self, texts):
+            raise AssertionError("search_only must not call the embedding model")
+
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(main_module, "_embedder", lambda: ForbiddenEmbedder())
     monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 

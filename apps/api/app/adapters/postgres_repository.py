@@ -1,16 +1,25 @@
 import json
+from collections.abc import Mapping
 from datetime import date, datetime
+from time import perf_counter
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_reference
 from app.domain.schemas import CorpusItemStatus, SearchHit
-from app.domain.search_queries import SearchTrace, prepare_search_query
+from app.domain.search_queries import (
+    PreparedSearchQuery,
+    SearchStageTrace,
+    SearchTrace,
+    matching_terms,
+    prepare_search_query,
+)
 
 
 def _async_url(url: str) -> str:
@@ -144,12 +153,14 @@ class PostgresLegalRepository:
     async def search_with_trace(
         self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
     ) -> tuple[list[SearchHit], SearchTrace]:
+        started = perf_counter()
         embedding = str(query_embedding) if query_embedding else None
         reference = parse_provision_reference(query)
         prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
             path_rows = []
             if reference is not None:
+                path_started = perf_counter()
                 path_rows = (
                     (
                         await connection.execute(
@@ -183,69 +194,211 @@ class PostgresLegalRepository:
                     .mappings()
                     .all()
                 )
-            rows = []
-            relaxed = False
-            executed_query = None
-            if reference is None and prepared.strict_query:
-                executed_query = prepared.strict_query
-                rows = (
-                    (
-                        await connection.execute(
-                            text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
-                            {
-                                "query": executed_query,
-                                "as_of": as_of_date,
-                                "embedding": embedding,
-                                "limit": limit,
-                            },
-                        )
-                    )
-                    .mappings()
-                    .all()
+            if reference is not None:
+                selected = [self._hit(row) for row in path_rows][:limit]
+                duration_ms = _elapsed_ms(path_started)
+                return selected, SearchTrace(
+                    strategy="direct_path",
+                    normalized_query=prepared.normalized_text,
+                    terms=prepared.terms,
+                    executed_query=None,
+                    relaxed=False,
+                    reference_title=reference.document_title,
+                    reference_path=reference.path,
+                    candidate_count=len(selected),
+                    anchor_term=prepared.anchor_term,
+                    stages=(
+                        SearchStageTrace(
+                            stage="direct_path",
+                            query=reference.path,
+                            raw_candidate_count=len(path_rows),
+                            accepted_candidate_count=len(selected),
+                            duration_ms=duration_ms,
+                            status="matched" if selected else "insufficient_evidence",
+                        ),
+                    ),
+                    total_duration_ms=_elapsed_ms(started),
                 )
-                if not rows and prepared.relaxed_query != prepared.strict_query:
-                    relaxed = True
-                    executed_query = prepared.relaxed_query
-                    rows = (
-                        (
-                            await connection.execute(
-                                text(
-                                    "SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"
-                                ),
-                                {
-                                    "query": executed_query,
-                                    "as_of": as_of_date,
-                                    "embedding": embedding,
-                                    "limit": limit,
-                                },
-                            )
-                        )
-                        .mappings()
-                        .all()
-                    )
-        merged = []
-        seen = set()
-        for row in [*path_rows, *rows]:
-            if row["provision_id"] in seen:
-                continue
-            seen.add(row["provision_id"])
-            merged.append(self._hit(row))
-        selected = merged[:limit]
-        return selected, SearchTrace(
-            strategy=(
-                "direct_path"
-                if reference
-                else "hybrid"
-                if query_embedding
-                else "keyword"
-            ),
+
+            stages: list[SearchStageTrace] = []
+            executed_queries: set[str] = set()
+            last_executed_query: str | None = None
+            candidate_limit = min(max(limit * 5, 50), 200)
+            match_cache: dict[UUID, set[str]] = {}
+
+            def row_matches(row: Mapping[str, Any]) -> set[str]:
+                provision_id = row["provision_id"]
+                if provision_id not in match_cache:
+                    match_cache[provision_id] = _row_matching_terms(row, prepared)
+                return match_cache[provision_id]
+
+            stage_started = perf_counter()
+            strict_rows = await _execute_search(
+                connection,
+                prepared.strict_query,
+                as_of_date,
+                embedding,
+                candidate_limit,
+            )
+            if prepared.strict_query:
+                executed_queries.add(prepared.strict_query)
+                last_executed_query = prepared.strict_query
+            strict_accepted = [
+                row
+                for row in strict_rows
+                if prepared.terms and len(row_matches(row)) == len(prepared.terms)
+            ]
+            stages.append(
+                _stage_trace(
+                    "all_terms",
+                    prepared.strict_query,
+                    len(strict_rows),
+                    len(strict_accepted),
+                    stage_started,
+                    "matched" if strict_accepted else "no_match",
+                )
+            )
+            if strict_accepted:
+                return _postgres_natural_result(
+                    self,
+                    strict_accepted,
+                    limit,
+                    prepared,
+                    stages,
+                    started,
+                    prepared.strict_query,
+                    query_embedding is not None,
+                    False,
+                )
+
+            stage_started = perf_counter()
+            minimum_query_executed = bool(
+                prepared.minimum_match_query
+                and prepared.minimum_match_query not in executed_queries
+            )
+            if minimum_query_executed:
+                minimum_rows = await _execute_search(
+                    connection,
+                    prepared.minimum_match_query,
+                    as_of_date,
+                    embedding,
+                    candidate_limit,
+                )
+                executed_queries.add(prepared.minimum_match_query)
+                last_executed_query = prepared.minimum_match_query
+            else:
+                minimum_rows = strict_rows
+            minimum = min(2, len(prepared.terms))
+            minimum_accepted = [
+                row for row in minimum_rows if minimum and len(row_matches(row)) >= minimum
+            ]
+            stages.append(
+                _stage_trace(
+                    "minimum_two",
+                    prepared.minimum_match_query,
+                    len(minimum_rows),
+                    len(minimum_accepted),
+                    stage_started,
+                    (
+                        "candidate_pool"
+                        if minimum_accepted
+                        else "no_match"
+                        if minimum_query_executed
+                        else "skipped_duplicate_query"
+                    ),
+                )
+            )
+
+            stage_started = perf_counter()
+            anchored = (
+                [row for row in minimum_accepted if prepared.anchor_term in row_matches(row)]
+                if prepared.anchor_term
+                else []
+            )
+            anchor_raw_count = len(minimum_accepted)
+            anchor_query_executed = False
+            anchor_query_skipped = False
+            if (
+                not anchored
+                and prepared.anchored_query
+                and prepared.anchored_query not in executed_queries
+            ):
+                anchor_query_executed = True
+                anchor_rows = await _execute_search(
+                    connection,
+                    prepared.anchored_query,
+                    as_of_date,
+                    embedding,
+                    candidate_limit,
+                )
+                executed_queries.add(prepared.anchored_query)
+                last_executed_query = prepared.anchored_query
+                anchor_raw_count = len(anchor_rows)
+                anchored = [
+                    row
+                    for row in anchor_rows
+                    if prepared.anchor_term in row_matches(row) and len(row_matches(row)) >= minimum
+                ]
+            elif not anchored and prepared.anchored_query in executed_queries:
+                anchor_query_skipped = True
+            stages.append(
+                _stage_trace(
+                    "anchor_required",
+                    prepared.anchored_query if anchor_query_executed else None,
+                    anchor_raw_count,
+                    len(anchored),
+                    stage_started,
+                    (
+                        "matched"
+                        if anchored
+                        else "skipped_no_anchor"
+                        if prepared.anchor_term is None
+                        else "skipped_duplicate_query"
+                        if anchor_query_skipped
+                        else "no_match"
+                    ),
+                )
+            )
+            if anchored:
+                return _postgres_natural_result(
+                    self,
+                    anchored,
+                    limit,
+                    prepared,
+                    stages,
+                    started,
+                    (
+                        prepared.anchored_query
+                        if anchor_query_executed
+                        else prepared.minimum_match_query
+                    ),
+                    query_embedding is not None,
+                    True,
+                )
+
+        stage_started = perf_counter()
+        stages.append(
+            _stage_trace(
+                "insufficient_evidence",
+                None,
+                0,
+                0,
+                stage_started,
+                "insufficient_evidence",
+            )
+        )
+        return [], SearchTrace(
+            strategy="four_stage_hybrid" if query_embedding else "four_stage_keyword",
             normalized_query=prepared.normalized_text,
             terms=prepared.terms,
-            executed_query=executed_query,
-            relaxed=relaxed,
-            reference_title=reference.document_title if reference else None,
-            reference_path=reference.path if reference else None,
-            candidate_count=len(selected),
+            executed_query=last_executed_query,
+            relaxed=True,
+            reference_title=None,
+            reference_path=None,
+            candidate_count=0,
+            anchor_term=prepared.anchor_term,
+            stages=tuple(stages),
+            total_duration_ms=_elapsed_ms(started),
         )
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
@@ -311,3 +464,100 @@ class PostgresLegalRepository:
             source_url=row["source_url"],
             score=float(row["score"]),
         )
+
+
+async def _execute_search(
+    connection: AsyncConnection,
+    query: str,
+    as_of_date: date,
+    embedding: str | None,
+    limit: int,
+) -> list[Mapping[str, Any]]:
+    if not query:
+        return []
+    return list(
+        (
+            await connection.execute(
+                text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
+                {
+                    "query": query,
+                    "as_of": as_of_date,
+                    "embedding": embedding,
+                    "limit": limit,
+                },
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+def _row_matching_terms(row: Mapping[str, Any], prepared: PreparedSearchQuery) -> set[str]:
+    return matching_terms(
+        " ".join(
+            (
+                str(row["document_title"]),
+                str(row["heading"] or ""),
+                str(row["content"]),
+            )
+        ),
+        prepared,
+    )
+
+
+def _elapsed_ms(started: float) -> float:
+    return (perf_counter() - started) * 1000
+
+
+def _stage_trace(
+    stage: str,
+    query: str | None,
+    raw_count: int,
+    accepted_count: int,
+    started: float,
+    status: str,
+) -> SearchStageTrace:
+    return SearchStageTrace(
+        stage=stage,
+        query=query or None,
+        raw_candidate_count=raw_count,
+        accepted_candidate_count=accepted_count,
+        duration_ms=_elapsed_ms(started),
+        status=status,
+    )
+
+
+def _postgres_natural_result(
+    repository: PostgresLegalRepository,
+    rows: list[Mapping[str, Any]],
+    limit: int,
+    prepared: PreparedSearchQuery,
+    stages: list[SearchStageTrace],
+    started: float,
+    executed_query: str,
+    hybrid: bool,
+    relaxed: bool,
+) -> tuple[list[SearchHit], SearchTrace]:
+    selected: list[SearchHit] = []
+    seen: set[UUID] = set()
+    for row in rows:
+        provision_id = row["provision_id"]
+        if provision_id in seen:
+            continue
+        seen.add(provision_id)
+        selected.append(repository._hit(row))
+        if len(selected) == limit:
+            break
+    return selected, SearchTrace(
+        strategy="four_stage_hybrid" if hybrid else "four_stage_keyword",
+        normalized_query=prepared.normalized_text,
+        terms=prepared.terms,
+        executed_query=executed_query,
+        relaxed=relaxed,
+        reference_title=None,
+        reference_path=None,
+        candidate_count=len(selected),
+        anchor_term=prepared.anchor_term,
+        stages=tuple(stages),
+        total_duration_ms=_elapsed_ms(started),
+    )

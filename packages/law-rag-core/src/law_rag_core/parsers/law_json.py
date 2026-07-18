@@ -57,7 +57,11 @@ def _date(value: str | None) -> date | None:
         return None
 
 
-_TECHNICAL_SECTION = re.compile(r"(?<![\d.])(\d+\.\d+)(?![\d.])\s*(?=[가-힣<])")
+_TECHNICAL_SECTION = re.compile(
+    r"(?<!\d)(?<!\d\.)(\d+\.\d+)(?![\d.])"
+    r"(?!에도|에서|으로|부터|까지|을|를|에|의|과|와|로)"
+    r"(?!\s+및(?:\s|$))\s*(?=[가-힣<])"
+)
 
 
 def _technical_standard_sections(content: str) -> list[tuple[str, str]]:

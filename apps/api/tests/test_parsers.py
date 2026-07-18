@@ -93,3 +93,38 @@ def test_technical_standard_is_split_by_decimal_sections_not_referenced_articles
     assert "제11조" in document.provisions[0].content
     assert "12.2 L" in document.provisions[1].content
     assert all(len(provision.content) < 100 for provision in document.provisions)
+
+
+def test_technical_standard_ignores_decimal_section_references() -> None:
+    body = json.dumps(
+        {
+            "AdmRulService": {
+                "행정규칙명": "전기저장시설의 화재안전기술기준(NFTC 607)",
+                "행정규칙ID": "nftc607",
+                "행정규칙일련번호": "2",
+                "조문내용": (
+                    "1.1 적용범위 세부사항이다.1.2 기준의 효력 세부사항이다."
+                    "2.1 소화기 기준이다.2.2 스프링클러설비 기준이다."
+                    "2.3 배터리용 소화장치 기준이며 2.2에도 불구하고 적용한다."
+                    "2.4 자동화재탐지설비에는 2.2 및 2.3을 적용하지 않을 수 있다."
+                ),
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="전기저장시설의 화재안전기술기준(NFTC 607)",
+        source_kind=SourceKind.ADMIN_RULE,
+        source_url="https://example.test",
+    )
+
+    assert [provision.path for provision in document.provisions] == [
+        "기준1.1",
+        "기준1.2",
+        "기준2.1",
+        "기준2.2",
+        "기준2.3",
+        "기준2.4",
+    ]
