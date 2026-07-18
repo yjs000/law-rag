@@ -38,3 +38,37 @@ def test_legacy_supabase_service_role_key_is_rejected(monkeypatch) -> None:
 
     with pytest.raises(ValidationError, match="must start with sb_secret_"):
         Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({}, "DATABASE_URL, SUPABASE_URL, SUPABASE_SECRET_KEY"),
+        (
+            {
+                "database_url": "postgresql://example",
+                "supabase_url": "https://project.supabase.co",
+                "supabase_secret_key": "sb_secret_example",
+            },
+            "non-default RATE_LIMIT_SECRET",
+        ),
+    ],
+)
+def test_production_rejects_missing_or_development_only_settings(
+    overrides: dict[str, str], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(environment="production", _env_file=None, **overrides)
+
+
+def test_production_accepts_explicit_dependencies_and_rate_limit_secret() -> None:
+    settings = Settings(
+        environment="production",
+        database_url="postgresql://example",
+        supabase_url="https://project.supabase.co",
+        supabase_secret_key="sb_secret_example",
+        rate_limit_secret="replace-with-managed-secret",
+        _env_file=None,
+    )
+
+    assert settings.environment == "production"

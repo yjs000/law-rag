@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +47,25 @@ class Settings(BaseSettings):
         if not isinstance(value, str) or not value.startswith("sb_secret_"):
             raise ValueError("SUPABASE_SECRET_KEY must start with sb_secret_")
         return value
+
+    @model_validator(mode="after")
+    def validate_production_dependencies(self) -> Settings:
+        if self.environment != "production":
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("DATABASE_URL", self.database_url),
+                ("SUPABASE_URL", self.supabase_url),
+                ("SUPABASE_SECRET_KEY", self.supabase_secret_key),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(f"production requires {', '.join(missing)}")
+        if self.rate_limit_secret == "development-only-secret":
+            raise ValueError("production requires a non-default RATE_LIMIT_SECRET")
+        return self
 
     @property
     def ai_enabled(self) -> bool:
