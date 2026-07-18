@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -57,6 +57,7 @@ class AiRuntimeState(BaseModel):
 
 
 class QuestionRequest(BaseModel):
+    client_request_id: UUID = Field(default_factory=uuid4)
     question: Annotated[str, Field(min_length=2, max_length=2000)]
     as_of_date: date = Field(default_factory=date.today)
     project_stage: ProjectStage = ProjectStage.PLANNING

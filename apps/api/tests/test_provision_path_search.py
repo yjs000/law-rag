@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.adapters.memory_repository import MemoryLegalRepository
+from app.application.answering import search_only_answer
 from app.domain.catalog import SourceKind
 from app.domain.provision_queries import parse_provision_reference
+from app.domain.schemas import QuestionRequest
 from app.parsers.law_json import parse_legal_document
 
 
@@ -54,7 +56,18 @@ def test_provision_reference_normalizes_article_branch_paragraph_item_and_subite
     assert "제12조의3/항②/호4./목가." in reference.storage_paths
 
 
-@pytest.mark.parametrize("question", ["제1조 ②항", "제1조제②항", "１조 ２항"])
+@pytest.mark.parametrize(
+    "question",
+    [
+        "1조 2항",
+        "제 1 조 제 2 항",
+        "제1조제2항",
+        "제1조 ②항",
+        "제1조제②항",
+        "１조 ２항",
+        "제1조 제2항.",
+    ],
+)
 def test_provision_reference_accepts_common_paragraph_number_forms(question: str) -> None:
     reference = parse_provision_reference(question)
 
@@ -117,6 +130,57 @@ async def test_path_query_excludes_version_before_its_effective_date() -> None:
     assert await repository.search("1조2항", date(2026, 12, 31), 10) == []
 
 
+@pytest.mark.asyncio
+async def test_path_query_effective_range_is_start_inclusive_and_end_exclusive() -> None:
+    repository = MemoryLegalRepository()
+    await repository.upsert_document(_document("전기사업법", "1", "20270101"))
+    key = next(iter(repository._effective_to))
+    repository._effective_to[key] = date(2028, 1, 1)
+
+    assert await repository.search("1조2항", date(2026, 12, 31), 10) == []
+    assert len(await repository.search("1조2항", date(2027, 1, 1), 10)) == 1
+    assert len(await repository.search("1조2항", date(2027, 12, 31), 10)) == 1
+    assert await repository.search("1조2항", date(2028, 1, 1), 10) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unknown_title", ["가짜에너지법", "가짜 에너지법"])
+async def test_unknown_law_like_title_does_not_fall_back_to_all_laws(
+    unknown_title: str,
+) -> None:
+    repository = MemoryLegalRepository()
+    await repository.upsert_document(_document("전기사업법", "1"))
+    question = f"{unknown_title} 제1조 제2항"
+    reference = parse_provision_reference(question)
+
+    assert reference is not None
+    assert reference.document_title is None
+    assert reference.unrecognized_document_title == unknown_title
+    assert await repository.search(question, date(2026, 7, 15), 10) == []
+
+
+@pytest.mark.asyncio
+async def test_missing_paragraph_does_not_return_upper_article_as_exact_evidence() -> None:
+    repository = MemoryLegalRepository()
+    await repository.upsert_document(_document("전기사업법", "1"))
+    request = QuestionRequest(
+        question="전기사업법 제1조 제99항은?",
+        as_of_date=date(2026, 7, 15),
+        answer_mode="search_only",
+    )
+
+    hits = await repository.search(request.question, request.as_of_date, 10)
+    answer = search_only_answer(request, hits)
+
+    assert hits == []
+    assert answer.citations == []
+    assert answer.no_results_reason == "requested_path_not_found"
+    assert any(
+        "상위 조문을 정확한 검색 결과로 대신 제시하지 않았습니다" in item
+        for item in answer.limitations
+    )
+
+
 def test_question_api_explains_when_requested_path_does_not_exist(monkeypatch) -> None:
     repository = MemoryLegalRepository()
     monkeypatch.setattr(main_module, "repository", repository)
@@ -159,3 +223,28 @@ def test_question_api_names_law_when_path_is_absent_from_named_document(monkeypa
         "전기사업법에서 요청한 조문 경로" in limitation
         for limitation in response.json()["limitations"]
     )
+    assert any(
+        "상위 조문을 정확한 검색 결과로 대신 제시하지 않았습니다" in limitation
+        for limitation in response.json()["limitations"]
+    )
+
+
+def test_question_api_explains_unrecognized_law_without_searching_all_laws(monkeypatch) -> None:
+    repository = MemoryLegalRepository()
+    monkeypatch.setattr(main_module, "repository", repository)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "가짜에너지법 제1조 제2항은?",
+            "as_of_date": "2026-07-15",
+            "project_stage": "planning",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_status"] == "no_results"
+    assert payload["citations"] == []
+    assert any("입력한 법령명(가짜에너지법)" in item for item in payload["limitations"])

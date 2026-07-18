@@ -137,6 +137,8 @@ class MemoryLegalRepository:
                 continue
             if reference and reference.document_title not in {None, document.title}:
                 continue
+            if reference and reference.unrecognized_document_title:
+                continue
             for provision in document.provisions:
                 title = normalize_text(document.title)
                 heading = normalize_text(provision.heading or "")

@@ -28,11 +28,19 @@ def search_only_answer(
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
             "원인: 질문과 일치하는 근거가 기준일에 유효한 MVP 법령에 없습니다."
         )
+    elif reference.unrecognized_document_title:
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            f"원인: 입력한 법령명({reference.unrecognized_document_title})을 "
+            "MVP 대상 법령에서 확인하지 못했습니다. 법령명을 다시 확인해 주세요."
+        )
     elif reference.document_title:
         no_results_message = (
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
             f"원인: {reference.document_title}에서 요청한 조문 경로({reference.path})를 "
-            "기준일 현재 찾지 못했습니다."
+            "기준일 현재 찾지 못했습니다. 요청 경로와 상위 조문은 같은 근거가 아니므로 "
+            "상위 조문을 정확한 검색 결과로 대신 제시하지 않았습니다. "
+            "해당 조 본문이나 인접 조문을 별도로 확인해 주세요."
         )
     else:
         no_results_message = (

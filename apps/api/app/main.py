@@ -1,9 +1,10 @@
+import asyncio
 import base64
 import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +23,7 @@ from app.adapters.supabase_auth import (
 )
 from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
+from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.schemas import (
@@ -47,6 +49,7 @@ from app.settings import get_settings
 
 settings = get_settings()
 ai_quota_exhausted = False
+question_tasks = QuestionTaskRegistry()
 repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
 )
@@ -180,6 +183,32 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
     user = await _optional_user(request.headers.get("authorization"))
+    owner = _question_owner(request, user)
+    task = asyncio.current_task()
+    if task is None:
+        raise HTTPException(status_code=503, detail="질문 처리를 시작할 수 없습니다.")
+    if not await question_tasks.register(owner, payload.client_request_id, task):
+        raise HTTPException(status_code=409, detail="같은 요청이 이미 처리 중입니다.")
+    try:
+        await asyncio.sleep(0)
+        return await _answer_question(payload, request, user)
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
+    finally:
+        await question_tasks.unregister(owner, payload.client_request_id, task)
+
+
+@app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
+async def cancel_question(client_request_id: UUID, request: Request) -> dict[str, bool]:
+    user = await _optional_user(request.headers.get("authorization"))
+    if not await question_tasks.cancel(_question_owner(request, user), client_request_id):
+        raise HTTPException(status_code=404, detail="처리 중인 질문을 찾을 수 없습니다.")
+    return {"cancelled": True}
+
+
+async def _answer_question(
+    payload: QuestionRequest, request: Request, user: MockUser | None
+) -> QuestionResponse:
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
@@ -211,6 +240,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         settings.ai_daily_limit if use_ai else settings.search_daily_limit,
         user=user,
     )
+    await asyncio.sleep(0)
     query_embedding = None
     embedding_failed = False
     if use_ai:
@@ -252,6 +282,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
             AiFallbackReason.EMBEDDING_ERROR if embedding_failed else AiFallbackReason.NO_EVIDENCE
         )
     fallback = search_only_answer(payload, hits, corpus_as_of, fallback_reason=fallback_reason)
+    fallback.request_id = str(payload.client_request_id)
     if not use_ai or not hits:
         generation_stage = diagnostics["generation"]
         assert isinstance(generation_stage, dict)
@@ -299,7 +330,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         for index, hit in enumerate(hits, 1)
     ]
     answer = QuestionResponse(
-        request_id=str(uuid4()),
+        request_id=str(payload.client_request_id),
         mode="ai",
         summary=draft.summary,
         scope=draft.scope,
@@ -561,6 +592,19 @@ async def _check_quota(
 
 def _ai_available() -> bool:
     return settings.ai_enabled and not ai_quota_exhausted
+
+
+def _question_owner(request: Request, user: MockUser | None) -> str:
+    if user is not None:
+        return f"user:{user.id}"
+    subject = anonymous_rate_limit_subject(
+        request.headers,
+        request.client.host if request.client else None,
+        trust_vercel_proxy=settings.environment == "production",
+    )
+    return "anonymous:" + daily_subject_hash(
+        subject, settings.rate_limit_secret, date.today()
+    )
 
 
 def _ai_unavailable_reason() -> str | None:

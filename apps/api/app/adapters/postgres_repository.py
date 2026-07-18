@@ -161,6 +161,7 @@ class PostgresLegalRepository:
             path_rows = []
             if reference is not None:
                 path_started = perf_counter()
+            if reference is not None and reference.unrecognized_document_title is None:
                 path_rows = (
                     (
                         await connection.execute(

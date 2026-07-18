@@ -24,6 +24,7 @@ _DOCUMENT_TITLE_ALIASES = {
 class ProvisionReference:
     path: str
     document_title: str | None
+    unrecognized_document_title: str | None = None
 
     @property
     def storage_paths(self) -> tuple[str, ...]:
@@ -79,11 +80,24 @@ def parse_provision_reference(query: str) -> ProvisionReference | None:
         for alias, title in _DOCUMENT_TITLE_ALIASES.items()
         if alias in compact_query
     )
+    recognized_title = (
+        max(title_candidates, key=lambda candidate: len(candidate[0]))[1]
+        if title_candidates
+        else None
+    )
+    unknown_title_match = re.search(
+        r"(?P<title>[0-9A-Za-z가-힣ㆍ·()]+(?:\s+[0-9A-Za-z가-힣ㆍ·()]+){0,5}"
+        r"(?:법|령|규칙|기준))\s*(?:의|에서)?\s*(?:제\s*)?\d+\s*조",
+        unicodedata.normalize("NFKC", query),
+    )
     return ProvisionReference(
         path=path,
-        document_title=max(title_candidates, key=lambda candidate: len(candidate[0]))[1]
-        if title_candidates
-        else None,
+        document_title=recognized_title,
+        unrecognized_document_title=(
+            " ".join(unknown_title_match.group("title").split())
+            if unknown_title_match and recognized_title is None
+            else None
+        ),
     )
 
 
