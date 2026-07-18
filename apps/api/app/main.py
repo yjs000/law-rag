@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
-from app.adapters.openai_answerer import OpenAIAnswerer, validate_draft
+from app.adapters.openai_answerer import OpenAIAnswerer, select_generation_hits, validate_draft
 from app.adapters.openai_embedder import OpenAIEmbedder
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -301,9 +301,17 @@ async def _answer_question(
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
     generation_stage = diagnostics["generation"]
     assert isinstance(generation_stage, dict)
-    generation_stage.update({"attempted": True, "status": "started"})
+    generation_hits = select_generation_hits(hits, settings.answer_evidence_max_characters)
+    generation_stage.update({
+        "attempted": True,
+        "status": "started",
+        "retrieved_evidence_count": len(hits),
+        "selected_evidence_count": len(generation_hits),
+        "dropped_evidence_count": len(hits) - len(generation_hits),
+        "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
+    })
     try:
-        draft = await _answerer().answer(payload, hits)
+        draft = await _answerer().answer(payload, generation_hits)
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         if status_code in {402, 429}:
@@ -316,7 +324,7 @@ async def _answer_question(
             "billing_or_quota_error" if status_code in {402, 429} else "failed"
         )
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
-    if not validate_draft(draft, hits):
+    if not validate_draft(draft, generation_hits):
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
@@ -330,7 +338,7 @@ async def _answer_question(
             quote=hit.content,
             source_url=hit.source_url,
         )
-        for index, hit in enumerate(hits, 1)
+        for index, hit in enumerate(generation_hits, 1)
     ]
     answer = QuestionResponse(
         request_id=str(payload.client_request_id),

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
+    answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
     answer_timeout_seconds: float = Field(default=30, gt=0, le=120)
     openai_embedding_model: str = "text-embedding-3-large"
     embedding_dimensions: int = 512

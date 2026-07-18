@@ -14,6 +14,23 @@ class DraftAnswer(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+def select_generation_hits(hits: list[SearchHit], max_characters: int) -> list[SearchHit]:
+    """Keep ranked provisions whole while bounding provider input size."""
+    if max_characters <= 0:
+        raise ValueError("evidence budget must be positive")
+    selected: list[SearchHit] = []
+    used = 0
+    for hit in hits:
+        size = len(hit.document_title) + len(hit.path) + len(hit.version_label) + len(hit.content)
+        if selected and used + size > max_characters:
+            continue
+        selected.append(hit)
+        used += size
+        if used >= max_characters:
+            break
+    return selected
+
+
 class OpenAIAnswerer:
     def __init__(self, *, api_key: str, model: str) -> None:
         if model != "gpt-5.6-terra":

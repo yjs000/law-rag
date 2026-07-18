@@ -24,6 +24,9 @@
 | TD-016 | P1 | 컨텍스트 | 실제 tokenizer 기반 전체 prompt/output 예산 게이트가 없음 | server tokenizer와 근거 trimming 경계 테스트 | 미지정 |
 | TD-017 | P1 | 로컬 추론 | Vercel→PC 직접 경로는 없고 outbound inference worker가 미구현 | 인증 queue worker·TTL·동시성·fallback 종단 테스트 | 미지정 |
 | TD-018 | P1 | 운영 | AI quota 플래그·메트릭이 인스턴스 메모리에 남음 | runtime_flags와 중앙 관측·복구 테스트 | 미지정 |
+| TD-019 | P0 | AI 개인정보 | NVIDIA hosted 전송의 보존·학습·국외 이전·Trial 약관이 미검증 | 정책 검토와 개인정보처리방침 반영 전 공개 AI 비활성 | 사용자 |
+| TD-020 | P1 | 임베딩 검색 | hybrid SQL이 embedding model·dimensions·version을 필터하지 않아 혼합 가능 | 벡터 값 유지, 함수 인자·필터 migration 및 혼합 회귀 테스트 | 미지정 |
+| TD-021 | P2 | 취소 UX | 취소 API 실패도 즉시 중지 완료처럼 표시될 수 있음 | 접수·확정·이미 완료·503 재시도 상태 UI 테스트 | 미지정 |
 
 ## 종료된 항목
 
