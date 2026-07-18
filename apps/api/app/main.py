@@ -244,7 +244,7 @@ async def _answer_question(
     await asyncio.sleep(0)
     query_embedding = None
     embedding_failed = False
-    if use_ai:
+    if use_ai and settings.openai_api_key:
         embedding_stage = diagnostics["embedding"]
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})
@@ -256,6 +256,10 @@ async def _answer_question(
         except Exception:
             embedding_failed = True
             embedding_stage.update({"status": "failed", "dimensions": None})
+    elif use_ai:
+        embedding_stage = diagnostics["embedding"]
+        assert isinstance(embedding_stage, dict)
+        embedding_stage.update({"attempted": False, "status": "skipped_provider_unavailable"})
     try:
         hits, search_trace = await repository.search_with_trace(
             payload.question, payload.as_of_date, 10, query_embedding

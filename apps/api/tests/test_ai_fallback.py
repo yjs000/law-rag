@@ -277,3 +277,53 @@ def test_unknown_answer_mode_is_rejected_at_boundary() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_nvidia_generation_without_openai_key_skips_embedding_call(monkeypatch) -> None:
+    hit = SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2025, 1, 1),
+        effective_to=None,
+        path="제1조",
+        content="에너지 관련 근거",
+        source_url="https://www.law.go.kr",
+    )
+
+    async def search(*args, **kwargs):
+        return [hit]
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    class ForbiddenEmbedder:
+        async def embed(self, texts):
+            raise AssertionError("embedding provider must not be called")
+
+    class FailedNvidiaAnswerer:
+        async def answer(self, payload, hits):
+            raise RuntimeError("NVIDIA mock generation failure")
+
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: ForbiddenEmbedder())
+    monkeypatch.setattr(main_module, "_answerer", lambda: FailedNvidiaAnswerer())
+    monkeypatch.setattr(main_module.settings, "answer_provider", "nvidia_nim")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
+    monkeypatch.setattr(main_module.settings, "openai_api_key", None)
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "에너지 근거를 알려주세요", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["fallback_reason"] == "generation_error"
