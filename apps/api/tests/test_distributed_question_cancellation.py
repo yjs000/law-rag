@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,14 @@ from app.application.distributed_question_cancellation import (
     MemoryQuestionCancellationCoordinator,
     watch_for_distributed_cancel,
 )
+
+
+def test_default_poll_interval_limits_active_request_db_reads() -> None:
+    default = inspect.signature(watch_for_distributed_cancel).parameters[
+        "poll_interval_seconds"
+    ].default
+
+    assert default == 2.0
 
 
 @pytest.mark.asyncio

@@ -171,7 +171,7 @@ async def watch_for_distributed_cancel(
     request_id: UUID,
     task: asyncio.Task[object],
     *,
-    poll_interval_seconds: float = 0.5,
+    poll_interval_seconds: float = 2.0,
 ) -> None:
     """Poll shared state and cancel the task owned by this process."""
 
