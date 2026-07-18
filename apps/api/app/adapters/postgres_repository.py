@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.entities import LegalDocumentRecord
-from app.domain.provision_queries import parse_provision_reference
+from app.domain.provision_queries import parse_provision_references
 from app.domain.schemas import CorpusItemStatus, SearchHit
 from app.domain.search_queries import (
     PreparedSearchQuery,
@@ -155,13 +155,17 @@ class PostgresLegalRepository:
     ) -> tuple[list[SearchHit], SearchTrace]:
         started = perf_counter()
         embedding = str(query_embedding) if query_embedding else None
-        reference = parse_provision_reference(query)
+        provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
             path_rows = []
-            if reference is not None:
+            if provision_query is not None:
                 path_started = perf_counter()
-            if reference is not None and reference.unrecognized_document_title is None:
+            if (
+                provision_query is not None
+                and provision_query.unrecognized_document_title is None
+                and provision_query.invalid_reason is None
+            ):
                 path_rows = (
                     (
                         await connection.execute(
@@ -173,20 +177,20 @@ class PostgresLegalRepository:
                                 FROM provisions p
                                 JOIN document_versions v ON v.id=p.version_id
                                 JOIN legal_documents d ON d.id=v.document_id
-                                WHERE p.path IN (
-                                  SELECT jsonb_array_elements_text(CAST(:paths AS jsonb))
-                                )
-                                  AND (
+                                JOIN jsonb_array_elements_text(CAST(:paths AS jsonb))
+                                  WITH ORDINALITY requested(path, ordinal)
+                                  ON requested.path=p.path
+                                WHERE (
                                     CAST(:title AS text) IS NULL
                                     OR d.exact_title=CAST(:title AS text)
                                   )
                                   AND (v.effective_from IS NULL OR v.effective_from<=:as_of)
                                   AND (v.effective_to IS NULL OR v.effective_to>:as_of)
-                                ORDER BY d.exact_title,p.path LIMIT :limit"""
+                                ORDER BY requested.ordinal,d.exact_title,p.path LIMIT :limit"""
                             ),
                             {
-                                "paths": json.dumps(reference.storage_paths),
-                                "title": reference.document_title,
+                                "paths": json.dumps(provision_query.storage_paths),
+                                "title": provision_query.document_title,
                                 "as_of": as_of_date,
                                 "limit": limit,
                             },
@@ -195,7 +199,7 @@ class PostgresLegalRepository:
                     .mappings()
                     .all()
                 )
-            if reference is not None:
+            if provision_query is not None:
                 selected = [self._hit(row) for row in path_rows][:limit]
                 duration_ms = _elapsed_ms(path_started)
                 return selected, SearchTrace(
@@ -204,14 +208,18 @@ class PostgresLegalRepository:
                     terms=prepared.terms,
                     executed_query=None,
                     relaxed=False,
-                    reference_title=reference.document_title,
-                    reference_path=reference.path,
+                    reference_title=provision_query.document_title,
+                    reference_path=", ".join(
+                        reference.path for reference in provision_query.references
+                    ),
                     candidate_count=len(selected),
                     anchor_term=prepared.anchor_term,
                     stages=(
                         SearchStageTrace(
                             stage="direct_path",
-                            query=reference.path,
+                            query=", ".join(
+                                reference.path for reference in provision_query.references
+                            ),
                             raw_candidate_count=len(path_rows),
                             accepted_candidate_count=len(selected),
                             duration_ms=duration_ms,

@@ -6,7 +6,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.domain.catalog import MVP_CATALOG
 from app.domain.entities import LegalDocumentRecord
-from app.domain.provision_queries import parse_provision_reference
+from app.domain.provision_queries import parse_provision_references
 from app.domain.schemas import CorpusItemStatus, SearchHit
 from app.domain.search_queries import (
     PreparedSearchQuery,
@@ -128,16 +128,18 @@ class MemoryLegalRepository:
         prepared = prepare_search_query(query)
         terms = set(prepared.expanded_terms)
         compact_query = compact_text(query)
-        reference = parse_provision_reference(query)
+        provision_query = parse_provision_references(query)
         hits: list[SearchHit] = []
         for key, document in self._documents.items():
             if document.effective_from and document.effective_from > as_of_date:
                 continue
             if self._effective_to.get(key) and self._effective_to[key] <= as_of_date:
                 continue
-            if reference and reference.document_title not in {None, document.title}:
+            if provision_query and provision_query.document_title not in {None, document.title}:
                 continue
-            if reference and reference.unrecognized_document_title:
+            if provision_query and (
+                provision_query.unrecognized_document_title or provision_query.invalid_reason
+            ):
                 continue
             for provision in document.provisions:
                 title = normalize_text(document.title)
@@ -151,10 +153,12 @@ class MemoryLegalRepository:
                 )
                 if compact_text(document.title) in compact_query:
                     matched_score += 4.0
-                path_matched = reference is not None and provision.path in reference.storage_paths
-                if reference is not None and not path_matched:
+                path_matched = (
+                    provision_query is not None and provision.path in provision_query.storage_paths
+                )
+                if provision_query is not None and not path_matched:
                     continue
-                if reference is None and not matched_score:
+                if provision_query is None and not matched_score:
                     continue
                 effective_to = self._effective_to.get(key)
                 hits.append(
@@ -174,8 +178,16 @@ class MemoryLegalRepository:
                     )
                 )
         ranked = sorted(hits, key=lambda hit: (-hit.score, hit.document_title, hit.path))
-        if reference is not None:
-            selected = ranked[:limit]
+        if provision_query is not None:
+            path_order = {
+                path: index
+                for index, reference in enumerate(provision_query.references)
+                for path in reference.storage_paths
+            }
+            selected = sorted(
+                ranked,
+                key=lambda hit: (path_order[hit.path], hit.document_title, hit.path),
+            )[:limit]
             duration_ms = _elapsed_ms(started)
             return selected, SearchTrace(
                 strategy="direct_path",
@@ -183,14 +195,16 @@ class MemoryLegalRepository:
                 terms=prepared.terms,
                 executed_query=None,
                 relaxed=False,
-                reference_title=reference.document_title,
-                reference_path=reference.path,
+                reference_title=provision_query.document_title,
+                reference_path=", ".join(
+                    reference.path for reference in provision_query.references
+                ),
                 candidate_count=len(selected),
                 anchor_term=prepared.anchor_term,
                 stages=(
                     SearchStageTrace(
                         stage="direct_path",
-                        query=reference.path,
+                        query=", ".join(reference.path for reference in provision_query.references),
                         raw_candidate_count=len(ranked),
                         accepted_candidate_count=len(selected),
                         duration_ms=duration_ms,

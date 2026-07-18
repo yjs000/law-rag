@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from app.domain.provision_queries import parse_provision_reference
+from app.domain.provision_queries import parse_provision_references
 from app.domain.schemas import (
     AiFallbackReason,
     AnswerSection,
@@ -19,34 +19,46 @@ def search_only_answer(
     *,
     fallback_reason: AiFallbackReason | None = None,
 ) -> QuestionResponse:
-    reference = parse_provision_reference(request.question)
+    provision_query = parse_provision_references(request.question)
     no_results_reason = (
-        "requested_path_not_found" if reference is not None else "no_matching_evidence"
+        "requested_path_not_found" if provision_query is not None else "no_matching_evidence"
     )
-    if reference is None:
+    if provision_query is None:
         no_results_message = (
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
             "원인: 질문과 일치하는 근거가 기준일에 유효한 MVP 법령에 없습니다."
         )
-    elif reference.unrecognized_document_title:
+    elif provision_query.invalid_reason == "descending_range":
         no_results_message = (
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
-            f"원인: 입력한 법령명({reference.unrecognized_document_title})을 "
+            "원인: 조문 범위의 시작 조가 끝 조보다 큽니다. 범위를 오름차순으로 입력해 주세요."
+        )
+    elif provision_query.invalid_reason == "range_too_wide":
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            "원인: 한 번에 조회할 수 있는 조문 범위는 20개 조까지입니다. 범위를 나눠 입력해 주세요."
+        )
+    elif provision_query.unrecognized_document_title:
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            f"원인: 입력한 법령명({provision_query.unrecognized_document_title})을 "
             "MVP 대상 법령에서 확인하지 못했습니다. 법령명을 다시 확인해 주세요."
         )
-    elif reference.document_title:
+    elif provision_query.document_title:
+        requested_paths = ", ".join(item.path for item in provision_query.references)
         no_results_message = (
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
-            f"원인: {reference.document_title}에서 요청한 조문 경로({reference.path})를 "
+            f"원인: {provision_query.document_title}에서 요청한 조문 경로({requested_paths})를 "
             "기준일 현재 찾지 못했습니다. 요청 경로와 상위 조문은 같은 근거가 아니므로 "
             "상위 조문을 정확한 검색 결과로 대신 제시하지 않았습니다. "
             "해당 조 본문이나 인접 조문을 별도로 확인해 주세요."
         )
     else:
+        requested_paths = ", ".join(item.path for item in provision_query.references)
         no_results_message = (
             "질문을 뒷받침할 근거를 찾지 못했습니다. "
             f"원인: 기준일에 유효한 MVP 대상 법령 전체에서 요청한 조문 경로"
-            f"({reference.path})를 찾지 못했습니다."
+            f"({requested_paths})를 찾지 못했습니다."
         )
     citations = [
         Citation(
@@ -68,11 +80,7 @@ def search_only_answer(
     return QuestionResponse(
         request_id=str(uuid4()),
         mode="search_only",
-        summary=(
-            evidence_summary
-            if hits
-            else f"검색 결과가 없습니다. {no_results_message}"
-        ),
+        summary=(evidence_summary if hits else f"검색 결과가 없습니다. {no_results_message}"),
         scope=(
             f"기준일 {request.as_of_date.isoformat()} · 사업 단계 "
             f"{request.project_stage.value} · 검색된 근거 {evidence_count}건"

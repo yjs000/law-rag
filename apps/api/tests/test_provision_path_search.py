@@ -9,7 +9,7 @@ import app.main as main_module
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.application.answering import search_only_answer
 from app.domain.catalog import SourceKind
-from app.domain.provision_queries import parse_provision_reference
+from app.domain.provision_queries import parse_provision_reference, parse_provision_references
 from app.domain.schemas import QuestionRequest
 from app.parsers.law_json import parse_legal_document
 
@@ -27,13 +27,15 @@ def _document(title: str, source_id: str, effective_date: str = "20200101"):
                 "조문": {
                     "조문단위": [
                         {
-                            "조문번호": "1",
-                            "조문내용": "제1조(목적)",
+                            "조문번호": str(number),
+                            "조문내용": f"제{number}조(시험 {number})",
                             "항": [
                                 {"항번호": "①", "항내용": "첫째 항"},
                                 {"항번호": "②", "항내용": "둘째 항"},
+                                {"항번호": "③", "항내용": "셋째 항"},
                             ],
                         }
+                        for number in range(1, 4)
                     ]
                 },
             }
@@ -74,6 +76,64 @@ def test_provision_reference_accepts_common_paragraph_number_forms(question: str
     assert reference is not None
     assert reference.path == "제1조/항2"
     assert set(reference.storage_paths) == {"제1조/항2", "제1조/항②"}
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("제일조 제이항", ("제1조/항2",)),
+        ("제십이조 제삼항", ("제12조/항3",)),
+        ("제1조 제2항 및 제3항", ("제1조/항2", "제1조/항3")),
+        ("제1조부터 제3조", ("제1조", "제2조", "제3조")),
+    ],
+)
+def test_provision_query_expands_korean_numbers_lists_and_ranges(
+    question: str, expected: tuple[str, ...]
+) -> None:
+    parsed = parse_provision_references(question)
+
+    assert parsed is not None
+    assert tuple(reference.path for reference in parsed.references) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "reason"),
+    [("제3조부터 제1조", "descending_range"), ("제1조부터 제21조", "range_too_wide")],
+)
+def test_provision_query_rejects_unsafe_ranges(question: str, reason: str) -> None:
+    parsed = parse_provision_references(question)
+
+    assert parsed is not None
+    assert parsed.references == ()
+    assert parsed.invalid_reason == reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_paths"),
+    [
+        ("제일조 제이항", ["제1조/항②"]),
+        ("제1조 제2항 및 제3항", ["제1조/항②", "제1조/항③"]),
+        ("제1조부터 제3조", ["제1조", "제2조", "제3조"]),
+    ],
+)
+async def test_direct_path_search_supports_korean_numbers_lists_and_ranges(
+    question: str, expected_paths: list[str]
+) -> None:
+    repository = MemoryLegalRepository()
+    await repository.upsert_document(_document("전기사업법", "1"))
+
+    hits = await repository.search(question, date(2026, 7, 15), 10)
+
+    assert [hit.path for hit in hits] == expected_paths
+
+
+@pytest.mark.asyncio
+async def test_invalid_range_does_not_fall_back_to_lexical_search() -> None:
+    repository = MemoryLegalRepository()
+    await repository.upsert_document(_document("전기사업법", "1"))
+
+    assert await repository.search("전기사업법 제3조부터 제1조", date(2026, 7, 15), 10) == []
 
 
 def test_postgres_path_query_types_nullable_title_parameter_explicitly() -> None:
