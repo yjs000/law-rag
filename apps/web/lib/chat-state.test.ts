@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { QuestionResponse } from "./contracts";
 import {
   CONTEXT_ROLLOVER_NOTICE,
-  MAX_CONTEXT_MESSAGES,
+  DEFAULT_INPUT_CONTEXT_TOKENS,
+  MESSAGE_TOKEN_OVERHEAD,
   appendPendingTurn,
   completePendingTurn,
   createChatSession,
   ellipsizeChatTitle,
+  estimateTextTokens,
   failPendingTurn,
   firstQuestionTitle,
+  selectConversationContext,
   stopPendingTurn,
   type ChatMessage,
   type ChatSession,
@@ -72,53 +75,82 @@ describe("chat titles", () => {
   });
 });
 
-describe("context rollover", () => {
-  it("keeps a reserved request-response pair in a chat with 398 messages", () => {
+describe("token-budgeted context", () => {
+  it("uses a conservative Korean-aware estimate", () => {
+    expect(estimateTextTokens("법령 검색")).toBe(4);
+    expect(estimateTextTokens("abcdef 1234")).toBe(4);
+    expect(estimateTextTokens("허가? yes!")).toBe(5);
+  });
+
+  it("selects the most recent completed turns while preserving chronological order", () => {
     const current: ChatSession = {
       id: "chat-1",
       title: "기존 제목",
-      messages: messages(MAX_CONTEXT_MESSAGES - 2),
-      contextMessageCount: MAX_CONTEXT_MESSAGES - 2,
+      messages: messages(6),
+      contextMessageCount: 6,
     };
+    const latestTurn = selectConversationContext(current, "현재 질문", 250);
 
-    const result = appendPendingTurn(current, pendingInput(399));
-
-    expect(result.rolledOver).toBe(false);
-    expect(result.session.id).toBe("chat-1");
-    expect(result.session.messages).toHaveLength(MAX_CONTEXT_MESSAGES);
-    expect(result.session.title).toBe("기존 제목");
+    expect(latestTurn.currentQuestion).toBe("현재 질문");
+    expect(latestTurn.turns.length).toBeGreaterThan(0);
+    expect(latestTurn.turns.at(-1)?.question).toBe("질문 4");
+    expect(latestTurn.estimatedInputTokens).toBeLessThanOrEqual(250);
+    expect(latestTurn.rolledOver).toBe(true);
   });
 
-  it("starts a new chat before the next turn when the current chat has 400 messages", () => {
+  it("ignores pending, stopped, and failed assistant messages", () => {
+    const current = createChatSession("chat-1");
+    current.messages = [
+      ...messages(2),
+      { id: "u2", role: "user", text: "대기", asOf: "2026-07-18", status: "sent" },
+      { id: "a2", role: "assistant", requestId: "r2", status: "pending" },
+    ];
+
+    expect(selectConversationContext(current, "현재", DEFAULT_INPUT_CONTEXT_TOKENS).turns)
+      .toHaveLength(1);
+  });
+
+  it("starts a new chat when full completed context plus the current question exceeds budget", () => {
     const current: ChatSession = {
       id: "chat-full",
       title: "이전 대화",
-      messages: messages(MAX_CONTEXT_MESSAGES),
-      contextMessageCount: MAX_CONTEXT_MESSAGES,
+      messages: messages(4),
+      contextMessageCount: 4,
     };
-
-    const result = appendPendingTurn(current, pendingInput(401));
+    const result = appendPendingTurn(current, {
+      ...pendingInput(5),
+      inputTokenBudget: estimateTextTokens("첫 질문 5 입니다") + MESSAGE_TOKEN_OVERHEAD,
+    });
 
     expect(result.rolledOver).toBe(true);
-    expect(result.session.id).toBe("rollover-401");
+    expect(result.session.id).toBe("rollover-5");
     expect(result.session.rolloverNotice).toBe(CONTEXT_ROLLOVER_NOTICE);
-    expect(result.session.messages).toHaveLength(2);
-    expect(result.session.messages[0]).toMatchObject({
-      role: "user",
-      text: "첫 질문 401 입니다",
-    });
-    expect(result.session.title).toBe("첫 질문 401 입니다");
+    expect(result.session.messages[0]).toMatchObject({ role: "user", text: "첫 질문 5 입니다" });
   });
 
-  it("rolls over at 399 messages because a complete pair is reserved", () => {
+  it("keeps the current chat when all completed context fits", () => {
     const current: ChatSession = {
-      id: "chat-odd",
-      title: "기존 대화",
-      messages: messages(MAX_CONTEXT_MESSAGES - 1),
-      contextMessageCount: MAX_CONTEXT_MESSAGES - 1,
+      id: "chat-1",
+      title: "기존 제목",
+      messages: messages(2),
+      contextMessageCount: 2,
     };
+    const result = appendPendingTurn(current, {
+      ...pendingInput(3),
+      inputTokenBudget: DEFAULT_INPUT_CONTEXT_TOKENS,
+    });
 
-    expect(appendPendingTurn(current, pendingInput(400)).rolledOver).toBe(true);
+    expect(result.rolledOver).toBe(false);
+    expect(result.session.id).toBe("chat-1");
+    expect(result.session.title).toBe("기존 제목");
+  });
+
+  it("rejects invalid budgets but still reports an oversized current question", () => {
+    expect(() => selectConversationContext(createChatSession("chat"), "질문", 0))
+      .toThrow(RangeError);
+    const selection = selectConversationContext(createChatSession("chat"), "긴질문", 1);
+    expect(selection.rolledOver).toBe(true);
+    expect(selection.turns).toEqual([]);
   });
 });
 
