@@ -86,9 +86,11 @@ export type ConversationTurnPage = {
 };
 
 export type QuestionInput = {
+  client_request_id?: string;
   question: string;
   as_of_date: string;
   project_stage: string;
   answer_mode?: "terra" | "search_only";
   conversation_id?: string;
+  conversation_context?: Array<{ question: string; answer: string }>;
 };

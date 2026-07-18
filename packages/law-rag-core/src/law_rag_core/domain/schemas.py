@@ -56,6 +56,11 @@ class AiRuntimeState(BaseModel):
             raise ValueError("검색 전용 모드에는 실패 분류가 필요합니다")
 
 
+class ConversationTurnContext(BaseModel):
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    answer: Annotated[str, Field(min_length=1, max_length=12000)]
+
+
 class QuestionRequest(BaseModel):
     client_request_id: UUID = Field(default_factory=uuid4)
     question: Annotated[str, Field(min_length=2, max_length=2000)]
@@ -65,6 +70,9 @@ class QuestionRequest(BaseModel):
     business_type: Annotated[str | None, Field(max_length=120)] = None
     facility_type: Annotated[str | None, Field(max_length=120)] = None
     conversation_id: UUID | None = None
+    conversation_context: Annotated[list[ConversationTurnContext], Field(max_length=20)] = (
+        Field(default_factory=list)
+    )
 
 
 class SearchRequest(BaseModel):

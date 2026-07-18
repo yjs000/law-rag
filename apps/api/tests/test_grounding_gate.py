@@ -239,6 +239,30 @@ def test_prompt_injection_remains_untrusted_user_data(hit: SearchHit) -> None:
     assert "사업유형: 미제공" in messages[1]["content"]
 
 
+def test_conversation_context_is_untrusted_and_current_evidence_is_revalidated(
+    hit: SearchHit,
+) -> None:
+    request = QuestionRequest(
+        question="그 내용이 지금도 유효한가요?",
+        conversation_context=[
+            {"question": "허가가 필요한가요?", "answer": "이전에는 필요하다고 답했습니다."}
+        ],
+    )
+
+    messages = build_messages(request, [hit])
+
+    assert [message["role"] for message in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert "이전 대화는 맥락일 뿐 법률 근거가 아니다" in messages[0]["content"]
+    assert "이전 질문(맥락)" in messages[1]["content"]
+    assert "이전 답변(검증 전 맥락)" in messages[2]["content"]
+    assert "근거:\n[C1]" in messages[3]["content"]
+
+
 def test_unrelated_generated_claim_falls_back_to_search_only(monkeypatch, hit: SearchHit) -> None:
     class UngroundedAnswerer:
         def __init__(self, *, api_key: str, model: str) -> None:

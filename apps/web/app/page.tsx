@@ -4,6 +4,7 @@ import type { AuthChangeEvent } from "@supabase/supabase-js";
 import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   askQuestion,
+  cancelQuestion,
   deleteAccount,
   deleteConversation,
   downloadPdf,
@@ -34,9 +35,11 @@ import { getEmptyResultMessage } from "../lib/empty-result";
 import {
   appendPendingTurn,
   completePendingTurn,
+  conversationAnswerText,
   createChatSession,
   failPendingTurn,
   stopPendingTurn,
+  selectConversationContext,
   type ChatSession,
 } from "../lib/chat-state";
 import {
@@ -473,6 +476,7 @@ export default function Home() {
     const { submittedQuestion: trimmed, nextDraft } = submission;
     const requestId = crypto.randomUUID();
     const controller = new AbortController();
+    const contextSelection = selectConversationContext(activeChat, trimmed);
     const pending = appendPendingTurn(activeChat, {
       requestId,
       userMessageId: crypto.randomUUID(),
@@ -491,10 +495,17 @@ export default function Home() {
     const requestedAnswerMode = terraUnavailable ? "search_only" : answerPreference;
     try {
       const answer = await askQuestion({
+        client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
         project_stage: "planning",
         answer_mode: requestedAnswerMode,
+        ...(!contextSelection.rolledOver && contextSelection.turns.length > 0
+          ? { conversation_context: contextSelection.turns.map((turn) => ({
+              question: turn.question,
+              answer: conversationAnswerText(turn.response),
+            })) }
+          : {}),
         ...(pending.rolledOver || activeChat.messages.length === 0
           ? {}
           : { conversation_id: activeChat.id }),
@@ -543,6 +554,7 @@ export default function Home() {
   function stopGeneration() {
     const request = activeRequest.current;
     if (!request) return;
+    void cancelQuestion(request.id).catch(() => undefined);
     request.controller.abort();
     setActiveChat((current) => stopPendingTurn(current, request.id));
     activeRequest.current = null;

@@ -89,12 +89,12 @@ describe("token-budgeted context", () => {
       messages: messages(6),
       contextMessageCount: 6,
     };
-    const latestTurn = selectConversationContext(current, "현재 질문", 250);
+    const latestTurn = selectConversationContext(current, "현재 질문", 100);
 
     expect(latestTurn.currentQuestion).toBe("현재 질문");
     expect(latestTurn.turns.length).toBeGreaterThan(0);
     expect(latestTurn.turns.at(-1)?.question).toBe("질문 4");
-    expect(latestTurn.estimatedInputTokens).toBeLessThanOrEqual(250);
+    expect(latestTurn.estimatedInputTokens).toBeLessThanOrEqual(100);
     expect(latestTurn.rolledOver).toBe(true);
   });
 

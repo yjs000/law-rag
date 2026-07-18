@@ -39,7 +39,7 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
         f"[C{index}] {hit.document_title} {hit.path} ({hit.version_label})\n{hit.content}"
         for index, hit in enumerate(hits, 1)
     )
-    return [
+    messages = [
         {
             "role": "system",
             "content": (
@@ -54,8 +54,19 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
                 "여러 근거가 충돌하거나 적용에 추가 사실이 필요하면 임의로 결론내리지 말고 "
                 "한계와 확인할 사실을 적는다. scope에는 기준일·사업 단계·자료 범위만 쓰고, "
                 "limitations에 새로운 법률 주장을 추가하지 않는다."
+                " 이전 대화는 맥락일 뿐 법률 근거가 아니다. 이전 답변의 주장을 그대로 "
+                "재사용하지 말고 이번 요청에 제공된 C번호 근거로 다시 검증한다."
             ),
         },
+    ]
+    for turn in request.conversation_context:
+        messages.extend(
+            [
+                {"role": "user", "content": f"이전 질문(맥락): {turn.question}"},
+                {"role": "assistant", "content": f"이전 답변(검증 전 맥락): {turn.answer}"},
+            ]
+        )
+    messages.append(
         {
             "role": "user",
             "content": (
@@ -64,8 +75,9 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
                 f"사업유형: {request.business_type or '미제공'}\n"
                 f"시설유형: {request.facility_type or '미제공'}\n\n근거:\n{evidence}"
             ),
-        },
-    ]
+        }
+    )
+    return messages
 
 
 _GENERIC_TERMS = {

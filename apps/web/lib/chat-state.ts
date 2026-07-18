@@ -209,8 +209,18 @@ function completedConversationTurns(messages: ChatMessage[]): ConversationContex
 
 function estimateTurnTokens(turn: ConversationContextTurn): number {
   return estimateTextTokens(turn.question)
-    + estimateTextTokens(JSON.stringify(turn.response))
+    + estimateTextTokens(conversationAnswerText(turn.response))
     + (MESSAGE_TOKEN_OVERHEAD * 2);
+}
+
+export function conversationAnswerText(response: QuestionResponse): string {
+  return JSON.stringify({
+    summary: response.summary,
+    scope: response.scope,
+    sections: response.sections,
+    checklist: response.checklist,
+    limitations: response.limitations,
+  });
 }
 
 export function completePendingTurn(
