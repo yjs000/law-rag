@@ -26,10 +26,15 @@ async function authHeaders(): Promise<HeadersInit> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, authToken?: string | null): Promise<T> {
+  const authentication = authToken === undefined
+    ? await authHeaders()
+    : authToken
+      ? { Authorization: `Bearer ${authToken}` }
+      : {};
   const response = await fetch(`${API}${path}`, {
     ...init,
-    headers: { ...(await authHeaders()), ...init?.headers },
+    headers: { ...authentication, ...init?.headers },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -40,7 +45,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function getStoredUser(): Promise<MockUser | null> {
-  if (!(await accessToken())) return null;
+  const token = await accessToken();
+  if (!token) return null;
   const consent = typeof window !== "undefined"
     ? window.sessionStorage.getItem(CONSENT_KEY)
     : null;
@@ -50,7 +56,7 @@ export async function getStoredUser(): Promise<MockUser | null> {
         "X-Terms-Version": TERMS_VERSION,
         "X-Privacy-Version": PRIVACY_VERSION,
       } : undefined,
-    });
+    }, token);
     if (consent) window.sessionStorage.removeItem(CONSENT_KEY);
     return user;
   } catch (error) {

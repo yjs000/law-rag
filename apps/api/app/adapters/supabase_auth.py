@@ -35,14 +35,24 @@ class SupabaseAuth:
         self.secret_key = secret_key
         self.timeout = timeout
         self.transport = transport
+        self._client: httpx.AsyncClient | None = None
+
+    def _http_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self.timeout, transport=self.transport)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def verify_user(self, token: str) -> SupabaseIdentity:
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
-                response = await client.get(
-                    f"{self.url}/auth/v1/user",
-                    headers={"apikey": self.secret_key, "Authorization": f"Bearer {token}"},
-                )
+            response = await self._http_client().get(
+                f"{self.url}/auth/v1/user",
+                headers={"apikey": self.secret_key, "Authorization": f"Bearer {token}"},
+            )
         except httpx.HTTPError as exc:
             raise SupabaseAuthUnavailableError("auth provider unavailable") from exc
         if response.status_code != 200:
@@ -69,14 +79,13 @@ class SupabaseAuth:
 
     async def delete_user(self, user_id: UUID) -> None:
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
-                response = await client.delete(
-                    f"{self.url}/auth/v1/admin/users/{user_id}",
-                    headers={
-                        "apikey": self.secret_key,
-                        "Authorization": f"Bearer {self.secret_key}",
-                    },
-                )
+            response = await self._http_client().delete(
+                f"{self.url}/auth/v1/admin/users/{user_id}",
+                headers={
+                    "apikey": self.secret_key,
+                    "Authorization": f"Bearer {self.secret_key}",
+                },
+            )
         except httpx.HTTPError as exc:
             raise SupabaseAuthError("could not delete auth user") from exc
         if response.status_code not in {200, 204, 404}:

@@ -71,6 +71,7 @@ describe("Supabase authenticated question workflow", () => {
     await startGoogleAuth("signup");
     expect(auth.signInWithOAuth).toHaveBeenCalledWith({ provider: "google", options: { redirectTo: "http://localhost:3000/auth/callback" } });
     expect((await getStoredUser())?.id).toBe("user-1");
+    expect(auth.getSession).toHaveBeenCalledTimes(1);
     expect((await askQuestion(history.request)).request_id).toBe("history-1");
     expect(await listQuestionHistory()).toEqual([history]);
     expect((await downloadPdf(history.id)).type).toBe("application/pdf");

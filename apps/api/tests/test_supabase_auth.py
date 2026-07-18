@@ -43,6 +43,37 @@ async def test_verified_supabase_user_is_mapped_without_exposing_secret() -> Non
 
 
 @pytest.mark.asyncio
+async def test_http_client_is_reused_and_can_be_closed() -> None:
+    request_count = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            200,
+            json={
+                "id": "4cc78d08-f2bd-490b-9619-b9ec35b6672c",
+                "email": "user@example.com",
+            },
+        )
+
+    auth = SupabaseAuth(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    await auth.verify_user("first-token")
+    client = auth._client
+    await auth.verify_user("second-token")
+
+    assert request_count == 2
+    assert auth._client is client
+    await auth.aclose()
+    assert auth._client is None
+
+
+@pytest.mark.asyncio
 async def test_invalid_supabase_token_is_rejected() -> None:
     auth = SupabaseAuth(
         "https://project.supabase.co",
