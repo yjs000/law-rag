@@ -17,6 +17,29 @@
 3. RTX 40/50 Windows 11 PC로 교체한 뒤에만 NIM on WSL2 또는 Nemotron 3 Nano 4B를 다시 평가한다.
 4. 빠른 원격 검증은 NVIDIA-hosted NIM API를 사용하되 무료 범위는 프로토타이핑이며 production SLA·지원으로 해석하지 않는다.
 
+## 2026-07-19 Hosted NIM 결정
+
+사용자 결정에 따라 생성 기본 후보를 `nvidia/nemotron-3-ultra-550b-a55b`로 변경한다. NVIDIA 모델 카드는 550B total/55B active, 한국어 지원, 최대 1M context, frontier reasoning과 high-stakes RAG 용도를 명시하고 hosted free endpoint를 제공한다. 이는 모델 규모·NVIDIA 분류 기준의 최상위 후보이지 이 프로젝트의 법률 정확도 실측 결과는 아니다.
+
+호출 계약:
+
+- Base URL: `https://integrate.api.nvidia.com/v1`
+- Model: `nvidia/nemotron-3-ultra-550b-a55b`
+- 초기 출력 상한: 4,096 tokens
+- 초기 thinking: off. 구조화 출력과 grounding 성공률을 먼저 측정한 뒤 별도 평가에서 medium/full reasoning을 비교
+- JSON schema guided generation 후 Pydantic 검증과 기존 인용 gate를 모두 통과해야 노출
+- timeout/429/잘못된 JSON/grounding 실패 시 검색 전용 결과 유지
+
+Hosted free endpoint는 NVIDIA API Trial Terms가 적용되는 prototype 서비스다. NVIDIA 공식 Run NIM Anywhere 문서는 Developer Program hosted endpoint를 prototyping 용도로 설명하고 Production 전환에는 partner endpoint, self-hosted 또는 NVIDIA AI Enterprise를 안내한다. 따라서 24시간 공개 배포의 영구 무료 backend로 확정하지 않는다.
+
+사용자 설정:
+
+1. NVIDIA Developer 계정으로 모델 페이지에서 API key 생성
+2. 키 원문을 채팅이나 저장소에 보내지 않고 Vercel의 Preview/Production `NVIDIA_API_KEY` secret에 각각 등록
+3. `ANSWER_PROVIDER=nvidia_nim`, `NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1`, `NVIDIA_ANSWER_MODEL=nvidia/nemotron-3-ultra-550b-a55b` 등록
+4. 실제 endpoint smoke와 법률 고정 평가셋을 실행할 때만 AI를 활성화
+5. Trial rate limit·데이터 보존·Production 가격을 NVIDIA 계정의 실제 계약 화면에서 확인하고 승인
+
 ## “NVIDIA가 최근 무료 배포했다”는 주장 확인
 
 서로 다른 세 가지 사실이 섞이기 쉽다.
@@ -143,6 +166,10 @@ NVIDIA WSL2 문서는 다른 LAN client를 위해 Windows `netsh interface portp
 - [RTX PC의 Nemotron 3 Nano 4B 발표(2026-03-17)](https://blogs.nvidia.com/blog/rtx-ai-garage-gtc-2026-nemoclaw/)
 - [RTX PC용 open-source inference 최적화 발표(2026-01-05)](https://developer.nvidia.com/blog/open-source-ai-tool-upgrades-speed-up-llm-and-diffusion-models-on-nvidia-rtx-pcs)
 - [NGC model download와 API key](https://docs.nvidia.com/nim/large-language-models/latest/deployment/model-download.html)
+- [Nemotron 3 Ultra hosted endpoint와 호출 예제](https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b?nim=hosted)
+- [Nemotron 3 Ultra 모델 카드](https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b/modelcard)
+- [NVIDIA hosted NIM prototype/Production 계약 안내](https://docs.api.nvidia.com/nim/re/docs/run-anywhere)
+- [NIM structured generation](https://docs.nvidia.com/nim/large-language-models/1.15.0/structured-generation.html)
 
 ## 미확정 사항
 

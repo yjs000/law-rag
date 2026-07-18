@@ -19,7 +19,7 @@
 | TD-011 | P1 | 답변 품질 | 5개 목업 질문 계약과 결정적 근거 게이트는 통과했으나 실제 코퍼스·Terra·법률 전문가 평가는 미실행 | 버전 고정 코퍼스 Recall/MRR, Terra 오탐·미탐, 전문가 블라인드 표본 결과 기록 | 미지정 |
 | TD-012 | P0 | 개인정보 | 1년 만료 이력 정리 함수는 있으나 운영 scheduler가 없음 | 정리 job·감사 메트릭·실제 만료 삭제 통합 테스트 | 미지정 |
 | TD-013 | P1 | 취소 | 분산 coordinator는 설계·memory mock만 있고 운영은 process-local | Supabase migration과 2인스턴스 종단 취소·상태 UX 통과 | 미지정 |
-| TD-014 | P1 | AI 공급자 | Answerer가 OpenAI Terra에 고정되어 Qwen 설정만으로 교체 불가 | provider-neutral adapter와 Qwen structured output/장애 평가 통과 | 미지정 |
+| TD-014 | P1 | AI 공급자 | NVIDIA hosted NIM adapter와 schema mock은 구현됐으나 실제 key·법률 평가·Trial→Production 계약이 미검증 | hosted smoke, 고정 평가셋, 운영 endpoint 계약 통과 | 미지정 |
 | TD-015 | P1 | 임베딩 | 조문 벡터 backfill 운영 경로와 모델·차원·버전 검색 필터가 없음 | backfill CLI, DB 함수 필터, 벡터 개수·Recall 검증 | 미지정 |
 | TD-016 | P1 | 컨텍스트 | 실제 tokenizer 기반 전체 prompt/output 예산 게이트가 없음 | server tokenizer와 근거 trimming 경계 테스트 | 미지정 |
 | TD-017 | P1 | 로컬 추론 | Vercel→PC 직접 경로는 없고 outbound inference worker가 미구현 | 인증 queue worker·TTL·동시성·fallback 종단 테스트 | 미지정 |
