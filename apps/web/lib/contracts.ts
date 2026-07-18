@@ -29,6 +29,7 @@ export type QuestionResponse = {
   citations: Citation[];
   limitations: string[];
   corpus_as_of?: string | null;
+  conversation_id?: string | null;
 };
 
 export type CorpusStatus = {
@@ -59,6 +60,29 @@ export type QuestionHistoryItem = {
   response: QuestionResponse;
   created_at: string;
   expires_at: string;
+  conversation_id?: string | null;
+  turn_index?: number | null;
+};
+
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  turn_count: number;
+  last_turn_id: string;
+};
+
+export type ConversationPage = {
+  items: ConversationSummary[];
+  next_cursor?: string | null;
+  has_more: boolean;
+};
+
+export type ConversationTurnPage = {
+  items: QuestionHistoryItem[];
+  next_cursor?: string | null;
+  has_more: boolean;
 };
 
 export type QuestionInput = {
@@ -66,4 +90,5 @@ export type QuestionInput = {
   as_of_date: string;
   project_stage: string;
   answer_mode?: "terra" | "search_only";
+  conversation_id?: string;
 };

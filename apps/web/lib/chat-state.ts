@@ -30,6 +30,7 @@ export type ChatSession = {
   id: string;
   title: string | null;
   messages: ChatMessage[];
+  contextMessageCount: number;
   rolloverNotice?: string;
 };
 
@@ -48,7 +49,7 @@ export type PendingTurnResult = {
 };
 
 export function createChatSession(id: string): ChatSession {
-  return { id, title: null, messages: [] };
+  return { id, title: null, messages: [], contextMessageCount: 0 };
 }
 
 export function firstQuestionTitle(question: string): string {
@@ -72,7 +73,7 @@ export function appendPendingTurn(
   current: ChatSession,
   input: PendingTurnInput,
 ): PendingTurnResult {
-  const rolledOver = current.messages.length + 2 > MAX_CONTEXT_MESSAGES;
+  const rolledOver = current.contextMessageCount + 2 > MAX_CONTEXT_MESSAGES;
   const base = rolledOver
     ? {
         ...createChatSession(input.rolloverSessionId),
@@ -97,7 +98,10 @@ export function appendPendingTurn(
       status: "pending",
     },
   ];
-  return { session: { ...base, title, messages }, rolledOver };
+  return {
+    session: { ...base, title, messages, contextMessageCount: base.contextMessageCount + 2 },
+    rolledOver,
+  };
 }
 
 export function completePendingTurn(

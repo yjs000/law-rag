@@ -1,5 +1,7 @@
 import type {
   CorpusStatus,
+  ConversationPage,
+  ConversationTurnPage,
   MockUser,
   QuestionHistoryItem,
   QuestionInput,
@@ -89,12 +91,33 @@ export function getCorpusStatus(): Promise<CorpusStatus> {
   return request("/v1/corpus/status");
 }
 
-export function askQuestion(input: QuestionInput): Promise<QuestionResponse> {
+export function askQuestion(input: QuestionInput, signal?: AbortSignal): Promise<QuestionResponse> {
   return request("/v1/questions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+    signal,
   });
+}
+
+export function listConversations(cursor?: string | null, limit = 20): Promise<ConversationPage> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return request(`/v1/conversations?${query}`);
+}
+
+export function listConversationTurns(
+  conversationId: string,
+  cursor?: string | null,
+  limit = 20,
+): Promise<ConversationTurnPage> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return request(`/v1/conversations/${encodeURIComponent(conversationId)}/turns?${query}`);
+}
+
+export function deleteConversation(conversationId: string): Promise<void> {
+  return request(`/v1/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE" });
 }
 
 export function listQuestionHistory(): Promise<QuestionHistoryItem[]> {

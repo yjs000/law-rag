@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   askQuestion,
+  deleteConversation,
   deleteQuestionHistory,
   downloadPdf,
   getStoredUser,
+  listConversations,
+  listConversationTurns,
   listQuestionHistory,
   startGoogleAuth,
 } from "./api-client";
@@ -62,6 +65,9 @@ describe("Supabase authenticated question workflow", () => {
       if (url.endsWith("/v1/auth/me")) return Response.json({ id: "user-1", email: "researcher@example.com", display_name: "법령 연구자", auth_provider: "google", created_at: "2026-07-14T00:00:00Z" });
       if (url.endsWith("/v1/questions") && init?.method === "POST") return Response.json(answer);
       if (url.endsWith("/v1/questions/history")) return Response.json([history]);
+      if (url.includes("/v1/conversations?")) return Response.json({ items: [{ id: "chat-1", title: "허가를 확인해줘", created_at: history.created_at, updated_at: history.created_at, turn_count: 1, last_turn_id: history.id }], has_more: false, next_cursor: null });
+      if (url.includes("/v1/conversations/chat-1/turns?")) return Response.json({ items: [history], has_more: false, next_cursor: null });
+      if (url.endsWith("/v1/conversations/chat-1") && init?.method === "DELETE") return new Response(null, { status: 204 });
       if (url.includes("/checklist?format=pdf")) return new Response(new Uint8Array([37, 80, 68, 70]), { headers: { "Content-Type": "application/pdf" } });
       if (url.endsWith("/v1/questions/history/history-1") && init?.method === "DELETE") return new Response(null, { status: 204 });
       return new Response(null, { status: 404 });
@@ -72,8 +78,14 @@ describe("Supabase authenticated question workflow", () => {
     expect(auth.signInWithOAuth).toHaveBeenCalledWith({ provider: "google", options: { redirectTo: "http://localhost:3000/auth/callback" } });
     expect((await getStoredUser())?.id).toBe("user-1");
     expect(auth.getSession).toHaveBeenCalledTimes(1);
-    expect((await askQuestion(history.request)).request_id).toBe("history-1");
+    const controller = new AbortController();
+    expect((await askQuestion(history.request, controller.signal)).request_id).toBe("history-1");
+    const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v1/questions"));
+    expect(questionCall?.[1]?.signal).toBe(controller.signal);
     expect(await listQuestionHistory()).toEqual([history]);
+    expect((await listConversations()).items[0].title).toBe("허가를 확인해줘");
+    expect((await listConversationTurns("chat-1")).items).toEqual([history]);
+    await deleteConversation("chat-1");
     expect((await downloadPdf(history.id)).type).toBe("application/pdf");
     await deleteQuestionHistory(history.id);
 

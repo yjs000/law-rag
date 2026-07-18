@@ -78,6 +78,7 @@ describe("context rollover", () => {
       id: "chat-1",
       title: "기존 제목",
       messages: messages(MAX_CONTEXT_MESSAGES - 2),
+      contextMessageCount: MAX_CONTEXT_MESSAGES - 2,
     };
 
     const result = appendPendingTurn(current, pendingInput(399));
@@ -93,6 +94,7 @@ describe("context rollover", () => {
       id: "chat-full",
       title: "이전 대화",
       messages: messages(MAX_CONTEXT_MESSAGES),
+      contextMessageCount: MAX_CONTEXT_MESSAGES,
     };
 
     const result = appendPendingTurn(current, pendingInput(401));
@@ -113,6 +115,7 @@ describe("context rollover", () => {
       id: "chat-odd",
       title: "기존 대화",
       messages: messages(MAX_CONTEXT_MESSAGES - 1),
+      contextMessageCount: MAX_CONTEXT_MESSAGES - 1,
     };
 
     expect(appendPendingTurn(current, pendingInput(400)).rolledOver).toBe(true);

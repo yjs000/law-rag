@@ -5,12 +5,12 @@ import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, us
 import {
   askQuestion,
   deleteAccount,
-  deleteQuestionHistory,
+  deleteConversation,
   downloadPdf,
   getCorpusStatus,
-  getQuestionHistory,
   getStoredUser,
-  listQuestionHistory,
+  listConversations,
+  listConversationTurns,
   logout,
   startGoogleAuth,
 } from "../lib/api-client";
@@ -32,6 +32,14 @@ import {
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
 import {
+  appendPendingTurn,
+  completePendingTurn,
+  createChatSession,
+  failPendingTurn,
+  stopPendingTurn,
+  type ChatSession,
+} from "../lib/chat-state";
+import {
   citationDocumentKind,
   DOCUMENT_KIND_LABELS,
   filterCitations,
@@ -39,8 +47,8 @@ import {
 } from "../lib/source-filter";
 import type {
   CorpusStatus,
+  ConversationSummary,
   MockUser,
-  QuestionHistoryItem,
   QuestionResponse,
 } from "../lib/contracts";
 import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
@@ -198,6 +206,46 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
   );
 }
 
+function AnswerView({
+  asOf,
+  documentKinds,
+  exportFormat,
+  exporting,
+  messageId,
+  onCitation,
+  onExport,
+  onExportFormat,
+  onRefine,
+  question,
+  response,
+  selectedCitationId,
+}: {
+  asOf: string;
+  documentKinds: Set<DocumentKind>;
+  exportFormat: ExportFormat;
+  exporting: boolean;
+  messageId: string;
+  onCitation: (messageId: string, response: QuestionResponse, id: string) => void;
+  onExport: (response: QuestionResponse, question: string, asOf: string) => void;
+  onExportFormat: (format: ExportFormat) => void;
+  onRefine: () => void;
+  question: string;
+  response: QuestionResponse;
+  selectedCitationId: string | null;
+}) {
+  const emptyResult = getEmptyResultMessage(response, question);
+  const citations = filterCitations(response.citations, documentKinds);
+  return <>
+    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{response.mode === "ai" ? "Terra · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
+    {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={onRefine}>질문 구체화하기</button></section>}
+    {!emptyResult && <p className="summary"><SafeText>{response.summary}</SafeText></p>}
+    {response.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === `${messageId}:${id}` ? "selected" : ""} key={id} onClick={() => onCitation(messageId, response, id)}>{id} 원문</button>)}</div></section>)}
+    {response.checklist.length > 0 && <section className="checklist"><div className="section-title-row"><h2>확인 체크리스트</h2><div className="export-controls"><select aria-label="내보내기 형식" value={exportFormat} onChange={(event) => onExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button disabled={exporting} onClick={() => onExport(response, question, asOf)}>{exporting ? "생성 중" : "내보내기"}</button></div></div>{response.checklist.map((item, index) => <div className="check-item" key={`${item.label}-${index}`}><span aria-hidden="true">□</span><p><SafeText>{item.label}</SafeText>{item.citation_ids.map((id) => <button className="inline-cite" key={id} onClick={() => onCitation(messageId, response, id)}>{id}</button>)}</p></div>)}</section>}
+    {citations.length > 0 && <section className="sources"><h2>원문 근거 <span>{citations.length}건</span></h2>{citations.map((citation) => <details className={selectedCitationId === `${messageId}:${citation.id}` ? "source selected" : "source"} id={`citation-${messageId}-${citation.id}`} key={citation.id} open={selectedCitationId === `${messageId}:${citation.id}`}><summary><span><strong>{citation.id} · <SafeText>{citation.document_title}</SafeText> <SafeText>{citation.path}</SafeText></strong><small><SafeText>{citation.version_label}</SafeText></small></span></summary><blockquote><SafeText>{citation.quote}</SafeText></blockquote></details>)}</section>}
+    <section className="limitations"><h2>범위와 한계</h2>{response.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}</section>
+  </>;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
@@ -210,8 +258,10 @@ export default function Home() {
   const [terraUnavailableFromResponse, setTerraUnavailableFromResponse] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
-  const [history, setHistory] = useState<QuestionHistoryItem[]>([]);
+  const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [authView, setAuthView] = useState<AuthView>("login");
   const [authNotice, setAuthNotice] = useState("");
@@ -223,18 +273,30 @@ export default function Home() {
   const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
   const [submittedQuestion, setSubmittedQuestion] = useState("");
+  const [activeChat, setActiveChat] = useState<ChatSession>(() => createChatSession(crypto.randomUUID()));
+  const [turnCursor, setTurnCursor] = useState<string | null>(null);
+  const [turnHasMore, setTurnHasMore] = useState(false);
+  const [turnLoadingMore, setTurnLoadingMore] = useState(false);
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
   const authEpoch = useRef(0);
+  const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
+  const historySentinel = useRef<HTMLDivElement>(null);
+  const historyCursorRef = useRef<string | null>(null);
 
   const clearAuthenticatedWorkspace = useCallback(() => {
     authEpoch.current += 1;
     setUser(null);
     setHistory([]);
+    historyCursorRef.current = null;
+    setHistoryHasMore(false);
     setHistoryLoading(false);
     setQuestion("");
     setSubmittedQuestion("");
     setResult(null);
+    activeRequest.current?.controller.abort();
+    activeRequest.current = null;
+    setActiveChat(createChatSession(crypto.randomUUID()));
     setCurrentHistoryId(null);
     setSelectedCitationId(null);
     setShowAccount(false);
@@ -244,7 +306,10 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
+    let hydrationInFlight = false;
     const hydrateUser = async () => {
+      if (hydrationInFlight) return;
+      hydrationInFlight = true;
       const epoch = ++authEpoch.current;
       setAuthStatus("checking");
       try {
@@ -257,6 +322,7 @@ export default function Home() {
         }
       } finally {
         if (active && authEpoch.current === epoch) setAuthStatus("ready");
+        hydrationInFlight = false;
       }
     };
 
@@ -297,22 +363,43 @@ export default function Home() {
     };
   }, [clearAuthenticatedWorkspace]);
 
-  const refreshHistory = useCallback(async () => {
+  const refreshHistory = useCallback(async (append = false) => {
     const epoch = authEpoch.current;
-    setHistoryLoading(true);
+    if (append) setHistoryLoadingMore(true);
+    else setHistoryLoading(true);
     try {
-      const nextHistory = await listQuestionHistory();
-      if (authEpoch.current === epoch) setHistory(nextHistory);
+      const page = await listConversations(append ? historyCursorRef.current : null);
+      if (authEpoch.current === epoch) {
+        setHistory((current) => {
+          const values = append ? [...current, ...page.items] : page.items;
+          return [...new Map(values.map((item) => [item.id, item])).values()];
+        });
+        historyCursorRef.current = page.next_cursor ?? null;
+        setHistoryHasMore(page.has_more);
+      }
     } catch (cause) {
       if (authEpoch.current === epoch) setError(cause instanceof Error ? cause.message : "질문 이력을 불러오지 못했습니다.");
     } finally {
-      if (authEpoch.current === epoch) setHistoryLoading(false);
+      if (authEpoch.current === epoch) {
+        setHistoryLoading(false);
+        setHistoryLoadingMore(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (user) void Promise.resolve().then(refreshHistory);
+    if (user) void Promise.resolve().then(() => refreshHistory());
   }, [refreshHistory, user]);
+
+  useEffect(() => {
+    const node = historySentinel.current;
+    if (!node || !user || !historyHasMore || historyLoadingMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void refreshHistory(true);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [historyHasMore, historyLoadingMore, refreshHistory, user]);
 
   const closeAuth = useCallback(() => {
     setShowAuth(false);
@@ -363,12 +450,17 @@ export default function Home() {
   }
 
   function startNewChat(seed = "") {
+    activeRequest.current?.controller.abort();
+    activeRequest.current = null;
     setQuestion(seed);
     setSubmittedQuestion("");
     setResult(null);
     setError("");
     setCurrentHistoryId(null);
     setSelectedCitationId(null);
+    setActiveChat(createChatSession(crypto.randomUUID()));
+    setTurnCursor(null);
+    setTurnHasMore(false);
     setSidebarOpen(false);
     requestAnimationFrame(() => composer.current?.focus());
   }
@@ -379,6 +471,18 @@ export default function Home() {
     const submission = consumeQuestionDraft(question);
     if (!submission) return;
     const { submittedQuestion: trimmed, nextDraft } = submission;
+    const requestId = crypto.randomUUID();
+    const controller = new AbortController();
+    const pending = appendPendingTurn(activeChat, {
+      requestId,
+      userMessageId: crypto.randomUUID(),
+      assistantMessageId: crypto.randomUUID(),
+      question: trimmed,
+      asOf,
+      rolloverSessionId: crypto.randomUUID(),
+    });
+    activeRequest.current = { id: requestId, controller };
+    setActiveChat(pending.session);
     setLoading(true);
     setError("");
     setSubmittedQuestion(trimmed);
@@ -391,7 +495,11 @@ export default function Home() {
         as_of_date: asOf,
         project_stage: "planning",
         answer_mode: requestedAnswerMode,
-      });
+        ...(pending.rolledOver || activeChat.messages.length === 0
+          ? {}
+          : { conversation_id: activeChat.id }),
+      }, controller.signal);
+      if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer);
       setModeNotice(resolution.notice ?? "");
       setAnswerPreference(resolution.preference);
@@ -404,15 +512,41 @@ export default function Home() {
         } : current);
       }
       setResult(answer);
+      setActiveChat((current) => ({
+        ...completePendingTurn(current, requestId, answer),
+        id: answer.conversation_id ?? current.id,
+      }));
       setSelectedCitationId(null);
       setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
-      if (user) await refreshHistory();
+      if (user) {
+        historyCursorRef.current = null;
+        await refreshHistory();
+      }
       else if (claimAnonymousLoginPrompt(sessionStorage)) setShowAnonymousNudge(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "연결 오류");
+      if (activeRequest.current?.id !== requestId) return;
+      if (cause instanceof DOMException && cause.name === "AbortError") {
+        setActiveChat((current) => stopPendingTurn(current, requestId));
+      } else {
+        const message = cause instanceof Error ? cause.message : "연결 오류";
+        setActiveChat((current) => failPendingTurn(current, requestId, message));
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (activeRequest.current?.id === requestId) {
+        activeRequest.current = null;
+        setLoading(false);
+      }
     }
+  }
+
+  function stopGeneration() {
+    const request = activeRequest.current;
+    if (!request) return;
+    request.controller.abort();
+    setActiveChat((current) => stopPendingTurn(current, request.id));
+    activeRequest.current = null;
+    setLoading(false);
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -422,20 +556,31 @@ export default function Home() {
     }
   }
 
-  async function openHistory(item: QuestionHistoryItem) {
+  async function openHistory(item: ConversationSummary) {
     setError("");
     try {
-      const detail = item.response ? item : await getQuestionHistory(item.id);
-      setQuestion(detail.request.question);
-      setSubmittedQuestion(detail.request.question);
-      setAsOf(detail.request.as_of_date);
-      const requestedAnswerMode = detail.request.answer_mode ?? (detail.response.mode === "ai" ? "terra" : "search_only");
-      const resolution = resolveResponseAnswerMode(requestedAnswerMode, detail.response);
+      activeRequest.current?.controller.abort();
+      const page = await listConversationTurns(item.id);
+      const ordered = [...page.items].reverse();
+      const messages = ordered.flatMap((detail) => [
+        { id: `user-${detail.id}`, role: "user" as const, text: detail.request.question, asOf: detail.request.as_of_date, status: "sent" as const },
+        { id: `assistant-${detail.id}`, role: "assistant" as const, requestId: detail.id, status: "complete" as const, response: detail.response },
+      ]);
+      const latest = ordered.at(-1);
+      if (!latest) throw new Error("대화에 표시할 질문이 없습니다.");
+      setActiveChat({ id: item.id, title: item.title, messages, contextMessageCount: item.turn_count * 2 });
+      setTurnCursor(page.next_cursor ?? null);
+      setTurnHasMore(page.has_more);
+      setQuestion("");
+      setSubmittedQuestion(latest.request.question);
+      setAsOf(latest.request.as_of_date);
+      const requestedAnswerMode = latest.request.answer_mode ?? (latest.response.mode === "ai" ? "terra" : "search_only");
+      const resolution = resolveResponseAnswerMode(requestedAnswerMode, latest.response);
       setModeNotice(resolution.notice ?? "");
       setAnswerPreference(resolution.preference);
-      setResult(detail.response);
+      setResult(latest.response);
       setSelectedCitationId(null);
-      setCurrentHistoryId(detail.id);
+      setCurrentHistoryId(latest.id);
       setSidebarOpen(false);
       document.querySelector<HTMLElement>("#conversation")?.focus();
     } catch (cause) {
@@ -443,22 +588,41 @@ export default function Home() {
     }
   }
 
-  async function removeHistory(item: QuestionHistoryItem) {
-    if (!window.confirm("이 질문 기록을 삭제할까요?")) return;
+  async function removeHistory(item: ConversationSummary) {
+    if (!window.confirm("이 대화 기록 전체를 삭제할까요?")) return;
     try {
-      await deleteQuestionHistory(item.id);
-      if (currentHistoryId === item.id) startNewChat();
-      await refreshHistory();
+      await deleteConversation(item.id);
+      if (activeChat.id === item.id) startNewChat();
+      setHistory((current) => current.filter((entry) => entry.id !== item.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "질문 기록을 삭제하지 못했습니다.");
     }
   }
 
-  function jumpToCitation(id: string) {
-    const citation = result?.citations.find((item) => item.id === id);
+  async function loadOlderTurns() {
+    if (!turnHasMore || !turnCursor || turnLoadingMore) return;
+    setTurnLoadingMore(true);
+    try {
+      const page = await listConversationTurns(activeChat.id, turnCursor);
+      const olderMessages = [...page.items].reverse().flatMap((detail) => [
+        { id: `user-${detail.id}`, role: "user" as const, text: detail.request.question, asOf: detail.request.as_of_date, status: "sent" as const },
+        { id: `assistant-${detail.id}`, role: "assistant" as const, requestId: detail.id, status: "complete" as const, response: detail.response },
+      ]);
+      setActiveChat((current) => ({ ...current, messages: [...olderMessages, ...current.messages] }));
+      setTurnCursor(page.next_cursor ?? null);
+      setTurnHasMore(page.has_more);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "이전 대화를 불러오지 못했습니다.");
+    } finally {
+      setTurnLoadingMore(false);
+    }
+  }
+
+  function jumpToCitation(messageId: string, response: QuestionResponse, id: string) {
+    const citation = response.citations.find((item) => item.id === id);
     if (citation) setDocumentKinds((current) => new Set([...current, citationDocumentKind(citation)]));
-    setSelectedCitationId(id);
-    requestAnimationFrame(() => document.getElementById(`citation-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    setSelectedCitationId(`${messageId}:${id}`);
+    requestAnimationFrame(() => document.getElementById(`citation-${messageId}-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
   }
 
   function toggleDocumentKind(kind: DocumentKind) {
@@ -470,18 +634,19 @@ export default function Home() {
     });
   }
 
-  async function exportChecklist() {
-    if (!result?.checklist.length) return;
-    const input = { question: submittedQuestion, asOfDate: asOf, projectStage: "일반 조사", checklist: result.checklist };
-    const filename = `법령-체크리스트-${asOf}`;
+  async function exportChecklist(exportResult = result, exportQuestion = submittedQuestion, exportAsOf = asOf) {
+    if (!exportResult?.checklist.length) return;
+    const input = { question: exportQuestion, asOfDate: exportAsOf, projectStage: "일반 조사", checklist: exportResult.checklist };
+    const filename = `법령-체크리스트-${exportAsOf}`;
     setExporting(true);
     setError("");
     try {
       if (exportFormat === "md") downloadText(`${filename}.md`, renderMarkdown(input), "text/markdown;charset=utf-8");
       else if (exportFormat === "csv") downloadText(`${filename}.csv`, renderCsv(input), "text/csv;charset=utf-8");
       else {
-        if (!currentHistoryId) throw new Error("PDF 출력본은 로그인 후 저장된 질문에서 만들 수 있습니다.");
-        downloadBlob(`${filename}.pdf`, await downloadPdf(currentHistoryId));
+        const historyId = exportResult.request_id ?? currentHistoryId;
+        if (!historyId) throw new Error("PDF 출력본은 로그인 후 저장된 질문에서 만들 수 있습니다.");
+        downloadBlob(`${filename}.pdf`, await downloadPdf(historyId));
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "체크리스트를 내보내지 못했습니다.");
@@ -490,8 +655,6 @@ export default function Home() {
     }
   }
 
-  const visibleCitations = result ? filterCitations(result.citations, documentKinds) : [];
-  const emptyResult = result ? getEmptyResultMessage(result, submittedQuestion) : null;
   const terraUnavailable = terraUnavailableFromResponse || isTerraUnavailable(corpus);
 
   function refineQuestion() {
@@ -515,11 +678,12 @@ export default function Home() {
           {user && historyLoading && <p className="history-empty">불러오는 중…</p>}
           {user && !historyLoading && history.length === 0 && <p className="history-empty">저장된 질문이 없습니다.</p>}
           {user && history.map((item) => (
-            <div className={`history-item ${currentHistoryId === item.id ? "active" : ""}`} key={item.id}>
-              <button className="history-open" onClick={() => openHistory(item)}><SafeText>{item.request.question}</SafeText><small>{new Date(item.created_at).toLocaleDateString("ko-KR")}</small></button>
-              <button aria-label={`질문 삭제: ${item.request.question}`} className="history-delete" onClick={() => removeHistory(item)}><Icon name="trash" /></button>
+            <div className={`history-item ${activeChat.id === item.id ? "active" : ""}`} key={item.id}>
+              <button className="history-open" onClick={() => openHistory(item)} title={item.title}><span className="history-title"><SafeText>{item.title}</SafeText></span><small>{new Date(item.updated_at).toLocaleDateString("ko-KR")}</small></button>
+              <button aria-label={`대화 삭제: ${item.title}`} className="history-delete" onClick={() => removeHistory(item)}><Icon name="trash" /></button>
             </div>
           ))}
+          {user && historyHasMore && <div className="history-sentinel" ref={historySentinel}>{historyLoadingMore ? "불러오는 중…" : <button className="history-more" onClick={() => refreshHistory(true)}>더 보기</button>}</div>}
         </nav>
         <div className="sidebar-footer">
           {user ? <button className="account-button" onClick={() => setShowAccount(true)}><div className="avatar small">{user.display_name.slice(0, 1)}</div><span><strong>{user.display_name}</strong><small>계정 및 모델 정책</small></span></button>
@@ -542,9 +706,9 @@ export default function Home() {
 
         {modeNotice && <div aria-live="polite" className="mode-notice" role="status"><span>{modeNotice}</span><button aria-label="모델 전환 알림 닫기" onClick={() => setModeNotice("")}><Icon name="close" /></button></div>}
 
-        <div className={`chat-scroll ${result || loading ? "has-conversation" : ""}`}>
+        <div className={`chat-scroll ${result || loading ? "has-conversation" : ""}`} onScroll={(event) => { if (event.currentTarget.scrollTop < 80) void loadOlderTurns(); }}>
           <section className="conversation" id="conversation" tabIndex={-1}>
-            {!result && !loading && !submittedQuestion ? (
+            {activeChat.messages.length === 0 ? (
               <div className="welcome">
                 <div className="welcome-mark"><Icon name="search" /></div>
                 <p className="eyebrow">Energy Law Research System</p>
@@ -555,25 +719,20 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <article className="message user-message"><div className="message-body"><SafeText>{submittedQuestion}</SafeText></div></article>
-                <article className="message assistant-message">
-                  <div className="assistant-avatar">EL</div>
-                  <div className="message-content">
-                    {loading ? <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div> : result && <>
-                      <div className="answer-meta"><span className={result.mode === "ai" ? "mode-badge" : "mode-badge search"}>{result.mode === "ai" ? "Terra · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
-                      {result.mode === "search_only" && <div className="search-only-note">{emptyResult ? "검색을 완료했지만 표시할 원문 근거를 찾지 못했습니다." : "생성 답변 없이 검색된 원문과 근거 후보만 표시합니다."}</div>}
-                      {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={refineQuestion}>질문 구체화하기</button></section>}
-                      {!emptyResult && <p className="summary"><SafeText>{result.summary}</SafeText></p>}
-                      {result.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === id ? "selected" : ""} key={id} onClick={() => jumpToCitation(id)}>{id} 원문</button>)}</div></section>)}
-                      {result.checklist.length > 0 && <section className="checklist"><div className="section-title-row"><h2>확인 체크리스트</h2><div className="export-controls"><select aria-label="내보내기 형식" value={exportFormat} onChange={(event) => setExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button disabled={exporting} onClick={exportChecklist}>{exporting ? "생성 중" : "내보내기"}</button></div></div>{result.checklist.map((item, index) => <div className="check-item" key={`${item.label}-${index}`}><span aria-hidden="true">□</span><p><SafeText>{item.label}</SafeText>{item.citation_ids.map((id) => <button className="inline-cite" key={id} onClick={() => jumpToCitation(id)}>{id}</button>)}</p></div>)}</section>}
-                      {visibleCitations.length > 0 && <section className="sources"><h2>원문 근거 <span>{visibleCitations.length}건</span></h2>{visibleCitations.map((citation) => <details className={selectedCitationId === citation.id ? "source selected" : "source"} id={`citation-${citation.id}`} key={citation.id} open={selectedCitationId === citation.id}><summary><span><strong>{citation.id} · <SafeText>{citation.document_title}</SafeText> <SafeText>{citation.path}</SafeText></strong><small><SafeText>{citation.version_label}</SafeText></small></span></summary><blockquote><SafeText>{citation.quote}</SafeText></blockquote>{citation.source_url && <a href={citation.source_url} rel="noreferrer" target="_blank">국가법령정보센터에서 열기</a>}</details>)}</section>}
-                      <section className="limitations"><h2>범위와 한계</h2>{result.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}</section>
-                    </>}
-                  </div>
-                </article>
-                {showAnonymousNudge && !user && (emptyResult
-                  ? <aside className="login-nudge"><div><strong>질문을 조금 더 구체화해 보세요</strong><p>{emptyResult.guidance}</p></div><button onClick={refineQuestion}>질문 수정</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>
-                  : <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>)}
+                {activeChat.rolloverNotice && <div aria-live="polite" className="context-rollover" role="status">{activeChat.rolloverNotice} 컨텍스트는 새로 시작됩니다.</div>}
+                {turnHasMore && <button className="history-more" disabled={turnLoadingMore} onClick={loadOlderTurns}>{turnLoadingMore ? "불러오는 중…" : "이전 대화 불러오기"}</button>}
+                {activeChat.messages.map((message, index) => {
+                  const previous = activeChat.messages[index - 1];
+                  return message.role === "user"
+                  ? <article className="message user-message chat-turn" key={message.id}><div className="message-body"><SafeText>{message.text}</SafeText></div></article>
+                  : <article className="message assistant-message" key={message.id}><div className="assistant-avatar">EL</div><div className="message-content">
+                    {message.status === "pending" && <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div>}
+                    {message.status === "stopped" && <p className="stopped-response">응답 대기를 중지했습니다.</p>}
+                    {message.status === "error" && <p className="stopped-response">{message.error}</p>}
+                    {message.status === "complete" && message.response && previous?.role === "user" && <AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />}
+                  </div></article>;
+                })}
+                {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}
               </>
             )}
           </section>
@@ -585,7 +744,7 @@ export default function Home() {
             <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
             <div className="composer-footer">
               <fieldset className="document-filters"><legend className="sr-only">원문 문서 종류</legend>{Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => { const kind = value as DocumentKind; return <label key={kind}><input checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} type="checkbox" />{label}</label>; })}</fieldset>
-              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" onChange={(event) => setAsOf(event.target.value)} type="date" value={asOf} /></label><button aria-label="법령 근거 조사" className="send-button" disabled={loading || question.trim().length < 2}><Icon name={loading ? "search" : "arrow"} /></button></div>
+              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" onChange={(event) => setAsOf(event.target.value)} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
             </div>
           </form>
           <p className="composer-disclaimer">법률 자문을 대체하지 않습니다. 중요한 결정은 원문과 전문가 검토를 함께 확인하세요.</p>
