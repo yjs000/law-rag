@@ -50,6 +50,8 @@ class QuestionCancellationCoordinator(Protocol):
 
     async def is_cancel_requested(self, owner: str, request_id: UUID) -> bool: ...
 
+    async def wait_for_cancel(self, owner: str, request_id: UUID) -> None: ...
+
     async def finish(
         self, owner: str, request_id: UUID, status: ExecutionStatus
     ) -> QuestionExecution: ...
@@ -73,6 +75,7 @@ class MemoryQuestionCancellationCoordinator:
 
     def __init__(self) -> None:
         self._executions: dict[UUID, QuestionExecution] = {}
+        self._cancel_events: dict[UUID, asyncio.Event] = {}
         self._lock = asyncio.Lock()
 
     async def register(self, owner: str, request_id: UUID) -> QuestionExecution:
@@ -115,6 +118,7 @@ class MemoryQuestionCancellationCoordinator:
                     created_at=now,
                     updated_at=now,
                 )
+                self._cancel_event(request_id).set()
                 return CancelSignalResult.PENDING_REGISTRATION
             if current.owner != owner:
                 return CancelSignalResult.NOT_OWNED
@@ -124,12 +128,28 @@ class MemoryQuestionCancellationCoordinator:
                 return CancelSignalResult.ALREADY_FINISHED
             if current.status is not ExecutionStatus.CANCEL_REQUESTED:
                 self._replace(current, ExecutionStatus.CANCEL_REQUESTED)
+            self._cancel_event(request_id).set()
             return CancelSignalResult.CANCEL_REQUESTED
 
     async def is_cancel_requested(self, owner: str, request_id: UUID) -> bool:
         async with self._lock:
             current = self._owned_execution(owner, request_id)
             return current.status is ExecutionStatus.CANCEL_REQUESTED
+
+    async def wait_for_cancel(self, owner: str, request_id: UUID) -> None:
+        """Wait for a durable-state-equivalent notification without polling.
+
+        The production adapter must combine an initial authoritative row check with
+        a Supabase Realtime notification and a post-subscribe row check so a signal
+        cannot be lost between checking and subscribing.
+        """
+
+        async with self._lock:
+            current = self._owned_execution(owner, request_id)
+            event = self._cancel_event(request_id)
+            if current.status is ExecutionStatus.CANCEL_REQUESTED:
+                event.set()
+        await event.wait()
 
     async def finish(
         self, owner: str, request_id: UUID, status: ExecutionStatus
@@ -164,24 +184,36 @@ class MemoryQuestionCancellationCoordinator:
         self._executions[current.request_id] = updated
         return updated
 
+    def _cancel_event(self, request_id: UUID) -> asyncio.Event:
+        return self._cancel_events.setdefault(request_id, asyncio.Event())
+
 
 async def watch_for_distributed_cancel(
     coordinator: QuestionCancellationCoordinator,
     owner: str,
     request_id: UUID,
     task: asyncio.Task[object],
-    *,
-    poll_interval_seconds: float = 2.0,
 ) -> None:
-    """Poll shared state and cancel the task owned by this process."""
+    """Await a shared event and cancel the task owned by this process."""
 
-    if poll_interval_seconds <= 0:
-        raise ValueError("poll interval must be positive")
-    while not task.done():
-        if await coordinator.is_cancel_requested(owner, request_id):
+    cancel_wait = asyncio.create_task(coordinator.wait_for_cancel(owner, request_id))
+    task_done = asyncio.create_task(_wait_until_done(task))
+    try:
+        done, _ = await asyncio.wait(
+            {cancel_wait, task_done}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if cancel_wait in done and not task.done():
             task.cancel()
-            return
-        await asyncio.sleep(poll_interval_seconds)
+    finally:
+        cancel_wait.cancel()
+        task_done.cancel()
+
+
+async def _wait_until_done(task: asyncio.Task[object]) -> None:
+    try:
+        await asyncio.shield(task)
+    except (asyncio.CancelledError, Exception):
+        return
 
 
 def _now() -> datetime:

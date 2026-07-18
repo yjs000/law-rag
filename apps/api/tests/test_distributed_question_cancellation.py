@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 from uuid import uuid4
 
 import pytest
@@ -11,14 +10,6 @@ from app.application.distributed_question_cancellation import (
     MemoryQuestionCancellationCoordinator,
     watch_for_distributed_cancel,
 )
-
-
-def test_default_poll_interval_limits_active_request_db_reads() -> None:
-    default = inspect.signature(watch_for_distributed_cancel).parameters[
-        "poll_interval_seconds"
-    ].default
-
-    assert default == 2.0
 
 
 @pytest.mark.asyncio
@@ -59,7 +50,6 @@ async def test_cancel_from_another_handler_reaches_the_active_task() -> None:
             "user:a",
             request_id,
             active_task,
-            poll_interval_seconds=0.001,
         )
     )
     await started.wait()
@@ -72,6 +62,22 @@ async def test_cancel_from_another_handler_reaches_the_active_task() -> None:
 
     assert result is CancelSignalResult.CANCEL_REQUESTED
     assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_completed_work_stops_watcher_without_cancel_signal() -> None:
+    coordinator = MemoryQuestionCancellationCoordinator()
+    request_id = uuid4()
+    await coordinator.register("user:a", request_id)
+    await coordinator.mark_running("user:a", request_id)
+
+    active_task = asyncio.create_task(asyncio.sleep(0))
+    await watch_for_distributed_cancel(
+        coordinator, "user:a", request_id, active_task
+    )
+
+    assert active_task.done()
+    assert not active_task.cancelled()
 
 
 @pytest.mark.asyncio
