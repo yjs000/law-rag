@@ -38,7 +38,7 @@ def test_anonymous_question_search_failure_returns_safe_temporary_error(
     async def fail_search(*args, **kwargs):
         raise RuntimeError("database host and credentials must stay private")
 
-    monkeypatch.setattr(repository, "search", fail_search)
+    monkeypatch.setattr(repository, "search_with_trace", fail_search)
     monkeypatch.setattr(main_module, "repository", repository)
     response = TestClient(app, raise_server_exceptions=False).post(
         "/v1/questions",

@@ -153,16 +153,8 @@ async def health() -> dict[str, str]:
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     await _check_quota(request, "search", settings.search_daily_limit)
-    query_embedding = None
-    if _ai_available():
-        try:
-            query_embedding = (await _embedder().embed([payload.query]))[0]
-        except Exception:
-            query_embedding = None
     try:
-        hits = await repository.search(
-            payload.query, payload.as_of_date, payload.limit, query_embedding
-        )
+        hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -178,6 +170,29 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     user = await _optional_user(request.headers.get("authorization"))
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
+    diagnostics: dict[str, object] = {
+        "schema_version": "1",
+        "input_validation": {
+            "status": "passed",
+            "as_of_date": payload.as_of_date.isoformat(),
+            "project_stage": payload.project_stage.value,
+            "answer_mode": payload.answer_mode,
+        },
+        "parsing": {},
+        "embedding": {
+            "requested": payload.answer_mode == "terra",
+            "attempted": False,
+            "status": (
+                "skipped_search_only"
+                if payload.answer_mode == "search_only"
+                else f"skipped_{_ai_unavailable_reason() or 'not_started'}"
+            ),
+            "dimensions": None,
+        },
+        "retrieval": {},
+        "generation": {"attempted": False, "status": "not_attempted"},
+        "outcome": {},
+    }
     await _check_quota(
         request,
         "ai" if use_ai else "search",
@@ -187,18 +202,38 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     query_embedding = None
     embedding_failed = False
     if use_ai:
+        embedding_stage = diagnostics["embedding"]
+        assert isinstance(embedding_stage, dict)
+        embedding_stage.update({"attempted": True, "status": "started"})
         try:
             query_embedding = (await _embedder().embed([payload.question]))[0]
+            embedding_stage.update(
+                {"status": "succeeded", "dimensions": len(query_embedding)}
+            )
         except Exception:
             embedding_failed = True
+            embedding_stage.update({"status": "failed", "dimensions": None})
     try:
-        hits = await repository.search(payload.question, payload.as_of_date, 10, query_embedding)
+        hits, search_trace = await repository.search_with_trace(
+            payload.question, payload.as_of_date, 10, query_embedding
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=503,
             detail="법령 검색을 일시적으로 사용할 수 없습니다.",
         ) from exc
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
+    diagnostics["retrieval"] = {
+        **search_trace.as_dict(),
+        "allowed_candidate_count": len(hits),
+    }
+    diagnostics["parsing"] = {
+        "normalized_query": search_trace.normalized_query,
+        "terms": list(search_trace.terms),
+        "reference_detected": search_trace.reference_path is not None,
+        "reference_title": search_trace.reference_title,
+        "reference_path": search_trace.reference_path,
+    }
     corpus_as_of = await repository.last_sync()
     if use_ai and not hits:
         fallback_reason = (
@@ -206,7 +241,19 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         )
     fallback = search_only_answer(payload, hits, corpus_as_of, fallback_reason=fallback_reason)
     if not use_ai or not hits:
-        return await _save_if_authenticated(user, payload, fallback)
+        generation_stage = diagnostics["generation"]
+        assert isinstance(generation_stage, dict)
+        generation_stage["status"] = (
+            "skipped_no_evidence"
+            if use_ai
+            else "skipped_search_only"
+            if payload.answer_mode == "search_only"
+            else "skipped_ai_disabled"
+        )
+        return await _save_if_authenticated(user, payload, fallback, diagnostics)
+    generation_stage = diagnostics["generation"]
+    assert isinstance(generation_stage, dict)
+    generation_stage.update({"attempted": True, "status": "started"})
     try:
         draft = await OpenAIAnswerer(
             api_key=settings.openai_api_key or "", model=settings.openai_answer_model
@@ -219,10 +266,14 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
             fallback.fallback_reason = AiFallbackReason.BILLING_OR_QUOTA_ERROR
         else:
             fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
-        return await _save_if_authenticated(user, payload, fallback)
+        generation_stage["status"] = (
+            "billing_or_quota_error" if status_code in {402, 429} else "failed"
+        )
+        return await _save_if_authenticated(user, payload, fallback, diagnostics)
     if not validate_draft(draft, hits):
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
-        return await _save_if_authenticated(user, payload, fallback)
+        generation_stage["status"] = "grounding_failed"
+        return await _save_if_authenticated(user, payload, fallback, diagnostics)
     citations = [
         Citation(
             id=f"C{index}",
@@ -247,7 +298,8 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
     )
-    return await _save_if_authenticated(user, payload, answer)
+    generation_stage["status"] = "succeeded"
+    return await _save_if_authenticated(user, payload, answer, diagnostics)
 
 
 @app.post("/v1/auth/mock/google", response_model=MockLoginResponse)
@@ -456,12 +508,28 @@ def _initial_fallback_reason(payload: QuestionRequest) -> AiFallbackReason | Non
 
 
 async def _save_if_authenticated(
-    user: MockUser | None, payload: QuestionRequest, response: QuestionResponse
+    user: MockUser | None,
+    payload: QuestionRequest,
+    response: QuestionResponse,
+    diagnostics: dict[str, object] | None = None,
 ) -> QuestionResponse:
     emit_question_outcome(response.request_id, response.mode)
+    if diagnostics is not None:
+        diagnostics["outcome"] = {
+            "mode": response.mode,
+            "result_status": response.result_status,
+            "no_results_reason": response.no_results_reason,
+            "fallback_reason": (
+                response.fallback_reason.value if response.fallback_reason else None
+            ),
+            "sections_count": len(response.sections),
+            "citations_count": len(response.citations),
+        }
     if user is not None:
         if postgres_identity:
-            await postgres_identity.save_question(user.id, payload, response)
+            await postgres_identity.save_question(
+                user.id, payload, response, diagnostics=diagnostics
+            )
         else:
             identity_repository.save_question(user.id, payload, response)
     return response

@@ -1,6 +1,4 @@
 import json
-import re
-import unicodedata
 from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -9,6 +7,12 @@ from app.domain.catalog import MVP_CATALOG
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_reference
 from app.domain.schemas import CorpusItemStatus, SearchHit
+from app.domain.search_queries import (
+    SearchTrace,
+    compact_text,
+    normalize_text,
+    prepare_search_query,
+)
 from app.parsers.law_json import parse_legal_document as parse_json_document
 from app.parsers.law_xml import parse_legal_document as parse_xml_document
 
@@ -110,8 +114,19 @@ class MemoryLegalRepository:
         limit: int,
         query_embedding: list[float] | None = None,
     ) -> list[SearchHit]:
-        terms = _query_terms(query)
-        compact_query = _compact_text(query)
+        hits, _ = await self.search_with_trace(query, as_of_date, limit, query_embedding)
+        return hits
+
+    async def search_with_trace(
+        self,
+        query: str,
+        as_of_date: date,
+        limit: int,
+        query_embedding: list[float] | None = None,
+    ) -> tuple[list[SearchHit], SearchTrace]:
+        prepared = prepare_search_query(query)
+        terms = set(prepared.expanded_terms)
+        compact_query = compact_text(query)
         reference = parse_provision_reference(query)
         hits: list[SearchHit] = []
         for key, document in self._documents.items():
@@ -122,16 +137,16 @@ class MemoryLegalRepository:
             if reference and reference.document_title not in {None, document.title}:
                 continue
             for provision in document.provisions:
-                title = _normalize_text(document.title)
-                heading = _normalize_text(provision.heading or "")
-                content = _normalize_text(provision.content)
+                title = normalize_text(document.title)
+                heading = normalize_text(provision.heading or "")
+                content = normalize_text(provision.content)
                 matched_score = _match_score(
                     terms,
                     title=title,
                     heading=heading,
                     content=content,
                 )
-                if _compact_text(document.title) in compact_query:
+                if compact_text(document.title) in compact_query:
                     matched_score += 4.0
                 path_matched = (
                     reference is not None and provision.path in reference.storage_paths
@@ -157,7 +172,19 @@ class MemoryLegalRepository:
                         score=(10.0 if path_matched else 0.0) + matched_score,
                     )
                 )
-        return sorted(hits, key=lambda hit: (-hit.score, hit.document_title, hit.path))[:limit]
+        selected = sorted(
+            hits, key=lambda hit: (-hit.score, hit.document_title, hit.path)
+        )[:limit]
+        return selected, SearchTrace(
+            strategy="direct_path" if reference else "keyword_memory",
+            normalized_query=prepared.normalized_text,
+            terms=prepared.terms,
+            executed_query=None if reference else prepared.strict_query,
+            relaxed=False,
+            reference_title=reference.document_title if reference else None,
+            reference_path=reference.path if reference else None,
+            candidate_count=len(selected),
+        )
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         for key, document in self._documents.items():
@@ -208,83 +235,6 @@ repository = MemoryLegalRepository()
 
 def _date_or_none(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
-
-
-def _query_terms(query: str) -> set[str]:
-    terms = set()
-    for raw_term in re.findall(r"[가-힣A-Za-z0-9]+", _normalize_text(query)):
-        term = _normalize_query_term(raw_term)
-        if len(term) > 1 and not _is_question_filler(term):
-            terms.add(term)
-    aliases = {
-        "신재생": {"신에너지", "재생에너지"},
-        "신재생에너지": {"신에너지", "재생에너지"},
-        "ess": {"전기저장시설", "에너지저장장치"},
-        "에너지저장장치": {"전기저장시설"},
-        "인허가": {"인가", "허가"},
-    }
-    for term in tuple(terms):
-        terms.update(aliases.get(term, set()))
-    return terms
-
-
-_KOREAN_PARTICLES = (
-    "으로부터",
-    "에게서",
-    "에서는",
-    "으로는",
-    "에서",
-    "에게",
-    "께서",
-    "까지",
-    "부터",
-    "처럼",
-    "보다",
-    "으로",
-    "와",
-    "과",
-    "은",
-    "는",
-    "이",
-    "가",
-    "을",
-    "를",
-    "의",
-    "에",
-    "로",
-    "도",
-    "만",
-)
-
-_QUESTION_FILLER_PREFIXES = (
-    "알려",
-    "무엇",
-    "어떤",
-    "어떻게",
-    "필요",
-    "궁금",
-    "보여",
-    "설명",
-)
-
-
-def _normalize_text(value: str) -> str:
-    return unicodedata.normalize("NFKC", value).casefold()
-
-
-def _compact_text(value: str) -> str:
-    return re.sub(r"[^0-9a-z가-힣]", "", _normalize_text(value))
-
-
-def _normalize_query_term(term: str) -> str:
-    for particle in _KOREAN_PARTICLES:
-        if term.endswith(particle) and len(term) - len(particle) >= 2:
-            return term[: -len(particle)]
-    return term
-
-
-def _is_question_filler(term: str) -> bool:
-    return any(term.startswith(prefix) for prefix in _QUESTION_FILLER_PREFIXES)
 
 
 def _match_score(terms: set[str], *, title: str, heading: str, content: str) -> float:

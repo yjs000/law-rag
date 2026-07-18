@@ -10,6 +10,7 @@ from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_reference
 from app.domain.schemas import CorpusItemStatus, SearchHit
+from app.domain.search_queries import SearchTrace, prepare_search_query
 
 
 def _async_url(url: str) -> str:
@@ -137,8 +138,15 @@ class PostgresLegalRepository:
     async def search(
         self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
     ) -> list[SearchHit]:
+        hits, _ = await self.search_with_trace(query, as_of_date, limit, query_embedding)
+        return hits
+
+    async def search_with_trace(
+        self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
+    ) -> tuple[list[SearchHit], SearchTrace]:
         embedding = str(query_embedding) if query_embedding else None
         reference = parse_provision_reference(query)
+        prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
             path_rows = []
             if reference is not None:
@@ -176,13 +184,16 @@ class PostgresLegalRepository:
                     .all()
                 )
             rows = []
-            if reference is None:
+            relaxed = False
+            executed_query = None
+            if reference is None and prepared.strict_query:
+                executed_query = prepared.strict_query
                 rows = (
                     (
                         await connection.execute(
                             text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
                             {
-                                "query": query,
+                                "query": executed_query,
                                 "as_of": as_of_date,
                                 "embedding": embedding,
                                 "limit": limit,
@@ -192,6 +203,26 @@ class PostgresLegalRepository:
                     .mappings()
                     .all()
                 )
+                if not rows and prepared.relaxed_query != prepared.strict_query:
+                    relaxed = True
+                    executed_query = prepared.relaxed_query
+                    rows = (
+                        (
+                            await connection.execute(
+                                text(
+                                    "SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"
+                                ),
+                                {
+                                    "query": executed_query,
+                                    "as_of": as_of_date,
+                                    "embedding": embedding,
+                                    "limit": limit,
+                                },
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
         merged = []
         seen = set()
         for row in [*path_rows, *rows]:
@@ -199,7 +230,23 @@ class PostgresLegalRepository:
                 continue
             seen.add(row["provision_id"])
             merged.append(self._hit(row))
-        return merged[:limit]
+        selected = merged[:limit]
+        return selected, SearchTrace(
+            strategy=(
+                "direct_path"
+                if reference
+                else "hybrid"
+                if query_embedding
+                else "keyword"
+            ),
+            normalized_query=prepared.normalized_text,
+            terms=prepared.terms,
+            executed_query=executed_query,
+            relaxed=relaxed,
+            reference_title=reference.document_title if reference else None,
+            reference_path=reference.path if reference else None,
+            candidate_count=len(selected),
+        )
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         async with self.engine.connect() as connection:

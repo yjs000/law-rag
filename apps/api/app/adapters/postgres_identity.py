@@ -122,13 +122,19 @@ class PostgresIdentityRepository:
             ).scalar_one()
 
     async def save_question(
-        self, user_id: UUID, request: QuestionRequest, response: QuestionResponse
+        self,
+        user_id: UUID,
+        request: QuestionRequest,
+        response: QuestionResponse,
+        diagnostics: dict[str, object] | None = None,
     ) -> None:
         async with self.engine.begin() as connection:
             await connection.execute(
                 text(
-                    """INSERT INTO question_history(id,user_id,request,response,expires_at)
+                    """INSERT INTO question_history(
+                    id,user_id,request,response,diagnostics,expires_at)
                     VALUES(:id,:user_id,CAST(:request AS jsonb),CAST(:response AS jsonb),
+                    CAST(:diagnostics AS jsonb),
                     now()+interval '1 year')"""
                 ),
                 {
@@ -136,6 +142,7 @@ class PostgresIdentityRepository:
                     "user_id": user_id,
                     "request": json.dumps(request.model_dump(mode="json"), ensure_ascii=False),
                     "response": json.dumps(response.model_dump(mode="json"), ensure_ascii=False),
+                    "diagnostics": json.dumps(diagnostics or {}, ensure_ascii=False),
                 },
             )
 

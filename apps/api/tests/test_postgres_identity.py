@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -7,6 +8,7 @@ import pytest
 
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.supabase_auth import SupabaseIdentity
+from app.domain.schemas import ProjectStage, QuestionRequest, QuestionResponse
 
 AUTH_ID = UUID("11111111-1111-4111-8111-111111111111")
 USER_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -112,3 +114,37 @@ async def test_existing_consented_profile_does_not_require_headers_again() -> No
 
     assert user.email == "new@example.com"
     assert not any("INSERT INTO user_consents" in sql for sql, _ in engine.connection.calls)
+
+
+@pytest.mark.asyncio
+async def test_question_diagnostics_are_persisted_as_json() -> None:
+    engine = FakeEngine({})
+    repository = PostgresIdentityRepository(engine)
+    request = QuestionRequest(
+        question="전기사업 허가 기준은?",
+        as_of_date="2026-07-18",
+        project_stage=ProjectStage.PLANNING,
+    )
+    response = QuestionResponse(
+        request_id="22222222-2222-4222-8222-222222222222",
+        mode="search_only",
+        summary="검색 결과가 없습니다.",
+        scope="테스트",
+        result_status="no_results",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=[],
+    )
+
+    await repository.save_question(
+        USER_ID,
+        request,
+        response,
+        diagnostics={"retrieval": {"candidate_count": 0}},
+    )
+
+    params = next(
+        params for sql, params in engine.connection.calls if "INSERT INTO question_history" in sql
+    )
+    assert json.loads(params["diagnostics"])["retrieval"]["candidate_count"] == 0

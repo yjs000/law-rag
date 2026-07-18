@@ -21,3 +21,4 @@
 - [16 Supabase Google 인증과 질문 이력](16-supabase-google-auth-and-history.md)
 - [17 로그인·익명 전체 흐름의 인증 경계](17-authenticated-and-anonymous-flow-edges.md)
 - [18 질문·근거·답변 평가 계약](18-answer-quality-evaluation-contract.md)
+- [19 AI 없는 자연어 검색과 단계별 진단](19-natural-language-retrieval-observability.md)

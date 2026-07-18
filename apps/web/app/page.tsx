@@ -43,6 +43,7 @@ import type {
   QuestionHistoryItem,
   QuestionResponse,
 } from "../lib/contracts";
+import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
 import { createClient } from "../lib/supabase/client";
 import { SafeText } from "./safe-text";
 
@@ -55,12 +56,6 @@ const MODEL_LABELS: Record<AnswerPreference, string> = {
   terra: "Terra · 근거 답변",
   search_only: "검색 전용 · 원문만",
 };
-
-const SUGGESTED_QUESTIONS = [
-  "에너지 사업 허가 절차를 알려주세요",
-  "전기저장시설 설치 시 확인할 기준은?",
-  "사업 변경 시 다시 신고해야 하는 사항은?",
-];
 
 export function oauthRedirectMessage(search: string): string | null {
   const status = new URLSearchParams(search).get("auth");

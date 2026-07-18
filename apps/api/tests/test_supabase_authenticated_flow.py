@@ -85,7 +85,7 @@ class FakePostgresIdentity:
     async def consume_quota(self, *_: object) -> bool:
         return True
 
-    async def save_question(self, user_id, request, response) -> None:
+    async def save_question(self, user_id, request, response, diagnostics=None) -> None:
         entry = QuestionHistoryEntry(
             id=UUID(response.request_id),
             user_id=user_id,

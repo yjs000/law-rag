@@ -57,6 +57,25 @@ def _date(value: str | None) -> date | None:
         return None
 
 
+_TECHNICAL_SECTION = re.compile(r"(?<![\d.])(\d+\.\d+)(?![\d.])\s*(?=[가-힣<])")
+
+
+def _technical_standard_sections(content: str) -> list[tuple[str, str]]:
+    """하나의 행정규칙 문자열에 붙은 기술기준 절을 번호별로 분리한다."""
+    matches = list(_TECHNICAL_SECTION.finditer(content))
+    if len(matches) < 2:
+        return []
+    sections: list[tuple[str, str]] = []
+    prefix = content[: matches[0].start()].strip()
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+        section = content[match.start() : end].strip()
+        if index == 0 and prefix:
+            section = f"{prefix} {section}"
+        sections.append((f"기준{match.group(1)}", section))
+    return sections
+
+
 def load_json(body: str) -> Any:
     try:
         return json.loads(body.lstrip("\ufeff\r\n\t "))
@@ -198,6 +217,11 @@ def parse_legal_document(
                 raw_sections = [raw_sections]
             for index, raw_section in enumerate(raw_sections, 1):
                 content = _clean(raw_section)
+                technical_sections = _technical_standard_sections(content)
+                if technical_sections:
+                    for path, section_content in technical_sections:
+                        add(path, section_content, None)
+                    continue
                 article_match = re.search(r"제\s*(\d+)\s*조(?:의\s*(\d+))?", content)
                 path = f"본문/단락{index}"
                 if article_match:

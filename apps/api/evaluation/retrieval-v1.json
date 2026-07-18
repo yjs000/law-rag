@@ -2,10 +2,11 @@
   {"question":"전기사업 허가가 필요한 경우는?","as_of_date":"2026-07-13","expected_documents":["전기사업법"]},
   {"question":"분산에너지 사업자의 등록 요건은?","as_of_date":"2026-07-13","expected_documents":["분산에너지 활성화 특별법"]},
   {"question":"분산에너지 특화지역 지정 절차는?","as_of_date":"2026-07-13","expected_documents":["분산에너지 활성화 특별법 시행령"]},
-  {"question":"전기사업 허가 신청 서류는?","as_of_date":"2026-07-13","expected_documents":["전기사업법 시행규칙"]},
+  {"question":"전기사업 허가를 신청할 때 제출해야 하는 서류는 무엇인가요?","as_of_date":"2026-07-13","expected_documents":["전기사업법 시행규칙"]},
   {"question":"전기사업 허가 기준의 세부 내용은?","as_of_date":"2026-07-13","expected_documents":["전기사업법 시행령"]},
   {"question":"신재생에너지 공급의무는 누구에게 적용되나?","as_of_date":"2026-07-13","expected_documents":["신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법"]},
   {"question":"전기설비 안전관리자의 의무는?","as_of_date":"2026-07-13","expected_documents":["전기안전관리법"]},
-  {"question":"전기저장시설 화재안전 성능 요구사항은?","as_of_date":"2026-07-13","expected_documents":["전기저장시설의 화재안전성능기준(NFPC 607)"]},
-  {"question":"ESS 화재안전 기술기준은?","as_of_date":"2026-07-13","expected_documents":["전기저장시설의 화재안전기술기준(NFTC 607)"]}
+  {"question":"전기저장시설을 설치할 때 적용되는 화재안전 기준은 무엇인가요?","as_of_date":"2026-07-13","expected_documents":["전기저장시설의 화재안전성능기준(NFPC 607)"]},
+  {"question":"ESS 화재안전 기술기준은?","as_of_date":"2026-07-13","expected_documents":["전기저장시설의 화재안전기술기준(NFTC 607)"]},
+  {"question":"전기사업법 제7조 제1항은 어떤 허가를 규정하나요?","as_of_date":"2026-07-13","expected_documents":["전기사업법"]}
 ]

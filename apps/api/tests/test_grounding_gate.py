@@ -14,6 +14,24 @@ from app.domain.schemas import (
     QuestionRequest,
     SearchHit,
 )
+from app.domain.search_queries import SearchTrace
+
+
+def _with_trace(search):
+    async def traced(*args, **kwargs):
+        hits = await search(*args, **kwargs)
+        return hits, SearchTrace(
+            strategy="keyword",
+            normalized_query="test",
+            terms=("test",),
+            executed_query="test",
+            relaxed=False,
+            reference_title=None,
+            reference_path=None,
+            candidate_count=len(hits),
+        )
+
+    return traced
 
 
 @pytest.fixture
@@ -246,7 +264,7 @@ def test_unrelated_generated_claim_falls_back_to_search_only(monkeypatch, hit: S
     async def consume_quota(*args, **kwargs):
         return True
 
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", UngroundedAnswerer)

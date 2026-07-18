@@ -7,6 +7,24 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.domain.catalog import SourceKind
 from app.domain.schemas import SearchHit
+from app.domain.search_queries import SearchTrace
+
+
+def _with_trace(search):
+    async def traced(*args, **kwargs):
+        hits = await search(*args, **kwargs)
+        return hits, SearchTrace(
+            strategy="keyword",
+            normalized_query="test",
+            terms=("test",),
+            executed_query="test",
+            relaxed=False,
+            reference_title=None,
+            reference_path=None,
+            candidate_count=len(hits),
+        )
+
+    return traced
 
 
 class FailingAnswerer:
@@ -69,7 +87,7 @@ def test_all_generation_failures_fall_back_without_another_model(
 
     FailingAnswerer.models = []
     FailingAnswerer.error = error
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
@@ -128,7 +146,7 @@ def test_billing_or_quota_failure_disables_terra_for_later_requests(
 
     FailingAnswerer.models = []
     FailingAnswerer.error = error
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module.repository, "corpus_items", corpus_items)
@@ -163,7 +181,7 @@ def test_disabled_ai_reports_safe_reason_without_calling_openai(monkeypatch) -> 
         return True
 
     FailingAnswerer.models = []
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
@@ -193,7 +211,7 @@ def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) ->
         async def embed(self, texts):
             raise RuntimeError("must not be returned to clients")
 
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: FailingEmbedder())
@@ -220,7 +238,7 @@ def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> 
         return True
 
     FailingAnswerer.models = []
-    monkeypatch.setattr(main_module.repository, "search", search)
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)

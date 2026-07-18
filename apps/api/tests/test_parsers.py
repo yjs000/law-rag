@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,37 @@ def test_admin_rule_json_sections_get_stable_article_paths() -> None:
         source_url="https://example.test",
     )
     assert [provision.path for provision in document.provisions] == ["제1조", "제2조"]
+
+
+def test_technical_standard_is_split_by_decimal_sections_not_referenced_articles() -> None:
+    body = json.dumps(
+        {
+            "AdmRulService": {
+                "행정규칙명": "전기저장시설의 화재안전성능기준(NFTC 607)",
+                "행정규칙ID": "nftc607",
+                "행정규칙일련번호": "1",
+                "조문내용": (
+                    "화재안전기술기준 1.1 적용범위 이 기준은 제11조에 따른다. "
+                    "1.2 용어의 정의 저장용량은 12.2 L 이상이다. "
+                    "2.1 설치기준 전기저장시설은 방화구획한다."
+                ),
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="전기저장시설의 화재안전성능기준(NFTC 607)",
+        source_kind=SourceKind.ADMIN_RULE,
+        source_url="https://example.test",
+    )
+
+    assert [provision.path for provision in document.provisions] == [
+        "기준1.1",
+        "기준1.2",
+        "기준2.1",
+    ]
+    assert "제11조" in document.provisions[0].content
+    assert "12.2 L" in document.provisions[1].content
+    assert all(len(provision.content) < 100 for provision in document.provisions)

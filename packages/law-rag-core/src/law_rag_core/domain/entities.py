@@ -28,8 +28,7 @@ class LegalDocumentRecord:
     source_url: str
     raw_format: str
     raw_sha256: str
-    parser_schema_version: str = "1"
+    parser_schema_version: str = "2"
     fallback_reason: str | None = None
     raw_storage_path: str | None = None
     provisions: list[ProvisionRecord] = field(default_factory=list)
-
