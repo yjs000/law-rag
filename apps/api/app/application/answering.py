@@ -23,13 +23,23 @@ def search_only_answer(
     no_results_reason = (
         "requested_path_not_found" if reference is not None else "no_matching_evidence"
     )
-    no_results_message = (
-        "질문을 뒷받침할 근거를 찾지 못했습니다. "
-        f"원인: 요청한 조문 경로({reference.path})가 기준일에 유효한 MVP 법령에 없습니다."
-        if reference is not None
-        else "질문을 뒷받침할 근거를 찾지 못했습니다. "
-        "원인: 질문과 일치하는 근거가 기준일에 유효한 MVP 법령에 없습니다."
-    )
+    if reference is None:
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            "원인: 질문과 일치하는 근거가 기준일에 유효한 MVP 법령에 없습니다."
+        )
+    elif reference.document_title:
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            f"원인: {reference.document_title}에서 요청한 조문 경로({reference.path})를 "
+            "기준일 현재 찾지 못했습니다."
+        )
+    else:
+        no_results_message = (
+            "질문을 뒷받침할 근거를 찾지 못했습니다. "
+            f"원인: 기준일에 유효한 MVP 대상 법령 전체에서 요청한 조문 경로"
+            f"({reference.path})를 찾지 못했습니다."
+        )
     citations = [
         Citation(
             id=f"C{index}",

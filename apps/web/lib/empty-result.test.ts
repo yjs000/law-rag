@@ -23,7 +23,7 @@ describe("empty search result messaging", () => {
     }), "1조2항은?")).toEqual({
       title: "검색 결과가 없습니다",
       reason: "기준일에 유효한 MVP 법령 범위에서 질문과 일치하는 조문을 찾지 못했습니다.",
-      guidance: "법령명과 조문 번호를 함께 적어 주세요. 예: 전기사업법 제1조 제2항은?",
+      guidance: "전체 대상 법령을 검색했습니다. 특정 법을 확인하려면 법령명과 조문 번호를 함께 적어 주세요. 예: 전기사업법 제1조 제2항은?",
     });
   });
 
@@ -40,7 +40,15 @@ describe("empty search result messaging", () => {
       result_status: "no_results",
       no_results_reason: "requested_path_not_found",
     }), "999조2항은?")?.reason)
-      .toBe("요청한 조·항 경로를 기준일에 유효한 MVP 대상 법령에서 찾지 못했습니다.");
+      .toBe("기준일에 유효한 MVP 대상 법령 전체에서 요청한 조·항 경로를 찾지 못했습니다.");
+  });
+
+  it("recognizes a circled paragraph number as a bare provision reference", () => {
+    expect(getEmptyResultMessage(response({
+      result_status: "no_results",
+      no_results_reason: "requested_path_not_found",
+    }), "제1조 ②항")?.guidance)
+      .toContain("전체 대상 법령을 검색했습니다.");
   });
 
   it("maps a no-evidence code without exposing the internal code", () => {

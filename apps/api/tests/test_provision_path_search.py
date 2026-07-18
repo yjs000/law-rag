@@ -54,6 +54,15 @@ def test_provision_reference_normalizes_article_branch_paragraph_item_and_subite
     assert "제12조의3/항②/호4./목가." in reference.storage_paths
 
 
+@pytest.mark.parametrize("question", ["제1조 ②항", "제1조제②항", "１조 ２항"])
+def test_provision_reference_accepts_common_paragraph_number_forms(question: str) -> None:
+    reference = parse_provision_reference(question)
+
+    assert reference is not None
+    assert reference.path == "제1조/항2"
+    assert set(reference.storage_paths) == {"제1조/항2", "제1조/항②"}
+
+
 def test_postgres_path_query_types_nullable_title_parameter_explicitly() -> None:
     source = (Path(__file__).parents[1] / "app/adapters/postgres_repository.py").read_text(
         encoding="utf-8"
@@ -128,3 +137,25 @@ def test_question_api_explains_when_requested_path_does_not_exist(monkeypatch) -
     assert payload["no_results_reason"] == "requested_path_not_found"
     assert "검색 결과가 없습니다" in payload["summary"]
     assert any("제999조/항2" in limitation for limitation in payload["limitations"])
+    assert any("대상 법령 전체" in limitation for limitation in payload["limitations"])
+
+
+def test_question_api_names_law_when_path_is_absent_from_named_document(monkeypatch) -> None:
+    repository = MemoryLegalRepository()
+    monkeypatch.setattr(main_module, "repository", repository)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "전기사업법 제999조 제2항은?",
+            "as_of_date": "2026-07-15",
+            "project_stage": "planning",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 200
+    assert any(
+        "전기사업법에서 요청한 조문 경로" in limitation
+        for limitation in response.json()["limitations"]
+    )

@@ -7,7 +7,7 @@ from app.domain.catalog import MVP_CATALOG
 _PROVISION_REFERENCE = re.compile(
     r"(?:제\s*)?(?P<article>\d+)\s*조"
     r"(?:\s*의\s*(?P<branch>\d+))?"
-    r"(?:\s*(?:제\s*)?(?P<paragraph>\d+)\s*항)?"
+    r"(?:\s*(?:제\s*)?(?P<paragraph>\d+|[①-⑳])\s*항)?"
     r"(?:\s*(?:제\s*)?(?P<item>\d+)\s*호)?"
     r"(?:\s*(?P<subitem>[가-힣])\s*목)?"
 )
@@ -51,6 +51,7 @@ class ProvisionReference:
 
 
 _CIRCLED_NUMBERS = dict(enumerate("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳", 1))
+_CIRCLED_NUMBER_VALUES = {symbol: number for number, symbol in _CIRCLED_NUMBERS.items()}
 
 
 def parse_provision_reference(query: str) -> ProvisionReference | None:
@@ -62,7 +63,7 @@ def parse_provision_reference(query: str) -> ProvisionReference | None:
     if branch := match.group("branch"):
         path += f"의{int(branch)}"
     if paragraph := match.group("paragraph"):
-        path += f"/항{int(paragraph)}"
+        path += f"/항{_number_value(paragraph)}"
     if item := match.group("item"):
         path += f"/호{int(item)}"
     if subitem := match.group("subitem"):
@@ -89,3 +90,7 @@ def parse_provision_reference(query: str) -> ProvisionReference | None:
 def _compact(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return re.sub(r"[^0-9a-z가-힣]", "", normalized)
+
+
+def _number_value(value: str) -> int:
+    return _CIRCLED_NUMBER_VALUES[value] if value in _CIRCLED_NUMBER_VALUES else int(value)

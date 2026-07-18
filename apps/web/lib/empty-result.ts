@@ -6,7 +6,7 @@ export type EmptyResultMessage = {
   guidance: string;
 };
 
-const BARE_PROVISION_REFERENCE = /^\s*(?:제\s*)?\d+\s*조(?:\s*(?:의\s*\d+))?(?:\s*(?:제\s*)?\d+\s*항)?(?:\s*(?:은|는|이|가|을|를))?\s*[?？.]?\s*$/;
+const BARE_PROVISION_REFERENCE = /^\s*(?:제\s*)?\d+\s*조(?:\s*(?:의\s*\d+))?(?:\s*(?:제\s*)?(?:\d+|[①-⑳])\s*항)?(?:\s*(?:은|는|이|가|을|를))?\s*[?？.]?\s*$/;
 
 export function getEmptyResultMessage(
   response: QuestionResponse,
@@ -22,7 +22,9 @@ export function getEmptyResultMessage(
   const apiReason = response.no_results_reason?.trim();
   const isBareProvisionReference = BARE_PROVISION_REFERENCE.test(question);
   const reason = apiReason === "requested_path_not_found"
-    ? "요청한 조·항 경로를 기준일에 유효한 MVP 대상 법령에서 찾지 못했습니다."
+    ? isBareProvisionReference
+      ? "기준일에 유효한 MVP 대상 법령 전체에서 요청한 조·항 경로를 찾지 못했습니다."
+      : "요청한 조·항 경로를 기준일에 유효한 MVP 대상 법령에서 찾지 못했습니다."
     : apiReason === "no_matching_evidence"
       ? "기준일에 유효한 MVP 법령 범위에서 질문과 일치하는 조문을 찾지 못했습니다."
       : isBareProvisionReference
@@ -33,7 +35,7 @@ export function getEmptyResultMessage(
     title: "검색 결과가 없습니다",
     reason,
     guidance: isBareProvisionReference
-      ? "법령명과 조문 번호를 함께 적어 주세요. 예: 전기사업법 제1조 제2항은?"
+      ? "전체 대상 법령을 검색했습니다. 특정 법을 확인하려면 법령명과 조문 번호를 함께 적어 주세요. 예: 전기사업법 제1조 제2항은?"
       : "법령명, 사업 단계, 허가·신고 등 확인하려는 쟁점을 포함해 질문을 구체화해 주세요.",
   };
 }
