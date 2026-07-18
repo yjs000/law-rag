@@ -55,7 +55,7 @@ def search_only_answer(
     evidence_count = len(citations)
     evidence_summary = (
         f"질문과 관련된 기준일 유효 근거 {evidence_count}건을 찾았습니다. "
-        "법적 결론을 생성하지 않고, 아래 원문과 확인 항목을 제공합니다."
+        "아래 원문과 확인 항목을 제공합니다."
     )
     return QuestionResponse(
         request_id=str(uuid4()),

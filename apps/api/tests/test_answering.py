@@ -33,7 +33,8 @@ def test_search_only_answer_citations_are_existing_exact_evidence() -> None:
     assert response.sections[0].citation_ids == [response.citations[0].id]
     assert response.sections[0].claim == "전기사업법 · 제1조"
     assert response.checklist[0].citation_ids == [response.citations[0].id]
-    assert "법적 결론을 생성하지 않고" in response.summary
+    assert "아래 원문과 확인 항목을 제공합니다" in response.summary
+    assert "법적 결론을 생성하지 않고" not in response.summary
     assert "근거 1건" in response.scope
 
 
