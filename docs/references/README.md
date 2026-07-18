@@ -5,6 +5,7 @@
 ## 현재 참고 자료
 
 - [Harness Engineering 메모](harness-engineering.md)
+- [NVIDIA 로컬 추론과 Vercel 연결 검토](nvidia-local-inference-and-vercel-connectivity.md)
 - 향후 데이터 제공처별 API 및 이용조건 메모
 - 채택한 런타임·패키지·배포 도구의 LLM 친화적 공식 문서 스냅샷
 
