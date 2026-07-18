@@ -101,6 +101,19 @@ def _load_dataset(dataset_path: Path) -> list[dict]:
     return json.loads(dataset_path.read_text(encoding="utf-8"))
 
 
+def _top_chunk_metadata(hit, rank: int) -> dict[str, object]:
+    return {
+        "rank": rank,
+        "provision_id": str(hit.provision_id),
+        "document_id": str(hit.document_id),
+        "document_title": hit.document_title,
+        "version_label": hit.version_label,
+        "path": hit.path,
+        "heading": hit.heading,
+        "score": hit.score,
+    }
+
+
 async def _run(cases: list[dict], dataset_path: Path) -> dict:
     settings = get_settings()
     if not settings.database_url:
@@ -153,14 +166,7 @@ async def _run(cases: list[dict], dataset_path: Path) -> dict:
                     else any(hit.document_title in expected for hit in hits)
                 ),
                 "top_chunks": [
-                    {
-                        "rank": index,
-                        "document_title": hit.document_title,
-                        "path": hit.path,
-                        "heading": hit.heading,
-                        "score": hit.score,
-                        "content": hit.content,
-                    }
+                    _top_chunk_metadata(hit, index)
                     for index, hit in enumerate(hits[:5], 1)
                 ],
             }

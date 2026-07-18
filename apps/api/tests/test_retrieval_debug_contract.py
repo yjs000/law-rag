@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -8,6 +10,7 @@ from app.domain.search_queries import (
     SearchTrace,
     prepare_search_query,
 )
+from scripts.debug_retrieval_pipeline import _top_chunk_metadata
 
 DATASET_PATH = (
     Path(__file__).resolve().parents[1] / "evaluation" / "retrieval-debug-v1.json"
@@ -81,3 +84,23 @@ def test_retrieval_diagnostics_serialize_every_stage_and_timing() -> None:
     assert all("duration_ms" in stage for stage in trace["stages"])
     assert all("raw_candidate_count" in stage for stage in trace["stages"])
     assert all("accepted_candidate_count" in stage for stage in trace["stages"])
+
+
+def test_debug_report_keeps_chunk_metadata_without_copying_source_text() -> None:
+    metadata = _top_chunk_metadata(
+        SimpleNamespace(
+            provision_id=uuid4(),
+            document_id=uuid4(),
+            document_title="전기사업법",
+            version_label="MST 1",
+            path="제7조/항①",
+            heading="사업의 허가",
+            score=1.0,
+            content="보고서에 복제하면 안 되는 법률 원문",
+        ),
+        1,
+    )
+
+    assert metadata["rank"] == 1
+    assert metadata["path"] == "제7조/항①"
+    assert "content" not in metadata
