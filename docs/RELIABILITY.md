@@ -46,5 +46,13 @@
 - DB 백업/복구 시험과 목표 RPO/RTO
 - 장애 등급, 연락, 사용자 공지, 사후 분석 템플릿
 
+## 질문 이력 보존 작업
+
+`purge_expired_question_history(cutoff)`는 `expires_at <= cutoff`인 로그인 질문 이력을 한 transaction에서 정리한다. 질문 삭제에 연결된 `checklist_exports`는 FK cascade로 제거하고, 영향받은 `conversations`의 턴 수·최근 시각·마지막 턴을 다시 계산한 뒤 빈 대화를 삭제한다. advisory transaction lock으로 겹친 호출을 직렬화하므로 같은 cutoff 재실행은 추가 데이터 변경 없이 성공하는 멱등 계약이다.
+
+각 실행은 `history_retention_runs`에 시작·종료·cutoff, 질문/내보내기 삭제 수, 대화 갱신/삭제 수, `succeeded`/`failed` 상태를 기록한다. 실패 감사에는 SQLSTATE만 허용하며 질문 원문, 응답, 이메일, 사용자 ID, 오류 전문을 기록하지 않는다. 성공률, 마지막 성공 시각, 연속 실패, 삭제 수의 비정상 급증을 운영 메트릭과 경보 후보로 사용한다. 기준선과 경보 임계값은 실제 트래픽 측정 전 `미결정`이다.
+
+Alembic migration은 scheduler 중립적이며 `pg_cron` 설치나 schedule 등록을 하지 않는다. Production 적용 전 운영 승인, 대상 Supabase 프로젝트 확인, `pg_cron` 가용성·설치 상태·권한 확인, 중복 schedule 방지 검토가 필요하다. `pg_cron`이 승인되지 않으면 Supabase가 지원하는 별도 scheduler가 동일 함수를 호출하도록 구성한다. 예약 실패가 API 요청 경로를 막지 않게 하되 마지막 성공 시각이 허용 지연을 넘으면 운영자가 확인한다.
+
 현재 목업 환경의 실행·장애 대응·롤백 절차는 [운영 런북](references/operations-runbook.md)에 기록한다.
 향후 운영 배포 조건은 [Vercel·Supabase 운영 전환 설계](design-docs/vercel-supabase-deployment.md)에 기록한다.

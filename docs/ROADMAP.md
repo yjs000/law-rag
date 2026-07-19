@@ -9,7 +9,7 @@
 - `Blocked`: 사용자 승인, credential, 운영환경 등 외부 입력 대기
 - `Done`: 구현·검증·상태 문서 갱신까지 완료
 
-동시에 둘 이상의 milestone을 `Picked Up`으로 두지 않는다.
+작업 진행 중에는 정확히 하나의 milestone만 `Picked Up`으로 두고, 대기·완료 상태에서는 0개일 수 있다.
 
 ## 현재 순서
 
@@ -20,18 +20,20 @@
 | D-003 | Done | 완료·중복 active 계획 정리 | 주 에이전트 | `docs/exec-plans/active/`, `completed/`, active index, 기술 부채 추적기 | `0013` 완료 상태와 `0012`/`0014` 역할이 실제 구현·외부 병목과 일치 | 문서 검사, 링크 검사, diff 검토 |
 | D-004 | Blocked | Supabase 분산 취소와 Realtime Broadcast 운영 연결 | DB/API/Web 에이전트(순차) | `0012`와 완료 계획 `0014`가 정한 migration/API/Web 범위 | 운영 migration 승인 후 2인스턴스 취소·소유자 격리·UX·부하 검증 통과 | API/Web 통합 테스트, schema 문서, Preview 검증 |
 | D-005 | Blocked | NVIDIA hosted NIM 실연결·법률 평가 | 주 에이전트 | provider 설정, 평가 산출물, 운영 문서 | API key와 정책 승인 후 hosted smoke·고정 평가셋·운영 계약 확인 | smoke, 고정 평가셋, fallback 회귀 |
-| D-006 | Picked Up | 1년 만료 질문 이력 자동 정리와 감사 메트릭 | 주 에이전트 + 독립 검토 에이전트 | 신규 migration·계약 테스트·DB schema·운영/학습 문서 | 예약 정리 함수가 만료 이력·종속 export·빈 conversation을 안전하게 정리하고 삭제 수·실행 상태를 감사 가능하게 기록 | migration 계약 테스트, API 회귀, 문서 검사, parent diff 검토 |
+| D-006 | Done | 1년 만료 질문 이력 정리 함수와 감사 메트릭의 로컬 계약 | 주 에이전트 + 독립 검토 에이전트 | 신규 migration·계약 테스트·DB schema·운영/학습 문서 | 정리 함수가 만료 이력·종속 export·빈 conversation을 안전하게 정리하고 삭제 수·실행 상태를 감사 가능하게 기록 | migration 계약 테스트, PostgreSQL 17 실행, API 회귀, 문서 검사, parent diff 검토 |
 | D-007 | Done | `main` Python CI 수집 실패 복구 | 주 에이전트 | `.github/workflows/ci.yml`, 오류 ledger | API import 경로와 pytest async 설정을 CI에 명시해 기존 suite가 수집·통과 | CI 동일 명령 207 passed, workflow diff 검토 |
+| D-008 | Picked Up | 통합 검토·PR·원격 CI 확인 | 주 에이전트 + 독립 reviewer | 현재 branch 전체 diff, GitHub PR | 독립 review finding 처리, commit/push/PR 후 CI green | immutable diff review, GitHub checks |
+| D-009 | Blocked | Production 질문 이력 scheduler 적용 | 운영 승인자 + 주 에이전트 | `0006` migration, 승인된 scheduler 설정 | 대상 Supabase 승인·extension 확인 후 일 1회 예약, 최초 실행 감사·경보 확인 | Production migration/schedule/감사 증거 |
 
-## 현재 TODO: D-006
+## 현재 TODO: D-008
 
-- 담당: 주 에이전트(통합·검증), 구현 에이전트(신규 migration·계약 테스트), 검토 에이전트(읽기 전용).
-- 목적: 애플리케이션 요청에 의존하지 않고 1년이 지난 질문 이력을 정기 삭제하며 결과를 감사 가능하게 만든다.
-- 선행 조건: 운영 migration은 별도 승인 전 적용하지 않고 로컬 migration 계약만 구현한다.
-- 수정 가능 범위: 신규 migration, 관련 migration 계약 테스트, `docs/generated/db-schema.md`, 운영·신뢰성·학습 문서, `0015` 실행 계획.
-- 금지: Production DB 적용, 사용자 데이터 직접 조회, credential 출력, 보존기간 변경.
-- 완료 조건: 정리의 cascade/대화 집계/멱등성/감사 결과와 scheduler 계약이 테스트로 고정되고 전체 관련 gate가 통과한다.
-- 검증: migration 정적 계약 및 가능하면 임시 PostgreSQL 실행, API 테스트·Ruff·문서 검사·`git diff --check`.
+- 담당: 주 에이전트(통합·GitHub), 독립 reviewer(읽기 전용).
+- 목적: 현재 branch의 문서·CI·retention migration을 독립 검토하고 검증된 PR로 전달한다.
+- 선행 조건: 로컬 전체 gate와 최신 PostgreSQL migration 실행 통과.
+- 수정 가능 범위: review finding 관련 파일, 실행 계획·보드·ledger, PR metadata.
+- 금지: Production DB 적용, credential 출력, review 미완료 상태의 merge.
+- 완료 조건: finding 처리, clean commit, push/PR, GitHub CI green.
+- 검증: `origin/main...HEAD` review, 전체 gate, PR files/base/head/checks 확인.
 
 ## 차단 기록
 

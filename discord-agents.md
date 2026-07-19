@@ -23,7 +23,7 @@
 ## TODO와 위임
 
 - 작업 순서와 상태의 Discord용 단일 진입점은 `docs/ROADMAP.md`다. 상세 설계와 체크리스트는 `docs/exec-plans/`에 두고 보드에서 링크한다.
-- 한 번에 정확히 하나의 milestone만 `Picked Up`으로 둔다. 다음 항목은 현재 항목의 구현·검증·review·commit/push/PR·CI 계약이 끝난 뒤 착수한다.
+- 작업 진행 중에는 정확히 하나의 milestone만 `Picked Up`으로 둔다. 대기·완료 상태에서는 0개일 수 있다. 다음 항목은 현재 항목의 구현·검증·review·commit/push/PR·CI 계약이 끝난 뒤 착수한다.
 - 하위 에이전트는 병렬 실행이 실제 시간을 줄이고 파일 소유권과 검증 범위가 독립적일 때만 사용한다.
 - 같은 파일, 공용 설정, lockfile, migration, Git 상태를 여러 에이전트가 동시에 수정하지 않는다.
 - 각 하위 에이전트에 수정 가능 파일, 금지 범위, 완료 조건, 검증 명령을 명시한다.
