@@ -1,18 +1,18 @@
 # 실행 계획 0002: 실제 서비스 연결
 
-상태: Vercel·Supabase·Google OAuth·현재 코퍼스 연결 완료, 운영 영속화·실제 Terra 평가 후속
+상태: Vercel·Supabase·Google OAuth·현재 코퍼스 연결 완료, 운영 영속화·선택 생성 provider 평가 후속
 작성일: 2026-07-14
 소유자: 사용자와 Codex
 
 ## 목적
 
-목업 경계로 검증한 에너지 법령 RAG를 실제 Supabase, Google OAuth, OpenAI, Vercel Web/FastAPI에 연결한다. collector는 등록된 고정 공인 IP Windows PC에서 독립 실행한다.
+목업 경계로 검증한 에너지 법령 RAG를 실제 Supabase, Google OAuth, provider-neutral 생성 adapter, Vercel Web/FastAPI에 연결한다. collector는 등록된 고정 공인 IP Windows PC에서 독립 실행한다.
 
 사용자 결과는 Vercel 발급 공개 URL에서 로그인, 기준일 검색, 근거 기반 답변, 인용 원문, 이력과 내보내기를 사용할 수 있고 collector 장애 중에도 마지막 검증 코퍼스로 질문을 계속 처리하는 것이다.
 
 ## 범위와 비범위
 
-범위에는 Supabase 영속화·RLS·Storage, Google OAuth, OpenAI 실제 호출, stateless FastAPI, Vercel Web/API 배포, Preview 동일 출처 프록시, Windows collector의 Supabase 반영과 출시 보안·복구 검증이 포함된다.
+범위에는 Supabase 영속화·RLS·Storage, Google OAuth, 승인된 생성 provider 실제 호출, stateless FastAPI, Vercel Web/API 배포, Preview 동일 출처 프록시, Windows collector의 Supabase 반영과 출시 보안·복구 검증이 포함된다.
 
 다음은 이 계획의 비범위다.
 
@@ -24,12 +24,12 @@
 
 ## 선행 입력
 
-- `gpt-5.6-terra` 권한이 있는 OpenAI API 키
+- 선택한 생성 provider의 API key·모델 권한·Production 사용 계약
 - Supabase 프로젝트 URL·리전, runtime pooler와 관리용 DB 연결 방식, service role과 Storage 설정
 - Google OAuth client와 Supabase callback·Vercel Production redirect URL
 - `apps/web`, `apps/api` Vercel Project와 자동 발급된 `*.vercel.app` Production URL
 - collector PC의 고정 공인 IPv4, 국가법령정보 Open API 등록과 OC
-- Vercel·Supabase·OpenAI 비용 한도·알림과 `gpt-5.6-terra` 권한이 있는 OpenAI API 키
+- Vercel·Supabase·생성 provider 비용/쿼터 한도·알림과 개인정보·데이터 처리 정책 확인
 
 비밀값은 채팅·Git에 전달하지 않고 서버 또는 CI Secret에 직접 등록한다.
 
@@ -40,7 +40,7 @@
 현재 우선순위는 다음과 같다.
 
 1. 활성 계획의 완료 상태를 실제 진행 기록과 일치시킨다.
-2. 다음 작업일에 실제 Production 코퍼스와 Terra 답변 품질 평가를 실행한다.
+2. 실제 Production 코퍼스와 현재 선택한 생성 provider의 답변 품질 평가를 실행한다.
 3. 이후 코퍼스 연혁·삭제 격리·런타임 상태·보존 및 복구를 영속 운영 경계로 전환한다.
 
 ### 사용자가 해야 할 일
@@ -49,7 +49,7 @@
 - [x] 아래 에이전트 검증 결과를 확인한 뒤 `main` 커밋·푸시와 Production 자동 배포를 승인한다.
 - [x] 비밀번호, API 키, bypass secret은 채팅이나 Git에 올리지 않는다.
 
-현재 즉시 필요한 사용자 작업은 없다. 실제 Terra 평가를 시작할 때 모델 권한·비용 한도를 확인하고, 공개 확대 전 개인정보 정책과 법률 전문가 표본 검토를 별도로 승인한다.
+현재 즉시 필요한 사용자 작업은 없다. 실제 생성 provider 평가를 시작할 때 모델 권한·비용/쿼터·데이터 처리 정책을 확인하고, 공개 확대 전 개인정보 정책과 법률 전문가 표본 검토를 별도로 승인한다.
 
 현재 Production API 주소는 일반 인터넷 요청의 `/health`에서 `200 OK`이므로 Deployment Protection 변경은 사용자 작업이 아니다.
 
@@ -95,9 +95,9 @@
 - [ ] Preview와 Production OAuth client·redirect·비밀·사용자 데이터 경계 검증
 - [ ] 개인정보 처리방침, 국외 이전, 보유·삭제 정책 검토
 
-### OpenAI와 품질 게이트
+### 생성 provider와 품질 게이트
 
-- [ ] 실제 Terra 구조화 출력에 결정적 인용 게이트 적용
+- [ ] 현재 선택한 생성 provider의 실제 구조화 출력에 결정적 인용 게이트 적용
 - [ ] quota·권한·모델 오류의 검색 전용 폴백과 영속 상태 검증
 - [ ] 사람 검토 평가셋으로 의미 게이트 오탐·미탐 측정
 - [ ] 실제 서비스 연결과 반복 가능한 검색 평가 실행 기반을 완성한 뒤, 같은 한국어 법령 조문·질의·모델·검색 설정으로 256·512·1024차원을 비교하고 Recall@10·nDCG@10·HNSW exact-search 대비 recall·지연시간·DB/인덱스 크기·인용 게이트 통과율을 기록하여 512차원을 유지하거나 migration·재임베딩 계획과 함께 변경
@@ -135,7 +135,7 @@
 
 로컬 DB 입력, Web/API Production 배포, 현재 코퍼스 적재와 Google OAuth 차단 요소는 해소되었다. 루트와 API의 `.env.local` 모두 transaction pooler용 `DATABASE_URL`(6543)과 migration용 `DIRECT_URL`(5432)을 갖고, Production Web에서 Production API 호출이 성공했다. Production 코퍼스는 현재 버전 9개가 `ready`이며 Google 가입·로그인·세션 복원·질문 이력 E2E도 완료했다.
 
-다음 작업의 외부 의존성은 실제 Terra 평가를 위한 모델 권한·비용 한도와 법률 전문가 표본 검토다. 외부 의존성 없이 진행 가능한 후속은 235개 연혁 이관, 출처 삭제 격리, `runtime_flags`·rate limit·평가 상태 영속화, Storage·질문 이력 삭제 수명주기와 복구 훈련이다.
+다음 작업의 외부 의존성은 현재 선택한 생성 provider의 모델 권한·비용/쿼터·데이터 처리 정책과 법률 전문가 표본 검토다. 외부 의존성 없이 진행 가능한 후속은 235개 연혁 이관, 출처 삭제 격리, `runtime_flags`·rate limit·평가 상태 영속화, Storage·질문 이력 삭제 수명주기와 복구 훈련이다.
 
 세부 준비 목록, 플랫폼과 애플리케이션 책임, 완료 조건은 [Vercel·Supabase 운영 전환 설계](../../design-docs/vercel-supabase-deployment.md)를 따른다. 커스텀 도메인, Vercel Static IP, 집 PC 포트포워딩은 선행 입력이 아니다.
 
@@ -159,4 +159,5 @@
 - 2026-07-15: collector Supabase 어댑터를 연결해 현재 버전 9문서, 9버전, 3,050조문과 content-addressed private Storage 객체 9개를 적재했다. 재실행은 9개 모두 `unchanged`, 실패 0으로 완료됐다.
 - 2026-07-15: Production API는 corpus `ready 9`, `missing 0`을 반환했다. 분산에너지와 전기저장시설 검색 각각 5건, 조문 상세 ID 왕복, 검색 전용 질문 10개 section·10개 인용을 확인했다.
 - 2026-07-15: Supabase `sync-history`는 출처 삭제 격리와 체크포인트 스키마가 완성될 때까지 명시적으로 차단한다. 현재 버전 적재 목표는 완료했지만 235개 연혁 이관 항목은 미완료로 유지한다.
-- 2026-07-15: 완료 계획 0004·0005와 Production 진행 기록을 대조해 Google OAuth·내부 사용자 경계·현재 코퍼스·Vercel 공개 health를 완료 처리했다. 실제 Terra 품질 평가는 다음 작업일로 미루고, 연혁·삭제·런타임 상태·보존·복구를 실제 잔여 TODO로 정리했다.
+- 2026-07-15: 완료 계획 0004·0005와 Production 진행 기록을 대조해 Google OAuth·내부 사용자 경계·현재 코퍼스·Vercel 공개 health를 완료 처리했다. 당시 Terra 품질 평가는 다음 작업일로 미루고, 연혁·삭제·런타임 상태·보존·복구를 실제 잔여 TODO로 정리했다.
+- 2026-07-19: NVIDIA hosted NIM 도입과 provider-neutral adapter 계약에 맞춰 현재 TODO의 Terra/OpenAI 전용 표현을 생성 provider 기준으로 갱신했다. OpenAI embedding 비교 참고는 embedding 평가 범위이므로 유지한다.
