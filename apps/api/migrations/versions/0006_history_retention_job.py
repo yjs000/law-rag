@@ -50,15 +50,28 @@ BEGIN
         USING ERRCODE = '22023';
     END IF;
 
-    -- export 집계 뒤 새 FK 참조가 추가되어 감사 수가 어긋나는 경합을 막는다.
+    -- 저장 경로도 conversation을 먼저 갱신하므로 같은 순서로 잠가 새 턴 경합을 막는다.
+    PERFORM 1
+    FROM public.conversations c
+    WHERE EXISTS(
+      SELECT 1 FROM public.question_history q
+      WHERE q.conversation_id=c.id AND q.expires_at <= p_cutoff_at
+    )
+    ORDER BY c.id
+    FOR UPDATE;
+
+    -- 새 export FK 참조와 질문 삭제가 집계 사이에 끼어들지 못하게 부모를 잠근다.
     PERFORM 1 FROM public.question_history
     WHERE expires_at <= p_cutoff_at
     FOR UPDATE;
 
-    SELECT count(*)::integer INTO v_exports_deleted
-    FROM public.checklist_exports e
-    JOIN public.question_history q ON q.id=e.history_id
-    WHERE q.expires_at <= p_cutoff_at;
+    WITH deleted_exports AS (
+      DELETE FROM public.checklist_exports e
+      USING public.question_history q
+      WHERE e.history_id=q.id AND q.expires_at <= p_cutoff_at
+      RETURNING e.id
+    )
+    SELECT count(*)::integer INTO v_exports_deleted FROM deleted_exports;
 
     WITH deleted AS (
       DELETE FROM public.question_history
@@ -135,10 +148,11 @@ def upgrade() -> None:
         )""",
         "CREATE INDEX history_retention_runs_started_at ON public.history_retention_runs(started_at DESC)",
         "ALTER TABLE public.history_retention_runs ENABLE ROW LEVEL SECURITY",
-        "REVOKE ALL ON TABLE public.history_retention_runs FROM PUBLIC",
+        "REVOKE ALL ON TABLE public.history_retention_runs FROM PUBLIC, anon, authenticated",
+        "REVOKE ALL ON SEQUENCE public.history_retention_runs_id_seq FROM PUBLIC, anon, authenticated",
         "GRANT SELECT ON TABLE public.history_retention_runs TO service_role",
         PURGE_FUNCTION,
-        "REVOKE ALL ON FUNCTION public.purge_expired_question_history(timestamptz) FROM PUBLIC",
+        "REVOKE ALL ON FUNCTION public.purge_expired_question_history(timestamptz) FROM PUBLIC, anon, authenticated",
         "GRANT EXECUTE ON FUNCTION public.purge_expired_question_history(timestamptz) TO service_role",
     ]
     for statement in statements:

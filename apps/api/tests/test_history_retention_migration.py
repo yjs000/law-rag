@@ -37,7 +37,16 @@ def test_retention_migration_records_auditable_cleanup(monkeypatch) -> None:
     assert "error_code text" in sql
     assert "CREATE OR REPLACE FUNCTION public.purge_expired_question_history" in sql
     assert "expires_at <= p_cutoff_at" in sql
+    assert "FROM public.conversations c" in sql
+    assert "ORDER BY c.id" in sql
     assert "FOR UPDATE" in sql
+    assert sql.index("FROM public.conversations c") < sql.index(
+        "DELETE FROM public.question_history"
+    )
+    assert "DELETE FROM public.checklist_exports e" in sql
+    assert "RETURNING e.id" in sql
+    assert "INTO v_exports_deleted FROM deleted_exports" in sql
+    assert "JOIN public.question_history q ON q.id=e.history_id" not in sql
     assert "DELETE FROM public.question_history" in sql
     assert "DELETE FROM public.conversations" in sql
     assert "turn_count=(SELECT count(*) FROM public.question_history" in sql
@@ -65,11 +74,14 @@ def test_retention_migration_is_serialized_idempotent_and_scheduler_neutral(
     assert "ENABLE ROW LEVEL SECURITY" in sql
     assert "SECURITY DEFINER" in sql
     assert "SET search_path = pg_catalog, public, pg_temp" in sql
+    assert "REVOKE ALL ON TABLE public.history_retention_runs" in sql
+    assert "REVOKE ALL ON SEQUENCE public.history_retention_runs_id_seq" in sql
     assert "REVOKE ALL ON FUNCTION public.purge_expired_question_history" in sql
+    assert "FROM PUBLIC, anon, authenticated" in sql
     assert "GRANT EXECUTE ON FUNCTION public.purge_expired_question_history" in sql
     assert "GRANT SELECT ON TABLE public.history_retention_runs TO service_role" in sql
-    assert "FROM public.checklist_exports" in sql
-    assert "JOIN public.question_history" in sql
+    assert "DELETE FROM public.checklist_exports e" in sql
+    assert "USING public.question_history q" in sql
     assert "TO anon, authenticated" not in sql
     assert "CREATE EXTENSION" not in sql.upper()
     assert "cron.schedule" not in sql

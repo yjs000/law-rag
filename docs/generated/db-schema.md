@@ -26,7 +26,7 @@
 
 `legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인, `provision_embeddings.embedding`에는 HNSW cosine 색인이 있다. `hybrid_search` SQL 함수가 기준일 유효 버전만 대상으로 제목·표제·본문 키워드와 선택적 벡터 순위를 RRF로 합친다. `question_history.diagnostics`는 입력 검증, 파싱, 임베딩, 검색, 생성, 결과 단계를 보존한다. 대화 목록은 `(user_id, updated_at DESC, id DESC)`, 대화 턴은 `(conversation_id, turn_index DESC, id DESC)` 복합 색인으로 커서 페이지네이션한다. 기존 질문 이력은 마이그레이션 시 각각 하나의 대화로 이관된다.
 
-사용자 테이블은 `auth.users` 삭제를 기준으로 연쇄 삭제된다. 대화를 삭제하면 질문 턴과 해당 턴의 체크리스트 내보내기 메타데이터가 연쇄 삭제된다. `purge_expired_question_history(cutoff)`는 cutoff에 만료된 질문을 삭제하고 같은 FK cascade로 내보내기를 정리한 뒤 영향받은 대화 요약을 재집계하고 빈 대화를 삭제한다. 실행은 advisory transaction lock으로 직렬화되며 `history_retention_runs`에는 원문·사용자 식별자 없이 집계와 SQLSTATE만 기록한다. 함수는 `PUBLIC` 실행 권한을 회수하고 `service_role`에만 실행 권한을 부여했다.
+사용자 테이블은 `auth.users` 삭제를 기준으로 연쇄 삭제된다. 대화를 삭제하면 질문 턴과 해당 턴의 체크리스트 내보내기 메타데이터가 연쇄 삭제된다. `purge_expired_question_history(cutoff)`는 저장 경로와 같은 순서로 영향받은 대화를 먼저 잠그고, cutoff에 만료된 질문의 내보내기를 `DELETE ... RETURNING`으로 정리해 실제 삭제 수를 얻은 뒤 질문 삭제·대화 요약 재집계·빈 대화 삭제를 수행한다. 실행은 advisory transaction lock으로 직렬화되며 `history_retention_runs`에는 원문·사용자 식별자 없이 집계와 SQLSTATE만 기록한다. 감사 table·identity sequence·함수는 `PUBLIC`, `anon`, `authenticated` 권한을 명시적으로 회수하고 필요한 `service_role` 권한만 부여했다.
 
 `0006`은 `pg_cron` extension을 설치하거나 schedule을 등록하지 않는다. Production 예약은 별도 승인 후 대상 Supabase의 extension 가용성·설치 상태와 호출 권한을 확인하는 운영 변경이다. 사용자 소유 테이블에는 RLS와 `auth.uid()` 소유권 정책을 적용했다. FastAPI의 pooler 직접 연결은 검증된 사용자 ID를 모든 소유 데이터 쿼리 조건에 사용한다.
 
