@@ -22,18 +22,14 @@
 | D-005 | Blocked | NVIDIA hosted NIM 실연결·법률 평가 | 주 에이전트 | provider 설정, 평가 산출물, 운영 문서 | API key와 정책 승인 후 hosted smoke·고정 평가셋·운영 계약 확인 | smoke, 고정 평가셋, fallback 회귀 |
 | D-006 | Done | 1년 만료 질문 이력 정리 함수와 감사 메트릭의 로컬 계약 | 주 에이전트 + 독립 검토 에이전트 | 신규 migration·계약 테스트·DB schema·운영/학습 문서 | 정리 함수가 만료 이력·종속 export·빈 conversation을 안전하게 정리하고 삭제 수·실행 상태를 감사 가능하게 기록 | migration 계약 테스트, PostgreSQL 17 실행, API 회귀, 문서 검사, parent diff 검토 |
 | D-007 | Done | `main` Python CI 수집 실패 복구 | 주 에이전트 | `.github/workflows/ci.yml`, 오류 ledger | API import 경로와 pytest async 설정을 CI에 명시해 기존 suite가 수집·통과 | CI 동일 명령 207 passed, workflow diff 검토 |
-| D-008 | Picked Up | 통합 검토·PR·원격 CI 확인 | 주 에이전트 + 독립 reviewer | 현재 branch 전체 diff, GitHub PR | 독립 review finding 처리, commit/push/PR 후 CI green | immutable diff review, GitHub checks |
+| D-008 | Done | 통합 검토·PR·원격 CI 확인 | 주 에이전트 + 독립 reviewer | 현재 branch 전체 diff, GitHub PR | 독립 review finding 처리, commit/push/PR 후 CI green | immutable diff review, GitHub checks |
 | D-009 | Blocked | Production 질문 이력 scheduler 적용 | 운영 승인자 + 주 에이전트 | `0006` migration, 승인된 scheduler 설정 | 대상 Supabase 승인·extension 확인 후 일 1회 예약, 최초 실행 감사·경보 확인 | Production migration/schedule/감사 증거 |
 
-## 현재 TODO: D-008
+## 현재 TODO: 없음 — 외부 입력 대기
 
-- 담당: 주 에이전트(통합·GitHub), 독립 reviewer(읽기 전용).
-- 목적: 현재 branch의 문서·CI·retention migration을 독립 검토하고 검증된 PR로 전달한다.
-- 선행 조건: 로컬 전체 gate와 최신 PostgreSQL migration 실행 통과.
-- 수정 가능 범위: review finding 관련 파일, 실행 계획·보드·ledger, PR metadata.
-- 금지: Production DB 적용, credential 출력, review 미완료 상태의 merge.
-- 완료 조건: finding 처리, clean commit, push/PR, GitHub CI green.
-- 검증: `origin/main...HEAD` review, 전체 gate, PR files/base/head/checks 확인.
+- D-008은 독립 review 승인, PR #1 생성, GitHub Python/Web와 Vercel API/Web checks 통과로 완료됐다.
+- 다음 후보 D-002, D-004, D-005, D-009는 각각 Production credential·migration·정책 승인이 필요해 `Blocked`다.
+- 승인 전에는 Production DB, scheduler, 외부 provider를 변경하지 않는다.
 
 ## 차단 기록
 
