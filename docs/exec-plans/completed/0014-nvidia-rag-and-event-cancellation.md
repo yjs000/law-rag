@@ -1,6 +1,7 @@
 # NVIDIA RAG 및 이벤트 기반 취소 실행 계획
 
 기준일: 2026-07-19
+상태: 로컬 구현 완료, 운영 연결은 0012·TD-014·TD-019로 이관
 
 ## 목표와 범위
 
@@ -12,8 +13,8 @@ NVIDIA Nemotron 생성과 검색 전용 모드를 함께 유지하고, 기존 51
 
 - [x] memory coordinator를 이벤트 대기로 바꾸고 polling 제거
 - [x] 조문을 자르지 않는 생성 근거 문자 예산과 진단 추가
-- [ ] Supabase coordinator/Broadcast adapter 및 API 연결(운영 migration 승인 의존)
-- [ ] NVIDIA hosted Responses cancel capability smoke(API key 의존)
+- [x] Supabase coordinator/Broadcast adapter 및 API 연결 범위를 `0012`의 운영 migration milestone로 이관
+- [x] NVIDIA hosted Responses cancel capability smoke를 `TD-014`의 외부 key 검증으로 이관
 
 ### 취소 조사 Agent — 읽기 전용
 
@@ -50,4 +51,8 @@ uv run ruff check app tests
 2. NVIDIA 데이터 보존·학습·국외 이전 및 Production 라이선스 확인
 3. Supabase migration, private Broadcast RLS/trigger 적용 승인
 4. Preview OAuth/NVIDIA 종단 검증 창구와 법률 전문가 평가
+
+## 완료 결과
+
+이 계획에서 외부 승인 없이 가능한 polling 제거와 생성 근거 예산 제한을 구현·검증했다. Supabase 운영 연결은 [분산 질문 취소 실행 계획](../active/0012-distributed-question-cancellation.md), NVIDIA 실호출과 정책 검토는 기술 부채 `TD-014`, `TD-019`가 단일 권위가 된다. 같은 차단 작업을 두 active 계획에서 중복 관리하지 않도록 이 계획을 완료 처리한다.
 

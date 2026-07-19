@@ -12,6 +12,8 @@ from app.domain.schemas import ProjectStage, QuestionRequest, QuestionResponse
 
 AUTH_ID = UUID("11111111-1111-4111-8111-111111111111")
 USER_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+CONVERSATION_ID = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+HISTORY_ID = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
 
 
 class FakeResult:
@@ -24,15 +26,23 @@ class FakeResult:
     def first(self):
         return self.row
 
+    def scalar_one_or_none(self):
+        if isinstance(self.row, dict):
+            return next(iter(self.row.values()), None)
+        return self.row
+
 
 class FakeConnection:
     def __init__(self, existing: dict) -> None:
         self.existing = existing
         self.calls: list[tuple[str, dict]] = []
+        self.scalar_results: list[object] = []
 
     async def execute(self, statement, params):
         sql = str(statement)
         self.calls.append((sql, params))
+        if self.scalar_results:
+            return FakeResult(self.scalar_results.pop(0))
         return FakeResult(self.existing if "SELECT id,email" in sql else None)
 
 
@@ -168,3 +178,19 @@ async def test_question_diagnostics_are_persisted_as_json() -> None:
         params for sql, params in engine.connection.calls if "INSERT INTO question_history" in sql
     )
     assert json.loads(params["diagnostics"])["retrieval"]["candidate_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_history_locks_conversation_before_deleting_question() -> None:
+    engine = FakeEngine({})
+    engine.connection.scalar_results = [CONVERSATION_ID, CONVERSATION_ID, None, None]
+    repository = PostgresIdentityRepository(engine)
+
+    assert await repository.delete_history(HISTORY_ID, USER_ID) is True
+
+    sql_calls = [sql for sql, _ in engine.connection.calls]
+    lock_index = next(i for i, sql in enumerate(sql_calls) if "FOR UPDATE OF c" in sql)
+    delete_index = next(
+        i for i, sql in enumerate(sql_calls) if "DELETE FROM question_history" in sql
+    )
+    assert lock_index < delete_index

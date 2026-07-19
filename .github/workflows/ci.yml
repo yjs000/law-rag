@@ -28,6 +28,23 @@ jobs:
 
   python:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: apps/api:packages/law-rag-core/src
+      RETENTION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/law_rag_test
+    services:
+      postgres:
+        image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: law_rag_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d law_rag_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
@@ -36,7 +53,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-packages --frozen --python 3.14
       - run: uv run --project apps/api ruff check apps/api/app apps/api/scripts apps/api/tests apps/api/migrations packages/law-rag-core/src packages/law-rag-core/tests
-      - run: uv run --project apps/api pytest apps/api/tests packages/law-rag-core/tests
+      - run: uv run --project apps/api pytest -c apps/api/pyproject.toml apps/api/tests packages/law-rag-core/tests
       - run: uv run --project apps/collector ruff check apps/collector/src apps/collector/tests
       - run: uv run --project apps/collector pytest apps/collector/tests
       - run: uv run --project apps/api python scripts/check_docs.py
