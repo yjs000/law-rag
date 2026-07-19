@@ -27,6 +27,7 @@
 - [x] `expires_at <= p_cutoff_at`인 질문만 삭제한다.
 - [x] 삭제 대상의 `checklist_exports`를 `DELETE ... RETURNING`으로 먼저 정리해 실제 삭제 수를 기록하고 FK cascade를 안전망으로 유지한다.
 - [x] 저장 경로와 같은 순서로 영향받은 대화를 먼저 잠근 뒤 재집계하며 남은 턴이 없으면 삭제한다.
+- [x] 사용자 단일 이력 삭제도 conversation-first로 통일해 retention과의 교차 deadlock을 막는다.
 - [x] 같은 cutoff로 재실행할 때 추가 삭제 없이 성공 감사 행을 남긴다.
 - [x] advisory transaction lock으로 겹친 실행을 직렬화한다.
 - [x] 유효 cutoff로 접수된 실행의 시작·종료·삭제/갱신 수·성공/실패·SQLSTATE를 기록하고 질문/사용자/오류 전문은 기록하지 않는다.
@@ -98,6 +99,8 @@ migration 자체는 `CREATE EXTENSION`, `cron.schedule`, 외부 scheduler 호출
 - 2026-07-19: conversation-first row lock, export `DELETE ... RETURNING`, named-role/sequence revoke와 PostgreSQL 17 동시 저장·ACL·downgrade CI 테스트로 보완했다.
 - 2026-07-19: PostgreSQL service를 포함한 API/core 210건, collector 34건, Web 46건, Ruff·ESLint·TypeScript·Production build·문서 검사를 통과했다.
 - 2026-07-19: 후속 review의 NULL cutoff 불명확성을 `22023` 사전 입력 오류로 고정하고, 감사 행 미생성 및 겹친 retention advisory lock 대기를 PostgreSQL CI 테스트에 추가했다.
+- 2026-07-19: 재review에서 사용자 단일 이력 삭제의 반대 잠금 순서로 `40P01`이 재현되어 `delete_history()`도 conversation-first로 변경하고 사용자 삭제·빈 대화·동시 export 삭제 회귀 테스트를 추가했다.
+- 2026-07-19: deadlock 회귀를 포함한 PostgreSQL service 전체 API/core 212건과 Ruff·문서 검사를 통과했다.
 
 ## 미결정과 차단 요소
 

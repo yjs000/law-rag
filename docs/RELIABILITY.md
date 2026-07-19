@@ -48,7 +48,7 @@
 
 ## 질문 이력 보존 작업
 
-`purge_expired_question_history(cutoff)`는 `expires_at <= cutoff`인 로그인 질문 이력을 한 transaction에서 정리한다. 저장 경로와 같은 순서로 영향받은 `conversations`를 먼저 잠그고, 연결된 `checklist_exports`를 `DELETE ... RETURNING`으로 제거해 실제 삭제 수를 얻은 뒤 질문과 대화 요약을 정리한다. advisory transaction lock으로 겹친 정리 호출을 직렬화하므로 같은 cutoff 재실행은 추가 데이터 변경 없이 성공하는 멱등 계약이다.
+`purge_expired_question_history(cutoff)`는 `expires_at <= cutoff`인 로그인 질문 이력을 한 transaction에서 정리한다. 새 질문 저장과 사용자 단일 이력 삭제를 포함한 관련 write path는 모두 `conversation → question` 순서로 잠근다. 정리 함수는 연결된 `checklist_exports`를 `DELETE ... RETURNING`으로 제거해 실제 삭제 수를 얻은 뒤 질문과 대화 요약을 정리한다. advisory transaction lock으로 겹친 정리 호출을 직렬화하므로 같은 cutoff 재실행은 추가 데이터 변경 없이 성공하는 멱등 계약이다.
 
 유효 cutoff로 접수된 실행은 `history_retention_runs`에 시작·종료·cutoff, 질문/내보내기 삭제 수, 대화 갱신/삭제 수, `succeeded`/`failed` 상태를 기록한다. 명시적 NULL cutoff는 실행으로 만들지 않고 감사 INSERT 전에 `22023` 입력 오류로 거부한다. 실패 감사에는 SQLSTATE만 허용하며 질문 원문, 응답, 이메일, 사용자 ID, 오류 전문을 기록하지 않는다. 성공률, 마지막 성공 시각, 연속 실패, 삭제 수의 비정상 급증을 운영 메트릭과 경보 후보로 사용한다.
 

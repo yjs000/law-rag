@@ -317,41 +317,62 @@ class PostgresIdentityRepository:
 
     async def delete_history(self, history_id: UUID, user_id: UUID) -> bool:
         async with self.engine.begin() as connection:
-            result = await connection.execute(
+            # Retention과 같은 conversation → question 순서로 잠가 교차 deadlock을 막는다.
+            conversation_id = (
+                await connection.execute(
+                    text(
+                        """SELECT c.id
+                        FROM conversations c
+                        JOIN question_history q ON q.conversation_id=c.id
+                        WHERE q.id=:id AND q.user_id=:user_id AND c.user_id=:user_id
+                        FOR UPDATE OF c"""
+                    ),
+                    {"id": history_id, "user_id": user_id},
+                )
+            ).scalar_one_or_none()
+            if conversation_id is None:
+                return False
+
+            deleted_conversation_id = (
+                await connection.execute(
+                    text(
+                        """DELETE FROM question_history
+                        WHERE id=:id AND user_id=:user_id AND conversation_id=:conversation_id
+                        RETURNING conversation_id"""
+                    ),
+                    {
+                        "id": history_id,
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                    },
+                )
+            ).scalar_one_or_none()
+            if deleted_conversation_id is None:
+                return False
+
+            await connection.execute(
                 text(
-                    """WITH deleted AS (
-                      DELETE FROM question_history WHERE id=:id AND user_id=:user_id
-                      RETURNING conversation_id
-                    )
-                    SELECT conversation_id FROM deleted"""
+                    """DELETE FROM conversations c WHERE c.id=:conversation_id
+                    AND c.user_id=:user_id AND NOT EXISTS(
+                      SELECT 1 FROM question_history q WHERE q.conversation_id=c.id)
+                    """
                 ),
-                {"id": history_id, "user_id": user_id},
+                {"conversation_id": conversation_id, "user_id": user_id},
             )
-            conversation_id = result.scalar_one_or_none()
-            if conversation_id is not None:
-                await connection.execute(
-                    text(
-                        """DELETE FROM conversations c WHERE c.id=:conversation_id
-                        AND c.user_id=:user_id AND NOT EXISTS(
-                          SELECT 1 FROM question_history q WHERE q.conversation_id=c.id)
-                        """
-                    ),
-                    {"conversation_id": conversation_id, "user_id": user_id},
-                )
-                await connection.execute(
-                    text(
-                        """UPDATE conversations c SET
-                        turn_count=(SELECT count(*) FROM question_history q
-                          WHERE q.conversation_id=c.id),
-                        updated_at=(SELECT max(created_at) FROM question_history q
-                          WHERE q.conversation_id=c.id),
-                        last_turn_id=(SELECT id FROM question_history q WHERE q.conversation_id=c.id
-                          ORDER BY created_at DESC,id DESC LIMIT 1)
-                        WHERE c.id=:conversation_id AND c.user_id=:user_id"""
-                    ),
-                    {"conversation_id": conversation_id, "user_id": user_id},
-                )
-        return conversation_id is not None
+            await connection.execute(
+                text(
+                    """UPDATE conversations c SET
+                    turn_count=(SELECT count(*) FROM question_history q
+                      WHERE q.conversation_id=c.id),
+                    updated_at=(SELECT max(created_at) FROM question_history q
+                      WHERE q.conversation_id=c.id),
+                    last_turn_id=(SELECT id FROM question_history q WHERE q.conversation_id=c.id
+                      ORDER BY created_at DESC,id DESC LIMIT 1)
+                    WHERE c.id=:conversation_id AND c.user_id=:user_id"""
+                ),
+                {"conversation_id": conversation_id, "user_id": user_id},
+            )
+        return True
 
     async def record_export(self, user_id: UUID, history_id: UUID, export_format: str) -> None:
         async with self.engine.begin() as connection:

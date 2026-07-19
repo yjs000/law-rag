@@ -31,7 +31,7 @@
 
 ## 멱등성과 동시성
 
-같은 cutoff로 다시 실행하면 이미 삭제된 질문이 없으므로 삭제 수가 0인 성공 실행이 된다. `pg_advisory_xact_lock`은 정리끼리 직렬화하고, conversation-first row lock은 정상 질문 저장과 잠금 순서를 맞춰 새 미만료 턴의 요약 덮어쓰기·cascade 삭제를 막는다. export는 사전 count가 아니라 실제 `DELETE ... RETURNING` 결과를 세어 동시 사용자 삭제가 감사 수를 부풀리지 않게 한다.
+같은 cutoff로 다시 실행하면 이미 삭제된 질문이 없으므로 삭제 수가 0인 성공 실행이 된다. `pg_advisory_xact_lock`은 정리끼리 직렬화한다. 새 질문 저장뿐 아니라 사용자 단일 이력 삭제도 conversation-first로 통일해야 retention의 conversation-first 잠금과 question-first 삭제가 교차해 `40P01` deadlock을 만드는 것을 막을 수 있다. export는 사전 count가 아니라 실제 `DELETE ... RETURNING` 결과를 세어 동시 사용자 삭제가 감사 수를 부풀리지 않게 한다.
 
 ## scheduler를 migration에서 만들지 않는 이유
 
