@@ -16,7 +16,7 @@ MAX_AGE_DAYS = 45
 
 
 def markdown_files() -> list[Path]:
-    return [ROOT / "AGENTS.md", ROOT / "ARCHITECTURE.md", *sorted((ROOT / "docs").rglob("*.md"))]
+    return [*sorted(ROOT.glob("*.md")), *sorted((ROOT / "docs").rglob("*.md"))]
 
 
 def check_links(path: Path) -> list[str]:

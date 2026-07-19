@@ -10,6 +10,12 @@
 4. 범위가 크거나 여러 세션에 걸치면 `docs/exec-plans/active/`에 실행 계획을 만든다.
 5. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
 
+## Discord 전용 오버레이
+
+- Discord thread `1528216345924337805`에서 시작한 작업에만 루트 [discord-agents.md](discord-agents.md)를 추가로 읽고 적용한다.
+- 다른 Discord thread, DM, 로컬 CLI, 웹, Telegram 등에서는 해당 overlay와 [Discord 작업 보드](docs/ROADMAP.md), [Discord 오류 Ledger](docs/operations/discord-error-ledger.md)를 적용하지 않는다.
+- 공통 프로젝트 계약은 항상 이 파일이 우선하며 Discord overlay는 진행 보고, TODO/위임, 상태 보존과 오류 기록만 보강한다.
+
 ## 권위 문서
 
 - 제품 목적과 사용자 가치: `docs/PRODUCT_SENSE.md`
