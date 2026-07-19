@@ -34,7 +34,7 @@
 - [x] 명시적 NULL cutoff는 감사 실행으로 만들지 않고 INSERT 전 `22023` 입력 오류로 거부한다.
 - [x] migration은 `pg_cron`을 설치하거나 예약하지 않는다.
 - [x] 정적 migration 계약 테스트와 문서 gate가 통과한다.
-- [x] 임시 PostgreSQL 17에서 cascade·대화 재집계·빈 대화 삭제·같은 cutoff 재실행을 검증한다.
+- [x] 임시 PostgreSQL 17의 축약된 `0005` 호환 schema에서 실제 `0006` SQL의 export 명시 삭제·대화 재집계·빈 대화 삭제·같은 cutoff 재실행을 검증한다.
 
 ## 구현 단계와 체크리스트
 
@@ -101,6 +101,7 @@ migration 자체는 `CREATE EXTENSION`, `cron.schedule`, 외부 scheduler 호출
 - 2026-07-19: 후속 review의 NULL cutoff 불명확성을 `22023` 사전 입력 오류로 고정하고, 감사 행 미생성 및 겹친 retention advisory lock 대기를 PostgreSQL CI 테스트에 추가했다.
 - 2026-07-19: 재review에서 사용자 단일 이력 삭제의 반대 잠금 순서로 `40P01`이 재현되어 `delete_history()`도 conversation-first로 변경하고 사용자 삭제·빈 대화·동시 export 삭제 회귀 테스트를 추가했다.
 - 2026-07-19: deadlock 회귀를 포함한 PostgreSQL service 전체 API/core 212건과 Ruff·문서 검사를 통과했다.
+- 2026-07-19: PostgreSQL CI는 전체 `0001..0005` chain이 아니라 축약 호환 schema에 실제 `0006` SQL을 적용하는 범위임을 명시했다. 전체 chain 순서는 별도 migration 계약 테스트가 담당한다.
 
 ## 미결정과 차단 요소
 

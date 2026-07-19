@@ -41,7 +41,7 @@
 
 ## 직접 실행 명령
 
-정적 계약은 외부 credential 없이 검증하고, CI는 disposable PostgreSQL service에서 동시 저장·ACL·멱등성·downgrade를 실행한다.
+정적 계약은 외부 credential 없이 검증하고, CI는 축약된 `0005` 호환 schema를 disposable PostgreSQL service에 만든 뒤 실제 `0006` SQL의 동시 저장·사용자 삭제·export count·ACL·멱등성·downgrade를 실행한다. 이 gate는 전체 `0001..0005` migration chain 실행을 대체하지 않는다.
 
 ```bash
 cd apps/api
