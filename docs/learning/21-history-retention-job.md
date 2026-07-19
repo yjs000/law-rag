@@ -6,7 +6,7 @@
 
 ## 선택 이유
 
-질문 생성 시 `expires_at=now()+interval '1 year'`가 저장되므로 정리 함수는 정책 기간을 다시 계산하지 않고 `expires_at <= cutoff`만 판단한다. 테스트나 장애 재현에서는 명시적 cutoff를 넘길 수 있어 같은 데이터 집합을 결정적으로 검증할 수 있다.
+질문 생성 시 `expires_at=now()+interval '1 year'`가 저장되므로 정리 함수는 정책 기간을 다시 계산하지 않고 `expires_at <= cutoff`만 판단한다. 테스트나 장애 재현에서는 명시적 cutoff를 넘길 수 있어 같은 데이터 집합을 결정적으로 검증할 수 있다. 명시적 NULL cutoff는 유효 실행이 아니므로 감사 행을 만들기 전 `22023`으로 거부한다.
 
 정리 로직은 PostgreSQL 함수 한 transaction에 둔다. export·만료 질문 삭제, 대화 재집계, 빈 대화 삭제가 분리된 serverless 요청으로 실행되면 중간 실패 때 요약이 실제 턴과 달라질 수 있기 때문이다.
 

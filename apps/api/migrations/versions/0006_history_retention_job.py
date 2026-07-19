@@ -35,6 +35,11 @@ DECLARE
   v_conversation_ids uuid[] := ARRAY[]::uuid[];
   v_error_code text;
 BEGIN
+  IF p_cutoff_at IS NULL THEN
+    RAISE EXCEPTION 'retention cutoff cannot be null'
+      USING ERRCODE = '22023';
+  END IF;
+
   -- 두 scheduler 호출이 겹쳐도 한 transaction만 정리하도록 직렬화한다.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('purge_expired_question_history', 0)

@@ -29,7 +29,8 @@
 - [x] 저장 경로와 같은 순서로 영향받은 대화를 먼저 잠근 뒤 재집계하며 남은 턴이 없으면 삭제한다.
 - [x] 같은 cutoff로 재실행할 때 추가 삭제 없이 성공 감사 행을 남긴다.
 - [x] advisory transaction lock으로 겹친 실행을 직렬화한다.
-- [x] 실행 시작·종료·cutoff·삭제/갱신 수·성공/실패·SQLSTATE를 기록하고 질문/사용자/오류 전문은 기록하지 않는다.
+- [x] 유효 cutoff로 접수된 실행의 시작·종료·삭제/갱신 수·성공/실패·SQLSTATE를 기록하고 질문/사용자/오류 전문은 기록하지 않는다.
+- [x] 명시적 NULL cutoff는 감사 실행으로 만들지 않고 INSERT 전 `22023` 입력 오류로 거부한다.
 - [x] migration은 `pg_cron`을 설치하거나 예약하지 않는다.
 - [x] 정적 migration 계약 테스트와 문서 gate가 통과한다.
 - [x] 임시 PostgreSQL 17에서 cascade·대화 재집계·빈 대화 삭제·같은 cutoff 재실행을 검증한다.
@@ -96,6 +97,7 @@ migration 자체는 `CREATE EXTENSION`, `cron.schedule`, 외부 scheduler 호출
 - 2026-07-19: 독립 review에서 새 턴 저장과 purge의 conversation race, export 사전 count, named-role ACL, scheduler 실패 감지, CI 통합 검증 부재를 확인했다.
 - 2026-07-19: conversation-first row lock, export `DELETE ... RETURNING`, named-role/sequence revoke와 PostgreSQL 17 동시 저장·ACL·downgrade CI 테스트로 보완했다.
 - 2026-07-19: PostgreSQL service를 포함한 API/core 210건, collector 34건, Web 46건, Ruff·ESLint·TypeScript·Production build·문서 검사를 통과했다.
+- 2026-07-19: 후속 review의 NULL cutoff 불명확성을 `22023` 사전 입력 오류로 고정하고, 감사 행 미생성 및 겹친 retention advisory lock 대기를 PostgreSQL CI 테스트에 추가했다.
 
 ## 미결정과 차단 요소
 

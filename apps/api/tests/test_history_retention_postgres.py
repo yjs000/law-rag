@@ -199,6 +199,19 @@ async def test_retention_is_safe_during_concurrent_turn_save_and_has_strict_acl(
         assert second["expired_history_deleted"] == 0
         assert second["checklist_exports_deleted"] == 0
 
+        audit_count_before_null = await admin.fetchval(
+            "SELECT count(*) FROM public.history_retention_runs"
+        )
+        with pytest.raises(asyncpg.PostgresError) as null_error:
+            await admin.fetchrow(
+                "SELECT * FROM public.purge_expired_question_history($1::timestamptz)",
+                None,
+            )
+        assert null_error.value.sqlstate == "22023"
+        assert await admin.fetchval(
+            "SELECT count(*) FROM public.history_retention_runs"
+        ) == audit_count_before_null
+
         failed = await admin.fetchrow(
             "SELECT * FROM public.purge_expired_question_history($1)",
             datetime.now(UTC) + timedelta(days=1),
@@ -247,6 +260,25 @@ async def test_retention_is_safe_during_concurrent_turn_save_and_has_strict_acl(
             "auth_seq": False,
             "service_fn": True,
         }
+
+        advisory_tx = writer.transaction()
+        await advisory_tx.start()
+        await writer.execute(
+            """SELECT pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('purge_expired_question_history', 0))"""
+        )
+        serialized_task = asyncio.create_task(
+            purge.fetchrow(
+                "SELECT * FROM public.purge_expired_question_history($1)",
+                datetime(2026, 7, 19, tzinfo=UTC),
+            )
+        )
+        await asyncio.sleep(0.1)
+        assert not serialized_task.done(), "겹친 retention 실행은 advisory lock을 기다려야 한다"
+        await advisory_tx.commit()
+        serialized = await asyncio.wait_for(serialized_task, timeout=5)
+        assert serialized is not None
+        assert serialized["status"] == "succeeded"
 
         downgrade_statements: list[str] = []
         migration.op.execute = downgrade_statements.append

@@ -53,8 +53,12 @@ def test_retention_migration_records_auditable_cleanup(monkeypatch) -> None:
     assert "last_turn_id=(SELECT id FROM public.question_history" in sql
     assert "status='succeeded'" in sql
     assert "status='failed'" in sql
+    assert "p_cutoff_at IS NULL" in sql
     assert "p_cutoff_at > pg_catalog.clock_timestamp()" in sql
     assert "ERRCODE = '22023'" in sql
+    assert sql.index("p_cutoff_at IS NULL") < sql.index(
+        "INSERT INTO public.history_retention_runs"
+    )
     assert "GET STACKED DIAGNOSTICS" not in sql
     assert "SQLERRM" not in sql
 
