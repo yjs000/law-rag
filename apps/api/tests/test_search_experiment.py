@@ -181,17 +181,28 @@ async def test_search_returns_cosine_top_three_in_score_order() -> None:
         "무엇이 필요한가?",
         corpus,
         embedder=FixedEmbedder([query]),
+        candidate_k=3,
     )
 
     assert result["corpus_chunks"] == len(expected_paths)
-    assert result["top_k"] == 3
-    assert [item["rank"] for item in result["results"]] == [1, 2, 3]
-    assert [item["path"] for item in result["results"]] == [
+    assert result["candidate_k"] == 3
+    assert [item["rank"] for item in result["raw_chunk_candidates"]] == [1, 2, 3]
+    assert [item["path"] for item in result["raw_chunk_candidates"]] == [
         "제1조",
         "제1조/항①",
         "제2조",
     ]
-    assert [item["score"] for item in result["results"]] == pytest.approx([0.8, 0.48, 0.36])
+    assert [item["score"] for item in result["raw_chunk_candidates"]] == pytest.approx(
+        [0.8, 0.48, 0.36]
+    )
+    assert [item["article_path"] for item in result["article_candidates"][:2]] == [
+        "제1조",
+        "제2조",
+    ]
+    assert [item["path"] for item in result["article_candidates"][0]["matched_chunks"]] == [
+        "제1조",
+        "제1조/항①",
+    ]
 
 
 @pytest.mark.asyncio
@@ -303,13 +314,32 @@ async def test_search_rejects_empty_question_before_embedding() -> None:
     assert embedder.inputs == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("candidate_k", [0, 51])
+async def test_search_rejects_candidate_k_outside_observation_boundary(
+    candidate_k: int,
+) -> None:
+    embedder = FixedEmbedder([_basis(0)])
+
+    with pytest.raises(ValueError, match="candidate_k must be between 1 and 50"):
+        await search_corpus(
+            "질문",
+            {"chunks": []},
+            embedder=embedder,
+            candidate_k=candidate_k,
+        )
+
+    assert embedder.inputs == []
+
+
 def test_ask_cli_prompts_for_question(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    async def fake_ask(path: Path, question: str) -> dict[str, object]:
+    async def fake_ask(path: Path, question: str, *, candidate_k: int) -> dict[str, object]:
         assert path == tmp_path / "corpus.json"
         assert question == "저작물이란?"
-        return {"experiment": "C", "results": []}
+        assert candidate_k == 10
+        return {"experiment": "C", "article_candidates": []}
 
     monkeypatch.setattr("builtins.input", lambda _prompt: "저작물이란?")
     monkeypatch.setattr(search_module, "_ask", fake_ask)
@@ -321,7 +351,8 @@ def test_ask_cli_prompts_for_question(
 def test_cli_reports_missing_corpus_without_provider_detail(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    async def missing(_path: Path, _question: str) -> dict[str, object]:
+    async def missing(_path: Path, _question: str, *, candidate_k: int) -> dict[str, object]:
+        assert candidate_k == 10
         raise FileNotFoundError("private provider detail")
 
     monkeypatch.setattr(search_module, "_ask", missing)

@@ -29,6 +29,9 @@ MODEL = "nvidia/nemotron-3-embed-1b"
 DIMENSIONS = 512
 EMBEDDING_VERSION = "1"
 DEFAULT_EMBEDDING_BATCH_SIZE = 32
+DEFAULT_CANDIDATE_K = 10
+MAX_CANDIDATE_K = 50
+ARTICLE_MATCHES_PER_CANDIDATE = 3
 CHAPTER_PATTERN = re.compile(r"^\s*제\s*(\d+)\s*장(?:의\s*(\d+))?")
 ARTICLE_PATH_PATTERN = re.compile(r"^(제(\d+)조(?:의(\d+))?)(?:/|$)")
 
@@ -85,9 +88,10 @@ def _parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare", help="3개 법령의 지정 장·조 범위를 저장하고 임베딩")
     prepare.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
     prepare.add_argument("--batch-size", type=int, default=DEFAULT_EMBEDDING_BATCH_SIZE)
-    ask = subparsers.add_parser("ask", help="질문을 임베딩해 로컬 청크 상위 3개 검색")
+    ask = subparsers.add_parser("ask", help="질문을 임베딩해 raw 청크와 조 단위 후보 검색")
     ask.add_argument("--question")
     ask.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
+    ask.add_argument("--candidate-k", type=int, default=DEFAULT_CANDIDATE_K)
     return parser
 
 
@@ -452,12 +456,12 @@ async def search_corpus(
     corpus: dict[str, object],
     *,
     embedder: Embedder,
-    top_k: int = 3,
+    candidate_k: int = DEFAULT_CANDIDATE_K,
 ) -> dict[str, object]:
     if not question.strip():
         raise ValueError("question must not be empty")
-    if top_k != 3:
-        raise ValueError("experiment C top_k must be 3")
+    if not 1 <= candidate_k <= MAX_CANDIDATE_K:
+        raise ValueError(f"candidate_k must be between 1 and {MAX_CANDIDATE_K}")
     query_vectors = await embedder.embed([question])
     if len(query_vectors) != 1:
         raise ValueError("query embedder returned an unexpected batch size")
@@ -470,7 +474,8 @@ async def search_corpus(
         chunk_vector = _validate_vector(chunk["embedding"])
         scored.append((_cosine(query_vector, chunk_vector), chunk))
     scored.sort(key=lambda item: (-item[0], str(item[1]["chunk_id"])))
-    results = [
+
+    raw_chunk_candidates = [
         {
             "rank": rank,
             "score": score,
@@ -483,17 +488,67 @@ async def search_corpus(
             "heading": chunk["heading"],
             "content": chunk["content"],
         }
-        for rank, (score, chunk) in enumerate(scored[:top_k], start=1)
+        for rank, (score, chunk) in enumerate(scored[:candidate_k], start=1)
     ]
+
+    grouped: dict[str, list[tuple[float, dict[str, object]]]] = {}
+    for score, chunk in scored:
+        article = _article_root(str(chunk["path"]))
+        if article is None:
+            raise ValueError("experiment C chunk path has no article root")
+        article_id = f"{chunk['source_id']}:{chunk['mst']}:{article[0]}"
+        grouped.setdefault(article_id, []).append((score, chunk))
+    article_groups = sorted(grouped.items(), key=lambda item: (-item[1][0][0], item[0]))
+    article_candidates: list[dict[str, object]] = []
+    for rank, (article_id, matches) in enumerate(article_groups[:candidate_k], start=1):
+        best_score, best_chunk = matches[0]
+        article = _article_root(str(best_chunk["path"]))
+        assert article is not None
+        article_candidates.append(
+            {
+                "rank": rank,
+                "score": best_score,
+                "article_id": article_id,
+                "article_path": article[0],
+                "title": best_chunk["title"],
+                "source_id": best_chunk["source_id"],
+                "mst": best_chunk["mst"],
+                "effective_from": best_chunk["effective_from"],
+                "article_chunk_count": len(matches),
+                "best_chunk": {
+                    "score": best_score,
+                    "chunk_id": best_chunk["chunk_id"],
+                    "path": best_chunk["path"],
+                    "heading": best_chunk["heading"],
+                    "content": best_chunk["content"],
+                },
+                "matched_chunks": [
+                    {
+                        "score": match_score,
+                        "chunk_id": match["chunk_id"],
+                        "path": match["path"],
+                        "heading": match["heading"],
+                        "content": match["content"],
+                    }
+                    for match_score, match in matches[:ARTICLE_MATCHES_PER_CANDIDATE]
+                ],
+            }
+        )
     return {
         "experiment": "C",
         "question": question,
         "provider": "nvidia_nim",
         "model": MODEL,
         "corpus_chunks": len(chunks),
-        "top_k": top_k,
+        "candidate_k": candidate_k,
         "score": "cosine_similarity",
-        "results": results,
+        "grouping": {
+            "unit": "article",
+            "article_score": "max_chunk_cosine",
+            "matched_chunks_per_article": ARTICLE_MATCHES_PER_CANDIDATE,
+        },
+        "raw_chunk_candidates": raw_chunk_candidates,
+        "article_candidates": article_candidates,
     }
 
 
@@ -555,10 +610,15 @@ async def _prepare(path: Path, *, embedding_batch_size: int) -> dict[str, object
     }
 
 
-async def _ask(path: Path, question: str) -> dict[str, object]:
+async def _ask(path: Path, question: str, *, candidate_k: int) -> dict[str, object]:
     _, api_settings = _settings()
     corpus = load_corpus(path)
-    return await search_corpus(question, corpus, embedder=_query_embedder(api_settings))
+    return await search_corpus(
+        question,
+        corpus,
+        embedder=_query_embedder(api_settings),
+        candidate_k=candidate_k,
+    )
 
 
 def _safe_error(code: str) -> str:
@@ -576,7 +636,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
             result = asyncio.run(_prepare(args.corpus, embedding_batch_size=args.batch_size))
         else:
             question = args.question if args.question is not None else input("질문> ")
-            result = asyncio.run(_ask(args.corpus, question))
+            result = asyncio.run(_ask(args.corpus, question, candidate_k=args.candidate_k))
     except RuntimeError as exc:
         known = {"nvidia_api_key_missing", "law_open_api_oc_missing"}
         code = str(exc) if str(exc) in known else "experiment_c_failed"
