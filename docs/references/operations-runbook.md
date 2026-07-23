@@ -9,6 +9,9 @@
 3. 수동 `sync-history`가 성공한 뒤에만 Windows 주간 작업을 등록한다.
 4. API는 collector 활성 상태 디렉터리를 `COLLECTOR_STATE_DIR`로 읽는다.
 5. `/v1/corpus/status`에서 9개 대상, 마지막 성공 시각, 누락 경고를 확인한다.
+6. NVIDIA 임베딩 검색을 배포할 때는 API 코드보다 먼저 migration `0007`을 적용하고, Preview와
+   Production에 `NVIDIA_API_KEY`, `NVIDIA_EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`,
+   `EMBEDDING_TIMEOUT_SECONDS`를 환경별로 등록한다.
 
 ## 주간 수집과 즉시 반영
 
@@ -25,6 +28,7 @@
 | 429/5xx/timeout | 실행 상태와 재시도 소진 | 기존 코퍼스 유지, 다음 예약 또는 수동 재실행 |
 | 정규화 실패 | 포맷·폴백 사유·대상 MST | HTML로 우회하지 않고 fixture와 파서를 먼저 갱신 |
 | AI quota/모델 오류 | 응답 mode와 관측 이벤트 | 다른 모델로 전환하지 않고 검색 전용 유지 |
+| NVIDIA 임베딩 오류 | embedding 진단 상태와 키워드 검색 결과 | key·model·quota를 확인하고 의미 검색만 중단, 키워드 검색 유지 |
 | API 재시작 | 목업 로그인·질문 이력 | 목업 데이터 소실을 허용하며 운영 전 Supabase로 교체 |
 
 ## 롤백
@@ -36,6 +40,6 @@
 
 ## 비밀과 로그
 
-- `.env`, OC, OpenAI 키, Supabase service role을 이슈·로그·Git에 남기지 않는다.
+- `.env`, OC, NVIDIA/OpenAI 키, Supabase secret key를 이슈·로그·Git에 남기지 않는다.
 - 질문 원문, 이메일, IP 원문, 법령 원문 전문을 관측 이벤트에 남기지 않는다.
 - 문제 보고에는 요청 ID, 실행 ID, 대상의 비민감 안정 ID, 오류 분류만 포함한다.

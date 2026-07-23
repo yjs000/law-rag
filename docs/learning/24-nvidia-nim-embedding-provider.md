@@ -44,6 +44,6 @@ mock 응답으로 batch 순서, 2048→512 slicing, L2 norm, 잘못된 index·�
 
 ## 관련 문서
 
-- [실험 B 실행 계획](../exec-plans/active/0017-experiment-b-sentence-embeddings.md)
+- [실험 B 실행 계획](../exec-plans/completed/0017-experiment-b-sentence-embeddings.md)
 - [코사인 유사도](23-cosine-similarity.md)
 - [NVIDIA 모델 참고](../references/nvidia-nemotron-3-embed-1b-2026-07-23.md)

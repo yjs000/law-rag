@@ -1,6 +1,6 @@
 # 실행 계획 0017: 실험 B — NVIDIA NIM 두 문장 임베딩과 코사인 유사도
 
-상태: 계획 수정 완료, 구현 대기
+상태: 구현 완료, 사용자 live 실행 대기
 작성일: 2026-07-23
 소유자: Codex
 
@@ -11,8 +11,7 @@
 추천 문장 두 개의 512차원 임베딩 전체와 코사인 유사도를 로컬 터미널에 출력한다.
 
 사용자가 직접 실행하고 결과를 판단하므로 저장소에는 실제 벡터, 실제 유사도나 미리 만든 결과
-보고서를 기록하지 않는다. 이번 작업은 계획·모델 조사·코사인 유사도 학습 문서까지만 작성하며
-provider 코드와 실험 CLI는 구현하지 않는다.
+보고서를 기록하지 않는다. provider 코드와 실험 CLI는 구현했으며 live API는 호출하지 않았다.
 
 ## 추천 문장
 
@@ -30,10 +29,8 @@ provider 코드와 실험 CLI는 구현하지 않는다.
 
 ## 현재 구현과 변경 경계
 
-현재 구현은 `OpenAIEmbedder.embed(texts)`가 텍스트 배열을 한 번에 전송하고 응답 `index` 순서로
-벡터를 반환한다. 질문 처리 코드는 이 메서드의 첫 벡터를 512차원 query embedding으로 검색에
-넘긴다. `OpenAIEmbedder`는 Python 어댑터이고 `text-embedding-3-large`는 그 어댑터가 호출하는
-원격 모델 이름이므로 두 임베딩 모델을 동시에 쓰는 구조가 아니다.
+현재 구현은 `NvidiaNimEmbedder.embed(texts)`가 텍스트 배열을 한 번에 전송하고 응답 `index` 순서로
+벡터를 반환한다. 질문 처리 코드는 이 메서드의 첫 벡터와 NVIDIA model ID를 검색에 넘긴다.
 
 유지할 계약:
 
@@ -158,16 +155,16 @@ return [normalize_l2(vector[:512]) for vector in vectors]
 
 비범위:
 
-- 이번 턴의 provider 코드, CLI 또는 live API 구현
+- Codex의 live API 실행
 - 실제 임베딩 벡터·유사도 생성 또는 결과 문서 커밋
 - 실험 C 문서 저장과 Top 3 검색
-- production corpus backfill, DB migration 또는 혼합 모델 검색
+- production corpus backfill
 - 모델 비교 점수, 임계값 튜닝, 법률적 동일성 판단
 - FastAPI·Next.js UI와 공개 API 변경
 
 ## 실행과 출력 방식
 
-구현 후 저장소 루트에서 실행할 명령:
+저장소 루트에서 실행할 명령:
 
 ```powershell
 uv run --directory apps/api python -m scripts.experiment_embeddings
@@ -189,8 +186,7 @@ norm_b: <값>
 cosine_similarity: <값>
 ```
 
-기본 실행은 터미널에만 출력하고 `docs/generated/`에 결과를 만들지 않는다. 사용자가 재현용 파일이
-필요한 경우에만 명시적 `--json-output <path>`로 로컬 JSON을 저장하며 `.data/` 아래 사용을 권장한다.
+기본 실행은 터미널에만 출력하고 `docs/generated/`나 `.data/`에 결과를 만들지 않는다.
 
 ## 사용자가 결과에서 확인할 항목
 
@@ -222,7 +218,7 @@ cosine_similarity: <값>
 - 실패 시 종료 코드 `2`와 provider 원문을 제외한 JSON 오류 한 줄을 표준 오류에 출력한다.
 - 한 벡터라도 검증에 실패하면 slicing, 유사도와 결과 저장을 중단한다.
 - OpenAI나 다른 모델, 임의 벡터나 0 벡터로 자동 대체하지 않는다.
-- 명시적 JSON 출력도 전체 성공 후에만 원자적으로 생성하고 기존 성공 파일을 실패로 덮어쓰지 않는다.
+- 실패 시 결과 파일을 만들지 않는다.
 
 ## 측정 가능한 완료 조건
 
@@ -246,7 +242,7 @@ cosine_similarity: <값>
   512차원 DB 계약과 생성 provider 선택을 깨뜨리지 않는 회귀 테스트를 추가한다.
 - [x] `M3 — 사용자 실행 CLI`: 두 기본 문장, 전체 벡터·norm·코사인 터미널 출력과 안전한 오류를
   구현하고 테스트한다. Codex는 live 실행이나 결과 기록을 하지 않는다.
-- [ ] `M4 — 검증과 문서`: 권위 설계·환경 예시를 실제 코드와 맞추고 전체 검증 후 계획을 완료한다.
+- [x] `M4 — 검증과 문서`: 권위 설계·환경 예시를 실제 코드와 맞추고 전체 검증 후 계획을 완료한다.
 
 ### 하위 에이전트
 
@@ -258,8 +254,8 @@ cosine_similarity: <값>
 예정 검증 명령:
 
 ```powershell
-uv run --directory apps/api pytest tests/test_nvidia_nim_embedder.py -q
-uv run --directory apps/api pytest tests/test_ai_fallback.py tests/test_settings.py -q
+uv run --directory apps/api python -m pytest tests/test_nvidia_nim_embedder.py -q
+uv run --directory apps/api python -m pytest tests/test_ai_fallback.py tests/test_settings.py -q
 uv run --directory apps/api ruff check app scripts tests
 uv run python scripts/check_docs.py
 pnpm.cmd verify
@@ -287,9 +283,15 @@ production corpus 재색인은 별도 실행 계획과 사용자 승인 전에�
 - 2026-07-23: 코사인 유사도 학습 문서와 사용자가 결과에서 확인할 체크리스트를 작성했다.
 - 2026-07-23: NVIDIA adapter, 실험 CLI와 model-filtered hybrid search를 구현하고 mock·API 전체
   회귀 테스트를 통과했다. live API와 실제 실험 결과는 생성하지 않았다.
+- 2026-07-23: `.env.example`, 실행 안내와 운영 실패 동작을 갱신하고 구현 계획을 완료했다.
 
 ## 미결정과 차단 요소
 
 - 실제 Free Endpoint 접근 가능 여부와 quota는 사용자의 NVIDIA 계정/API key에서만 확인할 수 있다.
-- production provider 교체에는 문서 전량 재임베딩과 모델/차원/버전 필터 보강이 필요하며 실험 B 범위가 아니다.
+- production 의미 검색에는 문서 전량 재임베딩이 필요하며 실험 B 범위가 아니다.
 - 실제 유사도 값은 사용자가 실행하기 전까지 미결정이며 저장소 문서에 예상 결과로 기록하지 않는다.
+
+## 완료 결과
+
+NVIDIA provider, 2048→512 변환, model-filtered 검색, 터미널 전용 실험 CLI, mock·회귀 테스트와
+환경·실패 안내를 완료했다. 실제 벡터와 유사도는 사용자가 live 실행할 때만 관찰한다.

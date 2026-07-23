@@ -14,8 +14,8 @@ pnpm.cmd install
 pnpm.cmd build
 
 uv sync --all-packages --python 3.14
-uv run --project apps/api pytest
-uv run --project apps/api uvicorn app.main:app --reload
+uv run --directory apps/api python -m pytest
+uv run --directory apps/api python -m uvicorn app.main:app --reload
 ```
 
 다른 터미널에서 `pnpm.cmd dev:web`을 실행한다. 환경변수는 `.env.example`, API는 `apps/api/.env.example`을 참고하되 실제 `.env`는 커밋하지 않는다.
@@ -33,6 +33,9 @@ uv run --project apps/collector law-rag-collector status
 Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collector 운영 문서](apps/collector/README.md)를 참고한다. 설치나 테스트가 스케줄러를 자동 등록하지 않는다.
 
 전체 검증은 `pnpm.cmd verify`로 실행한다.
+
+두 문장의 NVIDIA NIM 임베딩과 코사인 유사도를 직접 확인하는 방법은
+[실험 B 실행 안내](experiments/embeddings/README.md)를 참고한다. 실행 결과는 터미널에만 출력한다.
 
 ## 문서 시작점
 

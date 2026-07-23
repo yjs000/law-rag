@@ -4,3 +4,4 @@
 
 - [0001: MVP 기반 확정](0001-mvp-foundation.md)
 - [0016: 실험 A 일반 텍스트 조문 청킹](0016-experiment-a-plain-text-chunking.md)
+- [0017: 실험 B NVIDIA NIM 두 문장 임베딩과 유사도](0017-experiment-b-sentence-embeddings.md)
