@@ -26,11 +26,14 @@ from scripts.experiment_search import (
 class FixedEmbedder:
     def __init__(self, vectors: list[list[float]]) -> None:
         self.vectors = vectors
-        self.inputs: list[str] | None = None
+        self.inputs: list[list[str]] = []
+        self.offset = 0
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        self.inputs = texts
-        return self.vectors
+        self.inputs.append(texts)
+        vectors = self.vectors[self.offset : self.offset + len(texts)]
+        self.offset += len(texts)
+        return vectors
 
 
 def _basis(index: int) -> list[float]:
@@ -39,7 +42,7 @@ def _basis(index: int) -> list[float]:
     return vector
 
 
-def _source(spec: SourceSpec, index: int) -> LoadedSource:
+def _source(spec: SourceSpec, index: int, paths: list[str]) -> LoadedSource:
     mst = spec.mst or f"current-{index}"
     provisions = [
         ProvisionRecord(
@@ -49,7 +52,7 @@ def _source(spec: SourceSpec, index: int) -> LoadedSource:
             content=f"{spec.title} {path} 실제 조문",
             ordinal=ordinal,
         )
-        for ordinal, path in enumerate(spec.selected_paths)
+        for ordinal, path in enumerate(paths)
     ]
     document = LegalDocumentRecord(
         source_id=f"source-{index}",
@@ -70,37 +73,54 @@ def _source(spec: SourceSpec, index: int) -> LoadedSource:
 
 
 @pytest.mark.asyncio
-async def test_builds_exactly_ten_parser_chunks_with_passage_embeddings(tmp_path: Path) -> None:
-    sources = [_source(spec, index) for index, spec in enumerate(SOURCE_SPECS)]
-    embedder = FixedEmbedder([_basis(index) for index in range(10)])
+async def test_builds_all_parser_chunks_in_order_with_batched_passage_embeddings(
+    tmp_path: Path,
+) -> None:
+    paths_by_source = [
+        ["제1장", "제1조", "제1조/항①"],
+        ["제2장", "제7조"],
+        ["제1조"],
+    ]
+    sources = [
+        _source(spec, index, paths_by_source[index]) for index, spec in enumerate(SOURCE_SPECS)
+    ]
+    embedder = FixedEmbedder([_basis(index) for index in range(6)])
 
     corpus = await build_corpus(
         sources,
         embedder=embedder,
         generated_at="2026-07-23T07:00:00Z",
+        embedding_batch_size=2,
     )
     path = tmp_path / "corpus.json"
     save_corpus(path, corpus)
     loaded = load_corpus(path)
 
     assert loaded["source_count"] == 3
-    assert loaded["chunk_count"] == 10
+    assert loaded["chunk_count"] == 6
     assert [chunk["path"] for chunk in loaded["chunks"]] == [
-        path for spec in SOURCE_SPECS for path in spec.selected_paths
+        path for paths in paths_by_source for path in paths
     ]
     assert all(len(chunk["embedding"]) == 512 for chunk in loaded["chunks"])
     assert all("redacted" in chunk["source_url"] for chunk in loaded["chunks"])
-    assert embedder.inputs is not None
-    assert embedder.inputs[0].startswith("저작권법\n제2조/호1.")
-    assert "실제 조문" in embedder.inputs[0]
+    assert [len(batch) for batch in embedder.inputs] == [2, 2, 2]
+    assert embedder.inputs[0][0].startswith("저작권법\n제1장")
+    assert "실제 조문" in embedder.inputs[0][0]
 
 
 @pytest.mark.asyncio
 async def test_search_returns_cosine_top_three_in_score_order() -> None:
-    sources = [_source(spec, index) for index, spec in enumerate(SOURCE_SPECS)]
+    paths_by_source = [
+        ["제1장", "제1조", "제1조/항①"],
+        ["제2장", "제7조"],
+        ["제1조"],
+    ]
+    sources = [
+        _source(spec, index, paths_by_source[index]) for index, spec in enumerate(SOURCE_SPECS)
+    ]
     corpus = await build_corpus(
         sources,
-        embedder=FixedEmbedder([_basis(index) for index in range(10)]),
+        embedder=FixedEmbedder([_basis(index) for index in range(6)]),
     )
     query = [0.8, 0.48, 0.36, *([0.0] * 509)]
 
@@ -110,27 +130,55 @@ async def test_search_returns_cosine_top_three_in_score_order() -> None:
         embedder=FixedEmbedder([query]),
     )
 
-    assert result["corpus_chunks"] == 10
+    assert result["corpus_chunks"] == 6
     assert result["top_k"] == 3
     assert [item["rank"] for item in result["results"]] == [1, 2, 3]
     assert [item["path"] for item in result["results"]] == [
-        "제2조/호1.",
-        "제2조/호2.",
-        "제4조/항①/호1.",
+        "제1장",
+        "제1조",
+        "제1조/항①",
     ]
     assert [item["score"] for item in result["results"]] == pytest.approx([0.8, 0.48, 0.36])
 
 
 @pytest.mark.asyncio
-async def test_missing_selected_path_stops_before_embedding() -> None:
-    sources = [_source(spec, index) for index, spec in enumerate(SOURCE_SPECS)]
-    sources[0].document.provisions.pop()
-    embedder = FixedEmbedder([_basis(index) for index in range(10)])
+async def test_empty_parser_result_stops_before_embedding() -> None:
+    sources = [
+        _source(spec, index, [f"제{index + 1}조"]) for index, spec in enumerate(SOURCE_SPECS)
+    ]
+    sources[0].document.provisions.clear()
+    embedder = FixedEmbedder([_basis(index) for index in range(3)])
 
-    with pytest.raises(ValueError, match="선택 조문"):
+    with pytest.raises(ValueError, match="parser returned no chunks"):
         await build_corpus(sources, embedder=embedder)
 
-    assert embedder.inputs is None
+    assert embedder.inputs == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_embedding_batch_size_stops_before_embedding() -> None:
+    sources = [
+        _source(spec, index, [f"제{index + 1}조"]) for index, spec in enumerate(SOURCE_SPECS)
+    ]
+    embedder = FixedEmbedder([_basis(index) for index in range(3)])
+
+    with pytest.raises(ValueError, match="batch size must be positive"):
+        await build_corpus(sources, embedder=embedder, embedding_batch_size=0)
+
+    assert embedder.inputs == []
+
+
+@pytest.mark.asyncio
+async def test_embedder_batch_size_mismatch_is_rejected() -> None:
+    sources = [
+        _source(spec, index, [f"제{index + 1}조"]) for index, spec in enumerate(SOURCE_SPECS)
+    ]
+    embedder = FixedEmbedder([_basis(0)])
+
+    with pytest.raises(ValueError, match="unexpected batch size"):
+        await build_corpus(sources, embedder=embedder, embedding_batch_size=2)
+
+    assert [len(batch) for batch in embedder.inputs] == [2]
 
 
 def test_load_rejects_missing_or_embedding_contract_mismatch(tmp_path: Path) -> None:
@@ -143,13 +191,13 @@ def test_load_rejects_missing_or_embedding_contract_mismatch(tmp_path: Path) -> 
             {
                 "schema_version": 1,
                 "experiment": "C",
-                "chunk_count": 10,
+                "chunk_count": 1,
                 "embedding": {
                     "model": "other/model",
                     "dimensions": 512,
                     "embedding_version": "1",
                 },
-                "chunks": [{} for _ in range(10)],
+                "chunks": [{}],
             }
         ),
         encoding="utf-8",
@@ -177,7 +225,7 @@ async def test_search_rejects_empty_question_before_embedding() -> None:
     with pytest.raises(ValueError, match="question must not be empty"):
         await search_corpus(" ", {"chunks": []}, embedder=embedder)
 
-    assert embedder.inputs is None
+    assert embedder.inputs == []
 
 
 def test_ask_cli_prompts_for_question(

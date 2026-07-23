@@ -27,13 +27,13 @@ PREPARE_COMMAND = "uv run --directory apps/api python -m scripts.experiment_sear
 MODEL = "nvidia/nemotron-3-embed-1b"
 DIMENSIONS = 512
 EMBEDDING_VERSION = "1"
+DEFAULT_EMBEDDING_BATCH_SIZE = 32
 
 
 @dataclass(frozen=True, slots=True)
 class SourceSpec:
     title: str
     user_url: str
-    selected_paths: tuple[str, ...]
     mst: str | None = None
     effective_date: date | None = None
 
@@ -42,25 +42,18 @@ SOURCE_SPECS = (
     SourceSpec(
         title="저작권법",
         user_url=(
-            "https://www.law.go.kr/LSW/LsiJoLinkP.do?"
-            "lsNm=%EC%A0%80%EC%9E%91%EA%B6%8C%EB%B2%95#"
+            "https://www.law.go.kr/LSW/LsiJoLinkP.do?lsNm=%EC%A0%80%EC%9E%91%EA%B6%8C%EB%B2%95#"
         ),
-        selected_paths=("제2조/호1.", "제2조/호2.", "제4조/항①/호1."),
     ),
     SourceSpec(
         title="전기사업법",
         user_url="https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=180380#0000",
-        selected_paths=("제7조/항①", "제8조", "제9조/항①", "제10조/항①"),
         mst="180380",
         effective_date=date(2016, 7, 28),
     ),
     SourceSpec(
         title="신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법",
-        user_url=(
-            "https://www.law.go.kr/법령/"
-            "신에너지및재생에너지개발ㆍ이용ㆍ보급촉진법"
-        ),
-        selected_paths=("제2조/호1.", "제2조/호2.", "제12조/항②"),
+        user_url=("https://www.law.go.kr/법령/신에너지및재생에너지개발ㆍ이용ㆍ보급촉진법"),
     ),
 )
 
@@ -78,11 +71,14 @@ class LoadedSource:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Open API 법령 청크 10개의 로컬 NVIDIA 벡터 검색 실험"
+        description="Open API 법령의 기존 파서 청크 전체를 사용하는 로컬 NVIDIA 벡터 검색 실험"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    prepare = subparsers.add_parser("prepare", help="3개 법령에서 10개 청크를 저장하고 임베딩")
+    prepare = subparsers.add_parser(
+        "prepare", help="3개 법령의 기존 파서 청크 전체를 저장하고 임베딩"
+    )
     prepare.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
+    prepare.add_argument("--batch-size", type=int, default=DEFAULT_EMBEDDING_BATCH_SIZE)
     ask = subparsers.add_parser("ask", help="질문을 임베딩해 로컬 청크 상위 3개 검색")
     ask.add_argument("--question")
     ask.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
@@ -131,16 +127,6 @@ async def _load_source(client: LawOpenApiClient, spec: SourceSpec) -> LoadedSour
     return LoadedSource(spec, parsed.value, parsed.raw)
 
 
-def _selected_provisions(source: LoadedSource) -> list[ProvisionRecord]:
-    by_path = {provision.path: provision for provision in source.document.provisions}
-    missing = [path for path in source.spec.selected_paths if path not in by_path]
-    if missing:
-        raise ValueError(
-            f"선택 조문이 Open API 파서 결과에 없습니다: {source.spec.title} {', '.join(missing)}"
-        )
-    return [by_path[path] for path in source.spec.selected_paths]
-
-
 def _embedding_text(source: LoadedSource, provision: ProvisionRecord) -> str:
     heading = f" ({provision.heading})" if provision.heading else ""
     return f"{source.document.title}\n{provision.path}{heading}\n{provision.content}"
@@ -151,9 +137,7 @@ def _validate_vector(vector: object) -> list[float]:
         not isinstance(vector, list)
         or len(vector) != DIMENSIONS
         or any(
-            isinstance(value, bool)
-            or not isinstance(value, int | float)
-            or not isfinite(value)
+            isinstance(value, bool) or not isinstance(value, int | float) or not isfinite(value)
             for value in vector
         )
     ):
@@ -170,18 +154,26 @@ async def build_corpus(
     *,
     embedder: Embedder,
     generated_at: str | None = None,
+    embedding_batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE,
 ) -> dict[str, object]:
     if len(sources) != len(SOURCE_SPECS):
         raise ValueError("experiment C requires exactly three legal sources")
+    if embedding_batch_size <= 0:
+        raise ValueError("embedding batch size must be positive")
     selected = [
-        (source, provision)
-        for source in sources
-        for provision in _selected_provisions(source)
+        (source, provision) for source in sources for provision in source.document.provisions
     ]
-    if len(selected) != 10:
-        raise ValueError("experiment C requires exactly ten chunks")
+    empty_sources = [source.spec.title for source in sources if not source.document.provisions]
+    if empty_sources:
+        raise ValueError(f"parser returned no chunks: {', '.join(empty_sources)}")
     embedding_texts = [_embedding_text(source, provision) for source, provision in selected]
-    vectors = await embedder.embed(embedding_texts)
+    vectors: list[list[float]] = []
+    for start in range(0, len(embedding_texts), embedding_batch_size):
+        batch = embedding_texts[start : start + embedding_batch_size]
+        batch_vectors = await embedder.embed(batch)
+        if len(batch_vectors) != len(batch):
+            raise ValueError("embedder returned an unexpected batch size")
+        vectors.extend(batch_vectors)
     if len(vectors) != len(selected):
         raise ValueError("embedder returned an unexpected batch size")
 
@@ -192,9 +184,7 @@ async def build_corpus(
         validated_vector = _validate_vector(vector)
         chunks.append(
             {
-                "chunk_id": (
-                    f"{source.document.source_id}:{source.document.mst}:{provision.path}"
-                ),
+                "chunk_id": (f"{source.document.source_id}:{source.document.mst}:{provision.path}"),
                 "ordinal": ordinal,
                 "title": source.document.title,
                 "source_kind": source.document.source_kind.value,
@@ -234,6 +224,7 @@ async def build_corpus(
             "model": MODEL,
             "dimensions": DIMENSIONS,
             "embedding_version": EMBEDDING_VERSION,
+            "batch_size": embedding_batch_size,
             "document_input_type": "passage",
             "query_input_type": "query",
             "similarity": "cosine",
@@ -273,9 +264,11 @@ def load_corpus(path: Path) -> dict[str, object]:
         not isinstance(corpus, dict)
         or corpus.get("schema_version") != 1
         or corpus.get("experiment") != "C"
-        or corpus.get("chunk_count") != 10
         or not isinstance(corpus.get("chunks"), list)
-        or len(corpus["chunks"]) != 10
+        or isinstance(corpus.get("chunk_count"), bool)
+        or not isinstance(corpus.get("chunk_count"), int)
+        or corpus["chunk_count"] <= 0
+        or len(corpus["chunks"]) != corpus["chunk_count"]
     ):
         raise ValueError("invalid experiment C corpus metadata")
     embedding = corpus.get("embedding")
@@ -300,9 +293,7 @@ def _cosine(left: list[float], right: list[float]) -> float:
     norm_right = sqrt(fsum(value * value for value in right))
     if norm_left == 0 or norm_right == 0:
         raise ValueError("cosine similarity requires non-zero vectors")
-    score = fsum(a * b for a, b in zip(left, right, strict=True)) / (
-        norm_left * norm_right
-    )
+    score = fsum(a * b for a, b in zip(left, right, strict=True)) / (norm_left * norm_right)
     if not isfinite(score):
         raise ValueError("cosine similarity must be finite")
     return min(1.0, max(-1.0, score))
@@ -384,7 +375,7 @@ def _query_embedder(settings: Settings) -> NvidiaNimEmbedder:
     )
 
 
-async def _prepare(path: Path) -> dict[str, object]:
+async def _prepare(path: Path, *, embedding_batch_size: int) -> dict[str, object]:
     collector_settings, api_settings = _settings()
     if not collector_settings.law_open_api_oc:
         raise RuntimeError("law_open_api_oc_missing")
@@ -394,10 +385,12 @@ async def _prepare(path: Path) -> dict[str, object]:
         timeout=collector_settings.collector_request_timeout_seconds,
     ) as client:
         sources = [await _load_source(client, spec) for spec in SOURCE_SPECS]
-    corpus = await build_corpus(sources, embedder=_passage_embedder(api_settings))
+    corpus = await build_corpus(
+        sources,
+        embedder=_passage_embedder(api_settings),
+        embedding_batch_size=embedding_batch_size,
+    )
     save_corpus(path, corpus)
-    chunks = corpus["chunks"]
-    assert isinstance(chunks, list)
     return {
         "status": "ready",
         "experiment": "C",
@@ -406,17 +399,18 @@ async def _prepare(path: Path) -> dict[str, object]:
         "chunk_count": corpus["chunk_count"],
         "model": MODEL,
         "dimensions": DIMENSIONS,
-        "chunks": [
+        "sources": [
             {
-                "ordinal": chunk["ordinal"],
-                "title": chunk["title"],
-                "mst": chunk["mst"],
-                "effective_from": chunk["effective_from"],
-                "path": chunk["path"],
-                "heading": chunk["heading"],
+                "title": source.document.title,
+                "mst": source.document.mst,
+                "effective_from": (
+                    source.document.effective_from.isoformat()
+                    if source.document.effective_from
+                    else None
+                ),
+                "chunk_count": len(source.document.provisions),
             }
-            for chunk in chunks
-            if isinstance(chunk, dict)
+            for source in sources
         ],
     }
 
@@ -439,7 +433,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "prepare":
-            result = asyncio.run(_prepare(args.corpus))
+            result = asyncio.run(_prepare(args.corpus, embedding_batch_size=args.batch_size))
         else:
             question = args.question if args.question is not None else input("질문> ")
             result = asyncio.run(_ask(args.corpus, question))
@@ -451,7 +445,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     except FileNotFoundError:
         print(_safe_error("corpus_missing"), file=sys.stderr)
         return 2
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         print(_safe_error("question_cancelled"), file=sys.stderr)
         return 130
     except Exception:
