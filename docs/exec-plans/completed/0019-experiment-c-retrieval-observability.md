@@ -1,8 +1,10 @@
 # 실행 계획 0019: 실험 C — 검색 후보 관찰·기록·평가
 
-상태: 진행 중
+상태: 완료
 
 작성일: 2026-07-23
+
+완료일: 2026-07-23
 
 소유자: 주 에이전트
 
@@ -50,16 +52,17 @@ JSON 이력에 기록한다. 고정 질문셋으로 기대 법률·조문의 순
 - [x] M3 — ask 자동 결과 기록 구현·테스트·커밋
 - [x] M4 — 고정 평가셋·평가 명령·실제 결과 구현·실행·커밋
 - [x] M5 — 키워드 결합 보류 설계, 실험 D 계획·README, 학습 문서
-- [ ] M6 — 전체 검증, 완료 기록과 계획 이동
+- [x] M6 — 전체 검증, 완료 기록과 계획 이동
 
 ## 검증과 롤백
 
-```powershell
-uv run --directory apps/api python -m pytest tests/test_search_experiment.py -q
-uv run --directory apps/api ruff check scripts/experiment_search.py tests/test_search_experiment.py
-uv run python scripts/check_docs.py
-pnpm.cmd verify
-```
+실행 결과:
+
+- `test_search_experiment.py`: 19 passed
+- Ruff: passed
+- 문서 검사: 104 files passed
+- `pnpm.cmd verify`: core 4 passed, API 244 passed·2 skipped, collector 34 passed,
+  web 46 passed, lint·typecheck·Next.js build passed
 
 실험 출력은 `.data/experiments/search/`에만 쌓고 production 상태를 변경하지 않는다. 각 기록 파일은
 모두 준비된 뒤 원자 교체하며 실패하면 기존 성공 이력을 유지한다. 롤백은 실험 C CLI·테스트·문서와
@@ -90,9 +93,19 @@ pnpm.cmd verify
   확인했다. 태양광 질문은 신재생에너지법 제2조가 raw·조 모두 1위였다.
 - 2026-07-23: 키워드 결합은 RRF 후속 비교안으로 문서화하되 구현하지 않았다. 후보를 근거 1~5개로
   줄이는 일은 실험 D 계획 0020으로 분리했다.
+- 2026-07-23: 전체 저장소 검증이 통과해 계획을 completed로 이동했다.
+
+## 결과와 잔여 작업
+
+실험 C는 후보 관찰, 실제 실행 기록, 고정 평가가 가능한 dense-only 기준선이 됐다. top 5는 top 3보다
+고정 평가 recall을 높이지 못했고 top 10에서 누락 조문을 복구했다. 다만 후보 10개 전체를 답변 문맥으로
+쓰지 않는다. 직접 근거 1~5개 선택과 근거 부족 판정은 활성 계획 0020의 실험 D에서 구현한다.
+
+키워드 결합은 구현하지 않았다. 후속 비교안은 로컬 lexical 검색과 dense 검색의 RRF 결합이며, 현재
+평가셋에서 Recall@3과 MRR을 개선하는지 확인한 뒤 채택한다.
 
 ## 미결정 사항과 차단 요소
 
 - 키워드 결합의 tokenizer와 RRF 상수는 후속 비교 평가에서 결정한다.
 - 실험 D의 직접 관련성 판정 방식은 계획 0020의 M1에서 비교한다.
-- 현재 구현 차단 요소는 없다.
+- 완료 시점의 차단 요소는 없다.
