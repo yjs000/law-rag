@@ -30,8 +30,16 @@ DEFAULT_SEARCH_RUNS_DATA = REPOSITORY_ROOT / ".data" / "experiments" / "search" 
 DEFAULT_SEARCH_RUNS_REPORT = (
     REPOSITORY_ROOT / ".data" / "experiments" / "search" / "search-results.md"
 )
+DEFAULT_EVALUATION_QUESTIONS = (
+    REPOSITORY_ROOT / "experiments" / "search" / "evaluation-questions.json"
+)
+DEFAULT_EVALUATION_JSON = REPOSITORY_ROOT / ".data" / "experiments" / "search" / "evaluation.json"
+DEFAULT_EVALUATION_REPORT = (
+    REPOSITORY_ROOT / "docs" / "generated" / "experiment-c-retrieval-evaluation.md"
+)
 PREPARE_COMMAND = "uv run --directory apps/api python -m scripts.experiment_search prepare"
 ASK_COMMAND = "uv run --directory apps/api python -m scripts.experiment_search ask"
+EVALUATE_COMMAND = "uv run --directory apps/api python -m scripts.experiment_search evaluate"
 MODEL = "nvidia/nemotron-3-embed-1b"
 DIMENSIONS = 512
 EMBEDDING_VERSION = "1"
@@ -106,6 +114,12 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("--results-data", type=Path, default=DEFAULT_SEARCH_RUNS_DATA)
     ask.add_argument("--results-report", type=Path, default=DEFAULT_SEARCH_RUNS_REPORT)
     ask.add_argument("--no-record", action="store_true")
+    evaluate = subparsers.add_parser("evaluate", help="고정 질문셋의 dense 검색 순위 평가")
+    evaluate.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
+    evaluate.add_argument("--questions", type=Path, default=DEFAULT_EVALUATION_QUESTIONS)
+    evaluate.add_argument("--candidate-k", type=int, default=DEFAULT_CANDIDATE_K)
+    evaluate.add_argument("--json-output", type=Path, default=DEFAULT_EVALUATION_JSON)
+    evaluate.add_argument("--report", type=Path, default=DEFAULT_EVALUATION_REPORT)
     return parser
 
 
@@ -760,6 +774,252 @@ async def search_corpus(
     }
 
 
+def _load_evaluation_cases(path: Path) -> list[dict[str, str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError("experiment C evaluation questions are missing") from exc
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid experiment C evaluation questions") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 1
+        or payload.get("experiment") != "C"
+        or not isinstance(payload.get("cases"), list)
+        or not payload["cases"]
+    ):
+        raise ValueError("invalid experiment C evaluation questions")
+    cases: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for case in payload["cases"]:
+        if not isinstance(case, dict):
+            raise ValueError("invalid experiment C evaluation questions")
+        normalized: dict[str, str] = {}
+        for key in (
+            "id",
+            "question",
+            "scope",
+            "expected_title",
+            "expected_article_path",
+        ):
+            value = case.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("invalid experiment C evaluation questions")
+            normalized[key] = value.strip()
+        if normalized["scope"] not in {"in_scope", "out_of_scope"}:
+            raise ValueError("invalid experiment C evaluation questions")
+        if normalized["id"] in seen_ids:
+            raise ValueError("duplicate experiment C evaluation case id")
+        seen_ids.add(normalized["id"])
+        cases.append(normalized)
+    return cases
+
+
+def _expected_article_rank(candidates: object, *, title: str, article_path: str) -> int | None:
+    if not isinstance(candidates, list):
+        return None
+    for candidate in candidates:
+        if (
+            isinstance(candidate, dict)
+            and candidate.get("title") == title
+            and candidate.get("article_path") == article_path
+            and isinstance(candidate.get("rank"), int)
+        ):
+            return int(candidate["rank"])
+    return None
+
+
+def _expected_raw_rank(candidates: object, *, title: str, article_path: str) -> int | None:
+    if not isinstance(candidates, list):
+        return None
+    for candidate in candidates:
+        if not isinstance(candidate, dict) or candidate.get("title") != title:
+            continue
+        article = _article_root(str(candidate.get("path", "")))
+        if (
+            article is not None
+            and article[0] == article_path
+            and isinstance(candidate.get("rank"), int)
+        ):
+            return int(candidate["rank"])
+    return None
+
+
+async def evaluate_cases(
+    cases: list[dict[str, str]],
+    corpus: dict[str, object],
+    *,
+    embedder: Embedder,
+    candidate_k: int = DEFAULT_CANDIDATE_K,
+    generated_at: str | None = None,
+    corpus_sha256: str = "test-corpus",
+) -> dict[str, object]:
+    if not DEFAULT_CANDIDATE_K <= candidate_k <= MAX_CANDIDATE_K:
+        raise ValueError(
+            f"evaluation candidate_k must be between {DEFAULT_CANDIDATE_K} and {MAX_CANDIDATE_K}"
+        )
+    evaluated: list[dict[str, object]] = []
+    in_scope_ranks: list[int | None] = []
+    law_at_one_count = 0
+    chunks = corpus.get("chunks")
+    if not isinstance(chunks, list):
+        raise ValueError("invalid experiment C corpus chunks")
+    for case in cases:
+        search = await search_corpus(
+            case["question"],
+            corpus,
+            embedder=embedder,
+            candidate_k=candidate_k,
+        )
+        article_candidates = search["article_candidates"]
+        raw_candidates = search["raw_chunk_candidates"]
+        article_rank = _expected_article_rank(
+            article_candidates,
+            title=case["expected_title"],
+            article_path=case["expected_article_path"],
+        )
+        raw_rank = _expected_raw_rank(
+            raw_candidates,
+            title=case["expected_title"],
+            article_path=case["expected_article_path"],
+        )
+        law_at_one = bool(
+            isinstance(article_candidates, list)
+            and article_candidates
+            and isinstance(article_candidates[0], dict)
+            and article_candidates[0].get("title") == case["expected_title"]
+        )
+        expected_present_in_corpus = any(
+            isinstance(chunk, dict)
+            and chunk.get("title") == case["expected_title"]
+            and (article := _article_root(str(chunk.get("path", "")))) is not None
+            and article[0] == case["expected_article_path"]
+            for chunk in chunks
+        )
+        if case["scope"] == "in_scope":
+            in_scope_ranks.append(article_rank)
+            law_at_one_count += int(law_at_one)
+        evaluated.append(
+            {
+                **case,
+                "law_at_1": law_at_one,
+                "article_rank": article_rank,
+                "raw_chunk_rank": raw_rank,
+                "expected_present_in_corpus": expected_present_in_corpus,
+                "search": search,
+            }
+        )
+
+    in_scope_count = len(in_scope_ranks)
+    if in_scope_count == 0:
+        raise ValueError("evaluation requires at least one in-scope case")
+    metrics = {
+        "in_scope_cases": in_scope_count,
+        "law_at_1": law_at_one_count / in_scope_count,
+        "article_recall_at_3": sum(rank is not None and rank <= 3 for rank in in_scope_ranks)
+        / in_scope_count,
+        "article_recall_at_5": sum(rank is not None and rank <= 5 for rank in in_scope_ranks)
+        / in_scope_count,
+        "article_recall_at_10": sum(rank is not None and rank <= 10 for rank in in_scope_ranks)
+        / in_scope_count,
+        "article_mrr": sum(0.0 if rank is None else 1.0 / rank for rank in in_scope_ranks)
+        / in_scope_count,
+    }
+    return {
+        "schema_version": 1,
+        "experiment": "C",
+        "evaluation": "dense_article_retrieval",
+        "generated_at": generated_at
+        or datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "corpus_sha256": corpus_sha256,
+        "provider": "nvidia_nim",
+        "model": MODEL,
+        "candidate_k": candidate_k,
+        "metrics": metrics,
+        "cases": evaluated,
+    }
+
+
+def _render_evaluation_report(result: dict[str, object]) -> str:
+    metrics = result["metrics"]
+    cases = result["cases"]
+    assert isinstance(metrics, dict)
+    assert isinstance(cases, list)
+    lines = [
+        "# 실험 C — Dense 조 단위 검색 평가",
+        "",
+        f"> 생성 명령: `{EVALUATE_COMMAND}`",
+        f"> 기준 시점: `{result['generated_at']}`",
+        f"> corpus SHA-256: `{result['corpus_sha256']}`",
+        f"> 모델: `{result['model']}`",
+        f"> candidate k: `{result['candidate_k']}`",
+        "",
+        "이 문서는 키워드 결합이나 reranker가 없는 dense-only 기준선의 실제 실행 결과다.",
+        "",
+        "## 지표",
+        "",
+        f"- Law@1: `{metrics['law_at_1']}`",
+        f"- Article Recall@3: `{metrics['article_recall_at_3']}`",
+        f"- Article Recall@5: `{metrics['article_recall_at_5']}`",
+        f"- Article Recall@10: `{metrics['article_recall_at_10']}`",
+        f"- Article MRR: `{metrics['article_mrr']}`",
+        "",
+        "## 질문별 결과",
+        "",
+        "| ID | 범위 | 기대 법률·조 | Law@1 | 조 rank | raw rank |",
+        "| --- | --- | --- | --- | ---: | ---: |",
+    ]
+    for case in cases:
+        assert isinstance(case, dict)
+        lines.append(
+            f"| {case['id']} | {case['scope']} | "
+            f"{case['expected_title']} {case['expected_article_path']} | "
+            f"{case['law_at_1']} | {case['article_rank'] or '-'} | "
+            f"{case['raw_chunk_rank'] or '-'} |"
+        )
+    lines.extend(["", "## 실제 후보", ""])
+    for case in cases:
+        assert isinstance(case, dict)
+        search = case["search"]
+        assert isinstance(search, dict)
+        lines.extend(
+            [
+                f"### {case['id']}",
+                "",
+                f"질문: {case['question']}",
+                "",
+            ]
+        )
+        article_candidates = search["article_candidates"]
+        assert isinstance(article_candidates, list)
+        for candidate in article_candidates:
+            assert isinstance(candidate, dict)
+            best = candidate["best_chunk"]
+            assert isinstance(best, dict)
+            lines.extend(
+                [
+                    f"#### {candidate['rank']}. {candidate['title']} "
+                    f"{candidate['article_path']} — {candidate['score']}",
+                    "",
+                    f"최고 청크: `{best['path']}`",
+                    "",
+                    "```text",
+                    str(best["content"]),
+                    "```",
+                    "",
+                ]
+            )
+    return "\n".join(lines)
+
+
+def save_evaluation_result(
+    result: dict[str, object], *, json_path: Path, report_path: Path
+) -> None:
+    json_output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    report = _render_evaluation_report(result)
+    _atomic_write_many([(json_path, json_output), (report_path, report)])
+
+
 def _passage_embedder(settings: Settings) -> NvidiaNimEmbedder:
     if not settings.nvidia_api_key:
         raise RuntimeError("nvidia_api_key_missing")
@@ -829,6 +1089,38 @@ async def _ask(path: Path, question: str, *, candidate_k: int) -> dict[str, obje
     )
 
 
+async def _evaluate(
+    path: Path,
+    questions_path: Path,
+    *,
+    candidate_k: int,
+    json_path: Path,
+    report_path: Path,
+) -> dict[str, object]:
+    _, api_settings = _settings()
+    corpus = load_corpus(path)
+    cases = _load_evaluation_cases(questions_path)
+    try:
+        corpus_bytes = await asyncio.to_thread(path.read_bytes)
+        corpus_sha256 = hashlib.sha256(corpus_bytes).hexdigest()
+    except OSError as exc:
+        raise ValueError("experiment C corpus could not be hashed") from exc
+    result = await evaluate_cases(
+        cases,
+        corpus,
+        embedder=_query_embedder(api_settings),
+        candidate_k=candidate_k,
+        corpus_sha256=corpus_sha256,
+    )
+    result["questions_path"] = _display_path(questions_path)
+    result["outputs"] = {
+        "json": _display_path(json_path),
+        "report": _display_path(report_path),
+    }
+    save_evaluation_result(result, json_path=json_path, report_path=report_path)
+    return result
+
+
 def _safe_error(code: str) -> str:
     return json.dumps(
         {"status": "error", "code": code, "message": "실험 C를 실행하지 못했습니다"},
@@ -843,7 +1135,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         if args.command == "prepare":
             result = asyncio.run(_prepare(args.corpus, embedding_batch_size=args.batch_size))
             stdout = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
-        else:
+        elif args.command == "ask":
             question = args.question if args.question is not None else input("질문> ")
             result = asyncio.run(_ask(args.corpus, question, candidate_k=args.candidate_k))
             stdout = (
@@ -856,6 +1148,17 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
                     report_path=args.results_report,
                 )
             )
+        else:
+            result = asyncio.run(
+                _evaluate(
+                    args.corpus,
+                    args.questions,
+                    candidate_k=args.candidate_k,
+                    json_path=args.json_output,
+                    report_path=args.report,
+                )
+            )
+            stdout = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     except ResultRecordingError:
         print(_safe_error("result_recording_failed"), file=sys.stderr)
         return 2

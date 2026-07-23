@@ -10,15 +10,19 @@ from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
 
 import scripts.experiment_search as search_module
 from scripts.experiment_search import (
+    DEFAULT_EVALUATION_QUESTIONS,
     DIMENSIONS,
     SOURCE_SPECS,
     LoadedSource,
     SourceSpec,
     _exact_record,
+    _load_evaluation_cases,
     build_corpus,
+    evaluate_cases,
     load_corpus,
     run_cli,
     save_corpus,
+    save_evaluation_result,
     search_corpus,
 )
 
@@ -290,6 +294,149 @@ def test_load_rejects_missing_or_embedding_contract_mismatch(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="embedding contract mismatch"):
         load_corpus(path)
+
+
+@pytest.mark.asyncio
+async def test_fixed_evaluation_measures_article_recall_and_out_of_scope() -> None:
+    sources, expected_paths = _selected_sources()
+    corpus = await build_corpus(
+        sources,
+        embedder=FixedEmbedder([_basis(index) for index in range(len(expected_paths))]),
+    )
+    cases = [
+        {
+            "id": "first",
+            "question": "첫 조",
+            "scope": "in_scope",
+            "expected_title": "저작권법",
+            "expected_article_path": "제1조",
+        },
+        {
+            "id": "second",
+            "question": "둘째 조",
+            "scope": "in_scope",
+            "expected_title": "저작권법",
+            "expected_article_path": "제2조",
+        },
+        {
+            "id": "excluded",
+            "question": "범위 밖",
+            "scope": "out_of_scope",
+            "expected_title": "전기사업법",
+            "expected_article_path": "제7조",
+        },
+    ]
+
+    result = await evaluate_cases(
+        cases,
+        corpus,
+        embedder=FixedEmbedder([_basis(0), _basis(2), _basis(0)]),
+        candidate_k=10,
+        generated_at="2026-07-23T10:00:00Z",
+    )
+
+    assert result["metrics"] == {
+        "in_scope_cases": 2,
+        "law_at_1": 1.0,
+        "article_recall_at_3": 1.0,
+        "article_recall_at_5": 1.0,
+        "article_recall_at_10": 1.0,
+        "article_mrr": 1.0,
+    }
+    assert result["cases"][2]["expected_present_in_corpus"] is False
+    assert result["cases"][2]["article_rank"] is None
+
+
+def test_fixed_evaluation_questions_and_outputs_are_machine_readable(tmp_path: Path) -> None:
+    cases = _load_evaluation_cases(DEFAULT_EVALUATION_QUESTIONS)
+    assert len(cases) == 6
+    assert {case["scope"] for case in cases} == {"in_scope", "out_of_scope"}
+
+    result = {
+        "generated_at": "2026-07-23T10:00:00Z",
+        "corpus_sha256": "sha",
+        "model": "model",
+        "candidate_k": 10,
+        "metrics": {
+            "law_at_1": 1.0,
+            "article_recall_at_3": 1.0,
+            "article_recall_at_5": 1.0,
+            "article_recall_at_10": 1.0,
+            "article_mrr": 1.0,
+        },
+        "cases": [
+            {
+                **cases[0],
+                "law_at_1": True,
+                "article_rank": 1,
+                "raw_chunk_rank": 1,
+                "search": {
+                    "article_candidates": [
+                        {
+                            "rank": 1,
+                            "title": cases[0]["expected_title"],
+                            "article_path": cases[0]["expected_article_path"],
+                            "score": 0.8,
+                            "best_chunk": {"path": "제2조/호2.", "content": "태양에너지"},
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    json_path = tmp_path / "evaluation.json"
+    report_path = tmp_path / "evaluation.md"
+
+    save_evaluation_result(result, json_path=json_path, report_path=report_path)
+
+    assert json.loads(json_path.read_text(encoding="utf-8"))["metrics"]["law_at_1"] == 1.0
+    report = report_path.read_text(encoding="utf-8")
+    assert "Dense 조 단위 검색 평가" in report
+    assert "태양에너지" in report
+
+
+def test_evaluate_cli_uses_fixed_questions_and_prints_actual_result(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    async def fake_evaluate(
+        path: Path,
+        questions_path: Path,
+        *,
+        candidate_k: int,
+        json_path: Path,
+        report_path: Path,
+    ) -> dict[str, object]:
+        assert path == tmp_path / "corpus.json"
+        assert questions_path == tmp_path / "questions.json"
+        assert candidate_k == 10
+        assert json_path == tmp_path / "evaluation.json"
+        assert report_path == tmp_path / "evaluation.md"
+        return {"experiment": "C", "evaluation": "dense_article_retrieval"}
+
+    monkeypatch.setattr(search_module, "_evaluate", fake_evaluate)
+
+    assert (
+        run_cli(
+            [
+                "evaluate",
+                "--corpus",
+                str(tmp_path / "corpus.json"),
+                "--questions",
+                str(tmp_path / "questions.json"),
+                "--json-output",
+                str(tmp_path / "evaluation.json"),
+                "--report",
+                str(tmp_path / "evaluation.md"),
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "experiment": "C",
+        "evaluation": "dense_article_retrieval",
+    }
 
 
 def test_historical_source_requires_the_requested_mst() -> None:
