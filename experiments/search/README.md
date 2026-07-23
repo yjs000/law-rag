@@ -1,24 +1,22 @@
-# 실험 C — 지정 장·조 범위 NVIDIA 벡터 검색
+# 실험 C — Dense 검색 후보 관찰
 
-국가법령정보 공동활용 Open API에서 받은 원문을 기존 파서로 처리한 뒤, 사용자가 지정한 장·조 범위에
-속하는 기존 청크만 `NvidiaNimEmbedder`의 `passage` 모드로 임베딩해 로컬 JSON에 저장한다. 질문은
-같은 모델의 `query` 모드로 임베딩하고 저장 청크 전체의 코사인 유사도 상위 3개를 출력한다.
+지정 장·조 범위의 기존 청크 205개와 NVIDIA query embedding의 코사인 유사도를 전수 계산한다. 검색
+후보를 AI 답변 문맥으로 확정하지 않고, raw 청크 순위와 조 단위 그룹 순위를 함께 관찰·기록한다.
 
-## 데이터 범위
+## corpus 범위
 
-| 법령 | 버전 | 저장 범위 | 실제 청크 수 |
+| 법령 | 버전 | 저장 범위 | 청크 수 |
 | --- | --- | --- | ---: |
 | 저작권법 | 현행 MST `283335`, 시행 2026-05-11 | 제1장, 제5장 | 74 |
 | 전기사업법 | 과거 MST `180380`, 시행 2016-07-28 | 제1장, 제6장 | 94 |
 | 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 | 현행 MST `268793`, 시행 2026-02-01 | 제1조부터 제5조 | 37 |
 
-장 범위는 해당 장 표제가 붙은 첫 조부터 다음 장 표제가 붙은 조 직전까지다. `제5장의2`처럼 별도
-가지 장은 `제5장`에 포함하지 않는다. 조 범위는 제1조부터 제5조 사이의 `제2조의2` 같은 가지조문을
-포함한다. 선택된 조의 항·호·목 청크는 모두 보존하며 청크를 다시 합치거나 나누지 않는다.
+선택된 조의 항·호·목은 모두 보존한다. `제5장의2`는 제5장에 포함하지 않고, 제1조~제5조 범위의
+`제2조의2` 같은 가지조문은 포함한다.
 
-## 필요한 환경변수
+## 환경변수와 준비
 
-비밀값은 저장소에 커밋하지 않고 루트 또는 앱별 `.env.local`에 둔다.
+비밀값은 루트 또는 앱별 `.env.local`에 둔다.
 
 ```dotenv
 LAW_OPEN_API_OC=<국가법령정보 공동활용 Open API OC>
@@ -28,46 +26,71 @@ NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b
 EMBEDDING_DIMENSIONS=512
 ```
 
-## 데이터 준비와 저장
-
 ```powershell
 uv run --directory apps/api python -m scripts.experiment_search prepare
 ```
 
-성공하면 `.data/experiments/search/corpus.json`이 총 205개 청크의 새 corpus로 원자 교체된다. 이 파일은 Git에서
-제외된 현재 PC의 로컬 파일이다. 기존에 저장돼 있던 범위 밖 2,006개 corpus는 새 파일로 교체되므로
-남지 않는다. 터미널에는 전체·법령별 청크 수와 실제 선택 범위를 출력한다.
+성공하면 Git에서 제외되는 `.data/experiments/search/corpus.json`이 원자 교체된다. 모든 원문 수집,
+범위 검증, passage embedding과 512차원 벡터 검증이 끝나기 전에는 기존 corpus를 덮어쓰지 않는다.
 
-임베딩 요청은 기본 32청크씩 나눈다. 모든 원문 수집, 범위 검증, embedding과 벡터 검증이 성공한 뒤에만
-파일을 교체한다. 요청 하나라도 실패하거나 지정 장·조를 찾지 못하면 기존 corpus를 유지한다.
-
-각 청크에는 법령명, source ID, MST, 시행일, 원문 SHA-256, parser version, path, parent path, 원문,
-실제 passage 입력과 512차원 벡터가 저장된다. corpus의 `selection`에는 법령별 지정 범위와 실제 포함된
-조 경로가 기록된다.
-
-## 질문과 상위 3개 출력
-
-```powershell
-uv run --directory apps/api python -m scripts.experiment_search ask
-질문> 전기위원회는 무엇을 심의하나?
-```
+## 질문, 후보 10개와 자동 기록
 
 ```powershell
 uv run --directory apps/api python -m scripts.experiment_search ask `
-  --question "저작권법의 목적은 무엇인가?"
+  --question "태양광 발전에 사용하는 태양에너지는 신에너지와 재생에너지 중 어디에 해당하나요?"
 ```
 
-출력 JSON에는 질문, provider/model, corpus 청크 수, `top_k=3`, score 종류와 `rank`, `score`, 법령명,
-MST, 시행일, path, heading, content가 포함된다. 질문과 검색 결과는 파일에 저장하지 않으며, 질문할 때
-query embedding만 새로 만든다.
+기본 `candidate_k=10`이며 `--candidate-k 20`처럼 1~50 사이에서 바꿀 수 있다. 출력은 두 목록이다.
 
-## 점수와 실패 동작
+- `raw_chunk_candidates`: 개별 조·항·호·목 청크의 cosine 상위 K
+- `article_candidates`: 같은 조의 모든 청크를 묶고 최고 하위청크 cosine을 조 점수로 사용한 상위 K
 
-`score`는 코사인 유사도이며 확률·정답률·법률적 동일성 점수가 아니다. 검색 대상은 위 지정 범위로
-제한된다. 범위 밖 조문을 묻더라도 이 corpus에서는 찾을 수 없다.
+조 후보에는 조 전체 청크 수, 최고 청크와 점수가 높은 하위청크 3개가 들어간다. 이는 dense-only
+관찰 후보이며 AI에 전달할 최종 근거가 아니다.
 
-- corpus가 없으면 `corpus_missing`과 종료 코드 `2`
-- Open API OC 또는 NVIDIA key가 없으면 해당 설정 누락 코드와 종료 코드 `2`
-- 지정 장·조 누락, Open API·NVIDIA·스키마·차원 검증 실패는 `experiment_c_failed`와 종료 코드 `2`
-- provider 오류 전문, API key와 Authorization header는 출력하거나 저장하지 않음
-- 다른 임베딩 모델, 영벡터 또는 비슷한 다른 장·조로 자동 대체하지 않음
+성공한 `ask`는 실험 A와 같은 성공 후 원자 기록 원칙으로 다음 파일을 자동 생성·갱신한다.
+
+- `.data/experiments/search/search-runs.json`: 실행 번호, corpus/stdout SHA-256과 실제 stdout 전체
+- `.data/experiments/search/search-results.md`: 실행 비교표와 실행별 실제 stdout 전체
+
+두 파일은 질문 원문을 포함하므로 로컬 `.data`에만 두고 Git에 넣지 않는다. 기록을 원하지 않는 단일
+실행만 `--no-record`를 사용한다. 검색 성공 후 기록이 실패하면 `result_recording_failed`와 종료 코드
+`2`를 반환하고 이전 성공 이력을 보존한다.
+
+## 고정 평가
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_search evaluate
+```
+
+[고정 질문셋](evaluation-questions.json)의 기대 법률·조문을 기준으로 다음을 계산한다.
+
+- Law@1
+- Article Recall@3, Recall@5, Recall@10
+- Article MRR
+- 기대 조문의 raw 청크 rank와 조 단위 rank
+- 범위 밖 기대 조문이 corpus에 실제로 없는지
+
+기계 판독 결과는 `.data/experiments/search/evaluation.json`, 사람이 읽는 대표 결과는
+[실제 dense 검색 평가](../../docs/generated/experiment-c-retrieval-evaluation.md)에 원자 생성된다.
+
+2026-07-23 실제 기준선은 Law@1 `1.0`, Recall@3 `0.8`, Recall@5 `0.8`, Recall@10 `1.0`, MRR
+`0.82`였다. 따라서 top 3을 top 5로만 늘려서는 이 질문셋의 누락이 줄지 않았고 관찰 후보 10개가
+필요했다.
+
+## 현재 하지 않는 것
+
+- 키워드·BM25·PGroonga·RRF 결합: [보류 설계](../../docs/design-docs/experiment-c-keyword-retrieval-options.md)
+- 후보 중 AI 문맥 1~5개 선정, 중복 제거와 근거 부족 판정: [실험 D](../context/README.md)
+- 생성 AI 답변, production DB·검색 변경
+
+`score`는 코사인 유사도이며 정답 확률이 아니다. 후보 1위여도 실제 `content`가 질문을 뒷받침하는지
+직접 확인해야 한다.
+
+## 실패 동작
+
+- corpus 없음: `corpus_missing`, 종료 코드 `2`
+- Open API OC 또는 NVIDIA key 없음: 해당 설정 누락 코드, 종료 코드 `2`
+- 지정 범위·모델·차원·평가셋 검증 실패: `experiment_c_failed`, 종료 코드 `2`
+- 기록 실패: `result_recording_failed`, 종료 코드 `2`
+- provider 오류 전문, API key와 Authorization header는 출력·저장하지 않음

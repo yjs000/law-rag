@@ -38,7 +38,7 @@ Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collecto
 [실험 B 실행 안내](experiments/embeddings/README.md)를 참고한다. 성공한 터미널 JSON은
 `docs/generated/`의 실제 결과 문서에 기록되어 반복 실행 차이를 비교할 수 있다.
 
-Open API 세 법령의 지정 장·조 청크를 로컬에 저장하고 질문의 cosine 상위 3개를 확인하는 방법은
+Open API 세 법령의 지정 장·조 청크를 로컬에 저장하고 raw 청크·조 단위 후보 10개와 고정 평가를 확인하는 방법은
 [실험 C 실행 안내](experiments/search/README.md)를 참고한다.
 
 ## 문서 시작점
