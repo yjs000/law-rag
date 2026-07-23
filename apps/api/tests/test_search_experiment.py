@@ -344,8 +344,101 @@ def test_ask_cli_prompts_for_question(
     monkeypatch.setattr("builtins.input", lambda _prompt: "저작물이란?")
     monkeypatch.setattr(search_module, "_ask", fake_ask)
 
-    assert run_cli(["ask", "--corpus", str(tmp_path / "corpus.json")]) == 0
+    assert run_cli(["ask", "--corpus", str(tmp_path / "corpus.json"), "--no-record"]) == 0
     assert json.loads(capsys.readouterr().out)["experiment"] == "C"
+
+
+def test_ask_cli_records_exact_stdout_and_appends_local_history(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    corpus = tmp_path / "corpus.json"
+    corpus.write_text('{"corpus":"fixture"}', encoding="utf-8")
+    data = tmp_path / "runs.json"
+    report = tmp_path / "results.md"
+
+    async def fake_ask(_path: Path, question: str, *, candidate_k: int) -> dict[str, object]:
+        return {
+            "experiment": "C",
+            "question": question,
+            "candidate_k": candidate_k,
+            "raw_chunk_candidates": [{"title": "신재생에너지법", "path": "제2조/호2."}],
+            "article_candidates": [{"title": "신재생에너지법", "article_path": "제2조"}],
+        }
+
+    monkeypatch.setattr(search_module, "_ask", fake_ask)
+    argv = [
+        "ask",
+        "--question",
+        "태양광은 재생에너지인가?",
+        "--candidate-k",
+        "10",
+        "--corpus",
+        str(corpus),
+        "--results-data",
+        str(data),
+        "--results-report",
+        str(report),
+    ]
+
+    assert run_cli(argv) == 0
+    first_stdout = capsys.readouterr().out
+    assert run_cli(argv) == 0
+    second_stdout = capsys.readouterr().out
+
+    history = json.loads(data.read_text(encoding="utf-8"))
+    assert [run["run"] for run in history["runs"]] == [1, 2]
+    assert history["runs"][0]["stdout"] == first_stdout
+    assert history["runs"][1]["stdout"] == second_stdout
+    assert json.loads(first_stdout)["recording"]["run"] == 1
+    assert json.loads(second_stdout)["recording"]["run"] == 2
+    markdown = report.read_text(encoding="utf-8")
+    assert "실행 1" in markdown
+    assert "실행 2" in markdown
+    assert first_stdout.rstrip("\n") in markdown
+    assert second_stdout.rstrip("\n") in markdown
+
+
+def test_recording_failure_returns_safe_error_without_overwriting_history(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    corpus = tmp_path / "corpus.json"
+    corpus.write_text("{}", encoding="utf-8")
+    data = tmp_path / "runs.json"
+    report = tmp_path / "results.md"
+    data.write_text("previous data", encoding="utf-8")
+    report.write_text("previous report", encoding="utf-8")
+
+    async def fake_ask(_path: Path, _question: str, *, candidate_k: int) -> dict[str, object]:
+        assert candidate_k == 10
+        return {"experiment": "C"}
+
+    monkeypatch.setattr(search_module, "_ask", fake_ask)
+
+    assert (
+        run_cli(
+            [
+                "ask",
+                "--question",
+                "질문",
+                "--corpus",
+                str(corpus),
+                "--results-data",
+                str(data),
+                "--results-report",
+                str(report),
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["code"] == "result_recording_failed"
+    assert data.read_text(encoding="utf-8") == "previous data"
+    assert report.read_text(encoding="utf-8") == "previous report"
 
 
 def test_cli_reports_missing_corpus_without_provider_detail(

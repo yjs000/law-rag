@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
 import sys
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from math import fsum, isfinite, sqrt
@@ -24,7 +26,12 @@ from app.settings import Settings
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CORPUS_PATH = REPOSITORY_ROOT / ".data" / "experiments" / "search" / "corpus.json"
+DEFAULT_SEARCH_RUNS_DATA = REPOSITORY_ROOT / ".data" / "experiments" / "search" / "search-runs.json"
+DEFAULT_SEARCH_RUNS_REPORT = (
+    REPOSITORY_ROOT / ".data" / "experiments" / "search" / "search-results.md"
+)
 PREPARE_COMMAND = "uv run --directory apps/api python -m scripts.experiment_search prepare"
+ASK_COMMAND = "uv run --directory apps/api python -m scripts.experiment_search ask"
 MODEL = "nvidia/nemotron-3-embed-1b"
 DIMENSIONS = 512
 EMBEDDING_VERSION = "1"
@@ -80,6 +87,10 @@ class LoadedSource:
     raw: RawResponse
 
 
+class ResultRecordingError(RuntimeError):
+    pass
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="지정한 장·조 범위의 기존 파서 청크를 사용하는 로컬 NVIDIA 벡터 검색 실험"
@@ -92,6 +103,9 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("--question")
     ask.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS_PATH)
     ask.add_argument("--candidate-k", type=int, default=DEFAULT_CANDIDATE_K)
+    ask.add_argument("--results-data", type=Path, default=DEFAULT_SEARCH_RUNS_DATA)
+    ask.add_argument("--results-report", type=Path, default=DEFAULT_SEARCH_RUNS_REPORT)
+    ask.add_argument("--no-record", action="store_true")
     return parser
 
 
@@ -369,9 +383,203 @@ def _atomic_write(path: Path, content: str) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
+def _stage_text(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+        delete=False,
+    )
+    temporary = Path(handle.name)
+    try:
+        with handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        with suppress(OSError):
+            temporary.unlink()
+        raise
+    return temporary
+
+
+def _restore_text(path: Path, previous: bytes | None) -> None:
+    if previous is None:
+        with suppress(FileNotFoundError):
+            path.unlink()
+        return
+    temporary = _stage_text(path, previous.decode("utf-8"))
+    os.replace(temporary, path)
+
+
+def _atomic_write_many(outputs: list[tuple[Path, str]]) -> None:
+    resolved = [path.resolve() for path, _ in outputs]
+    if len(set(resolved)) != len(resolved):
+        raise ResultRecordingError("search result output paths must be different")
+    previous = {path: path.read_bytes() if path.exists() else None for path, _ in outputs}
+    staged: list[tuple[Path, Path]] = []
+    replaced: list[Path] = []
+    try:
+        staged = [(path, _stage_text(path, content)) for path, content in outputs]
+        for target, temporary in staged:
+            os.replace(temporary, target)
+            replaced.append(target)
+    except (OSError, UnicodeError) as exc:
+        for _, temporary in staged:
+            with suppress(FileNotFoundError):
+                temporary.unlink()
+        for target in reversed(replaced):
+            with suppress(OSError, UnicodeError):
+                _restore_text(target, previous[target])
+        raise ResultRecordingError("search result outputs could not be saved") from exc
+
+
 def save_corpus(path: Path, corpus: dict[str, object]) -> None:
     serialized = json.dumps(corpus, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     _atomic_write(path, serialized)
+
+
+def _display_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPOSITORY_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _load_search_runs(path: Path) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ResultRecordingError("invalid experiment C search history") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 1
+        or payload.get("experiment") != "C"
+        or not isinstance(payload.get("runs"), list)
+    ):
+        raise ResultRecordingError("invalid experiment C search history")
+    runs = payload["runs"]
+    for expected_run, run in enumerate(runs, start=1):
+        if (
+            not isinstance(run, dict)
+            or run.get("run") != expected_run
+            or not isinstance(run.get("recorded_at"), str)
+            or not isinstance(run.get("corpus_sha256"), str)
+            or not isinstance(run.get("stdout_sha256"), str)
+            or not isinstance(run.get("stdout"), str)
+            or hashlib.sha256(run["stdout"].encode("utf-8")).hexdigest() != run["stdout_sha256"]
+        ):
+            raise ResultRecordingError("invalid experiment C search history")
+    return runs
+
+
+def _markdown_cell(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def _render_search_report(runs: list[dict[str, object]]) -> str:
+    lines = [
+        "# 실험 C — 실제 검색 실행 기록",
+        "",
+        f"> 생성 명령: `{ASK_COMMAND}`",
+        f"> 마지막 기록: `{runs[-1]['recorded_at']}`",
+        "",
+        "이 문서는 사용자가 명시적으로 실행한 로컬 실험 C의 실제 stdout 이력이다.",
+        "운영 로그가 아니며 `.data/` 아래에만 저장되어 Git에 포함되지 않는다.",
+        "",
+        "## 실행 비교",
+        "",
+        "| 실행 | 기록 시각 | 질문 | candidate k | raw 1위 | 조 1위 |",
+        "| ---: | --- | --- | ---: | --- | --- |",
+    ]
+    parsed_results: list[dict[str, object]] = []
+    for run in runs:
+        parsed = json.loads(str(run["stdout"]))
+        if not isinstance(parsed, dict):
+            raise ResultRecordingError("invalid experiment C recorded stdout")
+        parsed_results.append(parsed)
+        raw = parsed.get("raw_chunk_candidates")
+        articles = parsed.get("article_candidates")
+        raw_first = raw[0] if isinstance(raw, list) and raw else {}
+        article_first = articles[0] if isinstance(articles, list) and articles else {}
+        lines.append(
+            "| "
+            f"{run['run']} | {_markdown_cell(run['recorded_at'])} | "
+            f"{_markdown_cell(parsed.get('question', ''))} | "
+            f"{_markdown_cell(parsed.get('candidate_k', ''))} | "
+            f"{_markdown_cell(raw_first.get('title', ''))} "
+            f"{_markdown_cell(raw_first.get('path', ''))} | "
+            f"{_markdown_cell(article_first.get('title', ''))} "
+            f"{_markdown_cell(article_first.get('article_path', ''))} |"
+        )
+    lines.extend(["", "## 실제 stdout", ""])
+    for run in runs:
+        lines.extend(
+            [
+                f"### 실행 {run['run']}",
+                "",
+                f"- 기록 시각: `{run['recorded_at']}`",
+                f"- corpus SHA-256: `{run['corpus_sha256']}`",
+                f"- stdout SHA-256: `{run['stdout_sha256']}`",
+                "",
+                "```json",
+                str(run["stdout"]).rstrip("\n"),
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def record_search_result(
+    result: dict[str, object],
+    *,
+    corpus_path: Path,
+    data_path: Path,
+    report_path: Path,
+) -> str:
+    try:
+        corpus_sha256 = hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise ResultRecordingError("experiment C corpus could not be hashed") from exc
+    runs = _load_search_runs(data_path)
+    recorded_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    recorded_result = dict(result)
+    recorded_result["recording"] = {
+        "run": len(runs) + 1,
+        "recorded_at": recorded_at,
+        "data_path": _display_path(data_path),
+        "report_path": _display_path(report_path),
+    }
+    stdout = json.dumps(recorded_result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    runs.append(
+        {
+            "run": len(runs) + 1,
+            "recorded_at": recorded_at,
+            "corpus_path": _display_path(corpus_path),
+            "corpus_sha256": corpus_sha256,
+            "stdout_sha256": hashlib.sha256(stdout.encode("utf-8")).hexdigest(),
+            "stdout": stdout,
+        }
+    )
+    history = {
+        "schema_version": 1,
+        "experiment": "C",
+        "generated_by": ASK_COMMAND,
+        "updated_at": recorded_at,
+        "runs": runs,
+    }
+    history_json = json.dumps(history, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    report = _render_search_report(runs)
+    _atomic_write_many([(data_path, history_json), (report_path, report)])
+    return stdout
 
 
 def _validate_selection_contract(corpus: dict[str, object]) -> None:
@@ -634,9 +842,23 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "prepare":
             result = asyncio.run(_prepare(args.corpus, embedding_batch_size=args.batch_size))
+            stdout = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
         else:
             question = args.question if args.question is not None else input("질문> ")
             result = asyncio.run(_ask(args.corpus, question, candidate_k=args.candidate_k))
+            stdout = (
+                json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+                if args.no_record
+                else record_search_result(
+                    result,
+                    corpus_path=args.corpus,
+                    data_path=args.results_data,
+                    report_path=args.results_report,
+                )
+            )
+    except ResultRecordingError:
+        print(_safe_error("result_recording_failed"), file=sys.stderr)
+        return 2
     except RuntimeError as exc:
         known = {"nvidia_api_key_missing", "law_open_api_oc_missing"}
         code = str(exc) if str(exc) in known else "experiment_c_failed"
@@ -651,7 +873,7 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     except Exception:
         print(_safe_error("experiment_c_failed"), file=sys.stderr)
         return 2
-    print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+    sys.stdout.write(stdout)
     return 0
 
 
