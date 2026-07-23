@@ -25,6 +25,7 @@
 - [22 기존 법령 파서를 재사용한 일반 텍스트 청킹 실험](22-existing-parser-chunking-experiment.md)
 - [24 NVIDIA NIM 임베딩 provider 교체](24-nvidia-nim-embedding-provider.md)
 - [25 임베딩의 전체 개념: 차원, 내적, 코사인 유사도와 축약](25-embedding-concepts.md)
+- [26 로컬 10청크 벡터 검색 실험에서 배운 경계](26-local-ten-chunk-vector-search.md)
 
 ## 모델 실행, 폴백과 취소
 
