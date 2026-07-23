@@ -1,7 +1,7 @@
 # 실험 A — 기존 법령 파서 청킹 결과
 
 > 생성 명령: `uv run --project packages/law-rag-core python -m experiments.chunking.run experiments/chunking/fixtures/electric-utility-act-chapter-2.txt`
-> 기준 시점: `2026-07-22T17:02:47+09:00`
+> 기준 시점: `2026-07-23T13:52:02+09:00`
 > 입력: `experiments/chunking/fixtures/electric-utility-act-chapter-2.txt`
 > 입력 SHA-256: `635f15e2d66fe8d95f59c461a75e03fd158b37bb9549b707152a7df6a9cd3b8d`
 > 실제 청킹 함수: `law_rag_core.parsers.law_json.parse_legal_document`
