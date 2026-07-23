@@ -35,7 +35,8 @@ Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collecto
 전체 검증은 `pnpm.cmd verify`로 실행한다.
 
 두 문장의 NVIDIA NIM 임베딩과 코사인 유사도를 직접 확인하는 방법은
-[실험 B 실행 안내](experiments/embeddings/README.md)를 참고한다. 실행 결과는 터미널에만 출력한다.
+[실험 B 실행 안내](experiments/embeddings/README.md)를 참고한다. 성공한 터미널 JSON은
+`docs/generated/`의 실제 결과 문서에 기록되어 반복 실행 차이를 비교할 수 있다.
 
 ## 문서 시작점
 

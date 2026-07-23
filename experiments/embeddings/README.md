@@ -1,7 +1,8 @@
 # 실험 B — NVIDIA NIM 문장 임베딩
 
 두 한국어 문장을 한 번의 NVIDIA hosted NIM batch 요청으로 임베딩하고, 각 512차원 벡터와 norm,
-코사인 유사도를 표준 출력에 JSON으로 표시한다. 결과 파일은 자동 생성하지 않는다.
+코사인 유사도를 표준 출력에 JSON으로 표시한다. 성공한 표준출력과 동일한 JSON 문자열을 실행별로
+보존하고, 예상 조건과 반복 실행 차이를 생성 문서에 자동 반영한다.
 
 ## 필요한 설정
 
@@ -47,7 +48,21 @@ uv run --directory apps/api python -m scripts.experiment_embeddings `
 ```
 
 성공 출력에는 provider, model, native/output dimensions, 두 문장, 두 512차원 벡터, 두 norm과
-`cosine_similarity`가 포함된다. 저장소의 `docs/generated/`나 `.data/`에는 결과를 쓰지 않는다.
+`cosine_similarity`가 포함된다. 같은 실행에서 다음 두 파일도 갱신한다.
+
+- `docs/generated/experiment-b-embedding-results.md`: 예상 조건, 실행별 비교표와 실제 터미널 JSON 전체
+- `docs/generated/experiment-b-embedding-runs.json`: 문서 재생성과 정확 비교에 사용하는 stdout 원시 이력
+
+여러 번 같은 명령을 실행하면 실행 1을 기준으로 두 512차원 배열의 정확 일치 여부, 최대 좌표 차이,
+코사인 차이와 SHA-256 지문을 비교한다. 표시 자릿수만 같다고 같은 것으로 처리하지 않는다. 기록 없이
+일회성으로 확인하려면 다음 옵션을 사용한다.
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_embeddings --no-record
+```
+
+현재 실제 실행 결과는
+[실험 B 실제 출력과 반복 비교](../../docs/generated/experiment-b-embedding-results.md)에서 확인한다.
 
 이 실험 CLI만 실행할 때 DB와 migration은 필요 없다. PostgreSQL 하이브리드 검색까지 사용할 경우에는
 배포 전에 `DATABASE_URL`/`DIRECT_URL`을 설정하고 새 model-filtered 함수를 적용한다.
@@ -63,13 +78,15 @@ uv run --directory apps/api python -m alembic -c alembic.ini upgrade head
 3. 두 embedding 배열 길이가 각각 512인지 본다.
 4. `norm_a`, `norm_b`가 부동소수점 오차 범위에서 1에 가까운지 본다.
 5. cosine 값이 유한하고 `-1`에서 `1` 사이인지 본다.
-6. 점수를 확률이나 법률적 동일성으로 해석하지 않는다.
+6. 반복 실행에서 두 벡터의 전체 일치 여부와 최대 좌표 차이를 본다.
+7. 점수를 확률이나 법률적 동일성으로 해석하지 않는다.
 
 ## 실패 동작
 
 키 없음, 인증·quota·network·timeout, 잘못된 응답 index·개수·차원·유한값 또는 영벡터는 종료 코드
 `2`와 안전한 JSON 오류를 표준 오류에 출력한다. provider 오류 전문이나 API key는 출력하지 않는다.
-실패 시 OpenAI, 다른 NVIDIA 모델, 영벡터로 자동 대체하지 않으며 결과 파일도 남기지 않는다.
+실패 시 OpenAI, 다른 NVIDIA 모델, 영벡터로 자동 대체하지 않으며 새 실행 결과도 기록하지 않는다.
+API 호출은 성공했지만 생성 문서를 기록하지 못한 경우에도 `result_recording_failed`로 종료한다.
 
 API 질문 흐름에서는 임베딩 실패 시 의미 후보만 생략하고 기존 키워드 검색을 계속한다. 검색 SQL은
 같은 NVIDIA model, 512차원, embedding version 1인 문서 벡터만 비교한다. 기존 OpenAI 문서 벡터는

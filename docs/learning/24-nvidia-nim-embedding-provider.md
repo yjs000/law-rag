@@ -40,7 +40,10 @@ NIM 2048 float
 
 mock 응답으로 batch 순서, 2048→512 slicing, L2 norm, 잘못된 index·차원·NaN·영벡터,
 설정과 검색 model 전달을 검증한다. 실험 B 실행기는 두 문장과 두 512차원 벡터, norm과 cosine을
-표준 출력에만 표시하고 저장소 결과 파일을 만들지 않는다.
+표준 출력에 표시한다. 성공한 stdout과 같은 JSON을 실행별로
+[`docs/generated/experiment-b-embedding-results.md`](../generated/experiment-b-embedding-results.md)에
+옮기고, 첫 실행 대비 전체 벡터 일치·최대 좌표 차이·cosine 차이를 계산한다. 예상 조건과 실제값은
+서로 다른 표와 절에 두며 실패한 실행은 새 결과로 기록하지 않는다.
 
 ## 관련 문서
 
