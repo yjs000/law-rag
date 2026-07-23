@@ -1,14 +1,18 @@
-# 실행 계획 0017: 실험 B — 두 문장 임베딩과 코사인 유사도
+# 실행 계획 0017: 실험 B — NVIDIA NIM 두 문장 임베딩과 코사인 유사도
 
-상태: 계획 완료, 구현 대기
-작성일: 2026-07-22
+상태: 계획 수정 완료, 구현 대기
+작성일: 2026-07-23
 소유자: Codex
 
 ## 목적과 사용자 결과
 
-추천 문장 두 개를 현재 `OpenAIEmbedder`에 한 번의 배치 요청으로 전달하고, 각 512차원 임베딩
-전체와 두 벡터의 코사인 유사도를 터미널·Markdown 보고서·JSON에서 확인한다. DB, 검색, 답변
-생성은 실행하지 않으며 이번 작업에서는 계획만 확정하고 API를 호출하거나 구현하지 않는다.
+현재 질문 처리 흐름의 `embed(texts) -> list[list[float]]` 계약, 512차원 검색 벡터와 응답 순서
+보존 방식을 그대로 사용하되, 임베딩 provider를 OpenAI에서 NVIDIA hosted NIM으로 교체한다.
+추천 문장 두 개의 512차원 임베딩 전체와 코사인 유사도를 로컬 터미널에 출력한다.
+
+사용자가 직접 실행하고 결과를 판단하므로 저장소에는 실제 벡터, 실제 유사도나 미리 만든 결과
+보고서를 기록하지 않는다. 이번 작업은 계획·모델 조사·코사인 유사도 학습 문서까지만 작성하며
+provider 코드와 실험 CLI는 구현하지 않는다.
 
 ## 추천 문장
 
@@ -20,165 +24,270 @@
 
 > 산업통상자원부장관의 허가를 받지 않으면 전기사업을 시작할 수 없다.
 
-두 문장은 행위자, 전기사업 시작과 사전 허가라는 의미가 같지만, A는 긍정형 의무이고 B는
-부정형 금지 표현이다. 단순한 동일 문장 복사가 아니라 문장 구조가 달라져 의미 임베딩이 유사성을
-포착하는지 관찰하기 좋다. 이 문장들은 임베딩 동작 실험용이며 별도의 법률 해석이나 답변 근거로
-사용하지 않는다.
+행위자, 전기사업 시작과 사전 허가라는 의미는 같고 긍정형 의무와 부정형 금지로 문장 구조가
+다르다. 동일 문자열 복사가 아닌 한국어 의미 유사성을 관찰하기 위한 쌍이며 법률 해석이나 답변
+근거로 사용하지 않는다.
 
-## 현재 구현과 재사용 범위
+## 현재 구현과 변경 경계
 
-- 현재 어댑터: `apps/api/app/adapters/openai_embedder.py`의 `OpenAIEmbedder`
-- 현재 모델 설정: `text-embedding-3-large`
-- 현재 차원 설정: `512`
-- 호출 방식: `await embedder.embed([sentence_a, sentence_b])`
-- 현재 어댑터가 응답의 `index` 순서로 정렬하므로 A/B 벡터 대응도 그대로 재사용한다.
+현재 구현은 `OpenAIEmbedder.embed(texts)`가 텍스트 배열을 한 번에 전송하고 응답 `index` 순서로
+벡터를 반환한다. 질문 처리 코드는 이 메서드의 첫 벡터를 512차원 query embedding으로 검색에
+넘긴다. `OpenAIEmbedder`는 Python 어댑터이고 `text-embedding-3-large`는 그 어댑터가 호출하는
+원격 모델 이름이므로 두 임베딩 모델을 동시에 쓰는 구조가 아니다.
 
-기존 어댑터, 설정, 검색 파이프라인과 DB 스키마는 수정하지 않는다. 실험 코드에는 두 벡터의
-코사인 유사도를 계산하고 결과를 표시·저장하는 기능만 추가한다.
+유지할 계약:
+
+- `async embed(texts: list[str]) -> list[list[float]]`
+- 빈 배열은 빈 배열 반환
+- 입력 순서와 응답 `index` 순서 일치
+- 검색·DB에 전달하는 최종 벡터는 512차원 float
+- 임베딩 실패 시 키워드 검색을 유지하는 기존 폴백
+- DB, 검색 함수와 `vector(512)` 스키마
+
+교체할 경계:
+
+- `OpenAIEmbedder` 대신 같은 메서드 계약의 `NvidiaNimEmbedder`
+- `OPENAI_API_KEY` 대신 기존 `NVIDIA_API_KEY`
+- `api.openai.com` 대신 기존 NVIDIA base URL `https://integrate.api.nvidia.com/v1`
+- `text-embedding-3-large` 대신 `nvidia/nemotron-3-embed-1b`
+
+## 선택 모델
+
+모델: `nvidia/nemotron-3-embed-1b`
+
+선택 이유:
+
+- NVIDIA 모델 카탈로그에서 현재 `Free Endpoint`로 제공된다.
+- 한국어를 포함한 34개 언어에서 평가된 multilingual/cross-lingual 모델이다.
+- 의미 유사도, dense retrieval, semantic search와 RAG가 명시적 용도다.
+- 약 1.14B parameters로 hosted 실험에 적합하고 상업적 사용 준비 모델로 표시된다.
+- 네이티브 2048차원 중 첫 1024 또는 512차원을 유지할 수 있는 표현 공간으로 학습됐으며,
+  잘라낸 벡터는 L2 재정규화하라는 모델 카드 계약이 있다.
+- 기존 NVIDIA 생성 adapter가 이미 쓰는 API key, base URL과 OpenAI-compatible SDK 패턴을 재사용한다.
+
+`Free Endpoint`는 NVIDIA API Trial Terms가 적용되는 prototype endpoint를 뜻하며 무제한·영구 무료,
+production SLA나 고정 quota를 보장한다는 뜻은 아니다. 실제 실행 시 현재 계정의 endpoint 제공 여부와
+rate limit을 확인한다.
+
+대안 제외 이유:
+
+- `nvidia/llama-nemotron-embed-1b-v2`는 한국어·동적 512차원을 지원하지만 현재 카탈로그 표시는
+  hosted `Free Endpoint`가 아니라 `Downloadable`이다.
+- `baai/bge-m3`도 한국어를 포함한 multilingual 모델이지만 현재 NVIDIA 카탈로그에서는
+  `Downloadable`이므로 로컬 GPU/NIM 인프라 없이 무료 hosted 실험을 바로 실행하는 조건에 맞지 않는다.
+- `nv-embedqa-e5-v5`는 영어용으로 표시되어 한국어 법률 문장 실험에 맞지 않는다.
+
+공식 근거와 확인 날짜는
+`docs/references/nvidia-nemotron-3-embed-1b-2026-07-23.md`에 고정한다.
+
+## 2048차원 NIM과 기존 512차원 계약 연결
+
+현재 NVIDIA NIM API는 `nvidia/nemotron-3-embed-1b`에 2048차원 native float만 허용하고
+`dimensions=512` 요청은 HTTP 400이 된다. 따라서 OpenAI 어댑터처럼 API에 512를 직접 요청하지 않는다.
+
+512를 선택하는 이유는 모델이 일반적인 임의 절단을 허용해서가 아니라 다음 두 계약이 맞물리기 때문이다.
+
+- 저장소의 검색·DB 계약이 이미 `vector(512)`이고, 이를 유지해야 현재 검색 호출부와 스키마를 재사용할 수 있다.
+- NVIDIA 모델 카드는 이 모델에 한해서 2048개 좌표 중 **첫 1024개 또는 첫 512개**를 남기는
+  prefix slicing을 명시적으로 지원한다. 따라서 마지막 512개, 임의 512개 또는 균등 간격 512개를
+  선택하지 않는다. 그런 절단은 모델이 보장한 축약 표현이 아니며 좌표 의미와 검색 품질을 보장할 수 없다.
+
+즉, `vector[:512]`는 단순한 편의가 아니라 이 모델이 공개한 차원 축약 계약을 기존 512차원 시스템에
+적용한 것이다. 다만 모델 카드는 축약을 지원한다고만 명시하며, 구체적인 학습 기법을 공개 근거 없이
+Matryoshka라고 단정하지 않는다.
+
+1. NIM에 `dimensions`를 보내지 않고 2048차원 float를 받는다.
+2. 각 벡터가 유한한 float 2048개인지 검증한다.
+3. 모델 카드가 허용한 첫 512개 원소만 유지한다.
+4. 잘라낸 벡터를 L2 norm 1이 되도록 재정규화한다.
+5. 기존 `embed()` 반환 타입으로 512차원 벡터를 돌려준다.
+
+L2 재정규화가 필요한 이유:
+
+- 2048차원 벡터가 길이 1이어도 뒤의 1536개 좌표를 버리면 남은 벡터의 길이는 보통 1보다 작아진다.
+- `v512 / ||v512||₂`로 모든 남은 좌표를 같은 비율로 확대하면 512차원 부분공간 안의 방향은 유지되고
+  길이만 1로 복원된다.
+- 그 결과 정규화된 벡터끼리는 내적과 코사인 유사도가 같아지고, 저장·검색 시 벡터 크기 차이가 점수에
+  끼어드는 것을 막는다. 순수 코사인 공식은 자체적으로 norm을 나누므로 재정규화 전후 값이 수학적으로
+  같지만, 모델 카드의 계약과 내적 기반 검색 호환성을 위해 저장 전 재정규화한다.
+- 재정규화는 버린 1536차원의 정보를 복구하지 않는다. 512차원은 저장 공간과 연산량을 native 대비
+  4분의 1로 줄이는 대신 검색 품질이 달라질 수 있으므로 실제 법률 평가셋에서 2048차원과 비교 검증한다.
+
+질문과 문서 벡터는 반드시 같은 모델, 같은 512 slicing과 같은 재정규화를 사용해야 한다. 기존 OpenAI
+벡터와 NVIDIA 벡터는 같은 공간이 아니므로 production corpus를 혼합하지 않으며 provider 교체 시
+전체 문서 임베딩을 같은 pipeline으로 다시 생성해야 한다. 실험 B는 DB backfill을 하지 않는다.
+
+## 계획된 핵심 호출 형태
+
+기존 NVIDIA SDK 초기화 패턴과 현재 embed 메서드 계약을 합치면 구현 형태는 다음과 같다.
+
+```python
+self.client = AsyncOpenAI(
+    api_key=api_key,
+    base_url="https://integrate.api.nvidia.com/v1",
+    max_retries=0,
+)
+
+response = await self.client.embeddings.create(
+    model="nvidia/nemotron-3-embed-1b",
+    input=texts,
+    extra_body={
+        "input_type": "query",
+        "modality": "text",
+        "embedding_type": "float",
+        "encoding_format": "float",
+        "truncate": "NONE",
+    },
+)
+vectors = [item.embedding for item in sorted(response.data, key=lambda item: item.index)]
+return [normalize_l2(vector[:512]) for vector in vectors]
+```
+
+실험 B의 두 문장은 문장 대 문장 비교이므로 둘 다 같은 `input_type="query"`로 보낸다. 실험 C에서
+질문과 문서 검색을 연결할 때는 질문은 `query`, 문서 조각은 `passage`로 분리한다.
 
 ## 범위와 비범위
 
 범위:
 
-- 현재 `OpenAIEmbedder`를 사용하는 로컬 실험 스크립트
-- 추천 문장 기본값과 명령행 문장 재정의 옵션
-- 512차원 벡터 두 개와 코사인 유사도 계산
-- 터미널 전체 출력, 자동 생성 Markdown 보고서, JSON sidecar
-- 정상·실패·경계 테스트와 mock OpenAI 응답
+- 현재 embed 메서드와 512차원 downstream 계약을 유지한 NVIDIA provider 교체 계획
+- 추천 문장 기본값과 명령행 재정의 옵션 계획
+- 512차원 벡터 두 개와 코사인 유사도 터미널 출력
+- mock 정상·실패·경계 테스트와 수동 실행 확인 항목
+- NVIDIA 모델 선정 근거와 코사인 유사도 학습 문서
 
 비범위:
 
+- 이번 턴의 provider 코드, CLI 또는 live API 구현
+- 실제 임베딩 벡터·유사도 생성 또는 결과 문서 커밋
 - 실험 C 문서 저장과 Top 3 검색
-- 실제 코퍼스 임베딩 backfill 또는 `provision_embeddings` DB 저장
-- pgvector, PGroonga, 하이브리드 검색과 재순위
-- 모델 비교, 차원 비교, 임계값 튜닝 또는 품질 합격선 확정
-- FastAPI·Next.js 화면과 공개 API 추가
-- 생성 모델 호출이나 법률 답변 생성
+- production corpus backfill, DB migration 또는 혼합 모델 검색
+- 모델 비교 점수, 임계값 튜닝, 법률적 동일성 판단
+- FastAPI·Next.js UI와 공개 API 변경
 
-## 보여주는 방식
+## 실행과 출력 방식
 
-구현 후 저장소 루트에서 다음 명령으로 실행한다.
+구현 후 저장소 루트에서 실행할 명령:
 
 ```powershell
 uv run --directory apps/api python -m scripts.experiment_embeddings
 ```
 
-터미널은 다음 순서로 출력한다.
+기본 출력:
 
 ```text
-모델: text-embedding-3-large | 차원: 512 | 상태: success
-문장 A: 전기사업을 하려는 자는 산업통상자원부장관의 허가를 받아야 한다.
-임베딩 A: [<512개 실수 전체>]
-문장 B: 산업통상자원부장관의 허가를 받지 않으면 전기사업을 시작할 수 없다.
-임베딩 B: [<512개 실수 전체>]
-코사인 유사도: <소수점 6자리 표시>
-보고서: docs/generated/experiment-b-embeddings.md
-JSON: .data/experiments/embeddings/experiment-b.json
+provider: nvidia_nim
+model: nvidia/nemotron-3-embed-1b
+native_dimensions: 2048
+output_dimensions: 512
+sentence_a: <문장 A>
+embedding_a: [<512개 실수 전체>]
+sentence_b: <문장 B>
+embedding_b: [<512개 실수 전체>]
+norm_a: <값>
+norm_b: <값>
+cosine_similarity: <값>
 ```
 
-코사인 유사도는 `dot(A, B) / (norm(A) * norm(B))`로 직접 계산한다. JSON에는 모델, 차원,
-문장, 512개 원본 실수, 벡터 노름, 유사도 원본 값, 생성 시각을 저장한다. Markdown과 터미널에는
-전체 벡터와 소수점 6자리 유사도를 표시한다. 유사도는 확률이나 법률적 동일성 점수가 아님을
-보고서에 명시한다.
+기본 실행은 터미널에만 출력하고 `docs/generated/`에 결과를 만들지 않는다. 사용자가 재현용 파일이
+필요한 경우에만 명시적 `--json-output <path>`로 로컬 JSON을 저장하며 `.data/` 아래 사용을 권장한다.
 
-## 저장 위치와 수명
+## 사용자가 결과에서 확인할 항목
 
-- 구현 예정: `apps/api/scripts/experiment_embeddings.py`
-- 테스트 예정: `apps/api/tests/test_embedding_experiment.py`
-- 자동 생성 보고서: `docs/generated/experiment-b-embeddings.md` — 성공한 대표 실행 후 Git 추적
-- JSON sidecar: `.data/experiments/embeddings/experiment-b.json` — 기존 `.gitignore`로 Git 제외
-- 구현 완료 시 학습 기록: `docs/learning/23-sentence-embedding-similarity-experiment.md`
+1. provider와 model이 각각 `nvidia_nim`, `nvidia/nemotron-3-embed-1b`인지 확인한다.
+2. native 응답은 각 2048개, 최종 `embedding_a`, `embedding_b`는 각각 정확히 512개인지 확인한다.
+3. 두 벡터의 모든 값이 유한한 숫자이고 서로 완전히 같지 않은지 확인한다.
+4. slicing 후 `norm_a`, `norm_b`가 부동소수점 오차 범위에서 1에 가까운지 확인한다.
+5. `cosine_similarity`가 유한하고 `-1 <= 값 <= 1`인지 확인한다.
+6. 두 문장은 의미가 가까우므로 양의 높은 값이 자연스럽지만, 이 한 쌍만으로 합격 임계값을 정하지 않는다.
+7. 예상보다 낮거나 음수이면 문장 순서보다 먼저 model ID, `input_type`, 2048→512 slicing과
+   L2 재정규화가 둘 다 동일하게 적용됐는지 확인한다.
+8. 출력과 오류에 `NVIDIA_API_KEY`, Authorization header나 provider 오류 전문이 없는지 확인한다.
 
-보고서와 JSON은 성공한 한 번의 API 응답을 검증한 뒤 임시 파일에서 원자적으로 교체한다. 같은
-기본 문장으로 재실행하면 같은 경로를 사용하지만, 모델 서비스의 부동소수점 결과가 영구히 동일하다고
-가정하지 않고 실행 시각·모델·차원을 함께 기록한다.
+실험 결과는 확률이 아니며 “법적으로 같은 문장”이라는 판정도 아니다. 모델·전처리·차원 계약이 제대로
+연결됐는지 관찰하는 smoke test다.
 
-## 입력과 비밀정보
+## 입력, 비용과 비밀정보
 
-- `OPENAI_API_KEY`는 `apps/api/.env.local` 또는 프로세스 환경변수로만 주입한다.
-- 키를 명령행 인자, Markdown, JSON, 오류 메시지나 로그에 출력하지 않는다.
-- 두 추천 문장은 비개인 공개 실험 문장만 사용한다. 개인 사건자료나 개인정보는 보내지 않는다.
-- 실제 대표 실행은 외부 OpenAI API에 문장 두 개를 전송하고 비용이 발생할 수 있다. 구현 요청과
-  별도로 유효한 키·모델 권한·예산이 준비된 상태에서만 live 실행한다.
+- `NVIDIA_API_KEY`는 `apps/api/.env.local` 또는 프로세스 환경변수로만 주입한다.
+- 키를 CLI 인자, 출력, JSON, 오류나 문서에 기록하지 않는다.
+- 비개인 공개 실험 문장만 hosted endpoint에 전송한다.
+- `Free Endpoint` 가용성과 quota는 계정·trial 조건에 의존한다. 유료 전환이나 production 사용은
+  별도 사용자 결정 없이는 진행하지 않는다.
 
 ## 실패 동작
 
-- 키 없음, 빈 문장, 동일한 입력 라벨, 응답 개수 불일치, 차원 불일치, NaN/Infinity,
-  영벡터, 인증·권한, quota·billing, timeout·network를 구분된 안전한 오류 코드로 처리한다.
-- 실패 시 종료 코드 `2`와 원문 provider 오류 전문을 제외한 JSON 오류 한 줄을 표준 오류에 출력한다.
-- 키, 계정, 요청 헤더와 provider 응답 전문을 출력하거나 저장하지 않는다.
-- 한 벡터만 반환되거나 검증에 실패하면 유사도를 계산하지 않고 전체 실행을 실패시킨다.
-- 실패한 실행은 새 보고서나 JSON을 남기지 않으며 기존 성공 결과를 덮어쓰지 않는다.
-- 다른 임베딩 모델, 로컬 임의 벡터나 0 벡터로 자동 대체하지 않는다.
+- 키 없음, 빈 문장, 응답 개수·index·native dimension 불일치, NaN/Infinity, 영벡터,
+  인증·권한, rate limit, timeout·network를 안전한 오류 코드로 구분한다.
+- 실패 시 종료 코드 `2`와 provider 원문을 제외한 JSON 오류 한 줄을 표준 오류에 출력한다.
+- 한 벡터라도 검증에 실패하면 slicing, 유사도와 결과 저장을 중단한다.
+- OpenAI나 다른 모델, 임의 벡터나 0 벡터로 자동 대체하지 않는다.
+- 명시적 JSON 출력도 전체 성공 후에만 원자적으로 생성하고 기존 성공 파일을 실패로 덮어쓰지 않는다.
 
 ## 측정 가능한 완료 조건
 
-- 현재 `OpenAIEmbedder.embed()`가 추천 문장 두 개를 단일 배치로 호출한다.
-- 결과가 정확히 2개이며 각 벡터가 정확히 512개 유한 실수이고 노름이 0보다 크다.
-- A/B 응답 순서가 현재 어댑터의 index 정렬 계약과 일치한다.
-- 코사인 유사도가 유한하고 `-1.0 <= similarity <= 1.0`을 만족한다.
-- 터미널, Markdown과 JSON의 두 문장·벡터·유사도가 일치한다.
-- 유사도에 임의의 합격 임계값을 두지 않고 관찰값으로만 보고한다.
-- mock 단위 테스트는 네트워크·비용 없이 정상·실패·경계 계약을 검증한다.
-- 실제 대표 실행 전에는 API 호출이 없으며, 구현 완료 후 별도 live 실행에서만 보고서를 생성한다.
-- API 테스트, Ruff와 문서 검사가 통과한다.
+- 기존 `embed(list[str])` 호출부와 512차원 검색·DB 계약을 바꾸지 않는다.
+- 실제 provider는 NVIDIA NIM 하나이며 OpenAI embedding API를 호출하지 않는다.
+- native 2048차원을 검증한 뒤 첫 512차원을 L2 재정규화한다.
+- 두 문장을 단일 batch, 동일한 `query` 설정으로 보내 입력 순서대로 두 벡터를 반환한다.
+- 코사인 유사도는 유한하고 `[-1, 1]` 범위다.
+- 터미널에 모델, native/final 차원, 문장, 전체 벡터, norm과 유사도를 출력한다.
+- 저장소에는 실제 실험 결과를 추가하지 않는다.
+- mock 테스트는 네트워크·quota 없이 정상·실패·경계와 비밀 비노출을 검증한다.
+- API 테스트, Ruff, 타입 검사와 문서 검사가 통과한다.
 
 ## TODO와 에이전트 배정
 
 ### 주 에이전트
 
-- [ ] `M1 — 계산 계약`: 현재 `OpenAIEmbedder` 배치 호출 연결, 벡터 검증과 코사인 계산을 구현하고
-  mock 정상·응답 순서·개수·차원·NaN·영벡터 테스트를 추가한다.
-- [ ] `M2 — CLI와 결과 저장`: 기본/재정의 문장 입력, UTF-8 터미널, Markdown/JSON 원자 저장,
-  비밀 없는 오류와 기존 성공 결과 보존을 구현하고 테스트한다.
-- [ ] `M3 — 승인된 live 실행과 문서`: 유효한 키·권한·예산을 확인한 뒤 대표 실행을 한 번 수행하고
-  결과 보고서와 학습 문서를 생성한다. 전체 검증 후 계획을 완료 처리한다.
+- [ ] `M1 — provider 교체 계약`: `NvidiaNimEmbedder`를 현재 embed 인터페이스와 동일하게 구현하고
+  2048 검증, 512 slicing, L2 재정규화와 순서 보존 mock 테스트를 추가한다.
+- [ ] `M2 — 기존 질문 흐름 연결`: settings와 `_embedder()`를 NVIDIA key/model로 연결하되 검색 폴백,
+  512차원 DB 계약과 생성 provider 선택을 깨뜨리지 않는 회귀 테스트를 추가한다.
+- [ ] `M3 — 사용자 실행 CLI`: 두 기본 문장, 전체 벡터·norm·코사인 터미널 출력, 안전한 오류와 선택적
+  로컬 JSON을 구현하고 테스트한다. Codex는 live 실행이나 결과 기록을 하지 않는다.
+- [ ] `M4 — 검증과 문서`: 권위 설계·환경 예시를 실제 코드와 맞추고 전체 검증 후 계획을 완료한다.
 
 ### 하위 에이전트
 
-- 사용하지 않는다. 현재 어댑터 연결, 계산, CLI와 mock 테스트가 하나의 작은 결과 계약을 공유하고
-  live API 호출은 단일 소유자가 통제해야 하므로 병렬화 이점이 작다.
-
-## 구현 순서
-
-1. 두 추천 문장과 모델·512차원 설정을 현재 `Settings`에서 읽는다.
-2. 현재 `OpenAIEmbedder.embed([A, B])`를 한 번 호출하는 유스케이스를 작성한다.
-3. 응답 개수·차원·유한값·노름을 검증한 뒤 안정적인 합산으로 코사인 유사도를 계산한다.
-4. mock 응답으로 계산, 순서, 실패 분류와 비밀정보 비노출 테스트를 완료한다.
-5. CLI와 Markdown/JSON 원자 저장을 연결하되 자동 테스트에서는 live API를 호출하지 않는다.
-6. 사용자가 구현과 billable live 실행을 승인하고 키가 준비됐을 때만 대표 결과를 생성한다.
-7. 학습 문서, 전체 검증과 diff 검토 후 마일스톤별로 별도 커밋한다.
+- 사용하지 않는다. provider, settings, 질문 흐름과 테스트가 같은 핵심 계약을 공유하며 병렬 수정 시
+  embedding provider 조건과 공용 설정이 충돌할 위험이 있다.
 
 ## 검증 및 롤백
 
 예정 검증 명령:
 
 ```powershell
-uv run --directory apps/api pytest tests/test_embedding_experiment.py -q
-uv run --directory apps/api ruff check app scripts tests/test_embedding_experiment.py
+uv run --directory apps/api pytest tests/test_nvidia_nim_embedder.py -q
+uv run --directory apps/api pytest tests/test_ai_fallback.py tests/test_settings.py -q
+uv run --directory apps/api ruff check app scripts tests
 uv run python scripts/check_docs.py
 pnpm.cmd verify
 ```
 
-live 실행은 자동 검증 명령과 분리한다. 구현은 기존 어댑터를 import하는 스크립트와 테스트로
-격리되며 DB migration이나 운영 배포가 없다. 문제가 생기면 실험 스크립트·테스트·생성 보고서·
-학습 문서만 되돌리며 기존 검색 임베딩 경로는 유지한다.
+live NVIDIA 호출은 자동 검증에 포함하지 않는다. provider 전환 후에는 OpenAI와 NVIDIA 벡터를 섞지
+않고, 문제가 있으면 NVIDIA query embedding을 비활성화해 기존 키워드 검색 폴백을 유지한다.
+production corpus 재색인은 별도 실행 계획과 사용자 승인 전에는 수행하지 않는다.
 
 ## 결정 로그
 
-- 2026-07-22: 모델과 차원은 저장소의 현재값 `text-embedding-3-large`, 512를 재사용한다.
-- 2026-07-22: 의미가 같고 긍정 의무/부정 금지 구조가 다른 두 문장을 추천 기본값으로 사용한다.
-- 2026-07-22: 유사도는 코사인 값 그대로 보고하고 임의 임계값이나 “법적으로 동일” 판정을 붙이지 않는다.
-- 2026-07-22: 두 문장을 한 배치로 보내 모델·설정·호출 시점을 동일하게 하고 현재 index 정렬을 재사용한다.
-- 2026-07-22: 자동 테스트는 mock만 사용하고, 비용이 가능한 live 실행은 구현 승인 후 별도로 수행한다.
+- 2026-07-23: 무료 hosted, 한국어 평가, semantic search/RAG 용도를 모두 만족하는
+  `nvidia/nemotron-3-embed-1b`를 선택했다.
+- 2026-07-23: API는 native 2048만 받으므로 512를 요청하지 않고 모델 카드 계약에 따라 첫 512개를
+  잘라 L2 재정규화해 기존 downstream 차원을 유지한다.
+- 2026-07-23: 어댑터 구현은 교체하지만 `embed()`와 검색·DB 512차원 계약은 유지한다.
+- 2026-07-23: 실제 벡터와 유사도는 사용자가 실행할 때만 터미널에 표시하며 저장소에 기록하지 않는다.
+- 2026-07-23: cosine score는 확률·법률적 동일성·고정 합격 임계값으로 해석하지 않는다.
 
 ## 진행 기록
 
-- 2026-07-22: 현재 `OpenAIEmbedder`, `Settings`, API 환경 예시, 모델·차원과 검색 연결부를 확인했다.
-- 2026-07-22: 추천 문장, 출력·저장·실패·비밀정보·비용 계약을 확정했다. 구현과 API 호출은 하지 않았다.
+- 2026-07-22: OpenAI 기반 초안을 작성했으나 구현하거나 API를 호출하지 않았다.
+- 2026-07-23: 현재 코드, NVIDIA hosted embedding catalog/API/model card와 OpenAI embedding 공식 문서를
+  확인하고 NVIDIA provider 재사용 계획으로 전면 수정했다.
+- 2026-07-23: 코사인 유사도 학습 문서와 사용자가 결과에서 확인할 체크리스트를 작성했다.
 
 ## 미결정과 차단 요소
 
-- 구현 자체에는 차단 요소가 없지만 대표 live 결과 생성에는 유효한 `OPENAI_API_KEY`,
-  `text-embedding-3-large` 사용 권한, 네트워크와 비용 예산이 필요하다.
-- 실제 유사도 값은 API를 호출하기 전에는 미결정이다. 계획 문서에 예상 수치를 사실처럼 기록하지 않는다.
+- 실제 Free Endpoint 접근 가능 여부와 quota는 사용자의 NVIDIA 계정/API key에서만 확인할 수 있다.
+- production provider 교체에는 문서 전량 재임베딩과 모델/차원/버전 필터 보강이 필요하며 실험 B 범위가 아니다.
+- 실제 유사도 값은 사용자가 실행하기 전까지 미결정이며 저장소 문서에 예상 결과로 기록하지 않는다.
