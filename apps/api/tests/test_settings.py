@@ -83,6 +83,9 @@ def test_nvidia_provider_uses_its_own_key_without_enabling_openai_embedding() ->
     )
 
     assert settings.ai_enabled
+    assert settings.embedding_enabled
+    assert settings.nvidia_embedding_model == "nvidia/nemotron-3-embed-1b"
+    assert settings.embedding_dimensions == 512
     assert settings.answer_max_output_tokens == 4096
 
 
@@ -95,3 +98,16 @@ def test_nvidia_provider_without_key_keeps_ai_disabled() -> None:
     )
 
     assert not settings.ai_enabled
+    assert not settings.embedding_enabled
+
+
+def test_openai_generation_key_does_not_enable_nvidia_embedding() -> None:
+    settings = Settings(
+        answer_provider="openai",
+        openai_api_key="openai-generation",
+        nvidia_api_key=None,
+        _env_file=None,
+    )
+
+    assert settings.ai_enabled
+    assert not settings.embedding_enabled

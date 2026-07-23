@@ -13,8 +13,8 @@ from fastapi.responses import StreamingResponse
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
+from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.openai_answerer import OpenAIAnswerer, select_generation_hits, validate_draft
-from app.adapters.openai_embedder import OpenAIEmbedder
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
@@ -244,7 +244,7 @@ async def _answer_question(
     await asyncio.sleep(0)
     query_embedding = None
     embedding_failed = False
-    if use_ai and settings.openai_api_key:
+    if use_ai and settings.embedding_enabled:
         embedding_stage = diagnostics["embedding"]
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})
@@ -262,7 +262,11 @@ async def _answer_question(
         embedding_stage.update({"attempted": False, "status": "skipped_provider_unavailable"})
     try:
         hits, search_trace = await repository.search_with_trace(
-            payload.question, payload.as_of_date, 10, query_embedding
+            payload.question,
+            payload.as_of_date,
+            10,
+            query_embedding,
+            settings.nvidia_embedding_model if query_embedding is not None else None,
         )
     except Exception as exc:
         raise HTTPException(
@@ -568,11 +572,13 @@ async def corpus_status() -> CorpusStatus:
     )
 
 
-def _embedder() -> OpenAIEmbedder:
-    return OpenAIEmbedder(
-        api_key=settings.openai_api_key or "",
-        model=settings.openai_embedding_model,
+def _embedder() -> NvidiaNimEmbedder:
+    return NvidiaNimEmbedder(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_embedding_model,
         dimensions=settings.embedding_dimensions,
+        timeout_seconds=settings.embedding_timeout_seconds,
     )
 
 

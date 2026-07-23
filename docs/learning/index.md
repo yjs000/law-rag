@@ -26,3 +26,4 @@
 - [21 질문 이력 보존 정리와 감사 가능한 DB 작업](21-history-retention-job.md)
 - [22 기존 법령 파서를 재사용한 일반 텍스트 청킹 실험](22-existing-parser-chunking-experiment.md)
 - [23 코사인 유사도와 임베딩 비교](23-cosine-similarity.md)
+- [24 NVIDIA NIM 임베딩 provider 교체](24-nvidia-nim-embedding-provider.md)

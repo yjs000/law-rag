@@ -64,6 +64,8 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 - `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태
 
 검색은 기준일 유효 버전을 먼저 제한한다. 검색 전용 모드는 직접 조문 경로 또는 PGroonga 4단계 키워드 검색만 실행한다. AI 모드는 임베딩 생성에 성공했을 때 pgvector 의미 후보를 추가하고 PGroonga 후보와 결정적으로 병합한다. 임베딩 API를 사용할 수 없으면 검색 자체를 0건으로 만들지 않고 PGroonga 검색을 유지한다.
+의미 검색은 질의와 저장 벡터의 모델 ID가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted
+NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다.
 
 ## 답변 안전 게이트
 
@@ -120,3 +122,4 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 | 2026-07-14 | 질문 요청에서 Terra 또는 검색 전용을 명시적으로 선택 | 사용자가 생성 모델 호출 여부를 통제하면서 Terra 단일 모델·안전 폴백 계약을 유지 |
 | 2026-07-15 | collector `sync-current`는 검증된 원문을 content-addressed private Storage에 먼저 보존하고 DB 문서·버전·조문을 트랜잭션 반영 | 원문 계보와 재실행 멱등성을 유지하면서 Vercel API가 같은 Supabase 코퍼스를 읽게 함 |
 | 2026-07-19 | 생성 기본 후보를 NVIDIA hosted Nemotron 3 Ultra로 변경하고 기존 `terra` wire 값은 호환용으로 유지 | 로컬 PC 공개 없이 Vercel outbound 호출이 가능하며 provider 변경 중 기존 클라이언트 호환을 보존 |
+| 2026-07-23 | 임베딩 provider를 NVIDIA hosted Nemotron 3 Embed 1B로 교체하고 검색 시 모델 ID를 필터링 | 한국어 hosted 실험과 기존 512차원 계약을 유지하면서 OpenAI·NVIDIA 벡터 공간 혼합을 방지 |

@@ -240,12 +240,12 @@ cosine_similarity: <값>
 
 ### 주 에이전트
 
-- [ ] `M1 — provider 교체 계약`: `NvidiaNimEmbedder`를 현재 embed 인터페이스와 동일하게 구현하고
+- [x] `M1 — provider 교체 계약`: `NvidiaNimEmbedder`를 현재 embed 인터페이스와 동일하게 구현하고
   2048 검증, 512 slicing, L2 재정규화와 순서 보존 mock 테스트를 추가한다.
-- [ ] `M2 — 기존 질문 흐름 연결`: settings와 `_embedder()`를 NVIDIA key/model로 연결하되 검색 폴백,
+- [x] `M2 — 기존 질문 흐름 연결`: settings와 `_embedder()`를 NVIDIA key/model로 연결하되 검색 폴백,
   512차원 DB 계약과 생성 provider 선택을 깨뜨리지 않는 회귀 테스트를 추가한다.
-- [ ] `M3 — 사용자 실행 CLI`: 두 기본 문장, 전체 벡터·norm·코사인 터미널 출력, 안전한 오류와 선택적
-  로컬 JSON을 구현하고 테스트한다. Codex는 live 실행이나 결과 기록을 하지 않는다.
+- [x] `M3 — 사용자 실행 CLI`: 두 기본 문장, 전체 벡터·norm·코사인 터미널 출력과 안전한 오류를
+  구현하고 테스트한다. Codex는 live 실행이나 결과 기록을 하지 않는다.
 - [ ] `M4 — 검증과 문서`: 권위 설계·환경 예시를 실제 코드와 맞추고 전체 검증 후 계획을 완료한다.
 
 ### 하위 에이전트
@@ -285,6 +285,8 @@ production corpus 재색인은 별도 실행 계획과 사용자 승인 전에�
 - 2026-07-23: 현재 코드, NVIDIA hosted embedding catalog/API/model card와 OpenAI embedding 공식 문서를
   확인하고 NVIDIA provider 재사용 계획으로 전면 수정했다.
 - 2026-07-23: 코사인 유사도 학습 문서와 사용자가 결과에서 확인할 체크리스트를 작성했다.
+- 2026-07-23: NVIDIA adapter, 실험 CLI와 model-filtered hybrid search를 구현하고 mock·API 전체
+  회귀 테스트를 통과했다. live API와 실제 실험 결과는 생성하지 않았다.
 
 ## 미결정과 차단 요소
 

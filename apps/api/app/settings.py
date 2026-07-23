@@ -34,8 +34,11 @@ class Settings(BaseSettings):
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
     answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
     answer_timeout_seconds: float = Field(default=30, gt=0, le=120)
-    openai_embedding_model: str = "text-embedding-3-large"
-    embedding_dimensions: int = 512
+    nvidia_embedding_model: Literal["nvidia/nemotron-3-embed-1b"] = (
+        "nvidia/nemotron-3-embed-1b"
+    )
+    embedding_dimensions: int = Field(default=512, ge=512, le=512)
+    embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
     ai_daily_limit: int = Field(default=3, ge=1)
     search_daily_limit: int = Field(default=30, ge=1)
@@ -82,6 +85,10 @@ class Settings(BaseSettings):
             else self.nvidia_api_key
         )
         return self.ai_mode == "auto" and bool(provider_key)
+
+    @property
+    def embedding_enabled(self) -> bool:
+        return self.ai_mode == "auto" and bool(self.nvidia_api_key)
 
 
 @lru_cache
