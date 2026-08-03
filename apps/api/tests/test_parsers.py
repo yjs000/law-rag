@@ -92,6 +92,57 @@ def test_chapter_marker_does_not_replace_first_article(wire_format: str) -> None
     ]
 
 
+def test_flat_json_subitems_are_restored_under_their_numbered_items() -> None:
+    body = json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "시험법",
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "2",
+                        "조문여부": "조문",
+                        "조문내용": "제2조(정의)",
+                        "항": {
+                            "호": [
+                                {"호번호": "1.", "호내용": "1. 다음 각 목의 신에너지"},
+                                {"호번호": "2.", "호내용": "2. 다음 각 목의 재생에너지"},
+                            ],
+                            "목": [
+                                {"목번호": "가.", "목내용": "가. 수소에너지"},
+                                {"목번호": "나.", "목내용": "나. 연료전지"},
+                                {"목번호": "가.", "목내용": "가. 태양에너지"},
+                                {"목번호": "나.", "목내용": "나. 풍력"},
+                            ],
+                        },
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="시험법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/json",
+    )
+
+    assert [item.path for item in document.provisions] == [
+        "제2조",
+        "제2조/호1.",
+        "제2조/호2.",
+        "제2조/호1./목가.",
+        "제2조/호1./목나.",
+        "제2조/호2./목가.",
+        "제2조/호2./목나.",
+    ]
+
+
 @pytest.mark.parametrize(
     "parser,error", [(parse_json, LawJsonParseError), (parse_xml, LawXmlParseError)]
 )

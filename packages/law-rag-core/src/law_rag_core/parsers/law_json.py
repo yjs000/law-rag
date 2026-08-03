@@ -80,6 +80,21 @@ def _technical_standard_sections(content: str) -> list[tuple[str, str]]:
     return sections
 
 
+def _flat_subitem_groups(subitems: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    if not subitems:
+        return []
+    groups: list[list[dict[str, Any]]] = []
+    first_number = _value(subitems[0], "목번호")
+    for subitem in subitems:
+        number = _value(subitem, "목번호")
+        if groups and groups[-1] and number == first_number:
+            groups.append([])
+        elif not groups:
+            groups.append([])
+        groups[-1].append(subitem)
+    return groups
+
+
 def load_json(body: str) -> Any:
     try:
         return json.loads(body.lstrip("\ufeff\r\n\t "))
@@ -205,10 +220,12 @@ def parse_legal_document(
             if paragraph_number:
                 add(paragraph_path, paragraph_content, article_path)
             item_parent = paragraph_path if paragraph_number else article_path
+            item_paths: list[tuple[dict[str, Any], str]] = []
             for item in nodes(paragraph.get("호")):
                 item_number = _value(item, "호번호") or str(len(provisions) + 1)
                 item_path = f"{item_parent}/호{item_number}"
                 add(item_path, _value(item, "호내용"), item_parent)
+                item_paths.append((item, item_path))
                 for subitem in nodes(item.get("목")):
                     subitem_number = _value(subitem, "목번호") or str(len(provisions) + 1)
                     add(
@@ -216,6 +233,24 @@ def parse_legal_document(
                         _value(subitem, "목내용"),
                         item_path,
                     )
+            flat_subitems = nodes(paragraph.get("목"))
+            if flat_subitems:
+                eligible_items = [
+                    (item, item_path)
+                    for item, item_path in item_paths
+                    if not nodes(item.get("목")) and "각 목" in (_value(item, "호내용") or "")
+                ]
+                groups = _flat_subitem_groups(flat_subitems)
+                if len(groups) != len(eligible_items):
+                    raise LawJsonParseError("평탄화된 목의 상위 호를 복원할 수 없습니다")
+                for (_, item_path), group in zip(eligible_items, groups, strict=True):
+                    for subitem in group:
+                        number = _value(subitem, "목번호") or str(len(provisions) + 1)
+                        add(
+                            f"{item_path}/목{number}",
+                            _value(subitem, "목내용"),
+                            item_path,
+                        )
     if not provisions and isinstance(payload, dict):
         service = payload.get("AdmRulService")
         if isinstance(service, dict):
