@@ -56,6 +56,8 @@ NVIDIA 공식 평가 문서도 문서 검색 지표와 답변 생성 지표를 �
 
 관련성을 `0/1`로만 기록하면 binary relevance이고, `0/1/2`처럼 중요도를 나누면 graded relevance다. Recall과 Precision은 보통 일정 등급 이상을 관련 문서로 보지만, nDCG는 등급 차이를 순위 품질에 반영할 수 있다.
 
+qrels가 없는 질문은행은 질문의 자연스러움과 범위는 검토할 수 있지만 검색 Recall은 계산할 수 없다. 그렇다고 현재 검색 결과를 곧바로 qrels로 복사하면 검색기가 낸 답을 같은 검색기의 정답으로 삼는 순환 평가가 된다. 실험 D에서는 질문 문구·범위 승인과 공식 원문 기반 qrels 판정을 분리하고, 독립 review가 끝난 전체 dataset과 문항별 payload를 별도 adjudication manifest의 canonical SHA-256으로 봉인한 뒤에만 지표를 계산한다.
+
 ### Reference contexts와 reference answer
 
 > **용어 요약:** `Reference`는 평가할 때 비교 기준으로 삼는 정답이다. `Reference contexts`는 정답 근거 원문, `reference answer`는 그 원문을 바탕으로 만든 기준 답변을 뜻한다.
@@ -152,7 +154,7 @@ MRR = 모든 질문의 Reciprocal Rank 평균
 top K 안에 없음 → 0
 ```
 
-예제에서는 보조 근거 B가 1위이므로 MRR은 `1.0`이다. 하지만 핵심 직접 근거 A는 3위다. 따라서 relevance 등급이 다른 법률 근거에서는 MRR만 보면 “보조 근거가 핵심 근거보다 앞선 문제”를 놓칠 수 있다.
+예제에서는 관련성 1 이상을 모두 정답으로 보는 일반 MRR이라면 보조 근거 B가 1위이므로 `1.0`이다. 하지만 핵심 직접 근거 A는 3위다. 따라서 relevance 등급이 다른 법률 근거에서는 어떤 등급을 MRR 정답으로 인정하는지 고정해야 한다. 현재 실험 D의 `MRR@10`은 relevance 2 직접 qrel만 인정하므로 이 예제의 첫 정답 순위는 3위, reciprocal rank는 `1/3`이다.
 
 MRR은 “첫 정답 하나를 빨리 보여주는가”에는 적합하지만, 두 번째 이후 정답의 순서는 평가하지 않는다.
 
@@ -202,6 +204,40 @@ nDCG는 다음 조건에서 특히 유용하다.
 - “찾았는가”뿐 아니라 “좋은 순서로 놓았는가”를 비교할 때
 
 모든 qrel이 `0/1`이고 질문마다 정답이 하나뿐이면 nDCG가 제공하는 추가 정보가 줄어든다.
+
+## 실험 D의 고정 검색 지표 계약
+
+현재 실험 D runner는 production의 조 단위 grouping이나 keyword fallback을 사용하지 않고 raw `provision_id` dense top 10을 평가한다. 실제로는 11개를 요청해 10위와 11위 점수가 같은지 검사하며, 동점이면 경계를 임의로 자르지 않고 실행을 실패시킨다.
+
+core 평균에는 `fully_answerable` 질문만 포함하며 질문별 값을 먼저 계산한 뒤 macro 평균한다. 그중 retrieval 설정 조정에 쓰지 않은 held-out `test` split이 primary다. `calibration` fully-answerable과 calibration+test 결합값은 동작 확인과 비교를 위한 `diagnostic_only`이며 primary 성능처럼 보고하지 않는다.
+
+```text
+Recall@K(q)
+= |top K ∩ relevance 2 qrels| / |relevance 2 qrels|
+
+HitRate@K(q)
+= top K에 relevance 2 qrel이 하나라도 있으면 1, 아니면 0
+
+MRR@10(q)
+= 첫 relevance 2 qrel 순위가 10 이내면 1 / 순위, 아니면 0
+
+DCG@K(q)
+= Σ (2^relevance_i - 1) / log2(rank_i + 1)
+
+nDCG@K(q)
+= DCG@K / 이상적 순서의 DCG@K
+
+Facet Recall@K(q)
+= top K의 relevance 2 qrels가 덮은 supported 필수 요소 수
+  / supported 필수 요소 전체 수
+
+All Required Facets Covered@K(q)
+= supported 필수 요소를 모두 덮으면 1, 아니면 0
+```
+
+cutoff는 `1, 3, 5, 10`이다. Recall·HitRate·MRR과 facet 지표는 relevance 2만 positive로 보며, nDCG만 relevance 2 직접 근거와 relevance 1 보조 문맥의 등급 차이를 함께 사용한다. partial·clarification·unanswerable은 이 core 평균에 섞지 않고 별도 모집단으로 보고한다.
+
+`calibration`은 cutoff나 설정을 정하는 조정용 자료다. `held-out test`는 그 조정 과정에서 보지 않고 봉인해 둔 최종 확인 자료다. 둘을 합친 평균을 primary로 사용하면 조정에 이미 본 질문의 성능이 섞여 실제 일반화 성능이 부풀 수 있다.
 
 ## Article Recall과 Evidence Recall
 
@@ -538,13 +574,14 @@ LLM judge 결과에는 반드시 다음을 기록한다.
 ## 실험 D에서 지표를 읽는 순서
 
 1. **데이터 무결성**: ID·path·SHA-256과 기준일이 모두 맞는지 확인한다.
-2. **후보 회수**: Recall@1/3/5/10과 Evidence Recall로 직접 근거가 후보 안에 들어오는지 본다.
-3. **순위 품질**: MRR과 graded nDCG로 핵심 근거가 보조 근거보다 앞서는지 본다.
-4. **문맥 축소**: Context/Evidence Precision과 Recall을 함께 보며 top 10에서 생성 문맥 3~5개로 줄였을 때 근거를 잃지 않는지 본다.
-5. **근거 부족**: unanswerable FPR과 answerable FNR을 함께 본다.
-6. **답변 생성**: Faithfulness, Answer Relevancy, Answer Correctness를 분리해 본다.
-7. **인용 검증**: Citation Correctness·Coverage와 ID·path·SHA 검사를 통과하는지 본다.
-8. **운영성**: latency, 비용, 오류, NaN과 반복 재현성을 확인한다.
+2. **후보 회수**: grade 2 qrels의 Recall@1/3/5/10과 HitRate@1/3/5/10으로 직접 근거 전체와 최소 한 건의 회수를 구분한다.
+3. **순위 품질**: MRR@10과 graded nDCG@1/3/5/10으로 핵심 근거가 보조 근거보다 앞서는지 본다.
+4. **넓은 질문**: facet_recall과 all_required_facets_covered로 supported 필수 답변 요소를 얼마나 덮었는지 본다.
+5. **문맥 축소**: Context/Evidence Precision과 Recall을 함께 보며 top 10에서 생성 문맥 3~5개로 줄였을 때 근거를 잃지 않는지 본다.
+6. **근거 부족**: unanswerable FPR과 answerable FNR을 함께 본다.
+7. **답변 생성**: Faithfulness, Answer Relevancy, Answer Correctness를 분리해 본다.
+8. **인용 검증**: Citation Correctness·Coverage와 ID·path·SHA 검사를 통과하는지 본다.
+9. **운영성**: latency, 비용, 오류, NaN과 반복 재현성을 확인한다.
 
 ## 한 점수만 보면 생기는 오판
 
@@ -567,7 +604,9 @@ LLM judge 결과에는 반드시 다음을 기록한다.
 
 ```text
 검색 후보:
-Recall@1/3/5/10 + MRR + graded nDCG@3/5/10
+Recall@1/3/5/10 + HitRate@1/3/5/10
+MRR@10 + graded nDCG@1/3/5/10
+facet_recall@1/3/5/10 + all_required_facets_covered@1/3/5/10
 
 실제 근거:
 Article Recall + Evidence Recall + Evidence Precision

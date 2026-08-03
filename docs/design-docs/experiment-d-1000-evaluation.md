@@ -1,7 +1,9 @@
 # 실험 D 1,000문항 평가 설계
 
-상태: 데이터셋 v3 검토 초안 생성, 사용자 질문 확인·검색 측정 전
+상태: 과거 v3 synthetic 검토 초안 보존, 일반 사용자 gold 승인·주석·검색 측정 전
 확정일: 2026-08-03
+
+> 이 문서의 v3 범주·850/150 구성은 parser v3 이전 조문 ID로 만든 합성 초안의 기록이다. 현재 사용자 검토 대상은 별도의 일반 사용자 질문은행이며, 실제 평가의 권위 계약은 [일반 사용자 질문은행과 gold 주석 경계](experiment-d-layperson-question-bank.md)와 `scripts.experiment_d_gold_contract`다. 정답이 없는 질문은행 자체로 Recall·MRR·nDCG를 계산하지 않는다.
 
 ## 선택한 방식
 
@@ -14,11 +16,13 @@ NVIDIA의 검색/답변 분리와 BEIR qrels, LlamaIndex의 labelled RAG dataset
 
 공식 자료와 확인 내용은 [RAG 평가 방법 공식 자료](../references/rag-evaluation-methods-2026-08-03.md)에 기록했다.
 
-## 정답을 정하는 방법
+## 과거 v3 초안에서 정답을 정한 방법
 
 정답을 질문에서 추론하지 않는다. 먼저 운영 corpus의 조·항·호·목 하나를 선택하고, 그 원문을 `reference`와 primary qrel로 고정한 뒤 해당 근거를 묻는 질문을 역으로 만든다. primary evidence에는 document/version/provision ID, path와 원문 SHA-256을 저장한다. 조 전체 문맥이 필요한 경우 같은 조의 부모·자식 조각을 relevance 1, 직접 답 조각을 relevance 2로 둔다.
 
-시행일 전·corpus 밖 음성 질문은 `answerable=false`, 빈 qrels, “현재 corpus와 기준일에서는 직접 근거를 찾을 수 없습니다”를 기준 응답으로 가진다. 모델 기억으로 정답을 보완하지 않는다.
+시행일 전·corpus 밖 음성 질문은 `answerable=false`, 빈 qrels, “현재 corpus와 기준일에서는 직접 근거를 찾을 수 없습니다”를 기준 응답으로 가졌다. 모델 기억으로 정답을 보완하지 않는다.
+
+현재 일반 사용자 gold는 질문을 역으로 다시 만들지 않는다. 사용자가 승인한 질문 문구와 범위를 고정한 뒤, 검색 결과와 독립적으로 공식 원문을 검토해 answerability 4상태, 필수 답변 요소, grade 2 직접 qrels, grade 1 보조 qrels, frozen reference contexts와 reference response를 주석한다. 질문은행의 `not_annotated`는 이 작업 전의 임시 승인 단계이지 더 좋은 평가 방식이 아니다.
 
 ## 왜 LLM이 1,000개 정답을 쓰게 하지 않았는가
 
@@ -32,7 +36,7 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 
 `다음 각 호` 또는 `다음 각 목`을 여는 조각은 그 문장만으로 목록 내용을 다 담지 못한다. 이 경우 primary evidence와 그 하위 호·목을 `subtree` evidence closure로 묶는다. primary 조각은 relevance 2, 답을 완성하는 하위 조각은 relevance 1이며, `reference`와 `reference_contexts`에도 함께 들어간다. 짧아서 질문 후보가 될 수 없는 호·목도 삭제·구조 표지가 아니라면 근거 문맥에는 포함한다.
 
-## 1,000문항 구성
+## 과거 v3 synthetic 1,000문항 구성
 
 | 범주 | 수 | 목적 |
 |---|---:|---|
@@ -44,16 +48,20 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 | temporal before effective | 75 | 첫 수록 버전 시행 전 기준일의 근거 부족 |
 | outside corpus | 75 | corpus 밖 실제 법률 질문 60개와 존재하지 않는 조문 극단 경계 15개 |
 
-전체 중 850개는 answerable, 150개는 unanswerable이다. 각 범주에서 20%를 calibration으로 배정해 top-k·후속 임계값 후보를 관찰하고, 나머지 800개 test는 결정 후 최종 비교에 사용한다. test 결과를 보고 calibration 규칙을 바꾸지 않는다.
+과거 v3 초안은 전체 중 850개 answerable, 150개 unanswerable로 만들었다. 이 비율은 현재 일반 사용자 gold에 자동 상속하지 않는다. 일반 사용자 gold는 독립 주석 결과로 answerability 분포가 정해지며, 같은 scenario family 다섯 문항을 나누지 않는 고정 200 calibration / 800 test 배정만 유지한다. test 결과를 보고 calibration 규칙을 바꾸지 않는다.
 
 ## 경계값·대조·비교군
 
 ### 경계값
 
-- `Recall@1/3/5/10`: 후보 수를 늘릴 때 직접 근거가 언제 들어오는지 본다.
+- `Recall@1/3/5/10`: 각 질문의 전체 grade 2 직접 qrels 중 top k에서 찾은 비율을 질문별로 계산해 macro 평균한다.
+- `HitRate@1/3/5/10`: grade 2 직접 qrel이 하나라도 top k에 있으면 1이다. 직접 qrel이 여러 개인 질문에서는 Recall과 다르다.
+- `MRR@10`: 처음 찾은 grade 2 직접 qrel이 10위 안에 있으면 그 순위의 역수, 없으면 0이다.
+- `nDCG@1/3/5/10`: 직접 근거 2, 보조 문맥 1, 그 밖의 후보 0을 `2^relevance - 1` gain과 `log2(rank + 1)` 할인으로 평가한다.
+- `facet_recall@k`와 `all_required_facets_covered@k`: retrieved grade 2 qrels가 corpus에서 supported인 필수 답변 요소를 얼마나 덮는지 본다.
 - HNSW exact 대조: indexed search가 exact cosine 순위에서 얼마나 근거를 놓치는지 본다.
 - 근거 부족: 시행 전 75개, corpus 밖 실제 법률 60개, 존재하지 않는 조문 15개의 false-positive rate를 본다.
-- 생성 문맥: 후보 10개와 생성 최대 5개 조문의 Evidence Recall/Precision 변화를 분리한다.
+- 생성 문맥: 후보 10개를 답변 문맥으로 줄이는 평가는 raw 검색 runner의 core 지표와 분리한 후속 문맥·답변 단계에서 수행한다.
 
 고정 similarity cutoff는 아직 채택하지 않는다. calibration 200개의 positive/negative 점수 분포가 분리되는지 관찰할 뿐이며, 직접 근거 판정을 코사인 점수 하나로 대체하지 않는다.
 
@@ -70,7 +78,7 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 
 ## 데이터 형식
 
-현재 사용자 검토 대상은 [experiment-d-v3-1000.json](../../apps/api/evaluation/experiment-d-v3-1000.json)이다. `draft` 버전이며 질문 확인 전에는 검색 실험 입력으로 사용하지 않는다. 각 문항은 다음을 가진다.
+과거 synthetic 검토 초안은 [experiment-d-v3-1000.json](../../apps/api/evaluation/experiment-d-v3-1000.json)이다. 이 파일의 qrels는 현재 parser v3 corpus와 맞지 않아 통과 대상 gold가 아니다. 현재 사용자 질문 검토 대상은 `experiment-d-lay-energy-query-bank-v1-draft.json`이며, 승인 뒤 별도의 `experiment-d-lay-energy-gold-v1.json`으로 주석한다. 과거 v3 각 문항은 다음을 가진다.
 
 - `user_input`, `as_of_date`, `answerable`
 - 원문 기반 `reference`, `reference_contexts`
@@ -79,9 +87,9 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 - hard contrast의 `distractor_provision_ids`
 - 생성 템플릿, `evidence_scope`와 사람 검토 상태
 
-BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/experiments/context/beir-v3/`에 로컬 생성한다. 전체 법률 원문 corpus는 실행 산출물이므로 Git에 넣지 않는다.
+과거 v3의 BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/experiments/context/beir-v3/`에 로컬 생성할 수 있다. 현재 runner의 권위 입력은 서로 다른 세 파일인 approved gold dataset, 고정 질문은행, 별도 승인 manifest다. 전체 법률 원문 corpus와 실제 run 결과는 로컬 실행 산출물이므로 Git에 넣지 않는다.
 
-## 자동 검증과 사람 검토
+## 과거 v3 자동 검증과 사람 검토
 
 자동 검사는 다음을 보장한다.
 
@@ -109,20 +117,25 @@ v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개
 
 ## 아직 측정하지 않은 것
 
-이 문서는 질문 초안 생성 결과이지 검색 품질 결과가 아니다. 사용자 질문 확인과 corpus 재수집이 끝난 뒤에만 다음을 실제 실행값으로 별도 기록한다.
+이 문서는 질문 초안과 평가 계약이지 검색 품질 결과가 아니다. 운영 corpus는 parser v3와 현재 NVIDIA 벡터로 이미 재구축됐다. 사용자 질문 승인, 독립 gold 주석·검토, 승인 manifest와 두 preflight가 모두 완료된 뒤에만 다음을 실제 실행값으로 별도 기록한다.
 
 실행 직전에는 다음 명령이 `approved_gold` 상태, 승인 질문·범위 해시, 현재 corpus fingerprint와 모든 qrel 메타데이터를 통과해야 한다. 이 명령은 임베딩이나 검색을 호출하지 않는다.
 
 `uv run --directory apps/api python -m scripts.preflight_experiment_d_gold --dataset evaluation/experiment-d-lay-energy-gold-v1.json`
 
-현재 명령은 독립적인 읽기 전용 검사다. 아직 1,000문항 평가 runner와 연결되지 않았으므로 그 자체가 검색 실행 전체를 잠그는 원자적 게이트는 아니다. 평가 runner를 구현할 때는 동일 프로세스에서 corpus mutation 공유 잠금을 먼저 얻고, 잠금 안에서 이 검사를 다시 수행한 뒤 마지막 검색까지 잠금을 유지해야 한다. 질문 승인 전에는 runner를 실행하지 않는다.
+이 명령은 독립적인 읽기 전용 검사이므로 그 자체가 검색 실행 전체를 잠그는 원자적 게이트는 아니다. 실제 `scripts.evaluate_experiment_d_gold` runner는 clean critical code provenance와 초기 preflight·검색 상태를 먼저 확인하고, 그 뒤에만 질문을 임베딩한다. 이어 같은 DB 연결의 transaction에서 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight·벡터 profile·coverage·L2 norm·HNSW identity와 설정을 다시 검사한 뒤 마지막 검색까지 잠금을 유지한다. 질문 승인 전에는 runner를 실행하지 않는다.
+
+runner의 검색 단위는 raw `provision_id`이며 production direct-path, keyword fallback과 article grouping을 사용하지 않는다. 각 질문에서 11개를 받아 raw cosine 내림차순과 provision ID 오름차순 tie-break를 검증하고, 10위와 11위 점수가 같으면 `unresolved_cutoff_tie`로 실패한다. 실행 계획, retrieval 상태, corpus·vector·질문·critical code 지문과 실제 순위를 기록하며, 전체 성공 뒤에만 `.data/experiments/experiment-d/runs/`에 새 JSON을 원자적으로 게시한다. 실패하면 완성 결과 파일을 만들지 않고 기존 run을 덮어쓰지 않는다.
 
 과거 v3 draft의 stale qrels를 재현해서 확인할 때만 보고서에 적힌 별도 명령처럼 `evaluation/experiment-d-v3-1000.json`을 명시한다. 이 파일은 통과 대상 gold가 아니다.
 
-- Recall@1/3/5/10, MRR, nDCG@3/5/10
-- answerable 범주의 Article/Evidence Recall
+- fully answerable의 Recall@1/3/5/10과 HitRate@1/3/5/10
+- grade 2 직접 qrel 기준 MRR@10
+- grade 2/1 graded nDCG@1/3/5/10
+- facet_recall@1/3/5/10과 all_required_facets_covered@1/3/5/10
+- partial·clarification·unanswerable 별도 모집단 보고
 - unanswerable false-positive rate
-- HNSW 대 exact recall과 latency
+- HNSW 대 exact recall과 latency는 core gold 지표와 분리한 인덱스 진단
 - 생성 답변의 faithfulness·answer correctness·citation correctness
 
 LLM judge를 쓰는 지표는 모델·프롬프트·실패/NaN 수를 함께 기록하고, ID·원문 기반 결정적 지표와 분리한다.
@@ -138,3 +151,6 @@ LLM judge를 쓰는 지표는 모델·프롬프트·실패/NaN 수를 함께 기
 - 2026-08-03: outside-corpus는 corpus 밖 실제 법률 질문 60개와 존재하지 않는 조문 15개로 분리했다.
 - 2026-08-03: 의미 질문에 행위 주체 역할명을 추가하고, 동일 질문이 복수 근거 후보를 가리키는 212개 후보는 제외했다.
 - 2026-08-03: 목록 도입 조각의 답을 완성하는 짧은 하위 호·목까지 subtree evidence closure와 qrels에 포함했다.
+- 2026-08-03: 일반 사용자 질문은행의 `not_annotated`는 질문 승인 전 임시 상태로 한정하며, 실제 평가는 독립 qrels·reference contexts·reference response와 승인 manifest가 있는 `approved_gold`만 허용한다.
+- 2026-08-03: approved-gold runner는 초기·공유 잠금 내부 preflight, raw provision top 11 경계 검사, retrieval plan·상태 지문과 원자적 결과 게시를 강제한다.
+- 2026-08-03: runner와 fixture 테스트는 구현했지만 실제 일반 사용자 1,000문항은 아직 승인 gold가 아니므로 검색 실행과 지표 산출을 하지 않았다.

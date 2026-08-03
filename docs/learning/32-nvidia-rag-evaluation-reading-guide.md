@@ -74,7 +74,9 @@ NVIDIA에는 하나의 고정된 “RAG 총점표”만 있는 것이 아니다.
 - Recall@5: 실패
 - Recall@10: 성공
 
-Recall@10이 높다는 것은 사서가 넉넉한 후보 안에는 정답을 가져왔다는 뜻이다. 하지만 작성자에게 10개를 전부 주어도 된다는 뜻은 아니다. 불필요한 조문이 너무 많으면 오히려 답변을 방해할 수 있다.
+이 예시는 정답이 하나뿐이어서 Recall과 HitRate가 같은 경우다. 직접 근거가 네 개 필요한 질문에서 top 10이 한 개만 찾았다면 HitRate@10은 1이지만 Recall@10은 `1/4`이다. 현재 실험 D는 두 값을 분리한다.
+
+Recall@10이 높다는 것은 사서가 넉넉한 후보 안에는 필요한 정답 근거를 많이 가져왔다는 뜻이다. 하지만 작성자에게 10개를 전부 주어도 된다는 뜻은 아니다. 불필요한 조문이 너무 많으면 오히려 답변을 방해할 수 있다.
 
 ### nDCG@K: 좋은 근거가 앞에 있는가
 
@@ -233,10 +235,14 @@ LLM 심사자는 의미를 읽을 수 있지만 절대적인 측정 기구는 �
 
 ### 검색 후보 단계
 
-1. 법률 원문 ID·조문 경로·버전·SHA가 맞는지 먼저 검증한다.
-2. 고정 질문과 정답 조문 표로 Recall@1·3·5·10을 계산한다.
-3. 직접 근거와 보조 근거에 등급을 주고 nDCG를 계산한다.
-4. 조문 ID뿐 아니라 실제 답변 문구가 후보에 있는지 Evidence Recall을 확인한다.
+1. 정답 없는 질문은행은 말투·범위 검토에만 사용한다. 질문 승인 뒤 검색 결과와 독립적으로 qrels·reference contexts·reference response를 주석한 gold를 만든다.
+2. 법률 원문 ID·조문 경로·버전·SHA와 승인 질문·corpus fingerprint가 맞는지 먼저 검증한다.
+3. grade 2 직접 qrels로 Recall@1·3·5·10과 HitRate@1·3·5·10을 구분해 계산한다.
+4. 첫 grade 2 qrel의 MRR@10을 계산한다.
+5. 직접 근거 2, 보조 문맥 1의 등급으로 nDCG@1·3·5·10을 계산한다.
+6. 넓은 질문은 grade 2 qrels가 supported 필수 답변 요소를 덮는 facet recall과 전체 요소 충족률을 함께 본다.
+
+현재 실험 D runner는 초기 preflight 뒤에만 질문을 임베딩하고, corpus mutation 공유 transaction lock 안에서 같은 검사를 다시 한 뒤 raw provision top 10 검색을 끝낼 때까지 잠금을 유지한다. 실제로는 11개를 요청해 10위와 11위 동점을 검사한다. query plan·retrieval 상태·입력·코드 지문과 실제 순위를 성공 run에 원자적으로 기록한다. 이 runner는 구현됐지만 일반 사용자 1,000문항은 아직 승인 gold가 아니므로 실제 실행하지 않았다.
 
 ### 최종 문맥 선택 단계
 
@@ -258,7 +264,7 @@ LLM 심사자는 의미를 읽을 수 있지만 절대적인 측정 기구는 �
 
 | 변경한 부분 | 우선 확인할 것 |
 |---|---|
-| 임베딩·검색 방식 | Recall@K, nDCG@K, 첫 정답 순위 |
+| 임베딩·검색 방식 | Recall@K, HitRate@K, MRR@10, nDCG@K, facet coverage |
 | top 10에서 최종 문맥을 고르는 방식 | Context Recall, Context Precision, Evidence Precision |
 | 생성 모델·프롬프트 | Faithfulness, Response Relevancy, Answer Correctness |
 | 잡음 제거 방식 | Noise Sensitivity |

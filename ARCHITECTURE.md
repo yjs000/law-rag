@@ -1,7 +1,7 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-07-18
+최종 갱신: 2026-08-03
 
 ## 목적
 
@@ -37,7 +37,7 @@ Python 실행 단위는 같은 저장소 안에서 두 프로젝트로 분리한
 - `domain`: 법령 버전, 조문, 공개 API 계약과 순수 검증 규칙
 - `application`: 수집, 검색, 답변 조립, 인용 검증 유스케이스
 - `ports`: 법령 저장소·임베딩·답변 모델·원문 저장소 계약
-- `adapters`: 국가법령 API, Supabase/PostgreSQL/Storage, OpenAI 구현
+- `adapters`: 국가법령 API, Supabase/PostgreSQL/Storage, NVIDIA NIM 등 외부 생성·임베딩 provider 구현
 - `delivery`: FastAPI 엔드포인트, collector CLI·OS 스케줄러, Next.js 워크벤치
 
 도메인 계층은 FastAPI, SQLAlchemy, OpenAI SDK를 import하지 않는다. 브라우저는 OpenAI와 Supabase service role에 직접 접근하지 않는다.
@@ -63,19 +63,37 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 - `derived_obligations`: 행위자·조건·의무 유형과 검증 상태
 - `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태
 
-검색은 기준일 유효 버전을 먼저 제한한다. 검색 전용 모드는 직접 조문 경로 또는 PGroonga 4단계 키워드 검색만 실행한다. AI 모드는 임베딩 생성에 성공했을 때 pgvector 의미 후보를 추가하고 PGroonga 후보와 결정적으로 병합한다. 임베딩 API를 사용할 수 없으면 검색 자체를 0건으로 만들지 않고 PGroonga 검색을 유지한다.
-의미 검색은 질의와 저장 벡터의 모델 ID가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted
-NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다.
+검색은 먼저 corpus 전체 준비 게이트와 기준일 유효 버전을 제한한다. 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
+
+의미 검색은 질의와 저장 벡터의 profile key가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다. production 응답은 같은 조의 하위 조각을 조 단위로 묶을 수 있지만, 실험 D의 검색 평가는 qrels와 같은 raw `provision_id` 단위를 사용하고 direct-path, keyword fallback, 조 단위 grouping을 우회한다.
 
 ## 답변 안전 게이트
 
 1. 질문의 기준일과 사업 단계를 검증한다.
-2. 하이브리드 검색으로 근거 후보를 구성한다.
+2. direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
 3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID를 받는다.
 4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다.
 5. 선택된 생성 provider 실패, quota 402/429, 권한 오류, AI 비활성 시 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다.
 
 현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다.
+
+## 실험 D 검색 평가 게이트
+
+정답이 없는 일반 사용자 질문은행은 질문 문구·범위 검토용 중간 산출물이다. 실제 검색 지표는 사용자가 질문을 승인한 뒤 공식 원문을 독립 검토해 qrels, reference contexts와 reference response를 붙이고 `approved_gold`로 확정한 자료에서만 계산한다. 질문 승인은 질문 문구·범위만 고정하며, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 다시 봉인한다. 시간 순서는 모든 문항에서 `질문 승인 < 독립 annotation review < gold adjudication`이어야 한다. 현재 일반 사용자 질문은행 1,000개에 대한 실제 검색 평가는 아직 실행하지 않았다.
+
+승인된 gold runner는 다음 순서를 강제한다.
+
+1. dataset, 질문은행, 질문 승인 manifest, gold adjudication manifest와 critical code provenance를 검증한다.
+2. 초기 `REPEATABLE READ, READ ONLY` transaction에서 corpus·벡터·HNSW 상태와 gold preflight를 통과하기 전에는 질문을 임베딩하지 않는다.
+3. 질문 임베딩 뒤 별도 `READ COMMITTED, READ ONLY` transaction의 첫 snapshot-taking statement로 PostgreSQL corpus mutation 공유 advisory lock을 얻는다.
+4. 같은 연결과 잠금 transaction 안에서 전체 검색 가능 corpus와 문항별 기준일 유효 population, qrels·distractor·후보 pool, 벡터 profile·coverage·L2 norm, HNSW 물리 identity와 runtime 설정을 다시 검증한다.
+5. 기준일별 대표 query의 `EXPLAIN` plan을 검색 전에 검사한다. 기대 HNSW index가 하나라도 plan에 없으면 검색을 시작하지 않는다. 통과한 경우에만 모든 질문을 raw provision dense 검색으로 11개까지 조회하며, 10위와 11위의 raw cosine 점수가 같으면 top 10 경계를 임의로 자르지 않고 실행을 실패시킨다.
+6. 같은 공유 lock을 마지막 검색까지 유지한 뒤에만 지표를 계산한다. 결과에는 입력·질문·corpus·벡터·query plan·임베딩 batch 크기·PostgreSQL/pgvector 버전과 검색 설정·critical code commit 및 파일 해시를 기록한다.
+7. 전체 실행이 성공한 경우에만 새 run JSON을 임시 파일에서 원자적으로 게시한다. 기존 run을 덮어쓰지 않으며 실패 시 완성 결과 파일을 만들지 않는다.
+
+annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 ID와 후보 집합 해시를 보존한다. 비전체검사 방법은 후보 수가 `min(top_k, 기준 corpus 크기)`와 정확히 같아야 하고, 방법별 후보의 합집합은 문항별 판정 pool과 정확히 같아야 한다. `full_corpus_manual_review` 방법을 선언하면 그 후보 집합은 해당 문항 기준일에 유효한 전체 검색 가능 provision 집합과 정확히 같아야 한다.
+
+핵심 검색 평균의 primary 모집단은 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항이다. grade 2 직접 qrels를 기준으로 Recall@1/3/5/10, HitRate@1/3/5/10과 MRR@10을 계산하고, nDCG@1/3/5/10은 grade 2 직접 근거와 grade 1 보조 문맥의 차이를 반영한다. 넓은 질문에는 supported 필수 요소의 `facet_recall`과 `all_required_facets_covered`를 함께 계산한다. calibration과 calibration+test 결합값은 diagnostic-only이며 primary 성능으로 보고하지 않는다. partial·clarification·unanswerable도 core 평균에 섞지 않고 별도 진단 모집단으로 보고한다.
 
 ## 공개 API
 
@@ -96,7 +114,7 @@ NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 
 - 법제처에 등록한 고정 공인 IPv4 Windows PC에서 `apps/collector`를 별도 프로세스로 실행한다. Vercel, 공용 runner와 브라우저에서 법령 API를 직접 호출하지 않으며 collector PC에 포트포워딩이나 공개 API를 열지 않는다.
 - 현재 버전 collector와 Vercel API, Google 인증과 사용자 질문 이력은 Supabase에 연결되어 있다. 연혁·삭제 격리와 영속 운영 플래그는 후속 단계다.
 - 익명 질문은 저장하지 않는다. 운영 로그인은 Supabase Google OAuth만 지원하며 질문 이력은 PostgreSQL에 생성일부터 1년 보존 후 삭제한다. 계정 삭제 시 질문·이력·세션·내보내기·동의 등 해당 사용자와 연결된 데이터를 삭제한다. 개발·테스트의 목업 인증은 production에서 비활성화한다.
-- 공개 서비스의 rate limit HMAC 저장과 평가셋 Recall@10 게이트는 배포 전 필수 잔여 작업이다.
+- 공개 서비스의 rate limit HMAC 저장과 승인 gold 기반 Recall·HitRate·MRR@10·nDCG·facet 회귀 게이트는 배포 전 필수 잔여 작업이다. 임계값은 calibration 결과를 보기 전에 임의로 확정하지 않는다.
 
 ## 결정 기록
 
