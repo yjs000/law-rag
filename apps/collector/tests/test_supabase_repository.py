@@ -10,6 +10,7 @@ import respx
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
 from law_rag_core.domain.identifiers import canonical_provision_id
+from law_rag_core.persistence import CORPUS_SEARCH_READY_FLAG_KEY
 
 from law_rag_collector.client import RawResponse
 from law_rag_collector.deletions import DeletionRecord
@@ -297,6 +298,8 @@ class _FakeConnection:
     async def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append((sql, params))
+        if "schema.corpus_search_ready_v1" in sql:
+            return _FakeResult(scalar=True)
         if "pg_advisory_xact_lock" in sql:
             return _FakeResult(scalar=None)
         if "SELECT id,exact_title FROM legal_documents" in sql:
@@ -392,6 +395,15 @@ def _repository(connection: _FakeConnection) -> SupabaseCurrentCorpusRepository:
     )
 
 
+def _corpus_gate_call_indices(calls: Sequence[tuple[str, object]]) -> list[int]:
+    return [
+        index
+        for index, (_, params) in enumerate(calls)
+        if isinstance(params, dict)
+        and params.get("key") == CORPUS_SEARCH_READY_FLAG_KEY
+    ]
+
+
 @pytest.mark.asyncio
 async def test_unchanged_sync_preserves_provisions_and_embeddings() -> None:
     document = _document()
@@ -419,6 +431,7 @@ async def test_unchanged_sync_preserves_provisions_and_embeddings() -> None:
     assert not any("UPDATE embedding_profiles" in sql for sql in statements)
     assert not any("DELETE FROM provision_embeddings" in sql for sql in statements)
     assert not any("INSERT INTO provisions" in sql for sql in statements)
+    assert _corpus_gate_call_indices(connection.calls) == []
 
 
 @pytest.mark.asyncio
@@ -531,6 +544,7 @@ async def test_changed_sync_invalidates_dependencies_before_replacing_provisions
     profile_index = next(
         i for i, sql in enumerate(statements) if "UPDATE embedding_profiles" in sql
     )
+    [corpus_gate_index] = _corpus_gate_call_indices(connection.calls)
     embedding_index = next(
         i for i, sql in enumerate(statements) if "DELETE FROM provision_embeddings e" in sql
     )
@@ -546,7 +560,8 @@ async def test_changed_sync_invalidates_dependencies_before_replacing_provisions
     insert_sql = statements[provision_insert_index]
 
     assert changed is True
-    assert profile_index < embedding_index < relationship_index < provision_delete_index
+    assert corpus_gate_index < profile_index < embedding_index
+    assert embedding_index < relationship_index < provision_delete_index
     assert provision_delete_index < provision_insert_index
     assert "version_id=excluded.version_id,path" not in insert_sql
     changed_params = connection.calls[provision_insert_index][1]
@@ -629,6 +644,7 @@ async def test_new_mst_closes_previous_open_version_before_insert() -> None:
     assert changed is True
     assert close_index < version_insert_index
     assert close_params["effective_from"] == date(2021, 1, 1)
+    assert len(_corpus_gate_call_indices(connection.calls)) == 1
     assert any("UPDATE embedding_profiles" in sql for sql in statements)
 
 
@@ -713,6 +729,7 @@ async def test_searchability_change_invalidates_active_embedding_profiles() -> N
 
     statements = [sql for sql, _ in connection.calls]
     assert changed is True
+    assert len(_corpus_gate_call_indices(connection.calls)) == 1
     assert any("UPDATE embedding_profiles SET active=false" in sql for sql in statements)
     assert not any("DELETE FROM provision_embeddings" in sql for sql in statements)
 
@@ -730,10 +747,13 @@ class _DeletionConnection:
         self.fail_mst = fail_mst
         self.calls: list[tuple[str, object]] = []
         self.profile_invalidations = 0
+        self.search_ready = True
 
     async def execute(self, statement, params=None):
         sql = str(statement)
         self.calls.append((sql, params))
+        if "schema.corpus_search_ready_v1" in sql:
+            return _FakeResult(scalar=True)
         if "pg_advisory_xact_lock" in sql:
             return _FakeResult()
         if "SELECT value->>'completed_on'" in sql:
@@ -774,6 +794,9 @@ class _DeletionConnection:
         if "INSERT INTO runtime_flags" in sql:
             assert isinstance(params, dict)
             incoming = json.loads(params["value"])
+            if params["key"] == CORPUS_SEARCH_READY_FLAG_KEY:
+                self.search_ready = bool(incoming["ready"])
+                return _FakeResult()
             current_date = (
                 date.fromisoformat(str(self.checkpoint["completed_on"]))
                 if self.checkpoint
@@ -882,6 +905,7 @@ async def test_supabase_source_deletions_deduplicate_and_preserve_earliest_date(
     assert by_id[rule]["source_deleted_on"] == date(2026, 7, 11)
     assert all(row["source_record_state"] == "deleted" for row in connection.rows)
     assert connection.profile_invalidations == 2
+    assert connection.search_ready is False
     assert connection.checkpoint == {
         "completed_on": "2026-07-14",
         "record_count": 4,

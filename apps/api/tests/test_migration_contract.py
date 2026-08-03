@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+from sqlalchemy import text
+
 
 def test_initial_migration_executes_one_ddl_command_at_a_time(monkeypatch) -> None:
     migration_path = (
@@ -139,3 +141,31 @@ def test_temporal_version_migration_enforces_version_identity_and_state(monkeypa
     assert "CREATE UNIQUE INDEX document_versions_one_open_per_document" in sql
     assert "WHERE effective_to IS NULL" in sql
     assert "EXCLUDE" not in sql.upper()
+
+
+def test_corpus_search_readiness_migration_starts_fail_closed(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0010_corpus_search_readiness.py"
+    )
+    spec = importlib.util.spec_from_file_location("corpus_readiness_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0010"
+    assert migration.down_revision == "0009"
+    assert "INSERT INTO runtime_flags" in sql
+    assert "schema.corpus_search_ready_v1" in sql
+    assert "corpus.search_ready" in sql
+    assert "jsonb_build_object('ready',false" in sql
+    assert "jsonb_build_object('enabled',true" in sql
+    assert "ON CONFLICT(key) DO UPDATE" in sql
+    assert all("false" not in text(statement)._bindparams for statement in statements)

@@ -208,8 +208,15 @@ class CorpusItemStatus(BaseModel):
     latest_effective_date: date | None = None
 
 
+class CorpusSearchStatus(BaseModel):
+    ready: bool
+    reason: str | None = None
+
+
 class CorpusStatus(BaseModel):
     last_successful_sync: datetime | None
+    corpus_search_ready: bool
+    corpus_search_unavailable_reason: str | None = None
     ai_available: bool
     ai_unavailable_reason: Literal["ai_disabled", "quota_exhausted"] | None = None
     source: Literal["국가법령정보 공동활용 Open API"] = "국가법령정보 공동활용 Open API"

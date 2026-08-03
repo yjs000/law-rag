@@ -9,7 +9,12 @@ from uuid import UUID
 import httpx
 from law_rag_core.domain.catalog import MVP_CATALOG
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
-from law_rag_core.persistence import CORPUS_MUTATION_LOCK_KEY, CORPUS_SYNC_RUN_LOCK_KEY
+from law_rag_core.persistence import (
+    CORPUS_MUTATION_LOCK_KEY,
+    CORPUS_SEARCH_READY_CAPABILITY_SQL,
+    CORPUS_SEARCH_READY_FLAG_KEY,
+    CORPUS_SYNC_RUN_LOCK_KEY,
+)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -142,6 +147,25 @@ def _embedding_eligible_version(
 
 def _ordered_ids(values: Sequence[UUID] | frozenset[UUID]) -> list[UUID]:
     return sorted(values, key=str)
+
+
+async def _mark_corpus_search_unready(connection, *, reason: str) -> None:
+    schema_ready = (
+        await connection.execute(text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}"))
+    ).scalar_one()
+    if not schema_ready:
+        raise RuntimeError("DB migration 0010 이상이 필요합니다")
+    await connection.execute(
+        text(
+            """INSERT INTO runtime_flags(key,value,updated_at)
+            VALUES(:key,CAST(:value AS jsonb),now())
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()"""
+        ),
+        {
+            "key": CORPUS_SEARCH_READY_FLAG_KEY,
+            "value": json.dumps({"ready": False, "reason": reason}),
+        },
+    )
 
 
 def resolve_effective_to(
@@ -731,6 +755,13 @@ class SupabaseCurrentCorpusRepository:
                 existing_provisions,
                 document.provisions,
             )
+            version_changed = version_record_changed(previous_version, version_values)
+            search_state_changed = bool(
+                document_title_changed
+                or closed_versions
+                or version_changed
+                or sync_plan.changed
+            )
             eligibility_changed = bool(
                 previous_version is not None
                 and _embedding_eligible_version(
@@ -762,6 +793,11 @@ class SupabaseCurrentCorpusRepository:
             if id_collisions:
                 raise ValueError("조문 ID가 다른 법령 버전에 이미 속해 있습니다")
 
+            if search_state_changed:
+                await _mark_corpus_search_unready(
+                    connection,
+                    reason="collector_corpus_change",
+                )
             if (
                 document_title_changed
                 or sync_plan.requires_embedding_revalidation
@@ -865,7 +901,7 @@ class SupabaseCurrentCorpusRepository:
         return bool(
             document_title_changed
             or closed_versions
-            or version_record_changed(previous_version, version_values)
+            or version_changed
             or sync_plan.changed
         )
 
@@ -1016,6 +1052,10 @@ class SupabaseCurrentCorpusRepository:
                 if len(changed_rows) != len(changed_ids):
                     raise RuntimeError("출처 삭제 상태를 일부 법령 버전에 반영하지 못했습니다")
                 stats[source_kind]["changed"] += len(changed_rows)
+                await _mark_corpus_search_unready(
+                    connection,
+                    reason="collector_source_deletion",
+                )
                 await connection.execute(
                     text("UPDATE embedding_profiles SET active=false WHERE active")
                 )

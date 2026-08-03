@@ -9,6 +9,7 @@ from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.catalog import SourceKind
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import ProvisionRecord
+from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.search_queries import prepare_search_query
 from app.parsers.law_json import parse_legal_document
 
@@ -28,14 +29,30 @@ class _MappingsResult:
 
 
 class _FakeConnection:
-    def __init__(self, rows_by_query: dict[str, list[dict]]) -> None:
+    def __init__(
+        self, rows_by_query: dict[str, list[dict]], *, search_ready: bool = True
+    ) -> None:
         self.rows_by_query = rows_by_query
+        self.search_ready = search_ready
+        self.readiness_checks = 0
         self.calls: list[dict] = []
         self.statements: list[str] = []
 
-    async def execute(self, statement, params: dict):
+    async def execute(self, statement, params: dict | None = None):
+        sql = str(statement)
+        if "corpus_search_readiness_check" in sql:
+            self.readiness_checks += 1
+            return _MappingsResult(
+                [
+                    {
+                        "ready": self.search_ready,
+                        "reason": None if self.search_ready else "embedding_backfill_started",
+                    }
+                ]
+            )
+        assert isinstance(params, dict)
         self.calls.append(params)
-        self.statements.append(str(statement))
+        self.statements.append(sql)
         key = "__dense__" if "embedding" in params else params.get("query", "__direct__")
         return _MappingsResult(self.rows_by_query.get(key, []))
 
@@ -240,6 +257,9 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert "source_record_state='available'" in connection.statements[0]
     assert "lifecycle_state IN ('active','scheduled')" in connection.statements[0]
     assert "parser_schema_version='3'" in connection.statements[0]
+    assert "corpus.search_ready" in connection.statements[0]
+    assert "schema.corpus_search_ready_v1" in connection.statements[0]
+    assert "value->>'ready'='true'" in connection.statements[0]
 
 
 @pytest.mark.asyncio
@@ -286,6 +306,7 @@ async def test_postgres_dense_zero_falls_back_to_separate_keyword_search() -> No
         "source_record_state='available'" in statement
         and "lifecycle_state IN ('active','scheduled')" in statement
         and "parser_schema_version='3'" in statement
+        and "corpus.search_ready" in statement
         for statement in connection.statements
     )
 
@@ -305,6 +326,7 @@ async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_vers
     assert "source_record_state='available'" in direct_connection.statements[0]
     assert "lifecycle_state IN ('active','scheduled')" in direct_connection.statements[0]
     assert "parser_schema_version='3'" in direct_connection.statements[0]
+    assert "corpus.search_ready" in direct_connection.statements[0]
 
     provision_connection = _FakeConnection({"__direct__": [row]})
     repository.engine = _FakeEngine(provision_connection)  # type: ignore[assignment]
@@ -314,6 +336,20 @@ async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_vers
     assert "source_record_state='available'" in provision_connection.statements[0]
     assert "lifecycle_state IN ('active','scheduled')" in provision_connection.statements[0]
     assert "parser_schema_version='3'" in provision_connection.statements[0]
+    assert "corpus.search_ready" in provision_connection.statements[0]
+
+
+@pytest.mark.asyncio
+async def test_postgres_reports_closed_corpus_before_running_retrieval() -> None:
+    connection = _FakeConnection({}, search_ready=False)
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    with pytest.raises(CorpusSearchUnavailableError, match="embedding_backfill_started"):
+        await repository.search_with_trace("전기사업 허가", date(2026, 7, 18), 10)
+
+    assert connection.readiness_checks == 1
+    assert connection.calls == []
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,10 @@ from uuid import UUID
 
 from law_rag_core.persistence import (
     CORPUS_MUTATION_LOCK_KEY,
+    CORPUS_SEARCH_READY_CAPABILITY_KEY,
+    CORPUS_SEARCH_READY_CAPABILITY_SQL,
+    CORPUS_SEARCH_READY_FLAG_KEY,
+    CORPUS_SEARCH_READY_SQL,
     CORPUS_SYNC_RUN_LOCK_KEY,
     EMBEDDING_BACKFILL_LOCK_KEY,
     LEGAL_PROVISION_V1_SOURCE_SHA_SQL,
@@ -473,6 +477,30 @@ async def _acquire_corpus_sync_run_lock(connection: AsyncConnection) -> None:
     )
 
 
+async def _set_corpus_search_ready(
+    connection: AsyncConnection,
+    *,
+    ready: bool,
+    reason: str,
+) -> None:
+    schema_ready = (
+        await connection.execute(text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}"))
+    ).scalar_one()
+    if not schema_ready:
+        raise RuntimeError("database must be migrated to revision 0010 or later")
+    await connection.execute(
+        text(
+            """INSERT INTO runtime_flags(key,value,updated_at)
+            VALUES(:key,CAST(:value AS jsonb),now())
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()"""
+        ),
+        {
+            "key": CORPUS_SEARCH_READY_FLAG_KEY,
+            "value": json.dumps({"ready": ready, "reason": reason}),
+        },
+    )
+
+
 @asynccontextmanager
 async def _embedding_backfill_run_lock(repository: PostgresLegalRepository):
     """Hold a direct-session lock across a complete DB-writing backfill run."""
@@ -509,6 +537,11 @@ async def _deactivate_embedding_profile(repository: PostgresLegalRepository) -> 
                 {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
             )
         ).scalar_one_or_none()
+        await _set_corpus_search_ready(
+            connection,
+            ready=False,
+            reason="embedding_backfill_started",
+        )
     if profile_key is None:
         raise RuntimeError("database does not contain the required embedding profile")
 
@@ -612,6 +645,11 @@ async def _promote_embedding_profile(
             ),
             {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
         )
+        await _set_corpus_search_ready(
+            connection,
+            ready=False,
+            reason="embedding_profile_verification",
+        )
         state = await _profile_gate_state(connection)
         failure = _profile_gate_failure(state)
         if failure is None:
@@ -622,8 +660,14 @@ async def _promote_embedding_profile(
                 ),
                 {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
             )
+            await _set_corpus_search_ready(
+                connection,
+                ready=True,
+                reason="embedding_profile_verified",
+            )
             assert state is not None
             state["profile_active"] = True
+            state["corpus_search_ready"] = True
     if failure is not None:
         raise RuntimeError(f"embedding profile activation refused: {failure}")
     assert state is not None
@@ -648,6 +692,9 @@ async def _database_state(repository: PostgresLegalRepository) -> dict[str, obje
                           SELECT active FROM embedding_profiles
                           WHERE profile_key=:profile_key
                         ),false) profile_active,
+                        {CORPUS_SEARCH_READY_SQL} corpus_search_ready,
+                        {CORPUS_SEARCH_READY_CAPABILITY_SQL}
+                          corpus_search_capability,
                         (SELECT COUNT(*) FROM provision_embeddings
                           WHERE profile_key=:profile_key) stored_count,
                         (SELECT COUNT(*) FROM provision_embeddings e
@@ -680,6 +727,8 @@ async def _database_state(repository: PostgresLegalRepository) -> dict[str, obje
         "non_unit_vector_count": state["non_unit_count"],
         "hnsw_ready": state["hnsw_ready"],
         "profile_active": state["profile_active"],
+        "corpus_search_ready": state["corpus_search_ready"],
+        "corpus_search_capability": state["corpus_search_capability"],
         "hybrid_function_exists": state["hybrid_function_exists"],
     }
 
@@ -812,12 +861,18 @@ async def _load_cache(
                       SELECT 1 FROM information_schema.columns
                       WHERE table_name='document_versions'
                         AND column_name='source_record_state'
+                    )
+                    AND EXISTS(
+                      SELECT 1 FROM runtime_flags
+                      WHERE key=:corpus_capability_key
+                        AND value->>'enabled'='true'
                     )"""
-                )
+                ),
+                {"corpus_capability_key": CORPUS_SEARCH_READY_CAPABILITY_KEY},
             )
         ).scalar_one()
         if not schema_ready:
-            raise RuntimeError("database must be migrated to revision 0009 or later")
+            raise RuntimeError("database must be migrated to revision 0010 or later")
     passages = _source_passages(await _source_provisions(repository))
     records, line_count = _read_cache(arguments.cache)
     state = _cache_state(arguments.cache, passages, records, line_count)
@@ -861,6 +916,8 @@ async def _verify_dense_search(
         state["pending_count"]
         or not state["hnsw_ready"]
         or not state["profile_active"]
+        or not state["corpus_search_capability"]
+        or not state["corpus_search_ready"]
     ):
         raise RuntimeError("dense index is not ready for verification")
     vector = (
@@ -886,6 +943,8 @@ async def _verify_dense_search(
         "candidate_count": trace.candidate_count,
         "hnsw_ready": state["hnsw_ready"],
         "profile_active": state["profile_active"],
+        "corpus_search_capability": state["corpus_search_capability"],
+        "corpus_search_ready": state["corpus_search_ready"],
         "hybrid_function_exists": state["hybrid_function_exists"],
         "results": [
             {

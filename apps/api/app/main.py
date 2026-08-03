@@ -27,6 +27,7 @@ from app.application.checklist_exports import render_csv, render_markdown, rende
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
+from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.schemas import (
     AiFallbackReason,
@@ -172,6 +173,8 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     await _check_quota(request, "search", settings.search_daily_limit)
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
+    except CorpusSearchUnavailableError as exc:
+        raise _corpus_unready_http_error() from exc
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -269,6 +272,8 @@ async def _answer_question(
             query_embedding,
             NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
         )
+    except CorpusSearchUnavailableError as exc:
+        raise _corpus_unready_http_error() from exc
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -536,7 +541,10 @@ async def export_checklist(
 
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
-    hit = await repository.provision(provision_id, as_of_date or date.today())
+    try:
+        hit = await repository.provision(provision_id, as_of_date or date.today())
+    except CorpusSearchUnavailableError as exc:
+        raise _corpus_unready_http_error() from exc
     if hit is None or not is_allowed_source_url(hit.source_url):
         raise HTTPException(status_code=404, detail="조문을 찾을 수 없습니다")
     return ProvisionResponse(hit=hit)
@@ -557,7 +565,10 @@ async def changes(document_id: UUID, from_date: date, to_date: date) -> Document
 @app.get("/v1/corpus/status", response_model=CorpusStatus)
 async def corpus_status() -> CorpusStatus:
     items = await repository.corpus_items()
+    search_status = await repository.corpus_search_status()
     warnings = []
+    if not search_status.ready:
+        warnings.append("법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.")
     if any(item.state != "ready" for item in items):
         warnings.append("MVP 허용 목록 일부가 아직 수집되지 않았습니다.")
     if not _ai_available():
@@ -566,10 +577,22 @@ async def corpus_status() -> CorpusStatus:
         warnings.append(f"collector 목업 원문 {len(collector_load_errors)}건을 읽지 못했습니다.")
     return CorpusStatus(
         last_successful_sync=await repository.last_sync(),
+        corpus_search_ready=search_status.ready,
+        corpus_search_unavailable_reason=search_status.reason,
         ai_available=_ai_available(),
         ai_unavailable_reason=_ai_unavailable_reason(),
         items=items,
         warnings=warnings,
+    )
+
+
+def _corpus_unready_http_error() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "corpus_unready",
+            "message": "법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.",
+        },
     )
 
 

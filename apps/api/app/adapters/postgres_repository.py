@@ -8,6 +8,9 @@ from uuid import UUID
 
 from law_rag_core.persistence import (
     CORPUS_MUTATION_LOCK_KEY,
+    CORPUS_SEARCH_READY_CAPABILITY_SQL,
+    CORPUS_SEARCH_READY_FLAG_KEY,
+    CORPUS_SEARCH_READY_SQL,
     LEGAL_PROVISION_V1_SOURCE_SHA_SQL,
     SEARCHABLE_DOCUMENT_VERSION_SQL,
 )
@@ -18,8 +21,9 @@ from sqlalchemy.pool import NullPool
 from app.domain.catalog import MVP_CATALOG, SourceKind
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import LegalDocumentRecord
+from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.provision_queries import parse_provision_references
-from app.domain.schemas import CorpusItemStatus, SearchHit
+from app.domain.schemas import CorpusItemStatus, CorpusSearchStatus, SearchHit
 from app.domain.search_queries import (
     PreparedSearchQuery,
     SearchStageTrace,
@@ -148,12 +152,33 @@ class PostgresLegalRepository:
                 raise RuntimeError(
                     "embedding batch source hash is stale; the complete batch was rolled back"
                 )
+            schema_ready = (
+                await connection.execute(
+                    text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}")
+                )
+            ).scalar_one()
+            if not schema_ready:
+                raise RuntimeError("database must be migrated to revision 0010 or later")
             await connection.execute(
                 text(
                     """UPDATE embedding_profiles SET active=false
                     WHERE profile_key=:profile_key"""
                 ),
                 {"profile_key": profile_key},
+            )
+            await connection.execute(
+                text(
+                    """INSERT INTO runtime_flags(key,value,updated_at)
+                    VALUES(:key,CAST(:value AS jsonb),now())
+                    ON CONFLICT(key) DO UPDATE
+                    SET value=excluded.value,updated_at=now()"""
+                ),
+                {
+                    "key": CORPUS_SEARCH_READY_FLAG_KEY,
+                    "value": json.dumps(
+                        {"ready": False, "reason": "embedding_batch"}
+                    ),
+                },
             )
             await connection.execute(
                 text(
@@ -211,6 +236,7 @@ class PostgresLegalRepository:
         provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
+            await _require_corpus_search_ready(connection)
             path_rows = []
             if provision_query is not None:
                 path_started = perf_counter()
@@ -238,6 +264,7 @@ class PostgresLegalRepository:
                                     OR d.exact_title=CAST(:title AS text)
                                   )
                                   AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                                  AND {CORPUS_SEARCH_READY_SQL}
                                   AND (v.effective_from IS NULL OR v.effective_from<=:as_of)
                                   AND (v.effective_to IS NULL OR v.effective_to>:as_of)
                                 ORDER BY requested.ordinal,d.exact_title,p.path LIMIT :limit"""
@@ -255,6 +282,8 @@ class PostgresLegalRepository:
                 )
             if provision_query is not None:
                 selected = [self._hit(row) for row in path_rows][:limit]
+                if not selected:
+                    await _require_corpus_search_ready(connection)
                 duration_ms = _elapsed_ms(path_started)
                 return selected, SearchTrace(
                     strategy="direct_path",
@@ -471,6 +500,8 @@ class PostgresLegalRepository:
                     True,
                 )
 
+            await _require_corpus_search_ready(connection)
+
         stage_started = perf_counter()
         stages.append(
             _stage_trace(
@@ -498,6 +529,7 @@ class PostgresLegalRepository:
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         async with self.engine.connect() as connection:
+            await _require_corpus_search_ready(connection)
             row = (
                 (
                     await connection.execute(
@@ -507,6 +539,7 @@ class PostgresLegalRepository:
                         v.source_url,1.0 score FROM provisions p JOIN document_versions v ON v.id=p.version_id
                         JOIN legal_documents d ON d.id=v.document_id WHERE p.id=:id AND
                         {SEARCHABLE_DOCUMENT_VERSION_SQL} AND
+                        {CORPUS_SEARCH_READY_SQL} AND
                         (v.effective_from IS NULL OR v.effective_from<=:as_of) AND
                         (v.effective_to IS NULL OR v.effective_to>:as_of)"""
                         ),
@@ -516,6 +549,8 @@ class PostgresLegalRepository:
                 .mappings()
                 .first()
             )
+            if row is None:
+                await _require_corpus_search_ready(connection)
         return self._hit(row) if row else None
 
     async def corpus_items(self) -> list[CorpusItemStatus]:
@@ -537,6 +572,10 @@ class PostgresLegalRepository:
             )
             for e in MVP_CATALOG
         ]
+
+    async def corpus_search_status(self) -> CorpusSearchStatus:
+        async with self.engine.connect() as connection:
+            return await _corpus_search_status(connection)
 
     async def last_sync(self) -> datetime | None:
         async with self.engine.connect() as connection:
@@ -587,6 +626,7 @@ async def _execute_dense_search(
                     WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
                       AND (v.effective_to IS NULL OR v.effective_to>:as_of)
                       AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                      AND {CORPUS_SEARCH_READY_SQL}
                       AND e.profile_key=:embedding_profile_key
                       AND e.dimensions=512
                       AND ep.active IS TRUE
@@ -606,6 +646,42 @@ async def _execute_dense_search(
         .mappings()
         .all()
     )
+
+
+async def _corpus_search_status(connection: AsyncConnection) -> CorpusSearchStatus:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    f"""SELECT /* corpus_search_readiness_check */
+                    {CORPUS_SEARCH_READY_SQL} ready,
+                    CASE WHEN NOT ({CORPUS_SEARCH_READY_CAPABILITY_SQL})
+                      THEN 'schema_capability_missing'
+                      ELSE COALESCE(
+                        (SELECT value->>'reason' FROM runtime_flags
+                         WHERE key=:corpus_ready_key),
+                        'runtime_flag_missing'
+                      )
+                    END reason"""
+                ),
+                {"corpus_ready_key": CORPUS_SEARCH_READY_FLAG_KEY},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return CorpusSearchStatus(ready=False, reason="status_query_empty")
+    return CorpusSearchStatus(
+        ready=bool(row["ready"]),
+        reason=None if row["ready"] else str(row["reason"] or "corpus_unready"),
+    )
+
+
+async def _require_corpus_search_ready(connection: AsyncConnection) -> None:
+    status = await _corpus_search_status(connection)
+    if not status.ready:
+        raise CorpusSearchUnavailableError(status.reason or "corpus_unready")
 
 
 async def _execute_keyword_search(
@@ -630,6 +706,7 @@ async def _execute_keyword_search(
                       WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
                         AND (v.effective_to IS NULL OR v.effective_to>:as_of)
                         AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                        AND {CORPUS_SEARCH_READY_SQL}
                     )
                     SELECT v.id provision_id,v.document_id,v.exact_title document_title,
                            v.source_kind,'MST '||v.mst version_label,

@@ -7,7 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from app.domain.catalog import MVP_CATALOG
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_references
-from app.domain.schemas import CorpusItemStatus, SearchHit
+from app.domain.schemas import CorpusItemStatus, CorpusSearchStatus, SearchHit
 from app.domain.search_queries import (
     PreparedSearchQuery,
     SearchStageTrace,
@@ -355,6 +355,9 @@ class MemoryLegalRepository:
             )
             for entry in MVP_CATALOG
         ]
+
+    async def corpus_search_status(self) -> CorpusSearchStatus:
+        return CorpusSearchStatus(ready=True)
 
     async def last_sync(self) -> datetime | None:
         return self._last_sync

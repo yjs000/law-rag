@@ -82,7 +82,7 @@ effective_from <= as_of_date < effective_to
 3. `display=100` 페이지를 끝까지 읽고 `(source_kind, MST, 삭제일)` 중복을 제거한다.
 4. 두 종류의 조회가 모두 성공한 뒤에만 허용 corpus의 MST와 대조한다.
 5. 일치 버전은 `source_record_state=deleted`, `source_deleted_on=가장 이른 삭제일`만 변경한다. `lifecycle_state`와 `effective_to`는 변경하지 않는다.
-6. 한 `(source_kind, MST)`의 상태 변경은 mutation lock이 있는 개별 transaction으로 반영한다. 실제 변경이 있으면 같은 transaction에서 active embedding profile을 비활성화한다.
+6. 한 `(source_kind, MST)`의 상태 변경은 mutation lock이 있는 개별 transaction으로 반영한다. 실제 변경이 있으면 같은 transaction에서 `corpus.search_ready=false`와 active embedding profile 비활성화를 반영한다.
 7. 모든 레코드 처리가 성공한 뒤에만 `runtime_flags['collector.deletion_sync']` 체크포인트를 전진시킨다. 더 오래된 동시 실행이 최신 체크포인트를 뒤로 덮어쓰지 못하게 단조 증가 조건을 적용한다.
 
 출처 삭제 원문은 감사용으로 보존하지만 `source_record_state='available'` 검색 조건에서 제외한다. 이 계약은 파일 mock과 Supabase repository에 구현되어 있고, 운영 경로에서는 collector run lock을 보유한 `sync-current`가 현재 문서 동기화 뒤 실행한다. Supabase `sync-history`가 종료 코드 2인 이유는 삭제 목록 때문이 아니라 전체 과거 본문 수집이 아직 비활성화됐기 때문이다.
@@ -101,9 +101,9 @@ Supabase `sync-current`는 session advisory run lock을 Open API 조회 전부�
 - 프로필·차원·query/passage 입력 유형·축약·정규화 계약이 같다.
 - 벡터 L2 norm과 profile 전용 HNSW index가 유효하다.
 
-어느 단계에서든 실패하면 profile은 inactive로 남고 dense 검색은 해당 profile을 읽지 않는다. direct path와 keyword 검색도 parser v3, 출처 가용성, 법적 상태와 효력 기간 조건을 적용한다.
+어느 단계에서든 실패하면 profile은 inactive, `corpus.search_ready`는 false로 남는다. direct path와 keyword 검색도 전체 준비 게이트, parser v3, 출처 가용성, 법적 상태와 효력 기간 조건을 적용한다.
 
-run lock은 실행 상호 배제를 제공하지만 전체 corpus reader snapshot을 제공하지는 않는다. 즉 multi-document sync 도중 direct/keyword reader는 이미 commit된 문서와 아직 처리되지 않은 문서가 섞인 시점을 볼 수 있다. dense profile은 마지막 전체 검증 전까지 비활성화되므로 부분 벡터 corpus는 노출되지 않는다. 전체 검색 방식에 세대 단위 원자 전환이 필요하면 별도 corpus generation pointer가 필요하다.
+run lock 자체는 reader snapshot이 아니며 각 문서는 별도 transaction으로 commit된다. 대신 첫 검색 가시성 변경과 같은 transaction에서 `corpus.search_ready=false`가 되므로 multi-document sync의 중간 상태는 direct·keyword·dense 모두에서 보이지 않는다. 마지막 전체 검증 transaction이 embedding profile과 전체 준비 게이트를 함께 활성화한다. 이 방식은 갱신 중 잠시 검색을 닫는 fail-closed 전환이며, 무중단으로 구세대와 신세대를 동시에 유지해야 할 때만 별도 generation pointer가 필요하다.
 
 ## 로컬 cache의 SHA 재사용
 
@@ -113,14 +113,17 @@ run lock은 실행 상호 배제를 제공하지만 전체 corpus reader snapsho
 
 ## 안전한 rollout 순서
 
-1. 운영 DB 백업과 session-mode `DIRECT_URL`을 확인한다.
-2. migration 0009를 적용한다. 기존 버전에 명시적 상태를 채우고 모든 embedding profile을 inactive로 만든다.
-3. `preview-current`로 v3 ID, 변경 버전 필드, 새·변경·삭제 조문과 임베딩 재검증 범위를 읽기 전용 확인한다.
-4. run lock 아래 `sync-current`를 실행한다. 중간 실패 시 dense profile을 수동 활성화하지 않는다.
-5. `generate-cache`로 현재 parser v3 corpus의 cache를 완성한다. 같은 SHA 벡터는 재사용한다.
-6. `DIRECT_URL`로 `load-cache`를 실행해 DB의 missing/stale 행만 적재한다.
-7. coverage·SHA·norm·HNSW 검증으로 자동 승격된 뒤 `status`와 실제 query `verify`를 확인한다.
-8. 삭제 목록은 `sync-current`에 포함되어 있으므로 별도 `sync-history` 없이 실행된다. 전체 과거 본문 수집이 구현·검증되기 전까지 `sync-history`는 활성화하지 않는다.
+1. 운영 DB 백업과 session-mode `DIRECT_URL`을 확인하고 collector 실행을 정지한다.
+2. gate-aware API를 먼저 배포하고 production이 새 revision으로 완전히 전환됐는지 확인한다. marker가 아직 없으므로 이 구간 검색은 `503 corpus_unready`다.
+3. migration 0009와 0010을 적용한다. 기존 버전에 명시적 상태를 채우고 embedding profile과 전체 검색 준비 게이트를 닫으며, 0010 capability marker를 설치한다.
+4. `preview-current`로 v3 ID, 변경 버전 필드, 새·변경·삭제 조문과 임베딩 재검증 범위를 읽기 전용 확인한다.
+5. run lock 아래 `sync-current`를 실행한다. 중간 실패 시 dense profile이나 runtime flag를 수동 활성화하지 않는다.
+6. `generate-cache`로 현재 parser v3 corpus의 cache를 완성한다. 같은 SHA 벡터는 재사용한다.
+7. `DIRECT_URL`로 `load-cache`를 실행해 DB의 missing/stale 행만 적재하고 profile과 corpus 게이트를 자동 승격한다.
+8. capability·coverage·SHA·norm·HNSW 검증 뒤 `status`와 실제 query `verify`를 확인한다.
+9. 삭제 목록은 `sync-current`에 포함되어 있으므로 별도 `sync-history` 없이 실행된다. 전체 과거 본문 수집이 구현·검증되기 전까지 `sync-history`는 활성화하지 않는다.
+
+구버전 API가 남아 있는 동안 collector를 재개하지 않는다. 구버전 reader는 `corpus.search_ready`를 검사하지 않으므로 migration만 먼저 적용해서는 부분 corpus 노출을 막을 수 없다.
 
 ## 결정 기록
 

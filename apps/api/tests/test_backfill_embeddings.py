@@ -6,6 +6,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from openai import APITimeoutError
+from sqlalchemy import text
 
 import scripts.backfill_embeddings as backfill_module
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -133,14 +134,18 @@ async def test_repository_rejects_wrong_vector_dimensions_before_database_access
 
 
 class _RowsResult:
-    def __init__(self, rows=None) -> None:
+    def __init__(self, rows=None, *, scalar=True) -> None:
         self.rows = rows or []
+        self.scalar = scalar
 
     def mappings(self):
         return self
 
     def all(self):
         return self.rows
+
+    def scalar_one(self):
+        return self.scalar
 
 
 class _EmbeddingConnection:
@@ -163,6 +168,8 @@ class _EmbeddingConnection:
                     }
                 ]
             )
+        if "schema.corpus_search_ready_v1" in sql:
+            return _RowsResult(scalar=True)
         return _RowsResult()
 
 
@@ -222,8 +229,12 @@ async def test_repository_upsert_embeddings_commits_only_current_hash() -> None:
     assert "lifecycle_state IN ('active','scheduled')" in connection.statements[1]
     assert "parser_schema_version='3'" in connection.statements[1]
     assert "text_template_version='legal-provision-v1'" in connection.statements[1]
-    assert "SET active=false" in connection.statements[2]
-    assert "INSERT INTO provision_embeddings" in connection.statements[3]
+    assert "schema.corpus_search_ready_v1" in connection.statements[2]
+    assert "SET active=false" in connection.statements[3]
+    assert "INSERT INTO runtime_flags" in connection.statements[4]
+    assert set(text(connection.statements[4])._bindparams) == {"key", "value"}
+    assert json.loads(connection.params[4]["value"])["ready"] is False
+    assert "INSERT INTO provision_embeddings" in connection.statements[5]
 
 
 @pytest.mark.asyncio
@@ -360,10 +371,12 @@ async def test_database_state_interpolates_the_searchable_corpus_sql(monkeypatch
 
         def one(self):
             return {
-                "db_revision": "0009",
+                "db_revision": "0010",
                 "hybrid_function_exists": False,
                 "hnsw_ready": True,
                 "profile_active": False,
+                "corpus_search_ready": False,
+                "corpus_search_capability": True,
                 "stored_count": 0,
                 "non_unit_count": 0,
             }
@@ -391,6 +404,7 @@ async def test_database_state_interpolates_the_searchable_corpus_sql(monkeypatch
     assert "{SEARCHABLE_DOCUMENT_VERSION_SQL}" not in connection.statement
     assert "source_record_state='available'" in connection.statement
     assert "parser_schema_version='3'" in connection.statement
+    assert "corpus_search_ready" in connection.statement
 
 
 def test_cache_batch_values_rejects_vector_for_an_old_source_hash() -> None:
@@ -480,6 +494,8 @@ async def test_failed_profile_promotion_commits_inactive_without_exposing_index(
             self.statements.append(sql)
             if "SELECT ep.active profile_active" in sql:
                 return GateResult([gate_state])
+            if "schema.corpus_search_ready_v1" in sql:
+                return GateResult(scalar=True)
             return GateResult()
 
     connection = Connection()
@@ -493,6 +509,7 @@ async def test_failed_profile_promotion_commits_inactive_without_exposing_index(
     assert "pg_advisory_xact_lock" in connection.statements[0]
     assert "pg_advisory_xact_lock" in connection.statements[1]
     assert "SET active=false" in connection.statements[2]
+    assert any("INSERT INTO runtime_flags" in sql for sql in connection.statements)
     assert not any("SET active=true" in sql for sql in connection.statements)
 
 
@@ -523,7 +540,7 @@ async def test_load_cache_writes_only_database_missing_or_stale_rows(monkeypatch
             return True
 
     class Connection:
-        async def execute(self, _statement):
+        async def execute(self, _statement, _params=None):
             return ScalarResult()
 
     class Engine:
@@ -555,7 +572,7 @@ async def test_load_cache_writes_only_database_missing_or_stale_rows(monkeypatch
         return {}
 
     async def database_state(_repository):
-        return {"profile_active": True}
+        return {"profile_active": True, "corpus_search_ready": True}
 
     monkeypatch.setattr(backfill_module, "_source_provisions", source_provisions)
     monkeypatch.setattr(backfill_module, "_provisions", provisions)
@@ -569,7 +586,10 @@ async def test_load_cache_writes_only_database_missing_or_stale_rows(monkeypatch
         repository,  # type: ignore[arg-type]
     )
 
-    assert result == {"loaded_count": 1, "state": {"profile_active": True}}
+    assert result == {
+        "loaded_count": 1,
+        "state": {"profile_active": True, "corpus_search_ready": True},
+    }
     assert events == ["inactive", "active"]
     assert len(repository.batches) == 1
     assert repository.batches[0][0][0][0] == passages[1].provision_id
@@ -599,6 +619,8 @@ async def test_verify_dense_search_uses_query_profile_without_printing_content(
             "pending_count": 0,
             "hnsw_ready": True,
             "profile_active": True,
+            "corpus_search_capability": True,
+            "corpus_search_ready": True,
             "hybrid_function_exists": False,
         }
 
@@ -636,6 +658,7 @@ async def test_verify_dense_search_uses_query_profile_without_printing_content(
     assert result["retrieval_strategy"] == "dense_only"
     assert result["query_dimensions"] == 512
     assert result["profile_active"] is True
+    assert result["corpus_search_ready"] is True
     assert result["results"][0]["document_title"] == "신에너지법"
     assert "content" not in result["results"][0]
 
@@ -653,6 +676,27 @@ async def test_verify_dense_search_rejects_invalid_arguments(query, limit) -> No
 async def test_verify_dense_search_rejects_inactive_profile(monkeypatch) -> None:
     async def database_state(_repository):
         return {"pending_count": 0, "hnsw_ready": True, "profile_active": False}
+
+    monkeypatch.setattr(backfill_module, "_database_state", database_state)
+
+    with pytest.raises(RuntimeError, match="not ready"):
+        await _verify_dense_search(
+            SimpleNamespace(query="질문", as_of=date(2026, 8, 3), limit=3),
+            object(),
+            object(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_verify_dense_search_rejects_an_unready_corpus(monkeypatch) -> None:
+    async def database_state(_repository):
+        return {
+            "pending_count": 0,
+            "hnsw_ready": True,
+            "profile_active": True,
+            "corpus_search_capability": True,
+            "corpus_search_ready": False,
+        }
 
     monkeypatch.setattr(backfill_module, "_database_state", database_state)
 

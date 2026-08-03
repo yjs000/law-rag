@@ -1,7 +1,7 @@
 # 데이터베이스 스키마
 
 > 기준 시점: 2026-08-03
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0009_temporal_document_versions.py`
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0010_corpus_search_readiness.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
@@ -30,6 +30,8 @@
 `0009`부터 `document_versions`의 자연키는 `(document_id, mst, effective_from)`이고 `effective_from`은 필수다. `effective_to`는 `NULL`이거나 `effective_from`보다 뒤여야 한다. `document_versions_one_open_per_document` partial unique index는 `effective_to IS NULL`인 open version을 문서마다 하나로 제한한다. 동일 시행일의 복수 MST는 수집기의 연혁 검증에서 거부하므로 exclusion constraint는 두지 않는다.
 
 법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
+
+`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm·HNSW 계약 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
 
 `0008`은 기존 4인자·5인자 `hybrid_search` 함수를 모두 제거한다. 현재 API는 dense-only SQL을 실행하고 dense 후보가 0개일 때만 독립 PGroonga keyword fallback을 실행한다. RRF는 현재 DB 동작이 아니다. 향후 BM25·RRF는 별도 retriever와 평가 버전을 추가해 비교한다.
 

@@ -3,7 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from law_rag_core.domain.entities import LegalDocumentRecord
-from law_rag_core.domain.schemas import CorpusItemStatus, SearchHit
+from law_rag_core.domain.schemas import CorpusItemStatus, CorpusSearchStatus, SearchHit
 
 
 class LegalRepository(Protocol):
@@ -30,5 +30,7 @@ class LegalRepository(Protocol):
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None: ...
 
     async def corpus_items(self) -> list[CorpusItemStatus]: ...
+
+    async def corpus_search_status(self) -> CorpusSearchStatus: ...
 
     async def last_sync(self) -> datetime | None: ...

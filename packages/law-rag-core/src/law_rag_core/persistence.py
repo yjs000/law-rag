@@ -19,6 +19,23 @@ CORPUS_SYNC_RUN_LOCK_KEY: Final[int] = 5_737_565_776_311_091_202
 # vectors for the same profile while one of them is promoting the profile.
 EMBEDDING_BACKFILL_LOCK_KEY: Final[int] = 5_737_565_776_311_091_203
 
+# Runtime readers use a model-independent corpus gate.  A corpus writer sets
+# it false in the same transaction as the first visible change; vector/index
+# promotion sets it true only after the complete corpus is verified.
+CORPUS_SEARCH_READY_CAPABILITY_KEY: Final[str] = "schema.corpus_search_ready_v1"
+CORPUS_SEARCH_READY_FLAG_KEY: Final[str] = "corpus.search_ready"
+CORPUS_SEARCH_READY_CAPABILITY_SQL: Final[str] = f"""EXISTS(
+  SELECT 1 FROM runtime_flags corpus_capability
+  WHERE corpus_capability.key='{CORPUS_SEARCH_READY_CAPABILITY_KEY}'
+    AND corpus_capability.value->>'enabled'='true'
+)"""
+CORPUS_SEARCH_READY_SQL: Final[str] = f"""{CORPUS_SEARCH_READY_CAPABILITY_SQL}
+AND EXISTS(
+  SELECT 1 FROM runtime_flags corpus_gate
+  WHERE corpus_gate.key='{CORPUS_SEARCH_READY_FLAG_KEY}'
+    AND corpus_gate.value->>'ready'='true'
+)"""
+
 # SQL fragments below intentionally use the canonical aliases ``p``
 # (provisions), ``v`` (document_versions), and ``d`` (legal_documents).
 # Keeping the legal-provision-v1 text/hash formula in one module prevents the
@@ -35,6 +52,10 @@ NULLIF(btrim(COALESCE(p.heading,'')),''),NULLIF(btrim(p.content),'')),
 
 __all__ = [
     "CORPUS_MUTATION_LOCK_KEY",
+    "CORPUS_SEARCH_READY_CAPABILITY_KEY",
+    "CORPUS_SEARCH_READY_CAPABILITY_SQL",
+    "CORPUS_SEARCH_READY_FLAG_KEY",
+    "CORPUS_SEARCH_READY_SQL",
     "CORPUS_SYNC_RUN_LOCK_KEY",
     "EMBEDDING_BACKFILL_LOCK_KEY",
     "LEGAL_PROVISION_V1_SOURCE_SHA_SQL",

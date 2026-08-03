@@ -1,8 +1,11 @@
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.adapters.memory_repository import MemoryLegalRepository
+from app.domain.errors import CorpusSearchUnavailableError
 from app.main import app
 
 
@@ -10,6 +13,14 @@ def test_health_exposes_no_secrets() -> None:
     response = TestClient(app).get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_corpus_status_exposes_search_readiness() -> None:
+    response = TestClient(app).get("/v1/corpus/status")
+
+    assert response.status_code == 200
+    assert response.json()["corpus_search_ready"] is True
+    assert response.json()["corpus_search_unavailable_reason"] is None
 
 
 def test_question_without_corpus_returns_safe_search_only_response() -> None:
@@ -73,3 +84,71 @@ def test_direct_search_failure_returns_the_same_safe_temporary_error(
     assert response.status_code == 503
     assert response.json() == {"detail": "법령 검색을 일시적으로 사용할 수 없습니다."}
     assert "database host" not in response.text
+
+
+def test_closed_corpus_is_not_reported_as_no_matching_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = MemoryLegalRepository()
+
+    async def closed_search(*args, **kwargs):
+        raise CorpusSearchUnavailableError("embedding_backfill_started")
+
+    monkeypatch.setattr(repository, "search", closed_search)
+    monkeypatch.setattr(main_module, "repository", repository)
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/v1/search",
+        json={"query": "전기사업 허가", "as_of_date": "2026-07-15"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": {
+            "code": "corpus_unready",
+            "message": "법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.",
+        }
+    }
+    assert "embedding_backfill_started" not in response.text
+
+
+def test_question_returns_corpus_unready_instead_of_insufficient_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = MemoryLegalRepository()
+
+    async def closed_search(*args, **kwargs):
+        raise CorpusSearchUnavailableError("collector_corpus_change")
+
+    monkeypatch.setattr(repository, "search_with_trace", closed_search)
+    monkeypatch.setattr(main_module, "repository", repository)
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/v1/questions",
+        json={
+            "question": "태양광 사업에 필요한 절차가 궁금해요",
+            "as_of_date": "2026-07-15",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "corpus_unready"
+    assert "insufficient_evidence" not in response.text
+
+
+def test_provision_returns_corpus_unready_instead_of_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = MemoryLegalRepository()
+
+    async def closed_provision(*args, **kwargs):
+        raise CorpusSearchUnavailableError("migration_0010")
+
+    monkeypatch.setattr(repository, "provision", closed_provision)
+    monkeypatch.setattr(main_module, "repository", repository)
+    response = TestClient(app, raise_server_exceptions=False).get(
+        f"/v1/provisions/{uuid4()}"
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "corpus_unready"
+    assert "조문을 찾을 수 없습니다" not in response.text
