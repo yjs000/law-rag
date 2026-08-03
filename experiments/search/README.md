@@ -68,20 +68,26 @@ uv run --directory apps/api python -m scripts.experiment_search evaluate
 - Law@1
 - Article Recall@3, Recall@5, Recall@10
 - Article MRR
+- Evidence Recall@3, Recall@5, Recall@10
 - 기대 조문의 raw 청크 rank와 조 단위 rank
+- 기대 조문의 필수 근거 문구가 복원된 조·항·호·목에 실제로 있는지
 - 범위 밖 기대 조문이 corpus에 실제로 없는지
 
 기계 판독 결과는 `.data/experiments/search/evaluation.json`, 사람이 읽는 대표 결과는
 [실제 dense 검색 평가](../../docs/generated/experiment-c-retrieval-evaluation.md)에 원자 생성된다.
 
-2026-07-23 실제 기준선은 Law@1 `1.0`, Recall@3 `0.8`, Recall@5 `0.8`, Recall@10 `1.0`, MRR
-`0.82`였다. 따라서 top 3을 top 5로만 늘려서는 이 질문셋의 누락이 줄지 않았고 관찰 후보 10개가
-필요했다.
+2026-07-23 수정 전 실제 기준선은 Law@1 `1.0`, Recall@3 `0.8`, Recall@5 `0.8`, Recall@10
+`1.0`, MRR `0.82`였다. 2026-08-03에는 구조 표지와 평탄화된 `목` 계층을 고치고 corpus validator를
+통과시킨 뒤 재측정했다. 최종 Law@1, Article Recall@3/5/10, Article MRR, Evidence Recall@3/5/10은
+모두 `1.0`이었다.
+
+이는 고정된 범위 내 질문 5개에 대한 결과이며 일반 검색 성능이 완벽하다는 뜻은 아니다. 현재 평가셋에서는
+hybrid 검색이 높일 지표 여지가 없으므로 dense-only를 유지하고 평가 질문을 확장한 뒤 다시 비교한다.
 
 ## 현재 하지 않는 것
 
 - 키워드·BM25·PGroonga·RRF 결합: [보류 설계](../../docs/design-docs/experiment-c-keyword-retrieval-options.md)
-- 후보 중 AI 문맥 1~5개 선정, 중복 제거와 근거 부족 판정: [실험 D](../context/README.md)
+- AI reranker를 사용한 일반 질문의 의미 기반 직접 근거 판정
 - 생성 AI 답변, production DB·검색 변경
 
 `score`는 코사인 유사도이며 정답 확률이 아니다. 후보 1위여도 실제 `content`가 질문을 뒷받침하는지

@@ -1,6 +1,6 @@
 # 실험 D — 검색 문맥 구성
 
-상태: 계획됨, 아직 실행 명령은 구현되지 않음
+상태: 구현·실행 완료
 
 ## 목적
 
@@ -36,26 +36,40 @@
 같은 조의 여러 청크는 하나의 근거 묶음으로 중복 제거한다. 질문을 직접 뒷받침할 때만 항·호·목 또는
 인접/상위 청크를 함께 넣는다. 점수가 높다는 이유만으로 무관한 청크를 문맥에 포함하지 않는다.
 
-## 실험 A에서 재사용할 기록 원칙
+## 실험 A에서 재사용한 기록 원칙
 
-구현 시 성공 결과를 원자적으로 두 산출물에 자동 기록한다.
+성공 결과를 원자적으로 두 산출물에 자동 기록한다.
 
 - `.data/experiments/context/context-runs.json`: 실제 context package와 입력·출력 SHA-256
 - `.data/experiments/context/context-results.md`: 실행 비교와 실제 context package
 
 모든 파일을 먼저 준비한 뒤 함께 교체하고, 기록 실패 시 이전 성공 결과를 보존한다. 질문 원문을 Git에
-남길지 여부는 구현 전에 개인정보 경계를 검토한다. 기본값은 실험 C처럼 두 파일 모두 로컬 `.data`에
-두며, 고정 평가셋 결과만 `docs/generated/experiment-d-search-context-evaluation.md`에 기록한다.
+남길지 여부는 실행 전에 개인정보 경계를 검토한다. 기본값은 실험 C처럼 두 파일 모두 로컬 `.data`에
+두며, 고정 평가셋의 요약만 `docs/generated/experiment-d-search-context-evaluation.md`에 기록한다.
 
-## 예정 CLI
-
-아래는 인터페이스 초안이며 현재는 실행할 수 없다.
+## 실행 CLI
 
 ```powershell
 uv run --directory apps/api python -m scripts.experiment_context build `
   --search-runs .data/experiments/search/search-runs.json `
-  --run 1
+  --run 20
 ```
+
+`--run`은 `.data/experiments/search/search-runs.json`에 기록된 실험 C 실행 번호다. 기록의 corpus
+SHA-256과 현재 corpus 파일이 다르면 실행을 거부한다.
+
+## 2026-08-03 실제 결과
+
+수정된 corpus SHA-256 `86fbfe0af0df4c308d46a910e2ba8ff3f102c3c8534c41f9777758b75054f3da`로
+검색 실행 20~25를 입력했다.
+
+- 범위 내 고정 질문 5개: 모두 `ready`, 기대 조문 rank 1, 근거 묶음 1개
+- 범위 밖 전기사업법 제7조 질문: `insufficient_evidence`
+- 범위 밖 이유: `governing_provision_outside_corpus`
+- 범위 밖 근거 묶음: 0개
+
+요약과 실행별 stdout SHA-256은 [실제 실험 D 평가](../../docs/generated/experiment-d-search-context-evaluation.md)에
+정리한다. stdout 전체는 Git에서 제외되는 `.data`에만 있다.
 
 ## 완료 조건
 
@@ -65,4 +79,4 @@ uv run --directory apps/api python -m scripts.experiment_context build `
 - 반복: 같은 입력에서 선택 결과가 같은지 실제 기록으로 비교한다.
 - 검색 후보와 최종 문맥을 구분해, top 10 전체가 답변 프롬프트로 유입되지 않게 한다.
 
-상세 실행 계획은 [0020 실험 D 계획](../../docs/exec-plans/active/0020-experiment-d-search-context.md)에 있다.
+상세 실행 결과는 [0020 실험 D 계획](../../docs/exec-plans/completed/0020-experiment-d-search-context.md)에 있다.
