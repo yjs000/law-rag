@@ -241,7 +241,7 @@ class MemoryLegalRepository:
             )
         )
         if all_terms and prepared.terms:
-            selected = all_terms[:limit]
+            selected = _unique_article_hits(all_terms)[:limit]
             return selected, _natural_trace(
                 prepared, selected, stages, started, prepared.strict_query, False
             )
@@ -283,7 +283,7 @@ class MemoryLegalRepository:
             )
         )
         if anchored:
-            selected = anchored[:limit]
+            selected = _unique_article_hits(anchored)[:limit]
             return selected, _natural_trace(
                 prepared, selected, stages, started, prepared.anchored_query, True
             )
@@ -374,6 +374,21 @@ def _match_score(terms: set[str], *, title: str, heading: str, content: str) -> 
         if term in content:
             score += 1.0
     return score
+
+
+def _unique_article_hits(hits: list[SearchHit]) -> list[SearchHit]:
+    """Keep the highest-ranked leaf for each document/article pair."""
+    selected: list[SearchHit] = []
+    seen: set[tuple[UUID, str]] = set()
+    for hit in hits:
+        root = hit.path.split("/", 1)[0]
+        article = hit.path if root == "본문" else root
+        key = (hit.document_id, article)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(hit)
+    return selected
 
 
 def _elapsed_ms(started: float) -> float:

@@ -14,19 +14,35 @@ class DraftAnswer(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
-def select_generation_hits(hits: list[SearchHit], max_characters: int) -> list[SearchHit]:
-    """Keep ranked provisions whole while bounding provider input size."""
+MAX_GENERATION_ARTICLES = 5
+
+
+def select_generation_hits(
+    hits: list[SearchHit],
+    max_characters: int,
+    max_articles: int = MAX_GENERATION_ARTICLES,
+) -> list[SearchHit]:
+    """Keep at most one ranked leaf per article within the provider input budget."""
     if max_characters <= 0:
         raise ValueError("evidence budget must be positive")
+    if max_articles <= 0:
+        raise ValueError("article limit must be positive")
     selected: list[SearchHit] = []
+    seen_articles: set[tuple[object, str]] = set()
     used = 0
     for hit in hits:
+        path_root = hit.path.split("/", 1)[0]
+        article = hit.path if path_root == "본문" else path_root
+        article_key = (hit.document_id, article)
+        if article_key in seen_articles:
+            continue
         size = len(hit.document_title) + len(hit.path) + len(hit.version_label) + len(hit.content)
         if selected and used + size > max_characters:
             continue
         selected.append(hit)
+        seen_articles.add(article_key)
         used += size
-        if used >= max_characters:
+        if used >= max_characters or len(selected) >= max_articles:
             break
     return selected
 

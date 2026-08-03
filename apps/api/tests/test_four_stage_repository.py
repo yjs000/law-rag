@@ -7,6 +7,7 @@ import pytest
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.catalog import SourceKind
+from app.domain.entities import ProvisionRecord
 from app.domain.search_queries import prepare_search_query
 from app.parsers.law_json import parse_legal_document
 
@@ -26,10 +27,13 @@ class _FakeConnection:
     def __init__(self, rows_by_query: dict[str, list[dict]]) -> None:
         self.rows_by_query = rows_by_query
         self.calls: list[dict] = []
+        self.statements: list[str] = []
 
-    async def execute(self, _statement, params: dict):
+    async def execute(self, statement, params: dict):
         self.calls.append(params)
-        return _MappingsResult(self.rows_by_query.get(params["query"], []))
+        self.statements.append(str(statement))
+        key = "__dense__" if "embedding" in params else params["query"]
+        return _MappingsResult(self.rows_by_query.get(key, []))
 
 
 class _ConnectionContext:
@@ -51,20 +55,27 @@ class _FakeEngine:
         return _ConnectionContext(self.connection)
 
 
-def _row(title: str, content: str) -> dict:
+def _row(
+    title: str,
+    content: str,
+    *,
+    document_id=None,
+    path: str = "제1조",
+    score: float = 1.0,
+) -> dict:
     return {
         "provision_id": uuid4(),
-        "document_id": uuid4(),
+        "document_id": document_id or uuid4(),
         "document_title": title,
         "source_kind": SourceKind.LAW.value,
         "version_label": "MST 1",
         "effective_from": date(2020, 1, 1),
         "effective_to": None,
-        "path": "제1조",
+        "path": path,
         "heading": None,
         "content": content,
         "source_url": "https://open.law.go.kr/mock",
-        "score": 1.0,
+        "score": score,
     }
 
 
@@ -106,6 +117,28 @@ async def test_all_terms_stage_stops_on_strict_match() -> None:
     assert [stage.stage for stage in trace.stages] == ["all_terms"]
     assert trace.stages[0].accepted_candidate_count == 1
     assert trace.total_duration_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_memory_natural_search_keeps_one_leaf_per_article() -> None:
+    repository = MemoryLegalRepository()
+    document = _document("전기사업법", "dedup", "제1조 전기사업 허가 서류")
+    document.provisions.append(
+        ProvisionRecord(
+            id=uuid4(),
+            path="제1조/항①",
+            heading=None,
+            content="① 전기사업 허가 서류",
+            parent_path="제1조",
+            ordinal=1,
+        )
+    )
+    await repository.upsert_document(document)
+
+    hits, _ = await repository.search_with_trace("전기사업 허가 서류", date(2026, 7, 18), 10)
+
+    assert len(hits) == 1
+    assert hits[0].path.startswith("제1조")
 
 
 @pytest.mark.asyncio
@@ -151,11 +184,62 @@ async def test_missing_anchor_finishes_with_insufficient_evidence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_postgres_hybrid_candidates_are_validated_at_each_stage() -> None:
+async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search() -> None:
+    document_id = uuid4()
+    connection = _FakeConnection(
+        {
+            "__dense__": [
+                _row(
+                    "전기사업법",
+                    "전기사업을 하려는 자는 장관의 허가를 받아야 한다.",
+                    document_id=document_id,
+                    path="제7조/항①",
+                    score=0.91,
+                ),
+                _row(
+                    "전기사업법",
+                    "같은 조의 다른 항",
+                    document_id=document_id,
+                    path="제7조/항②",
+                    score=0.89,
+                ),
+                _row(
+                    "전기사업법",
+                    "결격사유",
+                    document_id=document_id,
+                    path="제8조",
+                    score=0.75,
+                ),
+            ]
+        }
+    )
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    hits, trace = await repository.search_with_trace(
+        "전기사업 허가",
+        date(2026, 7, 18),
+        10,
+        [0.1, 0.2],
+        "nvidia/nemotron-3-embed-1b",
+    )
+
+    assert [hit.path for hit in hits] == ["제7조/항①", "제8조"]
+    assert [stage.stage for stage in trace.stages] == ["dense_retrieval"]
+    assert trace.strategy == "dense_only"
+    assert len(connection.calls) == 1
+    assert connection.calls[0]["embedding"] == "[0.1, 0.2]"
+    assert "hybrid_search" not in connection.statements[0]
+    assert "pgroonga" not in connection.statements[0].casefold()
+
+
+@pytest.mark.asyncio
+async def test_postgres_dense_zero_falls_back_to_separate_keyword_search() -> None:
     query = "전기사업 허가 서류"
     prepared = prepare_search_query(query)
     connection = _FakeConnection(
         {
+            "__dense__": [],
             prepared.strict_query: [_row("가상 규정", "벡터로만 유사한 내용")],
             prepared.minimum_match_query: [_row("가상 규정", "허가 서류")],
             prepared.anchored_query: [_row("전기사업법", "전기사업 허가 기준")],
@@ -174,21 +258,21 @@ async def test_postgres_hybrid_candidates_are_validated_at_each_stage() -> None:
 
     assert [hit.document_title for hit in hits] == ["전기사업법"]
     assert [stage.stage for stage in trace.stages] == [
+        "dense_retrieval",
         "all_terms",
         "minimum_two",
         "anchor_required",
     ]
-    assert trace.stages[0].raw_candidate_count == 1
-    assert trace.stages[0].accepted_candidate_count == 0
-    assert trace.stages[1].accepted_candidate_count == 1
+    assert trace.stages[0].raw_candidate_count == 0
+    assert trace.stages[1].raw_candidate_count == 1
+    assert trace.stages[1].accepted_candidate_count == 0
     assert trace.stages[2].accepted_candidate_count == 1
-    assert trace.strategy == "four_stage_hybrid"
-    assert len(connection.calls) == 3
-    assert all(call["embedding"] == "[0.1, 0.2]" for call in connection.calls)
-    assert all(
-        call["embedding_model"] == "nvidia/nemotron-3-embed-1b"
-        for call in connection.calls
-    )
+    assert trace.stages[3].accepted_candidate_count == 1
+    assert trace.strategy == "dense_then_keyword_fallback"
+    assert len(connection.calls) == 4
+    assert "embedding" in connection.calls[0]
+    assert all("embedding" not in call for call in connection.calls[1:])
+    assert all("hybrid_search" not in statement for statement in connection.statements)
 
 
 @pytest.mark.asyncio

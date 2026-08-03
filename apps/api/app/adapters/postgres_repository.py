@@ -244,9 +244,44 @@ class PostgresLegalRepository:
                 )
 
             stages: list[SearchStageTrace] = []
+            candidate_limit = min(max(limit * 5, 50), 200)
+            retrieval_strategy = "four_stage_keyword"
+            if embedding is not None and embedding_model is not None:
+                dense_started = perf_counter()
+                dense_rows = await _execute_dense_search(
+                    connection,
+                    as_of_date,
+                    embedding,
+                    embedding_model,
+                    candidate_limit,
+                )
+                dense_candidates = _unique_article_rows(dense_rows)
+                stages.append(
+                    _stage_trace(
+                        "dense_retrieval",
+                        None,
+                        len(dense_rows),
+                        len(dense_candidates),
+                        dense_started,
+                        "matched" if dense_candidates else "no_match",
+                    )
+                )
+                if dense_candidates:
+                    return _postgres_natural_result(
+                        self,
+                        dense_candidates,
+                        limit,
+                        prepared,
+                        stages,
+                        started,
+                        None,
+                        "dense_only",
+                        False,
+                    )
+                retrieval_strategy = "dense_then_keyword_fallback"
+
             executed_queries: set[str] = set()
             last_executed_query: str | None = None
-            candidate_limit = min(max(limit * 5, 50), 200)
             match_cache: dict[UUID, set[str]] = {}
 
             def row_matches(row: Mapping[str, Any]) -> set[str]:
@@ -256,12 +291,10 @@ class PostgresLegalRepository:
                 return match_cache[provision_id]
 
             stage_started = perf_counter()
-            strict_rows = await _execute_search(
+            strict_rows = await _execute_keyword_search(
                 connection,
                 prepared.strict_query,
                 as_of_date,
-                embedding,
-                embedding_model,
                 candidate_limit,
             )
             if prepared.strict_query:
@@ -291,7 +324,7 @@ class PostgresLegalRepository:
                     stages,
                     started,
                     prepared.strict_query,
-                    query_embedding is not None,
+                    retrieval_strategy,
                     False,
                 )
 
@@ -301,12 +334,10 @@ class PostgresLegalRepository:
                 and prepared.minimum_match_query not in executed_queries
             )
             if minimum_query_executed:
-                minimum_rows = await _execute_search(
+                minimum_rows = await _execute_keyword_search(
                     connection,
                     prepared.minimum_match_query,
                     as_of_date,
-                    embedding,
-                    embedding_model,
                     candidate_limit,
                 )
                 executed_queries.add(prepared.minimum_match_query)
@@ -349,12 +380,10 @@ class PostgresLegalRepository:
                 and prepared.anchored_query not in executed_queries
             ):
                 anchor_query_executed = True
-                anchor_rows = await _execute_search(
+                anchor_rows = await _execute_keyword_search(
                     connection,
                     prepared.anchored_query,
                     as_of_date,
-                    embedding,
-                    embedding_model,
                     candidate_limit,
                 )
                 executed_queries.add(prepared.anchored_query)
@@ -398,7 +427,7 @@ class PostgresLegalRepository:
                         if anchor_query_executed
                         else prepared.minimum_match_query
                     ),
-                    query_embedding is not None,
+                    retrieval_strategy,
                     True,
                 )
 
@@ -414,7 +443,7 @@ class PostgresLegalRepository:
             )
         )
         return [], SearchTrace(
-            strategy="four_stage_hybrid" if query_embedding else "four_stage_keyword",
+            strategy=retrieval_strategy,
             normalized_query=prepared.normalized_text,
             terms=prepared.terms,
             executed_query=last_executed_query,
@@ -492,12 +521,51 @@ class PostgresLegalRepository:
         )
 
 
-async def _execute_search(
+async def _execute_dense_search(
+    connection: AsyncConnection,
+    as_of_date: date,
+    embedding: str,
+    embedding_model: str,
+    limit: int,
+) -> list[Mapping[str, Any]]:
+    return list(
+        (
+            await connection.execute(
+                text(
+                    """SELECT p.id provision_id,d.id document_id,
+                    d.exact_title document_title,d.source_kind,
+                    'MST '||v.mst version_label,v.effective_from,v.effective_to,
+                    p.path,p.heading,p.content,v.source_url,
+                    1.0-(e.embedding <=> CAST(:embedding AS vector)) score
+                    FROM provisions p
+                    JOIN document_versions v ON v.id=p.version_id
+                    JOIN legal_documents d ON d.id=v.document_id
+                    JOIN provision_embeddings e ON e.provision_id=p.id
+                    WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
+                      AND (v.effective_to IS NULL OR v.effective_to>:as_of)
+                      AND e.model=:embedding_model
+                      AND e.dimensions=512
+                      AND e.embedding_version='1'
+                    ORDER BY e.embedding <=> CAST(:embedding AS vector),p.ordinal
+                    LIMIT :limit"""
+                ),
+                {
+                    "as_of": as_of_date,
+                    "embedding": embedding,
+                    "embedding_model": embedding_model,
+                    "limit": limit,
+                },
+            )
+        )
+        .mappings()
+        .all()
+    )
+
+
+async def _execute_keyword_search(
     connection: AsyncConnection,
     query: str,
     as_of_date: date,
-    embedding: str | None,
-    embedding_model: str | None,
     limit: int,
 ) -> list[Mapping[str, Any]]:
     if not query:
@@ -506,13 +574,34 @@ async def _execute_search(
         (
             await connection.execute(
                 text(
-                    "SELECT * FROM hybrid_search(:query,:as_of,:embedding,:embedding_model,:limit)"
+                    """WITH valid AS (
+                      SELECT p.*,v.document_id,v.mst,v.effective_from,v.effective_to,
+                             v.source_url,d.exact_title,d.source_kind,
+                             p.tableoid provision_tableoid,p.ctid provision_ctid
+                      FROM provisions p
+                      JOIN document_versions v ON v.id=p.version_id
+                      JOIN legal_documents d ON d.id=v.document_id
+                      WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
+                        AND (v.effective_to IS NULL OR v.effective_to>:as_of)
+                    )
+                    SELECT v.id provision_id,v.document_id,v.exact_title document_title,
+                           v.source_kind,'MST '||v.mst version_label,
+                           v.effective_from,v.effective_to,v.path,v.heading,v.content,
+                           v.source_url,
+                           (CASE WHEN v.exact_title &@~ :query THEN 3.0 ELSE 0.0 END)+
+                           (CASE WHEN ARRAY[COALESCE(v.heading,''),v.content] &@~
+                             (:query,ARRAY[2,1],'provisions_search_pgroonga')::pgroonga_full_text_search_condition
+                             THEN GREATEST(pgroonga_score(v.provision_tableoid,v.provision_ctid),1.0)
+                             ELSE 0.0 END) score
+                    FROM valid v
+                    WHERE v.exact_title &@~ :query
+                       OR ARRAY[COALESCE(v.heading,''),v.content] &@~
+                         (:query,ARRAY[2,1],'provisions_search_pgroonga')::pgroonga_full_text_search_condition
+                    ORDER BY score DESC,v.ordinal LIMIT :limit"""
                 ),
                 {
                     "query": query,
                     "as_of": as_of_date,
-                    "embedding": embedding,
-                    "embedding_model": embedding_model,
                     "limit": limit,
                 },
             )
@@ -564,22 +653,17 @@ def _postgres_natural_result(
     prepared: PreparedSearchQuery,
     stages: list[SearchStageTrace],
     started: float,
-    executed_query: str,
-    hybrid: bool,
+    executed_query: str | None,
+    strategy: str,
     relaxed: bool,
 ) -> tuple[list[SearchHit], SearchTrace]:
     selected: list[SearchHit] = []
-    seen: set[UUID] = set()
-    for row in rows:
-        provision_id = row["provision_id"]
-        if provision_id in seen:
-            continue
-        seen.add(provision_id)
+    for row in _unique_article_rows(rows):
         selected.append(repository._hit(row))
         if len(selected) == limit:
             break
     return selected, SearchTrace(
-        strategy="four_stage_hybrid" if hybrid else "four_stage_keyword",
+        strategy=strategy,
         normalized_query=prepared.normalized_text,
         terms=prepared.terms,
         executed_query=executed_query,
@@ -591,3 +675,20 @@ def _postgres_natural_result(
         stages=tuple(stages),
         total_duration_ms=_elapsed_ms(started),
     )
+
+
+def _unique_article_rows(rows: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Keep the highest-ranked leaf for each document/article pair."""
+    selected: list[Mapping[str, Any]] = []
+    seen: set[tuple[UUID, str]] = set()
+    for row in rows:
+        path = str(row["path"])
+        root = path.split("/", 1)[0]
+        # Flat administrative-rule paragraphs do not represent one legal article.
+        article = path if root == "본문" else root
+        key = (row["document_id"], article)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(row)
+    return selected
