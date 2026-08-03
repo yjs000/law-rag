@@ -77,28 +77,73 @@ def _source(
         raw_sha256=f"sha-{index}",
         provisions=provisions,
     )
-    raw = RawResponse("{}", "JSON", document.source_url)
+    chapter_by_article = (
+        {
+            "제1조": (1, None),
+            "제2조": (1, None),
+            "제4조": (2, None),
+            "제99조": (5, None),
+            "제101조의2": (5, 2),
+        }
+        if index == 0
+        else {"제1조": (1, None), "제7조": (2, None), "제53조": (6, None), "제61조": (7, None)}
+    )
+    raw_articles: list[dict[str, str]] = []
+    current_chapter: tuple[int, int | None] | None = None
+    for path, content, parent_path in records:
+        if parent_path is not None:
+            continue
+        chapter = chapter_by_article.get(path)
+        if chapter is not None and chapter != current_chapter:
+            chapter_number, chapter_branch = chapter
+            chapter_label = f"제{chapter_number}장"
+            if chapter_branch is not None:
+                chapter_label += f"의{chapter_branch}"
+            raw_articles.append(
+                {
+                    "조문번호": path.removeprefix("제").split("조", 1)[0],
+                    "조문여부": "전문",
+                    "조문내용": f"{chapter_label} 구조 표지",
+                }
+            )
+            current_chapter = chapter
+        number = path.removeprefix("제").split("조", 1)[0]
+        node = {
+            "조문번호": number,
+            "조문여부": "조문",
+            "조문내용": content,
+        }
+        if "의" in path:
+            base, branch = path.removeprefix("제").split("조의", 1)
+            node["조문번호"] = base
+            node["조문가지번호"] = branch
+        raw_articles.append(node)
+    raw = RawResponse(
+        json.dumps({"법령": {"조문": {"조문단위": raw_articles}}}, ensure_ascii=False),
+        "JSON",
+        document.source_url,
+    )
     return LoadedSource(spec, document, raw)
 
 
 def _selected_sources() -> tuple[list[LoadedSource], list[str]]:
     records_by_source = [
         [
-            ("제1조", "제1장 총칙 제1조 실제 조문", None),
+            ("제1조", "제1조 실제 조문", None),
             ("제1조/항①", "① 목적", "제1조"),
             ("제2조", "제2조 실제 조문", None),
-            ("제4조", "제2장 저작권 제4조 실제 조문", None),
-            ("제99조", "제5장 영상저작물 제99조 실제 조문", None),
+            ("제4조", "제4조 실제 조문", None),
+            ("제99조", "제99조 영상저작물 실제 조문", None),
             ("제99조/항①", "① 영상저작물 특례", "제99조"),
-            ("제101조의2", "제5장의2 프로그램 제101조의2", None),
+            ("제101조의2", "제101조의2 프로그램", None),
         ],
         [
-            ("제1조", "제1장 총칙 제1조 실제 조문", None),
+            ("제1조", "제1조 실제 조문", None),
             ("제1조/항①", "① 목적", "제1조"),
-            ("제7조", "제2장 전기사업 제7조", None),
-            ("제53조", "제6장 전기위원회 제53조", None),
+            ("제7조", "제7조 전기사업", None),
+            ("제53조", "제53조 전기위원회", None),
             ("제53조/항①", "① 전기위원회", "제53조"),
-            ("제61조", "제7장 안전관리 제61조", None),
+            ("제61조", "제61조 안전관리", None),
         ],
         [
             ("제1조", "제1조 실제 조문", None),
@@ -222,6 +267,30 @@ async def test_empty_parser_result_stops_before_embedding() -> None:
 
 
 @pytest.mark.asyncio
+async def test_structure_marker_article_body_stops_before_embedding() -> None:
+    sources, _ = _selected_sources()
+    sources[0].document.provisions[0].content = "제1장 총칙"
+    embedder = FixedEmbedder([_basis(0)])
+
+    with pytest.raises(ValueError, match="article body is a structure marker"):
+        await build_corpus(sources, embedder=embedder)
+
+    assert embedder.inputs == []
+
+
+@pytest.mark.asyncio
+async def test_orphan_provision_stops_before_embedding() -> None:
+    sources, _ = _selected_sources()
+    sources[0].document.provisions[1].parent_path = "제999조"
+    embedder = FixedEmbedder([_basis(0)])
+
+    with pytest.raises(ValueError, match="provision parent is missing"):
+        await build_corpus(sources, embedder=embedder)
+
+    assert embedder.inputs == []
+
+
+@pytest.mark.asyncio
 async def test_invalid_embedding_batch_size_stops_before_embedding() -> None:
     sources, _ = _selected_sources()
     embedder = FixedEmbedder([_basis(0)])
@@ -246,9 +315,21 @@ async def test_embedder_batch_size_mismatch_is_rejected() -> None:
 @pytest.mark.asyncio
 async def test_missing_requested_chapter_stops_before_embedding() -> None:
     sources, _ = _selected_sources()
-    sources[0].document.provisions = [
-        item for item in sources[0].document.provisions if item.path != "제99조"
+    raw_payload = json.loads(sources[0].raw.body)
+    raw_payload["법령"]["조문"]["조문단위"] = [
+        item
+        for item in raw_payload["법령"]["조문"]["조문단위"]
+        if not str(item["조문내용"]).startswith("제5장")
     ]
+    sources[0] = LoadedSource(
+        sources[0].spec,
+        sources[0].document,
+        RawResponse(
+            json.dumps(raw_payload, ensure_ascii=False),
+            "JSON",
+            sources[0].raw.source_url,
+        ),
+    )
     embedder = FixedEmbedder([_basis(0)])
 
     with pytest.raises(ValueError, match="missing requested chapters"):
@@ -310,6 +391,7 @@ async def test_fixed_evaluation_measures_article_recall_and_out_of_scope() -> No
             "scope": "in_scope",
             "expected_title": "저작권법",
             "expected_article_path": "제1조",
+            "required_evidence_terms": ["제1조 실제 조문"],
         },
         {
             "id": "second",
@@ -317,6 +399,7 @@ async def test_fixed_evaluation_measures_article_recall_and_out_of_scope() -> No
             "scope": "in_scope",
             "expected_title": "저작권법",
             "expected_article_path": "제2조",
+            "required_evidence_terms": ["제2조 실제 조문"],
         },
         {
             "id": "excluded",
@@ -324,6 +407,7 @@ async def test_fixed_evaluation_measures_article_recall_and_out_of_scope() -> No
             "scope": "out_of_scope",
             "expected_title": "전기사업법",
             "expected_article_path": "제7조",
+            "required_evidence_terms": ["허가권자"],
         },
     ]
 
@@ -342,6 +426,9 @@ async def test_fixed_evaluation_measures_article_recall_and_out_of_scope() -> No
         "article_recall_at_5": 1.0,
         "article_recall_at_10": 1.0,
         "article_mrr": 1.0,
+        "evidence_recall_at_3": 1.0,
+        "evidence_recall_at_5": 1.0,
+        "evidence_recall_at_10": 1.0,
     }
     assert result["cases"][2]["expected_present_in_corpus"] is False
     assert result["cases"][2]["article_rank"] is None
@@ -363,12 +450,16 @@ def test_fixed_evaluation_questions_and_outputs_are_machine_readable(tmp_path: P
             "article_recall_at_5": 1.0,
             "article_recall_at_10": 1.0,
             "article_mrr": 1.0,
+            "evidence_recall_at_3": 1.0,
+            "evidence_recall_at_5": 1.0,
+            "evidence_recall_at_10": 1.0,
         },
         "cases": [
             {
                 **cases[0],
                 "law_at_1": True,
                 "article_rank": 1,
+                "evidence_rank": 1,
                 "raw_chunk_rank": 1,
                 "search": {
                     "article_candidates": [

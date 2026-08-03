@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "experiment": "C",
   "description": "Dense-only 검색 후보의 법률·조문 순위를 반복 비교하는 고정 질문셋",
   "cases": [
@@ -8,42 +8,48 @@
       "question": "태양광 발전에 사용하는 태양에너지는 신에너지와 재생에너지 중 어디에 해당하나요?",
       "scope": "in_scope",
       "expected_title": "신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법",
-      "expected_article_path": "제2조"
+      "expected_article_path": "제2조",
+      "required_evidence_terms": ["재생에너지", "태양에너지"]
     },
     {
       "id": "electricity-commission-functions",
       "question": "전기위원회는 어떤 사항을 심의하나요?",
       "scope": "in_scope",
       "expected_title": "전기사업법",
-      "expected_article_path": "제56조"
+      "expected_article_path": "제56조",
+      "required_evidence_terms": ["전기위원회", "심의"]
     },
     {
       "id": "audiovisual-rights-transfer-presumption",
       "question": "영상저작물 제작에 협력해 저작권을 취득한 사람의 이용에 필요한 권리는 누구에게 양도된 것으로 추정하나요?",
       "scope": "in_scope",
       "expected_title": "저작권법",
-      "expected_article_path": "제100조"
+      "expected_article_path": "제100조",
+      "required_evidence_terms": ["영상제작자가 이를 양도 받은 것으로 추정"]
     },
     {
       "id": "renewable-basic-plan-cycle",
       "question": "신재생에너지 기본계획은 몇 년마다 수립해야 하나요?",
       "scope": "in_scope",
       "expected_title": "신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법",
-      "expected_article_path": "제5조"
+      "expected_article_path": "제5조",
+      "required_evidence_terms": ["기본계획", "5년마다 수립"]
     },
     {
       "id": "copyright-act-purpose",
       "question": "저작권법은 어떤 목적을 위해 제정되었나요?",
       "scope": "in_scope",
       "expected_title": "저작권법",
-      "expected_article_path": "제1조"
+      "expected_article_path": "제1조",
+      "required_evidence_terms": ["저작자의 권리", "공정한 이용", "문화 및 관련 산업"]
     },
     {
       "id": "electricity-business-license-out-of-scope",
       "question": "전기사업을 하려면 누구의 허가를 받아야 하나요?",
       "scope": "out_of_scope",
       "expected_title": "전기사업법",
-      "expected_article_path": "제7조"
+      "expected_article_path": "제7조",
+      "required_evidence_terms": ["산업통상자원부장관의 허가"]
     }
   ]
 }

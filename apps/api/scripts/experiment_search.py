@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Protocol
 
+from defusedxml import ElementTree as ET
 from law_rag_collector.client import LawOpenApiClient, RawResponse, SearchRecord
 from law_rag_collector.settings import CollectorSettings
 from law_rag_core.domain.catalog import SourceKind
@@ -177,24 +179,165 @@ def _article_root(path: str) -> tuple[str, int] | None:
     return match.group(1), int(match.group(2))
 
 
+def _clean_text(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _json_nodes(value: object) -> list[dict[str, object]]:
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _raw_article_events(source: LoadedSource) -> list[tuple[str, str | None, str]]:
+    events: list[tuple[str, str | None, str]] = []
+    if source.raw.wire_format == "JSON":
+        try:
+            payload = json.loads(source.raw.body)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid legal hierarchy JSON: {source.spec.title}") from exc
+
+        article_nodes: list[dict[str, object]] = []
+
+        def walk(value: object) -> None:
+            nonlocal article_nodes
+            if article_nodes:
+                return
+            if isinstance(value, dict):
+                if "조문단위" in value:
+                    article_nodes = _json_nodes(value["조문단위"])
+                    return
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(payload)
+        for node in article_nodes:
+            content = _clean_text(node.get("조문내용"))
+            if not content:
+                continue
+            kind = _clean_text(node.get("조문여부")) or "조문"
+            article_path = None
+            if kind == "조문":
+                number = _clean_text(node.get("조문번호"))
+                if number:
+                    article_path = f"제{number}조"
+                    branch = _clean_text(node.get("조문가지번호"))
+                    if branch and branch not in {"0", "00"}:
+                        article_path += f"의{branch}"
+            events.append((kind, article_path, content))
+    else:
+        try:
+            root = ET.fromstring(source.raw.body)
+        except ET.ParseError as exc:
+            raise ValueError(f"invalid legal hierarchy XML: {source.spec.title}") from exc
+
+        def local_name(tag: str) -> str:
+            return tag.rsplit("}", 1)[-1]
+
+        def direct_text(node: ET.Element, name: str) -> str:
+            for child in list(node):
+                if local_name(child.tag) == name:
+                    return _clean_text(" ".join(child.itertext()))
+            return ""
+
+        for node in root.iter():
+            if local_name(node.tag) != "조문단위":
+                continue
+            content = direct_text(node, "조문내용")
+            if not content:
+                continue
+            kind = direct_text(node, "조문여부") or "조문"
+            article_path = None
+            if kind == "조문":
+                number = direct_text(node, "조문번호")
+                if number:
+                    article_path = f"제{number}조"
+                    branch = direct_text(node, "조문가지번호")
+                    if branch and branch not in {"0", "00"}:
+                        article_path += f"의{branch}"
+            events.append((kind, article_path, content))
+    if not events:
+        raise ValueError(f"legal hierarchy is missing: {source.spec.title}")
+    return events
+
+
+def _validate_provision_hierarchy(
+    title: str, provisions: list[ProvisionRecord]
+) -> dict[str, object]:
+    by_path: dict[str, ProvisionRecord] = {}
+    roots: set[str] = set()
+    for provision in provisions:
+        if provision.path in by_path:
+            raise ValueError(f"duplicate provision path: {title} {provision.path}")
+        by_path[provision.path] = provision
+        article = _article_root(provision.path)
+        if article is None:
+            raise ValueError(f"provision has no article root: {title} {provision.path}")
+        if provision.parent_path is None:
+            if provision.path != article[0]:
+                raise ValueError(f"non-root provision has no parent: {title} {provision.path}")
+            if CHAPTER_PATTERN.match(provision.content):
+                raise ValueError(f"article body is a structure marker: {title} {provision.path}")
+            roots.add(provision.path)
+
+    for provision in provisions:
+        if provision.parent_path is None:
+            continue
+        parent = by_path.get(provision.parent_path)
+        if parent is None:
+            raise ValueError(f"provision parent is missing: {title} {provision.path}")
+        provision_article = _article_root(provision.path)
+        parent_article = _article_root(parent.path)
+        if (
+            provision_article is None
+            or parent_article is None
+            or provision_article[0] != parent_article[0]
+        ):
+            raise ValueError(f"provision parent crosses articles: {title} {provision.path}")
+
+    expected_roots = {
+        article[0]
+        for provision in provisions
+        if (article := _article_root(provision.path)) is not None
+    }
+    if roots != expected_roots:
+        missing = ", ".join(sorted(expected_roots - roots))
+        raise ValueError(f"article root is missing: {title} {missing}")
+    return {
+        "status": "passed",
+        "checks": [
+            "unique_paths",
+            "article_body_not_structure_marker",
+            "article_root_present",
+            "parent_path_resolved",
+            "parent_within_article",
+        ],
+        "article_count": len(roots),
+        "chunk_count": len(provisions),
+    }
+
+
 def _select_chapters(
     source: LoadedSource, chapters: tuple[int, ...]
 ) -> tuple[list[ProvisionRecord], dict[str, object]]:
     current_chapter: tuple[int, int | None] | None = None
     chapter_by_article: dict[str, tuple[int, int | None] | None] = {}
     found_chapters: set[tuple[int, int | None]] = set()
-    for provision in source.document.provisions:
-        article = _article_root(provision.path)
-        if article is None or provision.parent_path is not None:
-            continue
-        marker = CHAPTER_PATTERN.match(provision.content)
+    for kind, article_path, content in _raw_article_events(source):
+        marker = CHAPTER_PATTERN.match(content)
         if marker is not None:
             current_chapter = (
                 int(marker.group(1)),
                 int(marker.group(2)) if marker.group(2) else None,
             )
             found_chapters.add(current_chapter)
-        chapter_by_article[article[0]] = current_chapter
+        if kind == "조문" and article_path is not None:
+            chapter_by_article[article_path] = current_chapter
 
     requested = {(chapter, None) for chapter in chapters}
     missing = requested - found_chapters
@@ -213,6 +356,7 @@ def _select_chapters(
         if (article := _article_root(provision.path)) is not None
         and article[0] in selected_articles
     ]
+    validation = _validate_provision_hierarchy(source.document.title, selected)
     return selected, {
         "title": source.document.title,
         "mst": source.document.mst,
@@ -223,6 +367,8 @@ def _select_chapters(
         "chapters": [f"제{chapter}장" for chapter in chapters],
         "article_paths": sorted(selected_articles),
         "chunk_count": len(selected),
+        "hierarchy_source": f"open_api_{source.raw.wire_format.lower()}",
+        "validation": validation,
     }
 
 
@@ -248,6 +394,7 @@ def _select_article_range(
         raise ValueError(
             f"parser result is missing requested articles: {source.spec.title} {labels}"
         )
+    validation = _validate_provision_hierarchy(source.document.title, selected)
     return selected, {
         "title": source.document.title,
         "mst": source.document.mst,
@@ -258,6 +405,8 @@ def _select_article_range(
         "article_range": [f"제{start}조", f"제{end}조"],
         "article_paths": sorted(selected_articles),
         "chunk_count": len(selected),
+        "hierarchy_source": "provision_paths",
+        "validation": validation,
     }
 
 
@@ -364,6 +513,11 @@ async def build_corpus(
         "selection": {
             "strategy": "fixed_legal_structure",
             "sources": [metadata for _, metadata in selections],
+        },
+        "validation": {
+            "status": "passed",
+            "source_count": len(sources),
+            "checks": ["source_scope", "article_body", "provision_hierarchy"],
         },
         "embedding": {
             "provider": "nvidia_nim",
@@ -625,8 +779,72 @@ def _validate_selection_contract(corpus: dict[str, object]) -> None:
             or metadata["chunk_count"] <= 0
         ):
             raise ValueError("experiment C corpus selection contract mismatch")
+        validation = metadata.get("validation")
+        if not isinstance(validation, dict) or validation.get("status") != "passed":
+            raise ValueError("experiment C corpus validation contract mismatch")
+        if not isinstance(metadata.get("hierarchy_source"), str):
+            raise ValueError("experiment C corpus validation contract mismatch")
     if sum(metadata["chunk_count"] for metadata in sources) != corpus["chunk_count"]:
         raise ValueError("experiment C corpus selection contract mismatch")
+
+
+def _validate_corpus_chunk_hierarchy(chunks: list[object]) -> None:
+    by_document_path: dict[tuple[str, str, str], dict[str, object]] = {}
+    roots_by_document: dict[tuple[str, str], set[str]] = {}
+    expected_roots_by_document: dict[tuple[str, str], set[str]] = {}
+    chunk_ids: set[str] = set()
+    for raw_chunk in chunks:
+        if not isinstance(raw_chunk, dict):
+            raise ValueError("invalid experiment C chunk")
+        chunk = raw_chunk
+        chunk_id = chunk.get("chunk_id")
+        title = chunk.get("title")
+        mst = chunk.get("mst")
+        path = chunk.get("path")
+        content = chunk.get("content")
+        required = (chunk_id, title, mst, path, content)
+        if not all(isinstance(value, str) and value.strip() for value in required):
+            raise ValueError("invalid experiment C chunk metadata")
+        assert isinstance(chunk_id, str)
+        assert isinstance(title, str)
+        assert isinstance(mst, str)
+        assert isinstance(path, str)
+        assert isinstance(content, str)
+        if chunk_id in chunk_ids:
+            raise ValueError("duplicate experiment C chunk id")
+        chunk_ids.add(chunk_id)
+        key = (title, mst, path)
+        if key in by_document_path:
+            raise ValueError("duplicate experiment C provision path")
+        by_document_path[key] = chunk
+        article = _article_root(path)
+        if article is None:
+            raise ValueError("experiment C chunk path has no article root")
+        document_key = (title, mst)
+        expected_roots_by_document.setdefault(document_key, set()).add(article[0])
+        parent = chunk.get("parent_path")
+        if parent is None:
+            if path != article[0] or CHAPTER_PATTERN.match(content):
+                raise ValueError("invalid experiment C article root")
+            roots_by_document.setdefault(document_key, set()).add(path)
+        elif not isinstance(parent, str) or not parent.strip():
+            raise ValueError("invalid experiment C parent path")
+
+    for (title, mst, path), chunk in by_document_path.items():
+        parent = chunk.get("parent_path")
+        if parent is None:
+            continue
+        assert isinstance(parent, str)
+        parent_chunk = by_document_path.get((title, mst, parent))
+        if parent_chunk is None:
+            raise ValueError("experiment C provision parent is missing")
+        article = _article_root(path)
+        parent_article = _article_root(parent)
+        if article is None or parent_article is None or article[0] != parent_article[0]:
+            raise ValueError("experiment C provision parent crosses articles")
+
+    if roots_by_document != expected_roots_by_document:
+        raise ValueError("experiment C article root is missing")
 
 
 def load_corpus(path: Path) -> dict[str, object]:
@@ -651,6 +869,9 @@ def load_corpus(path: Path) -> dict[str, object]:
         embedding.get("embedding_version"),
     ) != (MODEL, DIMENSIONS, EMBEDDING_VERSION):
         raise ValueError("experiment C corpus embedding contract mismatch")
+    validation = corpus.get("validation")
+    if not isinstance(validation, dict) or validation.get("status") != "passed":
+        raise ValueError("experiment C corpus validation contract mismatch")
     _validate_selection_contract(corpus)
     for chunk in corpus["chunks"]:
         if not isinstance(chunk, dict):
@@ -659,6 +880,7 @@ def load_corpus(path: Path) -> dict[str, object]:
         for key in ("chunk_id", "title", "source_id", "mst", "path", "content"):
             if not isinstance(chunk.get(key), str) or not chunk[key].strip():
                 raise ValueError("invalid experiment C chunk metadata")
+    _validate_corpus_chunk_hierarchy(corpus["chunks"])
     return corpus
 
 
@@ -774,7 +996,7 @@ async def search_corpus(
     }
 
 
-def _load_evaluation_cases(path: Path) -> list[dict[str, str]]:
+def _load_evaluation_cases(path: Path) -> list[dict[str, object]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -783,18 +1005,18 @@ def _load_evaluation_cases(path: Path) -> list[dict[str, str]]:
         raise ValueError("invalid experiment C evaluation questions") from exc
     if (
         not isinstance(payload, dict)
-        or payload.get("schema_version") != 1
+        or payload.get("schema_version") != 2
         or payload.get("experiment") != "C"
         or not isinstance(payload.get("cases"), list)
         or not payload["cases"]
     ):
         raise ValueError("invalid experiment C evaluation questions")
-    cases: list[dict[str, str]] = []
+    cases: list[dict[str, object]] = []
     seen_ids: set[str] = set()
     for case in payload["cases"]:
         if not isinstance(case, dict):
             raise ValueError("invalid experiment C evaluation questions")
-        normalized: dict[str, str] = {}
+        normalized: dict[str, object] = {}
         for key in (
             "id",
             "question",
@@ -806,6 +1028,14 @@ def _load_evaluation_cases(path: Path) -> list[dict[str, str]]:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError("invalid experiment C evaluation questions")
             normalized[key] = value.strip()
+        required_terms = case.get("required_evidence_terms")
+        if (
+            not isinstance(required_terms, list)
+            or not required_terms
+            or any(not isinstance(term, str) or not term.strip() for term in required_terms)
+        ):
+            raise ValueError("invalid experiment C evaluation questions")
+        normalized["required_evidence_terms"] = [term.strip() for term in required_terms]
         if normalized["scope"] not in {"in_scope", "out_of_scope"}:
             raise ValueError("invalid experiment C evaluation questions")
         if normalized["id"] in seen_ids:
@@ -845,8 +1075,34 @@ def _expected_raw_rank(candidates: object, *, title: str, article_path: str) -> 
     return None
 
 
+def _normalize_evidence_text(value: object) -> str:
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value)))
+
+
+def _article_evidence_presence(
+    chunks: list[object],
+    *,
+    title: str,
+    article_path: str,
+    required_terms: list[str],
+) -> tuple[bool, list[str]]:
+    article_contents = [
+        str(chunk["content"])
+        for chunk in chunks
+        if isinstance(chunk, dict)
+        and chunk.get("title") == title
+        and (article := _article_root(str(chunk.get("path", "")))) is not None
+        and article[0] == article_path
+    ]
+    normalized_content = _normalize_evidence_text(" ".join(article_contents))
+    missing = [
+        term for term in required_terms if _normalize_evidence_text(term) not in normalized_content
+    ]
+    return bool(article_contents) and not missing, missing
+
+
 async def evaluate_cases(
-    cases: list[dict[str, str]],
+    cases: list[dict[str, object]],
     corpus: dict[str, object],
     *,
     embedder: Embedder,
@@ -860,13 +1116,19 @@ async def evaluate_cases(
         )
     evaluated: list[dict[str, object]] = []
     in_scope_ranks: list[int | None] = []
+    in_scope_evidence_ranks: list[int | None] = []
     law_at_one_count = 0
     chunks = corpus.get("chunks")
     if not isinstance(chunks, list):
         raise ValueError("invalid experiment C corpus chunks")
     for case in cases:
+        question = str(case["question"])
+        expected_title = str(case["expected_title"])
+        expected_article_path = str(case["expected_article_path"])
+        required_terms = case["required_evidence_terms"]
+        assert isinstance(required_terms, list)
         search = await search_corpus(
-            case["question"],
+            question,
             corpus,
             embedder=embedder,
             candidate_k=candidate_k,
@@ -875,29 +1137,37 @@ async def evaluate_cases(
         raw_candidates = search["raw_chunk_candidates"]
         article_rank = _expected_article_rank(
             article_candidates,
-            title=case["expected_title"],
-            article_path=case["expected_article_path"],
+            title=expected_title,
+            article_path=expected_article_path,
         )
         raw_rank = _expected_raw_rank(
             raw_candidates,
-            title=case["expected_title"],
-            article_path=case["expected_article_path"],
+            title=expected_title,
+            article_path=expected_article_path,
         )
         law_at_one = bool(
             isinstance(article_candidates, list)
             and article_candidates
             and isinstance(article_candidates[0], dict)
-            and article_candidates[0].get("title") == case["expected_title"]
+            and article_candidates[0].get("title") == expected_title
         )
         expected_present_in_corpus = any(
             isinstance(chunk, dict)
-            and chunk.get("title") == case["expected_title"]
+            and chunk.get("title") == expected_title
             and (article := _article_root(str(chunk.get("path", "")))) is not None
-            and article[0] == case["expected_article_path"]
+            and article[0] == expected_article_path
             for chunk in chunks
         )
+        evidence_present_in_corpus, missing_evidence_terms = _article_evidence_presence(
+            chunks,
+            title=expected_title,
+            article_path=expected_article_path,
+            required_terms=[str(term) for term in required_terms],
+        )
+        evidence_rank = article_rank if evidence_present_in_corpus else None
         if case["scope"] == "in_scope":
             in_scope_ranks.append(article_rank)
+            in_scope_evidence_ranks.append(evidence_rank)
             law_at_one_count += int(law_at_one)
         evaluated.append(
             {
@@ -906,6 +1176,9 @@ async def evaluate_cases(
                 "article_rank": article_rank,
                 "raw_chunk_rank": raw_rank,
                 "expected_present_in_corpus": expected_present_in_corpus,
+                "evidence_present_in_corpus": evidence_present_in_corpus,
+                "missing_evidence_terms": missing_evidence_terms,
+                "evidence_rank": evidence_rank,
                 "search": search,
             }
         )
@@ -923,6 +1196,18 @@ async def evaluate_cases(
         "article_recall_at_10": sum(rank is not None and rank <= 10 for rank in in_scope_ranks)
         / in_scope_count,
         "article_mrr": sum(0.0 if rank is None else 1.0 / rank for rank in in_scope_ranks)
+        / in_scope_count,
+        "evidence_recall_at_3": sum(
+            rank is not None and rank <= 3 for rank in in_scope_evidence_ranks
+        )
+        / in_scope_count,
+        "evidence_recall_at_5": sum(
+            rank is not None and rank <= 5 for rank in in_scope_evidence_ranks
+        )
+        / in_scope_count,
+        "evidence_recall_at_10": sum(
+            rank is not None and rank <= 10 for rank in in_scope_evidence_ranks
+        )
         / in_scope_count,
     }
     return {
@@ -963,11 +1248,14 @@ def _render_evaluation_report(result: dict[str, object]) -> str:
         f"- Article Recall@5: `{metrics['article_recall_at_5']}`",
         f"- Article Recall@10: `{metrics['article_recall_at_10']}`",
         f"- Article MRR: `{metrics['article_mrr']}`",
+        f"- Evidence Recall@3: `{metrics['evidence_recall_at_3']}`",
+        f"- Evidence Recall@5: `{metrics['evidence_recall_at_5']}`",
+        f"- Evidence Recall@10: `{metrics['evidence_recall_at_10']}`",
         "",
         "## 질문별 결과",
         "",
-        "| ID | 범위 | 기대 법률·조 | Law@1 | 조 rank | raw rank |",
-        "| --- | --- | --- | --- | ---: | ---: |",
+        "| ID | 범위 | 기대 법률·조 | Law@1 | 조 rank | 근거 rank | raw rank |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: |",
     ]
     for case in cases:
         assert isinstance(case, dict)
@@ -975,6 +1263,7 @@ def _render_evaluation_report(result: dict[str, object]) -> str:
             f"| {case['id']} | {case['scope']} | "
             f"{case['expected_title']} {case['expected_article_path']} | "
             f"{case['law_at_1']} | {case['article_rank'] or '-'} | "
+            f"{case['evidence_rank'] or '-'} | "
             f"{case['raw_chunk_rank'] or '-'} |"
         )
     lines.extend(["", "## 실제 후보", ""])
