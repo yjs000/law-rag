@@ -305,6 +305,8 @@ parser v3와 시간 모델, 벡터 gate를 운영에 넣는 순서는 다음과 
 
 검색이 닫힌 시간은 의도된 안전 상태이며 이 기간의 요청은 무근거 응답이 아니라 503 `corpus_unready`다. 0010 직후에는 이전 profile이 존재해도 direct, keyword, dense 모두 결과를 내지 않는다. 완전한 검증 없이 flag를 수동으로 true로 바꾸지 않는다. 무중단이 제품 요구사항이 되면 현재 테이블을 부분 갱신하는 대신 generation pointer 방식을 별도 설계한다.
 
+배포 완료 표시는 충분한 증거가 아니다. 이 작업 중 Vercel은 빌드를 성공 처리했지만 기존 catch-all rewrite가 원래 요청 경로를 `/app/main.py`로 바꾸어 모든 FastAPI route가 404를 반환했다. FastAPI 프로젝트는 `pyproject.toml`의 명시적 ASGI entrypoint를 사용하고, 운영 별칭에서 `/health`와 corpus 상태 응답을 직접 확인한 뒤에만 DB 전환을 시작한다.
+
 ## 용어 정리
 
 - **Atomic**: 여러 변경이 전부 반영되거나 전부 취소되는 성질

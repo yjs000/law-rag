@@ -46,3 +46,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.vercel]
 runtime = "python3.14"
+entrypoint = "app.main:app"

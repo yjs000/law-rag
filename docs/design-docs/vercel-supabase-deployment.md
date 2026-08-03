@@ -107,6 +107,7 @@ Preview에서는 선택지 2인 **동일 출처 프록시**를 사용한다.
 ### 함수와 배포 계약
 
 - `apps/api/vercel.json`의 함수 경로, Python 버전, 번들 제외 목록을 실제 모노레포 Root Directory에서 검증한다.
+- FastAPI backend framework는 `pyproject.toml`의 `[tool.vercel].entrypoint`로 ASGI 앱을 지정한다. 모든 요청을 Python 파일 경로로 바꾸는 catch-all rewrite는 애플리케이션이 원래 `/health`, `/v1/*` 경로 대신 파일 경로를 보게 만들 수 있으므로 사용하지 않는다.
 - 응답 시간과 OpenAI 스트리밍을 측정해 `maxDuration`을 정한다. 현재 60초 값은 운영 확정값이 아니다.
 - 함수 번들 크기와 cold start를 측정하고 collector 데이터·테스트 fixture를 번들에 포함하지 않는다.
 - startup은 짧고 멱등적으로 유지한다. shutdown 완료에 의존해 데이터 무결성을 보장하지 않는다.
