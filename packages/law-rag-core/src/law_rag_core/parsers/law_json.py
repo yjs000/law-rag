@@ -95,6 +95,40 @@ def _flat_subitem_groups(subitems: list[dict[str, Any]]) -> list[list[dict[str, 
     return groups
 
 
+def _flat_subitem_parents(
+    item_paths: list[tuple[dict[str, Any], str]],
+    group_count: int,
+) -> list[tuple[dict[str, Any], str]]:
+    def has_nested_subitems(item: dict[str, Any]) -> bool:
+        value = item.get("목")
+        return isinstance(value, dict) or (
+            isinstance(value, list) and any(isinstance(child, dict) for child in value)
+        )
+
+    explicit = [
+        pair
+        for pair in item_paths
+        if not has_nested_subitems(pair[0])
+        and "각 목" in (_value(pair[0], "호내용") or "")
+    ]
+    if len(explicit) == group_count:
+        return explicit
+
+    unnested = [pair for pair in item_paths if not has_nested_subitems(pair[0])]
+    if len(unnested) == group_count:
+        return unnested
+
+    active = [
+        pair
+        for pair in unnested
+        if "삭제" not in (_value(pair[0], "호내용") or "")
+    ]
+    if len(active) == group_count:
+        return active
+
+    raise LawJsonParseError("평탄화된 목의 상위 호를 복원할 수 없습니다")
+
+
 def load_json(body: str) -> Any:
     try:
         return json.loads(body.lstrip("\ufeff\r\n\t "))
@@ -235,14 +269,8 @@ def parse_legal_document(
                     )
             flat_subitems = nodes(paragraph.get("목"))
             if flat_subitems:
-                eligible_items = [
-                    (item, item_path)
-                    for item, item_path in item_paths
-                    if not nodes(item.get("목")) and "각 목" in (_value(item, "호내용") or "")
-                ]
                 groups = _flat_subitem_groups(flat_subitems)
-                if len(groups) != len(eligible_items):
-                    raise LawJsonParseError("평탄화된 목의 상위 호를 복원할 수 없습니다")
+                eligible_items = _flat_subitem_parents(item_paths, len(groups))
                 for (_, item_path), group in zip(eligible_items, groups, strict=True):
                     for subitem in group:
                         number = _value(subitem, "목번호") or str(len(provisions) + 1)
