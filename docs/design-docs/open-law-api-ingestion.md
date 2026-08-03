@@ -99,7 +99,9 @@ Supabase `sync-current`는 session advisory run lock을 Open API 조회 전부�
 
 - 검색 가능한 parser v3 조문 전체에 현재 SHA의 벡터가 있다.
 - 프로필·차원·query/passage 입력 유형·축약·정규화 계약이 같다.
-- 벡터 L2 norm과 profile 전용 HNSW index가 유효하다.
+- 벡터 L2 norm과, 보류 결정 전에 설치된 profile 전용 HNSW index의 물리 상태가 유효하다.
+
+마지막 HNSW 항목은 현재 backfill 구현에 남아 있는 기존 물리 설치 무결성 검사다. 운영·실험 dense 쿼리는 exhaustive exact cosine을 사용하며, 이 검사 결과를 근거 찾기 품질이나 HNSW 승인 근거로 사용하지 않는다. gold와 근거 찾기 검증 후 별도 HNSW 설계를 승인할 때 backfill 계약에서도 유지·제거 여부를 함께 결정한다.
 
 어느 단계에서든 실패하면 profile은 inactive, `corpus.search_ready`는 false로 남는다. direct path와 keyword 검색도 전체 준비 게이트, parser v3, 출처 가용성, 법적 상태와 효력 기간 조건을 적용한다.
 
@@ -120,7 +122,7 @@ run lock 자체는 reader snapshot이 아니며 각 문서는 별도 transaction
 5. run lock 아래 `sync-current`를 실행한다. 중간 실패 시 dense profile이나 runtime flag를 수동 활성화하지 않는다.
 6. `generate-cache`로 현재 parser v3 corpus의 cache를 완성한다. 같은 SHA 벡터는 재사용한다.
 7. `DIRECT_URL`로 `load-cache`를 실행해 DB의 missing/stale 행만 적재하고 profile과 corpus 게이트를 자동 승격한다.
-8. capability·coverage·SHA·norm·HNSW 검증 뒤 `status`와 실제 query `verify`를 확인한다.
+8. capability·coverage·SHA·norm과 기존 물리 인덱스 무결성 확인 뒤 `status`와 exhaustive exact query `verify`를 확인한다.
 9. 삭제 목록은 `sync-current`에 포함되어 있으므로 별도 `sync-history` 없이 실행된다. 전체 과거 본문 수집이 구현·검증되기 전까지 `sync-history`는 활성화하지 않는다.
 
 구버전 API가 남아 있는 동안 collector를 재개하지 않는다. 구버전 reader는 `corpus.search_ready`를 검사하지 않으므로 migration만 먼저 적용해서는 부분 corpus 노출을 막을 수 없다.

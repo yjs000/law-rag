@@ -124,7 +124,7 @@ artifact 계약과 critical code provenance 확인
 → 질문 임베딩
 → READ COMMITTED, READ ONLY transaction의 첫 snapshot-taking statement로 shared lock 획득
 → locked preflight + retrieval 상태 재검사
-→ 기준일별 대표 query EXPLAIN에서 exact cosine 계획 확인
+→ 기준일별 대표 exhaustive exact cosine query EXPLAIN과 SHA-256 기록
 → 모든 질문 raw exact cosine 검색
 → lock 해제
 → 지표 계산
@@ -139,13 +139,12 @@ artifact 계약과 critical code provenance 확인
 
 ## 검색 상태 지문에는 무엇이 들어가는가
 
-같은 질문과 corpus라도 벡터나 검색 실행 방식이 바뀌면 순위가 달라질 수 있다. runner는 exact cosine 평가 상태와 별도로 운영 인덱스 준비 상태를 검증하고 결과에 기록한다.
+같은 질문과 corpus라도 벡터나 검색 실행 방식이 바뀌면 순위가 달라질 수 있다. runner는 exhaustive exact cosine 평가에 실제로 영향을 주는 상태만 검증하고 결과에 기록한다.
 
 - NVIDIA embedding profile의 모델, query/passage 유형, native·stored 차원, 축약·정규화와 템플릿 버전
 - 검색 가능한 provision 수와 active 벡터 수
 - passage 벡터의 source SHA와 전체 벡터 지문
 - L2 norm 위반 벡터 수
-- HNSW index의 이름, OID, relfilenode, 크기, 정의, operator class, valid·ready 상태
 - PostgreSQL server와 pgvector extension 버전
 - transaction isolation·read-only 상태
 - `enable_seqscan`, `enable_indexscan`, `enable_bitmapscan`, `random_page_cost`, `effective_cache_size`, `work_mem` 같은 planner 설정
@@ -154,17 +153,24 @@ artifact 계약과 critical code provenance 확인
 
 ## 실행 계획 지문은 상태 지문과 무엇이 다른가
 
-HNSW index가 물리적으로 존재하고 valid·ready여도 PostgreSQL planner가 실제 query에서 그 index를 선택했는지는 별개다. 반대로 index가 준비됐다는 이유만으로 평가 기준선을 HNSW로 삼아야 하는 것도 아니다. HNSW는 빠른 근사 검색이므로, 기준일 필터가 적용된 과거 corpus에서는 현재 유효 행을 먼저 훑은 뒤 필터링하는 방식에 따라 exact cosine의 정답 후보를 덜 반환할 수 있다.
-
-실험 D primary dense baseline은 각 문항의 기준일에 유효한 전체 검색 population을 대상으로 하는 exact cosine이다. runner는 서로 다른 기준일마다 대표 질문 하나의 `EXPLAIN (FORMAT JSON)`을 같은 잠금 안에서 수집하고 다음을 확인한다.
+retrieval state는 corpus·벡터·DB 설정이 같은지를 보여주고, 실행 계획 지문은 실제 exact query가 어떤 계획으로 실행됐는지를 보여준다. 실험 D primary dense baseline은 각 문항의 기준일에 유효한 전체 검색 population을 먼저 `MATERIALIZED`한 뒤 모두 비교하는 exhaustive exact cosine이다. runner는 서로 다른 기준일마다 대표 질문 하나의 `EXPLAIN (FORMAT JSON)`을 같은 잠금 안에서 수집해 다음을 기록한다.
 
 - raw plan
 - 실행 방식이 `exact_cosine`인지 여부
-- HNSW index가 plan에 나타나지 않았는지 여부
 - 대표 질문과 query embedding SHA-256
 - 전체 plan 기록의 SHA-256
 
-대표 plan 중 하나라도 HNSW를 사용하면 첫 검색 전에 실패한다. 성공 결과에는 raw plan, plan SHA-256과 exact 실행 방식이 기록된다. 물리 HNSW identity와 valid·ready 상태는 운영 준비 증거로 계속 남지만 primary 품질 점수의 검색 방식은 아니다. ANN/HNSW의 속도와 exact 결과 대비 누락률은 gold 평가와 섞지 않고 추후 별도 진단으로 측정한다.
+성공 결과에는 raw plan, plan SHA-256과 exact 실행 방식이 기록된다. 기존 물리 HNSW 인덱스의 identity·상태·결과 비교는 runner의 입력·게이트·결과에 넣지 않는다. 질문-정답 gold와 직접 근거 찾기 자체를 모두 검증하기 전에 근사 인덱스를 함께 측정하면 어느 단계의 실패인지 분리할 수 없기 때문이다. HNSW 설계와 평가는 gold 1,000문항·근거 찾기 전수 검증 이후 별도 제안과 사용자 승인을 거친 경우에만 진행한다.
+
+## 현재 corpus에서 허용하는 기준일
+
+법률 버전의 효력 구간과 현재 저장소가 완전하게 보장하는 날짜 범위는 다르다. 현재 snapshot `mvp-current-corpus-2026-08-03`은 9개 open version과 3,066개 provision이 공통으로 갖춰진 다음 범위만 지원한다.
+
+```text
+2026-06-03 <= as_of_date <= 2026-08-03
+```
+
+양끝을 포함한다. 더 과거 또는 미래 문항은 일부 corpus로 검색하지 않고 질문 임베딩 전에 실패시킨다. 운영 API도 같은 범위 밖 요청을 `422 unsupported_corpus_date`로 차단하며 `/v1/corpus/status`에서 snapshot ID와 두 경계를 제공한다.
 
 ## Production 검색과 평가 검색은 왜 다른가
 
@@ -285,7 +291,7 @@ runner는 fail-closed로 동작한다.
 - initial·locked preflight
 - retrieval state와 query plans
 - 입력 artifact·코드·corpus·vector·plan·실제 순위 지문
-- embedding batch 크기와 PostgreSQL·pgvector·HNSW 물리 상태·planner 설정·exact 실행 방식
+- embedding batch 크기와 PostgreSQL·pgvector 버전·planner 설정·exact 실행 방식
 - 질문별 순위와 aggregate 지표
 
 결과 파일 자체 SHA-256은 파일 안에 자기 자신을 포함할 수 없으므로 성공 시 터미널에 출력되는 완료 요약에 기록한다. JSON 안에는 자기 해시 필드를 넣기 직전 payload의 SHA-256인 `payload_without_self_hash_sha256`을 둔다.
@@ -293,6 +299,8 @@ runner는 fail-closed로 동작한다.
 ## 현재 상태
 
 approved-gold-only runner와 합성 fixture 검증은 구현됐다. 그러나 일반 사용자 질문은행 1,000개는 아직 사용자 승인과 독립 qrels·reference response 주석·adjudication을 마친 gold가 아니다. 따라서 실제 1,000개 질문의 NVIDIA query embedding, DB 검색, Recall·HitRate·Precision·MRR@10·nDCG·facet 결과는 아직 실행하거나 기록하지 않았다.
+
+기존 물리 HNSW 인덱스는 삭제하지 않았지만 현재 runner가 읽거나 검증하지 않는 보류 자산이다. gold와 근거 찾기 검증 완료 뒤에도 사용자에게 설계 승인을 받기 전에는 HNSW 평가를 시작하지 않는다.
 
 ## 관련 문서와 구현
 

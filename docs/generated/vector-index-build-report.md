@@ -6,6 +6,8 @@
 
 대상: Supabase 운영 corpus, NVIDIA Nemotron 512차원 dense-only 프로필
 
+> **현재 결정:** 이 문서는 이미 수행된 migration·벡터 적재·물리 인덱스 감사의 역사적 실행 기록이다. 당시 만들어진 HNSW 인덱스는 삭제하지 않지만 실험 D와 근거 찾기 품질 검증의 입력·게이트·결과로 사용하지 않는다. 질문-정답 gold 1,000문항과 근거 찾기를 모두 검증한 뒤 별도 HNSW 설계를 제시하고 사용자가 명시적으로 승인하기 전에는 추가 HNSW 실행·튜닝·비교를 하지 않는다.
+
 ## 실행 명령
 
 HNSW 스키마와 검색 준비 게이트는 Alembic migration으로 설치한다. 인덱스 SQL만 수동으로 따로 실행하지 않는다.
@@ -74,7 +76,7 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 
 운영 API의 `GET /health`는 `ok`, `GET /v1/corpus/status`는 `corpus_search_ready=true`, 9개 문서 모두 `state=ready`를 반환했다.
 
-## 인덱스 준비와 실제 실행 계획 감사
+## 과거 인덱스 준비와 실행 계획 감사
 
 물리 HNSW 인덱스는 존재하고 valid·ready이며 단순 vector-only 최근접 이웃 query에서는 사용된다. 그러나 현재 production 형태의 법률·버전·기준일 join query는 3,066개 규모에서 HNSW가 아니라 유효 행의 exact cosine sort 계획을 선택했다. 따라서 `HNSW ready=true`와 `실제 query가 HNSW 사용`은 같은 뜻이 아니다.
 
@@ -88,7 +90,17 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 | 2026-06-03 | 3,066 | 11 | 11 |
 | 2026-08-03 | 3,066 | 11 | 11 |
 
-이 비교는 실험 D 질문은행을 실행한 품질 실험이 아니라 단일 query의 실행 계획·완전성 감사다. 실험 D primary dense baseline은 모든 문항 기준일의 유효 population을 완전히 비교하는 exact cosine으로 고정한다. 대표 `EXPLAIN`에 HNSW가 나타나면 실패하며, ANN/HNSW의 속도와 exact 대비 누락률은 추후 별도 진단으로 분리한다.
+이 비교는 실험 D 질문은행을 실행한 품질 실험이 아니라 단일 query로 과거에 수행한 실행 계획·완전성 감사다. 위 속도·반환 수를 HNSW 품질 검증이나 채택 근거로 사용하지 않는다. 현재 실험 D primary dense baseline은 모든 문항 기준일의 유효 population을 `MATERIALIZED`해 완전히 비교하는 exhaustive exact cosine으로 고정하며, runner는 HNSW 상태·계획·결과 비교를 기록하지 않는다.
+
+## 현재 corpus 기준일 계약
+
+운영 DB 읽기 전용 감사에서 허용 목록 9개마다 open version 1개, 검색 가능한 provision 3,066개, open version 중 가장 늦은 `effective_from=2026-06-03`을 확인했다. snapshot 검증 기준일은 `2026-08-03`이다. 따라서 현재 corpus의 검색 보장 범위는 다음과 같다.
+
+```text
+2026-06-03 <= as_of_date <= 2026-08-03
+```
+
+양끝을 포함한다. 위 표의 더 오래된 날짜는 일부 유효 행만 남아 완전한 현재 9개 corpus를 대표하지 않으므로 이제 검색 대상으로 허용하지 않는다. API는 범위 밖 요청을 embedding·repository 호출 전에 `422 unsupported_corpus_date`로 거부하고 `/v1/corpus/status`에서 snapshot ID와 두 경계를 노출한다.
 
 ## 재실행 해석
 

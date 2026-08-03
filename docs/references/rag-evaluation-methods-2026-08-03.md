@@ -59,4 +59,4 @@
 
 - URL: https://github.com/pgvector/pgvector
 - 확인 내용: 차원 가변 `vector` 열에는 같은 차원의 행만 expression/partial index로 인덱싱한다. HNSW는 exact search보다 빠른 근사 검색이고 recall과 교환 관계가 있으므로 exact 결과와 비교해야 한다.
-- 적용: NVIDIA 프로필 전용 512차원 HNSW partial index를 사용하고 실험 D에서 exact와 indexed 결과를 비교할 수 있게 한다.
+- 당시 적용 메모: NVIDIA 프로필 전용 512차원 HNSW partial index를 만들고 exact와 indexed 결과를 비교하려 했다. 후속 결정으로 이 비교는 1,000문항 gold와 근거 찾기 전수 검증 뒤 별도 설계·사용자 승인 전까지 보류했으며, 현재 실험 D에는 포함하지 않는다.

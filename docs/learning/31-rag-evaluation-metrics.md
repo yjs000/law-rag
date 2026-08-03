@@ -207,7 +207,7 @@ nDCG는 다음 조건에서 특히 유용하다.
 
 ## 실험 D의 고정 검색 지표 계약
 
-현재 실험 D runner는 production의 조 단위 grouping이나 keyword fallback을 사용하지 않고, 문항 기준일에 유효한 전체 검색 population에서 raw `provision_id` exact cosine top 10을 평가한다. `EXPLAIN`에 HNSW가 나타나면 근사 검색이 기준선에 섞인 것이므로 첫 검색 전에 실패한다. 실제로는 11개를 요청해 10위와 11위 점수가 같은지 검사하며, 동점이면 경계를 임의로 자르지 않고 실행을 실패시킨다.
+현재 실험 D runner는 production의 조 단위 grouping이나 keyword fallback을 사용하지 않고, 문항 기준일에 유효한 전체 검색 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine으로 raw `provision_id` top 10을 평가한다. 실제로는 11개를 요청해 10위와 11위 점수가 같은지 검사하며, 동점이면 경계를 임의로 자르지 않고 실행을 실패시킨다. 기존 물리 HNSW 인덱스의 상태나 결과 비교는 이 평가에 넣지 않는다.
 
 core 평균에는 `fully_answerable` 질문만 포함하며 질문별 값을 먼저 계산한 뒤 scenario family 단위로 집계한다. 그중 retrieval 설정 조정에 쓰지 않은 held-out `test` split이 primary다. `calibration` fully-answerable과 calibration+test 결합값은 동작 확인과 비교를 위한 `diagnostic_only`이며 primary 성능처럼 보고하지 않는다.
 
@@ -512,22 +512,19 @@ FNR = answerable인데 거부한 수 / 전체 answerable 수
 
 무조건 많이 거부하면 FPR은 낮아지지만 FNR이 높아진다. 두 지표를 같이 보고 calibration 데이터에서 기준을 정한 뒤 test 데이터에는 기준을 고정해야 한다.
 
-## HNSW exact-search 대비 recall
+## 근사 인덱스를 현재 평가에서 빼는 이유
 
-> **용어 요약:** `HNSW`는 `Hierarchical Navigable Small World`의 줄임말로, 모든 벡터를 전부 비교하지 않고 그래프를 따라 빠르게 이웃을 찾는 근사 검색 방식이다. `ANN`은 `Approximate Nearest Neighbor`, 근사 최근접 이웃 검색을 뜻한다. `Exact search`는 모든 후보를 정확히 비교하며, 여기의 recall은 HNSW가 exact 상위 결과를 얼마나 재현했는지를 뜻한다.
+> **용어 요약:** `HNSW`는 `Hierarchical Navigable Small World`의 줄임말로, 모든 벡터를 전부 비교하지 않고 그래프를 따라 빠르게 이웃을 찾는 근사 검색 방식이다. `ANN`은 `Approximate Nearest Neighbor`, 근사 최근접 이웃 검색을 뜻한다. `Exact search`는 현재 후보를 전부 비교한다.
 
-이 지표는 qrels 기반 검색 Recall과 다른 문제를 측정한다.
-
-- qrels Recall: 법적으로 정답인 문서를 찾았는가
-- ANN recall: 근사 검색이 exact vector search의 상위 결과를 얼마나 재현했는가
-
-대표적으로 다음처럼 계산할 수 있다.
+HNSW가 exact 결과를 얼마나 재현하는지는 “법적 직접 근거를 찾았는가”와 다른 문제다. 질문-정답표와 직접 근거 찾기가 아직 검증되지 않은 상태에서 두 문제를 함께 측정하면 낮은 점수가 다음 중 어디에서 생겼는지 구분할 수 없다.
 
 ```text
-ANN Recall@K = |HNSW top K ∩ exact top K| / K
+qrels 또는 corpus가 잘못됨
+검색 모델이 직접 근거를 못 찾음
+근사 인덱스가 exact 후보를 놓침
 ```
 
-ANN Recall이 낮으면 임베딩 모델이 아니라 HNSW 인덱스 설정 때문에 후보가 누락될 수 있다. 반대로 ANN Recall이 1.0이어도 exact 검색 자체가 법적 정답을 못 찾으면 qrels Recall은 낮다.
+따라서 현재는 승인 gold와 exhaustive exact cosine으로 앞의 두 문제를 먼저 검증한다. HNSW의 지표·파라미터·비교 방법은 1,000문항 gold와 근거 찾기 검증을 모두 마친 뒤 별도 설계안을 만들고 사용자가 승인한 경우에만 정한다. 기존 물리 인덱스가 존재한다는 사실 자체는 품질 증거가 아니다.
 
 ## 운영 지표
 
@@ -606,7 +603,6 @@ LLM judge 결과에는 반드시 다음을 기록한다.
 | Answer Relevancy | 질문에는 맞지만 사실이 틀림 |
 | Answer Correctness | 올바른 답이지만 인용이 없거나 잘못됨 |
 | Citation Correctness | 일부 주장만 인용되고 나머지는 무근거 |
-| ANN Recall | exact vector 검색 자체가 법적 정답을 못 찾음 |
 
 ## 최소 권장 지표 묶음
 

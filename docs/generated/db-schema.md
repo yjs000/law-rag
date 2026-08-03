@@ -25,7 +25,7 @@
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 
-`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index를 만든다. 다른 차원 모델은 같은 차원 가변 열에 저장하되 새 프로필 전용 partial index를 추가할 수 있다.
+`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재한다. 다만 현재 운영·실험 dense SQL은 exhaustive exact cosine을 사용하며, 이 인덱스의 후속 설계·평가는 1,000문항 gold와 근거 찾기 검증 뒤 별도 승인 전까지 보류한다.
 
 `0009`부터 `document_versions`의 자연키는 `(document_id, mst, effective_from)`이고 `effective_from`은 필수다. `effective_to`는 `NULL`이거나 `effective_from`보다 뒤여야 한다. `document_versions_one_open_per_document` partial unique index는 `effective_to IS NULL`인 open version을 문서마다 하나로 제한한다. 동일 시행일의 복수 MST는 수집기의 연혁 검증에서 거부하므로 exclusion constraint는 두지 않는다.
 

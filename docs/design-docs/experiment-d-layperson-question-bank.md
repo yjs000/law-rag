@@ -36,6 +36,13 @@
 
 이 상태로 확인할 수 있는 것은 질문 수, 범위, 자연스러움, 중복, 법률식 표현 혼입 여부다. Recall·MRR·nDCG나 최종 답변 정확도는 평가할 수 없다.
 
+질문 승인을 위한 읽기 자료는 두 개다.
+
+- [전체 1,000문항 읽기본](../generated/experiment-d-lay-energy-query-bank-v1.md)
+- [대표 15문항과 고위험 35문항 승인 검토표](../generated/experiment-d-lay-energy-approval-review-v1.md)
+
+승인 검토표는 질문 문구와 범위만 보여 주며 답·qrels·검색 결과를 만들지 않는다. 질문을 하나라도 수정하거나 제외하면 현재 두 질문 해시를 승인하지 않고 질문은행을 새 버전으로 다시 생성한다.
+
 질문은 200개 상황과 상황별 5개 질문 변형(`query_variants_per_scenario`)으로 구성한다. 여기서 변형은 질문 말투·관점이며, gold의 필수 답변 요소(`required_answer_facets`)와 다른 개념이다. 처음에는 큰 주제마다 공통 후속문을 붙였지만, 검사 신청·계량기 고장·계약 분쟁처럼 서로 다른 상황에서 의미 충돌이 발견됐다. 이후 상황을 더 작은 호환 묶음으로 나누고, 문항별 사용자 유형·단계·scope 자동 배정을 제거했다. 정적 중복 검사와 별도로 전체 문장 읽기 검토를 수행한다.
 
 ## 왜 질문과 정답을 동시에 자동 생성하지 않는가
@@ -62,10 +69,12 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
   --confirm-question-scope-set-sha256 "f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7"
 ```
 
+명령이 출력하는 `approval_manifest_sha256`은 JSON 공백·들여쓰기에 영향받지 않는 canonical payload 해시이며, 이후 gold의 `source_bank.approval_manifest_sha256`에 사용하는 값이다. `approval_manifest_file_sha256`은 실제 저장 파일 바이트의 무결성을 확인하는 별도 값이다. 두 값을 같은 의미로 사용하지 않는다.
+
 1. `evaluation_status`: 사람 검토와 승인 완료 전에는 `draft_for_review`, 완료 후에만 `approved_gold`
 2. `source_bank`: 질문은행 버전과 승인된 전체 질문 문구 SHA-256·범위 SHA-256, 외부 승인 manifest SHA-256
 3. `approval_manifest`: 사용자가 승인한 질문 ID·질문 SHA-256·질문 범위 SHA-256과 승인 시각을 질문은행과 별도 파일로 고정
-4. `corpus_snapshot`: parser 계약 버전, 기준일, 실제 provision ID+본문 SHA 기반 corpus fingerprint와 검색 단위
+4. `corpus_snapshot`: hardcoded snapshot ID, parser 계약 버전, 기준일, 실제 provision ID+본문 SHA 기반 corpus fingerprint와 검색 단위
 5. `question_review_status`: gold에는 `approved` 문항만 포함하고 승인한 질문 SHA-256을 보존
 6. `split`: 같은 scenario family를 나누지 않는 `calibration | test`
 7. `answerability`: `fully_answerable | partially_answerable | clarification_required | unanswerable`
@@ -89,6 +98,7 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 - 질문 문구가 바뀌면 질문은행 버전과 해시를 바꾸고 다시 승인한다.
 - 모든 문항에서 시간 순서는 `질문 approval manifest의 approved_at < annotation_review.reviewed_at < gold adjudication manifest의 approved_at`이어야 한다. 같은 시각도 허용하지 않는다.
 - adjudication 뒤 dataset 또는 문항 payload의 어떤 필드라도 바뀌면 전체 또는 문항 canonical SHA-256이 달라져 실행이 거부된다.
+- 현재 corpus snapshot의 모든 문항 `as_of_date`는 `2026-06-03..2026-08-03` 양끝 포함 범위 안이어야 한다. 범위 밖 질문은 희소한 부분 corpus로 qrels를 만들지 않고 gold 승격 전에 거부한다.
 
 `expected_action`은 위 상태와 일대일로 고정한다.
 
@@ -103,19 +113,22 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 
 질문 승인 직후 1,000개를 한 번에 주석하지 않는다. calibration에서 서로 다른 주제·answerability 경계를 대표하는 10개 scenario family, 즉 50문항을 먼저 이중 주석한다. 이 pilot에서 필수 답변 요소의 크기, 직접 근거와 보조 문맥의 구분, 범위 밖·추가 사실 필요 판정과 reference response 형식을 사람이 확인한 뒤 같은 계약을 나머지 문항에 적용한다. pilot 결과를 최종 검색 성능처럼 발표하거나 test qrels 조정에 사용하지 않는다.
 
+승인 manifest가 생긴 뒤에만 `scripts.create_experiment_d_pilot_worklist`로 10개 family × 5문항의 질문 전용 작업표를 만든다. 이 파일은 `artifact_class=not_gold`, `status=draft_for_annotation`이며 답·qrels·검색 후보를 허용하지 않는다. 승인 manifest의 canonical SHA-256과 정확히 10개의 `--scenario-family-id`를 명시해야 하고 기존 파일은 덮어쓰지 않는다. 현재는 질문이 승인되지 않았으므로 실제 pilot 파일을 생성하지 않았다.
+
 평가 실행 전에는 `scripts.preflight_experiment_d_gold`가 다음을 읽기 전용으로 확인한다.
 
 - `evaluation_status=approved_gold`
 - 별도 질문 승인 manifest, 질문은행, gold의 질문 ID·문구·범위·SHA-256 일치
 - 별도 gold adjudication manifest의 전체 dataset·1,000개 문항 canonical SHA-256과 승인 시간 순서 일치
 - gold가 고정한 corpus fingerprint와 현재 searchable corpus의 일치
+- gold의 snapshot ID와 모든 문항 기준일이 현재 hardcoded corpus 지원 범위 `2026-06-03..2026-08-03` 안인지 확인
 - 모든 qrel의 provision ID, document/version ID, path와 본문 SHA-256의 일치
 - qrel·distractor·pool 후보가 문항 기준일에 유효한 searchable provision인지 확인하고, 전체 corpus 검토 방법은 해당 기준일의 전체 유효 population과 정확히 일치
 - answerability와 qrels 유무의 일관성
 
 독립 preflight는 빠른 읽기 전용 점검용이며 검사 뒤 DB 잠금을 해제한다. 실제 평가에는 `scripts.evaluate_experiment_d_gold` runner를 사용한다. runner는 critical code가 clean commit과 일치하는지 확인하고 초기 `REPEATABLE READ, READ ONLY` transaction에서 preflight와 검색 상태 검증을 통과해야만 질문을 임베딩한다. 그 다음 별도 `READ COMMITTED, READ ONLY` transaction에서 첫 snapshot-taking statement로 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight와 검색 상태를 다시 검증한 뒤 마지막 raw provision 검색까지 잠금을 유지한다. 프로젝트의 corpus writer는 같은 key의 배타 lock을 사용하므로 이 구간의 corpus 변경을 막는다. 독립 preflight만 통과했다고 실제 run이 같은 잠금 상태를 봤다고 주장하지 않는다.
 
-runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 사용하지 않는다. primary dense 기준선은 기준일에 유효한 모든 검색 가능 조문의 거리를 계산하는 exhaustive exact cosine이다. 기준일별 대표 query에 실제 평가 쿼리와 같은 `EXPLAIN (FORMAT JSON)`을 먼저 실행하고 HNSW index가 plan에 나타나면 검색 전에 실패한다. 물리 HNSW index의 유효성·프로필·차원 계약은 계속 기록하지만, ANN/HNSW의 exact 대비 recall과 latency는 core gold 지표와 분리한 후속 진단으로 둔다. 통과하면 각 질문에서 raw cosine 순으로 `provision_id` 후보 11개를 요청해 10위와 11위 동점 여부를 검사하고, 동점이 없을 때만 앞의 10개를 지표 입력으로 사용한다. 동점, 중복 ID, 비유한 점수, 순서 위반, corpus·벡터·index 상태 변화 중 하나라도 발견하면 결과 파일을 만들지 않는다. 성공한 run에는 실행 모드 `exact_cosine`, 실제 embedding batch 크기, PostgreSQL·pgvector 버전, index·planner 상태와 clean Git commit·평가 핵심 파일 해시도 기록한다. `.data/experiments/experiment-d/runs/`에 새 JSON으로 원자적으로 게시하며 기존 run은 덮어쓰지 않는다.
+runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 사용하지 않는다. primary dense 기준선은 기준일에 유효한 모든 검색 가능 조문을 먼저 `MATERIALIZED`하고 거리를 전부 계산하는 exhaustive exact cosine이다. 기준일별 대표 query에 실제 평가 쿼리와 같은 `EXPLAIN (FORMAT JSON)`을 먼저 실행해 raw plan과 SHA-256을 기록한다. 통과하면 각 질문에서 raw cosine 순으로 `provision_id` 후보 11개를 요청해 10위와 11위 동점 여부를 검사하고, 동점이 없을 때만 앞의 10개를 지표 입력으로 사용한다. 동점, 중복 ID, 비유한 점수, 순서 위반, corpus·벡터 상태 변화 중 하나라도 발견하면 결과 파일을 만들지 않는다. 성공한 run에는 실행 모드 `exact_cosine`, 실제 embedding batch 크기, PostgreSQL·pgvector 버전, planner 상태와 clean Git commit·평가 핵심 파일 해시도 기록한다. 기존 물리 HNSW 인덱스의 identity·상태·결과 비교는 입력·게이트·결과에 포함하지 않는다. `.data/experiments/experiment-d/runs/`에 새 JSON으로 원자적으로 게시하며 기존 run은 덮어쓰지 않는다.
 
 ## 독립 주석과 blind 평가
 
@@ -165,6 +178,7 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 ## 현재 제한
 
 - 현재 corpus는 에너지 법령·기술기준 9종으로 제한돼 있어 토지, 건축, 농지, 세금, 금융, 지원 공고, 소비자 계약 질문 상당수는 범위 밖일 수 있다.
+- 현재 snapshot은 9개 문서·3,066개 조문이 모두 갖춰진 `2026-06-03..2026-08-03` 양끝 포함 기준일만 지원한다. 더 과거·미래 질문을 부분 corpus로 평가하지 않는다.
 - 지원금, 요금, 신청기한처럼 변하는 값은 기준일과 당시 공식 자료 없이는 고정 답으로 만들지 않는다.
 - broad question은 “관련 조문 하나가 포함됐는가”만으로 정답 처리할 수 없다. 필수 답변 요소 전체에 대한 evidence coverage를 별도로 검토해야 한다.
 
@@ -183,3 +197,5 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-03: core 검색 지표는 Recall과 HitRate를 분리하고, grade 2 직접 qrels 기반 MRR@10, graded nDCG와 facet coverage를 held-out test fully-answerable 모집단에서 macro 평균한다. calibration과 combined 값은 진단용이다.
 - 2026-08-03: runner와 fixture 검증은 구현했지만 사용자가 질문을 승인하지 않았으므로 실제 일반 사용자 1,000문항 검색은 실행하지 않는다.
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
+- 2026-08-03: HNSW는 질문-정답 gold와 근거 찾기를 전부 검증한 뒤 별도 설계와 사용자 승인을 거칠 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않되 실험 D 상태·게이트·결과에서 제외한다.
+- 2026-08-03: 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부한다.
