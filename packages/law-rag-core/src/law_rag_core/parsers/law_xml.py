@@ -216,6 +216,9 @@ def parse_legal_document(
             if local_name(node.tag) == "조문" and first_text(node, "조문내용")
         ]
     for article in article_nodes:
+        article_kind = direct_text(article, "조문여부")
+        if article_kind is not None and article_kind != "조문":
+            continue
         number = first_text(article, "조문번호") or str(ordinal + 1)
         branch = first_text(article, "조문가지번호")
         path = f"제{clean_text(number)}조"

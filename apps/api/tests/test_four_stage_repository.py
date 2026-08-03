@@ -164,7 +164,13 @@ async def test_postgres_hybrid_candidates_are_validated_at_each_stage() -> None:
     repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
     repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
 
-    hits, trace = await repository.search_with_trace(query, date(2026, 7, 18), 10, [0.1, 0.2])
+    hits, trace = await repository.search_with_trace(
+        query,
+        date(2026, 7, 18),
+        10,
+        [0.1, 0.2],
+        "nvidia/nemotron-3-embed-1b",
+    )
 
     assert [hit.document_title for hit in hits] == ["전기사업법"]
     assert [stage.stage for stage in trace.stages] == [
@@ -179,6 +185,23 @@ async def test_postgres_hybrid_candidates_are_validated_at_each_stage() -> None:
     assert trace.strategy == "four_stage_hybrid"
     assert len(connection.calls) == 3
     assert all(call["embedding"] == "[0.1, 0.2]" for call in connection.calls)
+    assert all(
+        call["embedding_model"] == "nvidia/nemotron-3-embed-1b"
+        for call in connection.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_postgres_rejects_embedding_without_matching_model() -> None:
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+
+    with pytest.raises(ValueError, match="must be provided together"):
+        await repository.search_with_trace(
+            "전기사업 허가",
+            date(2026, 7, 18),
+            10,
+            [0.1, 0.2],
+        )
 
 
 @pytest.mark.asyncio

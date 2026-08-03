@@ -113,8 +113,11 @@ class MemoryLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
+        embedding_model: str | None = None,
     ) -> list[SearchHit]:
-        hits, _ = await self.search_with_trace(query, as_of_date, limit, query_embedding)
+        hits, _ = await self.search_with_trace(
+            query, as_of_date, limit, query_embedding, embedding_model
+        )
         return hits
 
     async def search_with_trace(
@@ -123,6 +126,7 @@ class MemoryLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
+        embedding_model: str | None = None,
     ) -> tuple[list[SearchHit], SearchTrace]:
         started = perf_counter()
         prepared = prepare_search_query(query)

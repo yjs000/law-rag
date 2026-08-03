@@ -135,7 +135,7 @@ async def _run(cases: list[dict], dataset_path: Path) -> dict:
                 "expected_documents": case["expected_documents"],
                 "expected_outcome": case.get("expected_outcome", "evidence_expected"),
                 "pipeline_version": {
-                    "embedding_model": settings.openai_embedding_model,
+                    "embedding_model": settings.nvidia_embedding_model,
                     "embedding_dimensions": settings.embedding_dimensions,
                     "ai_enabled": settings.ai_enabled,
                     "query_plan_schema": "four-stage-v1",

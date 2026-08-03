@@ -24,7 +24,7 @@
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 
-`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인, `provision_embeddings.embedding`에는 HNSW cosine 색인이 있다. `hybrid_search` SQL 함수가 기준일 유효 버전만 대상으로 제목·표제·본문 키워드와 선택적 벡터 순위를 RRF로 합친다. `question_history.diagnostics`는 입력 검증, 파싱, 임베딩, 검색, 생성, 결과 단계를 보존한다. 대화 목록은 `(user_id, updated_at DESC, id DESC)`, 대화 턴은 `(conversation_id, turn_index DESC, id DESC)` 복합 색인으로 커서 페이지네이션한다. 기존 질문 이력은 마이그레이션 시 각각 하나의 대화로 이관된다.
+`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인, `provision_embeddings.embedding`에는 HNSW cosine 색인이 있다. `hybrid_search` SQL 함수가 기준일 유효 버전만 대상으로 제목·표제·본문 키워드와 선택적 벡터 순위를 RRF로 합친다. 의미 후보는 요청한 `model`, 512차원, embedding version 1과 일치하는 행만 사용해 서로 다른 provider의 벡터 공간을 혼합하지 않는다. `question_history.diagnostics`는 입력 검증, 파싱, 임베딩, 검색, 생성, 결과 단계를 보존한다. 대화 목록은 `(user_id, updated_at DESC, id DESC)`, 대화 턴은 `(conversation_id, turn_index DESC, id DESC)` 복합 색인으로 커서 페이지네이션한다. 기존 질문 이력은 마이그레이션 시 각각 하나의 대화로 이관된다.
 
 사용자 테이블은 `auth.users` 삭제를 기준으로 연쇄 삭제된다. 대화를 삭제하면 질문 턴과 해당 턴의 체크리스트 내보내기 메타데이터가 연쇄 삭제된다. `purge_expired_question_history(cutoff)`는 저장 경로와 같은 순서로 영향받은 대화를 먼저 잠그고, cutoff에 만료된 질문의 내보내기를 `DELETE ... RETURNING`으로 정리해 실제 삭제 수를 얻은 뒤 질문 삭제·대화 요약 재집계·빈 대화 삭제를 수행한다. 실행은 advisory transaction lock으로 직렬화되며 `history_retention_runs`에는 원문·사용자 식별자 없이 집계와 SQLSTATE만 기록한다. 감사 table·identity sequence·함수는 `PUBLIC`, `anon`, `authenticated` 권한을 명시적으로 회수하고 필요한 `service_role` 권한만 부여했다.
 

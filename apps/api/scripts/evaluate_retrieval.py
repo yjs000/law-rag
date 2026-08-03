@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from app.adapters.memory_repository import MemoryLegalRepository
-from app.adapters.openai_embedder import OpenAIEmbedder
+from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.application.answering import search_only_answer
 from app.domain.schemas import ProjectStage, QuestionRequest
@@ -62,12 +62,14 @@ async def main() -> None:
         if errors:
             raise SystemExit(f"collector 목업 코퍼스 {len(errors)}건을 읽지 못했습니다")
     embedder = (
-        OpenAIEmbedder(
-            api_key=settings.openai_api_key or "",
-            model=settings.openai_embedding_model,
+        NvidiaNimEmbedder(
+            api_key=settings.nvidia_api_key or "",
+            base_url=settings.nvidia_base_url,
+            model=settings.nvidia_embedding_model,
             dimensions=settings.embedding_dimensions,
+            timeout_seconds=settings.embedding_timeout_seconds,
         )
-        if settings.ai_enabled and settings.database_url
+        if settings.embedding_enabled and settings.database_url
         else None
     )
     passed = 0
@@ -79,7 +81,11 @@ async def main() -> None:
     for case in dataset:
         vector = (await embedder.embed([case["question"]]))[0] if embedder else None
         hits = await repository.search(
-            case["question"], date.fromisoformat(case["as_of_date"]), 10, vector
+            case["question"],
+            date.fromisoformat(case["as_of_date"]),
+            10,
+            vector,
+            settings.nvidia_embedding_model if vector is not None else None,
         )
         actual = {hit.document_title for hit in hits}
         success = bool(actual.intersection(case["expected_documents"]))

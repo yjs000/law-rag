@@ -145,15 +145,29 @@ class PostgresLegalRepository:
                 )
 
     async def search(
-        self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
+        self,
+        query: str,
+        as_of_date: date,
+        limit: int,
+        query_embedding: list[float] | None = None,
+        embedding_model: str | None = None,
     ) -> list[SearchHit]:
-        hits, _ = await self.search_with_trace(query, as_of_date, limit, query_embedding)
+        hits, _ = await self.search_with_trace(
+            query, as_of_date, limit, query_embedding, embedding_model
+        )
         return hits
 
     async def search_with_trace(
-        self, query: str, as_of_date: date, limit: int, query_embedding: list[float] | None = None
+        self,
+        query: str,
+        as_of_date: date,
+        limit: int,
+        query_embedding: list[float] | None = None,
+        embedding_model: str | None = None,
     ) -> tuple[list[SearchHit], SearchTrace]:
         started = perf_counter()
+        if (query_embedding is None) != (embedding_model is None):
+            raise ValueError("query embedding and model must be provided together")
         embedding = str(query_embedding) if query_embedding else None
         provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
@@ -247,6 +261,7 @@ class PostgresLegalRepository:
                 prepared.strict_query,
                 as_of_date,
                 embedding,
+                embedding_model,
                 candidate_limit,
             )
             if prepared.strict_query:
@@ -291,6 +306,7 @@ class PostgresLegalRepository:
                     prepared.minimum_match_query,
                     as_of_date,
                     embedding,
+                    embedding_model,
                     candidate_limit,
                 )
                 executed_queries.add(prepared.minimum_match_query)
@@ -338,6 +354,7 @@ class PostgresLegalRepository:
                     prepared.anchored_query,
                     as_of_date,
                     embedding,
+                    embedding_model,
                     candidate_limit,
                 )
                 executed_queries.add(prepared.anchored_query)
@@ -480,6 +497,7 @@ async def _execute_search(
     query: str,
     as_of_date: date,
     embedding: str | None,
+    embedding_model: str | None,
     limit: int,
 ) -> list[Mapping[str, Any]]:
     if not query:
@@ -487,11 +505,14 @@ async def _execute_search(
     return list(
         (
             await connection.execute(
-                text("SELECT * FROM hybrid_search(:query,:as_of,:embedding,:limit)"),
+                text(
+                    "SELECT * FROM hybrid_search(:query,:as_of,:embedding,:embedding_model,:limit)"
+                ),
                 {
                     "query": query,
                     "as_of": as_of_date,
                     "embedding": embedding,
+                    "embedding_model": embedding_model,
                     "limit": limit,
                 },
             )

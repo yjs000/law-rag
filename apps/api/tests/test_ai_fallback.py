@@ -92,6 +92,7 @@ def test_all_generation_failures_fall_back_without_another_model(
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module.settings, "answer_provider", "openai")
     monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
@@ -152,6 +153,7 @@ def test_billing_or_quota_failure_disables_terra_for_later_requests(
     monkeypatch.setattr(main_module.repository, "corpus_items", corpus_items)
     monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module.settings, "answer_provider", "openai")
     monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
@@ -215,7 +217,8 @@ def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) ->
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: FailingEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "openai_api_key", "openai-generation-test")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
@@ -279,7 +282,7 @@ def test_unknown_answer_mode_is_rejected_at_boundary() -> None:
     assert response.status_code == 422
 
 
-def test_nvidia_generation_without_openai_key_skips_embedding_call(monkeypatch) -> None:
+def test_nvidia_generation_uses_nvidia_embedding_without_openai_key(monkeypatch) -> None:
     hit = SearchHit(
         provision_id=uuid4(),
         document_id=uuid4(),
@@ -302,9 +305,13 @@ def test_nvidia_generation_without_openai_key_skips_embedding_call(monkeypatch) 
     async def consume_quota(*args, **kwargs):
         return True
 
-    class ForbiddenEmbedder:
+    embedding_calls = 0
+
+    class NoopEmbedder:
         async def embed(self, texts):
-            raise AssertionError("embedding provider must not be called")
+            nonlocal embedding_calls
+            embedding_calls += 1
+            return [[1.0, *([0.0] * 511)]]
 
     class FailedNvidiaAnswerer:
         async def answer(self, payload, hits):
@@ -313,7 +320,7 @@ def test_nvidia_generation_without_openai_key_skips_embedding_call(monkeypatch) 
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "_embedder", lambda: ForbiddenEmbedder())
+    monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
     monkeypatch.setattr(main_module, "_answerer", lambda: FailedNvidiaAnswerer())
     monkeypatch.setattr(main_module.settings, "answer_provider", "nvidia_nim")
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
@@ -327,3 +334,4 @@ def test_nvidia_generation_without_openai_key_skips_embedding_call(monkeypatch) 
 
     assert response.status_code == 200
     assert response.json()["fallback_reason"] == "generation_error"
+    assert embedding_calls == 1

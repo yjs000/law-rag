@@ -37,6 +37,206 @@ def test_json_and_xml_normalize_to_equivalent_core_document() -> None:
     assert xml_doc.raw_format == "XML"
 
 
+@pytest.mark.parametrize("wire_format", ["json", "xml"])
+def test_chapter_marker_does_not_replace_first_article(wire_format: str) -> None:
+    if wire_format == "json":
+        body = json.dumps(
+            {
+                "법령": {
+                    "기본정보": {
+                        "법령ID": "001",
+                        "법령일련번호": "1001",
+                        "법령명_한글": "전기사업법",
+                    },
+                    "조문": {
+                        "조문단위": [
+                            {
+                                "조문번호": "1",
+                                "조문여부": "전문",
+                                "조문내용": "제1장 총칙",
+                            },
+                            {
+                                "조문번호": "1",
+                                "조문여부": "조문",
+                                "조문제목": "목적",
+                                "조문내용": "제1조(목적) 실제 본문",
+                            },
+                        ]
+                    },
+                }
+            },
+            ensure_ascii=False,
+        )
+        document = parse_json(
+            body,
+            expected_title="전기사업법",
+            source_kind=SourceKind.LAW,
+            source_url="https://example.test/json",
+        )
+    else:
+        body = """\
+<법령><기본정보><법령ID>001</법령ID><법령일련번호>1001</법령일련번호>
+<법령명_한글>전기사업법</법령명_한글></기본정보><조문>
+<조문단위><조문번호>1</조문번호><조문여부>전문</조문여부><조문내용>제1장 총칙</조문내용></조문단위>
+<조문단위><조문번호>1</조문번호><조문여부>조문</조문여부><조문제목>목적</조문제목>
+<조문내용>제1조(목적) 실제 본문</조문내용></조문단위></조문></법령>"""
+        document = parse_xml(
+            body,
+            expected_title="전기사업법",
+            source_kind=SourceKind.LAW,
+            source_url="https://example.test/xml",
+        )
+
+    assert [(item.path, item.heading, item.content) for item in document.provisions] == [
+        ("제1조", "목적", "제1조(목적) 실제 본문")
+    ]
+
+
+def test_flat_json_subitems_are_restored_under_their_numbered_items() -> None:
+    body = json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "시험법",
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "2",
+                        "조문여부": "조문",
+                        "조문내용": "제2조(정의)",
+                        "항": {
+                            "호": [
+                                {"호번호": "1.", "호내용": "1. 다음 각 목의 신에너지"},
+                                {"호번호": "2.", "호내용": "2. 다음 각 목의 재생에너지"},
+                            ],
+                            "목": [
+                                {"목번호": "가.", "목내용": "가. 수소에너지"},
+                                {"목번호": "나.", "목내용": "나. 연료전지"},
+                                {"목번호": "가.", "목내용": "가. 태양에너지"},
+                                {"목번호": "나.", "목내용": "나. 풍력"},
+                            ],
+                        },
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="시험법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/json",
+    )
+
+    assert [item.path for item in document.provisions] == [
+        "제2조",
+        "제2조/호1.",
+        "제2조/호2.",
+        "제2조/호1./목가.",
+        "제2조/호1./목나.",
+        "제2조/호2./목가.",
+        "제2조/호2./목나.",
+    ]
+
+
+def test_flat_json_subitems_use_order_when_parent_text_has_no_each_subitem_phrase() -> None:
+    body = json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "시험법",
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "2",
+                        "조문여부": "조문",
+                        "조문내용": "제2조(정의)",
+                        "항": {
+                            "호": [
+                                {"호번호": "1.", "호내용": "1. 실연"},
+                                {"호번호": "2.", "호내용": "2. 음반"},
+                            ],
+                            "목": [
+                                {"목번호": "가.", "목내용": "가. 첫째 실연"},
+                                {"목번호": "나.", "목내용": "나. 둘째 실연"},
+                                {"목번호": "가.", "목내용": "가. 첫째 음반"},
+                            ],
+                        },
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="시험법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/json",
+    )
+
+    assert [item.path for item in document.provisions] == [
+        "제2조",
+        "제2조/호1.",
+        "제2조/호2.",
+        "제2조/호1./목가.",
+        "제2조/호1./목나.",
+        "제2조/호2./목가.",
+    ]
+
+
+def test_flat_json_subitems_skip_deleted_numbered_item_when_counts_match() -> None:
+    body = json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "시험법",
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "3",
+                        "조문여부": "조문",
+                        "조문내용": "제3조(정의)",
+                        "항": {
+                            "호": [
+                                {"호번호": "1.", "호내용": "1. 첫째"},
+                                {"호번호": "2.", "호내용": "2. 삭제<2020.2.4>"},
+                                {"호번호": "3.", "호내용": "3. 셋째"},
+                            ],
+                            "목": [
+                                {"목번호": "가.", "목내용": "가. 첫째의 목"},
+                                {"목번호": "가.", "목내용": "가. 셋째의 목"},
+                            ],
+                        },
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="시험법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/json",
+    )
+
+    paths = [item.path for item in document.provisions]
+    assert "제3조/호1./목가." in paths
+    assert "제3조/호3./목가." in paths
+    assert "제3조/호2./목가." not in paths
+
+
 @pytest.mark.parametrize(
     "parser,error", [(parse_json, LawJsonParseError), (parse_xml, LawXmlParseError)]
 )
