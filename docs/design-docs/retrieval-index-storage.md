@@ -89,19 +89,28 @@ DB 마이그레이션:
 uv run --directory apps/api alembic upgrade head
 ```
 
-상태 확인:
+DB 상태 확인(0008 적용 후):
 
 ```powershell
 uv run --directory apps/api python -m scripts.backfill_embeddings status
 ```
 
-벡터 생성:
+운영 DB를 바꾸지 않고 벡터를 로컬 체크포인트에 생성:
 
 ```powershell
-uv run --directory apps/api python -m scripts.backfill_embeddings run --batch-size 32
+uv run --directory apps/api python -m scripts.backfill_embeddings generate-cache --batch-size 32
+uv run --directory apps/api python -m scripts.backfill_embeddings cache-status
 ```
 
-backfill은 원문을 수정하지 않고 파생 벡터만 배치별 upsert한다. 중간 실패 후 같은 명령을 다시 실행하면 현재 해시와 일치하는 행은 건너뛴다.
+0008 적용 후 완성된 체크포인트를 DB에 적재:
+
+```powershell
+uv run --directory apps/api python -m scripts.backfill_embeddings load-cache --batch-size 100
+```
+
+체크포인트는 `.data/embeddings/`의 Git 제외 JSONL이다. 원문은 넣지 않고 조각 ID, 프로필, 본문 입력 SHA-256, 512차원 L2 정규화 벡터만 저장한다. 배치마다 flush와 `fsync`를 수행하므로 중단 후 같은 `generate-cache` 명령을 실행하면 해시가 같은 벡터를 재사용한다. 본문이 바뀐 조각은 같은 파일 끝에 새 레코드를 추가하며 마지막 유효 레코드가 현재값이다.
+
+`load-cache`는 체크포인트가 현재 corpus 전체와 일치하지 않거나 DB가 0008 이상의 임베딩 스키마·필수 프로필을 갖추지 않으면 적재를 거부한다. 기존 `run`은 0008 이후 API 생성과 DB upsert를 한 번에 수행하는 운영 경로로 유지하지만, 마이그레이션과 외부 API 호출을 분리해야 할 때는 체크포인트 경로를 사용한다.
 
 ## 결정 기록
 
@@ -109,3 +118,4 @@ backfill은 원문을 수정하지 않고 파생 벡터만 배치별 upsert한�
 - 2026-08-03: 모델 이름이 아니라 전체 변환 계약을 나타내는 profile key로 질의 벡터 공간을 선택한다.
 - 2026-08-03: 차원 가변 열과 프로필별 partial expression index로 미래 모델을 격리한다.
 - 2026-08-03: BM25는 별도 retriever로 평가하며 현재 검색에 미리 결합하지 않는다.
+- 2026-08-03: NIM 호출과 운영 DB 변경을 분리하기 위해 원문 없는 재개 가능 로컬 벡터 체크포인트를 추가했다.
