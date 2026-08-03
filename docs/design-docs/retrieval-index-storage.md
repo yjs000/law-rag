@@ -108,6 +108,13 @@ uv run --directory apps/api python -m scripts.backfill_embeddings cache-status
 uv run --directory apps/api python -m scripts.backfill_embeddings load-cache --batch-size 100
 ```
 
+실제 query 임베딩과 dense-only 검색 확인:
+
+```powershell
+uv run --directory apps/api python -m scripts.backfill_embeddings verify `
+  --query "태양광 발전 설비는 법에서 어떻게 정의하나요?" --limit 3
+```
+
 체크포인트는 `.data/embeddings/`의 Git 제외 JSONL이다. 원문은 넣지 않고 조각 ID, 프로필, 본문 입력 SHA-256, 512차원 L2 정규화 벡터만 저장한다. 배치마다 flush와 `fsync`를 수행하므로 중단 후 같은 `generate-cache` 명령을 실행하면 해시가 같은 벡터를 재사용한다. 본문이 바뀐 조각은 같은 파일 끝에 새 레코드를 추가하며 마지막 유효 레코드가 현재값이다.
 
 `load-cache`는 체크포인트가 현재 corpus 전체와 일치하지 않거나 DB가 0008 이상의 임베딩 스키마·필수 프로필을 갖추지 않으면 적재를 거부한다. 기존 `run`은 0008 이후 API 생성과 DB upsert를 한 번에 수행하는 운영 경로로 유지하지만, 마이그레이션과 외부 API 호출을 분리해야 할 때는 체크포인트 경로를 사용한다.

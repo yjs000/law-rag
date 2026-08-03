@@ -1,4 +1,6 @@
 import json
+from datetime import date
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -16,6 +18,7 @@ from scripts.backfill_embeddings import (
     _embed_with_retry,
     _pending,
     _read_cache,
+    _verify_dense_search,
 )
 
 
@@ -144,3 +147,60 @@ def test_read_cache_rejects_wrong_vector_dimensions(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="512 dimensions"):
         _read_cache(cache)
+
+
+@pytest.mark.asyncio
+async def test_verify_dense_search_uses_query_profile_without_printing_content(
+    monkeypatch,
+) -> None:
+    async def database_state(_repository):
+        return {
+            "pending_count": 0,
+            "hnsw_ready": True,
+            "hybrid_function_exists": False,
+        }
+
+    class Embedder:
+        async def embed(self, texts):
+            assert texts == ["태양광 발전 정의"]
+            return [[1.0] + [0.0] * 511]
+
+    def embedder(_settings, *, input_type):
+        assert input_type == NVIDIA_NEMOTRON_512_PROFILE.query_input_type
+        return Embedder()
+
+    class Repository:
+        async def search_with_trace(self, query, as_of, limit, vector, profile_key):
+            assert (query, as_of, limit) == ("태양광 발전 정의", date(2026, 8, 3), 3)
+            assert len(vector) == 512
+            assert profile_key == NVIDIA_NEMOTRON_512_PROFILE.key
+            hit = SimpleNamespace(
+                document_title="신에너지법",
+                path="제2조",
+                heading="정의",
+                content="출력되면 안 되는 원문",
+                score=0.8,
+            )
+            return [hit], SimpleNamespace(strategy="dense_only", candidate_count=1)
+
+    monkeypatch.setattr(backfill_module, "_database_state", database_state)
+    monkeypatch.setattr(backfill_module, "_embedder", embedder)
+    arguments = SimpleNamespace(
+        query=" 태양광 발전 정의 ", as_of=date(2026, 8, 3), limit=3
+    )
+
+    result = await _verify_dense_search(arguments, Repository(), object())
+
+    assert result["retrieval_strategy"] == "dense_only"
+    assert result["query_dimensions"] == 512
+    assert result["results"][0]["document_title"] == "신에너지법"
+    assert "content" not in result["results"][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("query", "limit"), [("  ", 3), ("질문", 0), ("질문", 21)])
+async def test_verify_dense_search_rejects_invalid_arguments(query, limit) -> None:
+    arguments = SimpleNamespace(query=query, as_of=date(2026, 8, 3), limit=limit)
+
+    with pytest.raises(ValueError):
+        await _verify_dense_search(arguments, object(), object())

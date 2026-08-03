@@ -8,8 +8,10 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from datetime import date
 from math import fsum, isfinite, sqrt
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
@@ -70,6 +72,12 @@ def _arguments() -> argparse.Namespace:
     )
     load_cache.add_argument("--cache", type=Path, default=DEFAULT_CACHE_PATH)
     load_cache.add_argument("--batch-size", type=int, default=100)
+    verify = subparsers.add_parser(
+        "verify", help="실제 query 임베딩과 dense-only repository 검색을 검증"
+    )
+    verify.add_argument("--query", required=True)
+    verify.add_argument("--as-of", type=date.fromisoformat, default=date.today())
+    verify.add_argument("--limit", type=int, default=3)
     run = subparsers.add_parser("run", help="누락·변경 벡터 생성 후 배치별 upsert")
     run.add_argument("--batch-size", type=int, default=32)
     run.add_argument("--max-items", type=int)
@@ -365,7 +373,9 @@ def _validate_batch_arguments(arguments: argparse.Namespace) -> None:
         raise ValueError("retry settings must be positive")
 
 
-def _embedder(settings) -> NvidiaNimEmbedder:
+def _embedder(
+    settings, *, input_type: Literal["query", "passage"] = "passage"
+) -> NvidiaNimEmbedder:
     if not settings.nvidia_api_key:
         raise SystemExit("NVIDIA_API_KEY가 필요합니다.")
     return NvidiaNimEmbedder(
@@ -374,7 +384,7 @@ def _embedder(settings) -> NvidiaNimEmbedder:
         model=NVIDIA_NEMOTRON_512_PROFILE.model,
         dimensions=NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
         timeout_seconds=settings.embedding_timeout_seconds,
-        input_type=NVIDIA_NEMOTRON_512_PROFILE.document_input_type,
+        input_type=input_type,
     )
 
 
@@ -478,6 +488,55 @@ async def _load_cache(
     return {"loaded_count": loaded, "state": await _database_state(repository)}
 
 
+async def _verify_dense_search(
+    arguments: argparse.Namespace,
+    repository: PostgresLegalRepository,
+    settings,
+) -> dict[str, object]:
+    query = arguments.query.strip()
+    if not query:
+        raise ValueError("query must not be empty")
+    if arguments.limit < 1 or arguments.limit > 20:
+        raise ValueError("limit must be between 1 and 20")
+    state = await _database_state(repository)
+    if state["pending_count"] or not state["hnsw_ready"]:
+        raise RuntimeError("dense index is not ready for verification")
+    vector = (
+        await _embedder(
+            settings, input_type=NVIDIA_NEMOTRON_512_PROFILE.query_input_type
+        ).embed([query])
+    )[0]
+    hits, trace = await repository.search_with_trace(
+        query,
+        arguments.as_of,
+        arguments.limit,
+        vector,
+        NVIDIA_NEMOTRON_512_PROFILE.key,
+    )
+    if trace.strategy != "dense_only":
+        raise RuntimeError(f"unexpected retrieval strategy: {trace.strategy}")
+    return {
+        "query": query,
+        "as_of_date": arguments.as_of.isoformat(),
+        "profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
+        "query_dimensions": len(vector),
+        "retrieval_strategy": trace.strategy,
+        "candidate_count": trace.candidate_count,
+        "hnsw_ready": state["hnsw_ready"],
+        "hybrid_function_exists": state["hybrid_function_exists"],
+        "results": [
+            {
+                "rank": rank,
+                "document_title": hit.document_title,
+                "path": hit.path,
+                "heading": hit.heading,
+                "score": hit.score,
+            }
+            for rank, hit in enumerate(hits, start=1)
+        ],
+    }
+
+
 async def _run(arguments: argparse.Namespace) -> dict[str, object]:
     settings = get_settings()
     if not settings.database_url:
@@ -486,6 +545,8 @@ async def _run(arguments: argparse.Namespace) -> dict[str, object]:
     try:
         if arguments.command == "status":
             return await _database_state(repository)
+        if arguments.command == "verify":
+            return await _verify_dense_search(arguments, repository, settings)
         if arguments.command in {"cache-status", "generate-cache", "load-cache"}:
             passages = _source_passages(await _source_provisions(repository))
             if arguments.command == "cache-status":
