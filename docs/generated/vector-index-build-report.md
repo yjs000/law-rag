@@ -29,13 +29,13 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
   --limit 3
 ```
 
-`alembic upgrade head`가 migration `0008`의 `provision_embeddings_nemotron_512_hnsw` partial HNSW 인덱스와 이후 schema를 설치한다. `load-cache`는 벡터를 넣은 뒤 coverage, 원문 SHA-256, 512차원, L2 norm, HNSW valid·ready 상태를 검사하고 전부 통과할 때만 embedding profile과 `corpus.search_ready`를 같은 transaction에서 활성화한다.
+`alembic upgrade head`가 migration `0008`의 `provision_embeddings_nemotron_512_hnsw` partial HNSW 인덱스와 이후 schema를 설치한다. `load-cache`는 벡터를 넣은 뒤 coverage, 원문 SHA-256, 512차원, L2 norm과 DB 임베딩 프로필 계약을 검사하고 전부 통과할 때만 embedding profile과 `corpus.search_ready`를 같은 transaction에서 활성화한다. HNSW valid·ready 상태는 `status`와 `verify`에 표시되는 물리 상태 진단값이며 승격 조건이 아니다.
 
 ## 실제 결과
 
 | 확인 항목 | 실제 값 |
 |---|---:|
-| Alembic revision | `0010 (head)` |
+| 실행 당시 Alembic revision | `0010` |
 | corpus 문서 | 9 |
 | parser schema | `3` |
 | 현재 조문 | 3,066 |
@@ -63,6 +63,14 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 실제 운영 벡터 저장 위치: Supabase PostgreSQL `provision_embeddings`
 - 변환 계약 저장 위치: `embedding_profiles`
 - HNSW 인덱스: `provision_embeddings_nemotron_512_hnsw`
+
+## 후속 retrieval catalog와 이 기록의 관계
+
+Migration `0011_retrieval_catalog.py`는 이 실행 뒤에 추가된 계보 catalog다. corpus snapshot, 독립 retrieval profile, index build, configuration과 member, release와 build 연결, active release pointer를 분리해 기록하고 `evaluation_runs`에 dataset·code·snapshot·release 계보를 연결한다.
+
+`0011` 적용은 벡터를 다시 만들거나 HNSW를 새로 구축·활성화하는 명령이 아니다. 마이그레이션은 8개 catalog 테이블과 `schema.retrieval_catalog_v1` capability marker만 설치하며, 이 문서의 과거 벡터와 HNSW를 snapshot·build·release 행으로 자동 추정해 넣지 않는다. 따라서 이 표의 `HNSW valid·ready=true`는 당시 물리 상태 기록일 뿐 ready release 또는 현재 검색 선택을 뜻하지 않는다.
+
+현재 runtime은 catalog나 `active_retrieval_release`를 읽지 않는다. 검색 동작은 계속 exhaustive exact dense이고 dense 결과가 0건일 때만 독립 keyword fallback을 실행한다. BM25·RRF·새 HNSW profile/build/configuration은 이번 catalog migration에 포함되지 않는다.
 
 ## 운영 검색 확인
 

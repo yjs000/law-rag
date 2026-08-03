@@ -79,6 +79,13 @@
 
 ## TODO
 
+### 2026-08-03 retrieval 계보 재감사
+
+- [x] 담당: 주 에이전트 — BM25를 구현하지 않고도 corpus snapshot, retriever profile, index build, retrieval configuration/release를 독립적으로 추적할 수 있는 additive migration `0011`과 계약 테스트를 추가한다.
+- [x] 담당: `retrieval_catalog_docs` — 확정 스키마와 현재 exact dense/HNSW 보류 경계를 설계·생성·학습 문서에 반영하고, 과거 실행 보고서의 HNSW 승격 조건 설명을 바로잡는다.
+- [ ] 담당: 주 에이전트 — 전체 diff와 기존 사용자 변경 비혼입을 검토하고 로컬 검증 후 운영 DB에 migration만 적용한다. 데이터셋 검색, NVIDIA 질문 임베딩, BM25/RRF, 새 HNSW 작업은 실행하지 않는다.
+- [ ] 담당: 사용자 → 주 에이전트 — 1,000문항 질문 문구와 범위를 승인한다. 승인 전에는 approval manifest, pilot, gold/qrels, 실제 실험 D를 생성하거나 실행하지 않는다.
+
 - [x] 현재 코드·마이그레이션·문서와 기존 사용자 변경 범위를 감사한다.
 - [x] 공식 RAG 평가 자료를 비교하고 실험 D 평가 계약을 확정한다.
 - [x] 임베딩 프로필과 독립 검색기 경계를 설계 문서로 확정한다.

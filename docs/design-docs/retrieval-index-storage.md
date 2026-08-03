@@ -5,7 +5,9 @@
 
 ## 결론
 
-현재 검색기는 dense-only다. DB는 dense와 lexical 점수를 합치지 않으며 `hybrid_search`와 RRF 함수를 제공하지 않는다. 검색기별 후보 회수는 독립 repository 경로로 유지하고, 향후 BM25·RRF·reranker는 고정 평가셋에서 이득을 증명한 뒤 별도 버전의 실험 계층에 추가한다. HNSW 보류 기간에는 운영 dense 검색과 실험 D 모두 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine만 사용한다. HNSW 설계·평가·비교는 승인 gold와 근거 찾기 검증이 끝난 뒤 별도 사용자 승인을 받기 전까지 보류한다.
+현재 주 검색 경로는 exhaustive exact dense다. dense 후보가 0개일 때만 PGroonga keyword fallback을 별도로 실행하며, 두 점수를 합치지 않는다. 두 경로는 현재 같은 repository의 내부 실행 단계이므로 독립적인 public retriever 계약이라고 부르지 않는다. DB는 `hybrid_search`와 RRF 함수를 제공하지 않는다. 향후 BM25는 독립 repository 계약과 profile로 추가하고, RRF·reranker는 고정 평가셋에서 이득을 증명한 뒤 별도 버전의 실험 계층에 추가한다. HNSW 보류 기간에는 운영 dense 검색과 실험 D 모두 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine만 사용한다. HNSW 설계·평가·비교는 승인 gold와 근거 찾기 검증이 끝난 뒤 별도 사용자 승인을 받기 전까지 보류한다.
+
+Migration `0011`은 이 동작을 바꾸지 않고 corpus·검색기·물리 build·configuration·release·평가 실행의 계보를 분리해 기록할 수 있는 additive catalog만 추가한다. catalog 행의 존재나 capability marker는 검색 방식의 구현·승인·활성화를 뜻하지 않으며, 현재 runtime은 이 catalog를 읽어 검색기를 선택하지 않는다.
 
 ## 해결하는 불일치
 
@@ -17,7 +19,7 @@
 - `vector(512)` 고정 열과 모든 행을 아우르는 HNSW 인덱스는 다른 차원의 모델을 추가할 때 테이블 변경을 요구했다.
 - 조문 본문이 바뀌었을 때 저장 벡터가 현재 입력으로 만들어졌는지 판별할 해시가 없었다.
 
-## 새 데이터 모델
+## 임베딩 저장 데이터 모델 (`0008`)
 
 ```text
 embedding_profiles
@@ -43,6 +45,84 @@ provision_embeddings
 ```
 
 DB는 `vector_dims(embedding)=dimensions`, 0이 아닌 norm, 프로필과 차원의 복합 외래키를 검사한다. 현재 프로필은 `nvidia-nemotron-3-embed-1b-512-v1`이다.
+
+## 검색 계보 catalog (`0011`)
+
+`0011_retrieval_catalog.py`는 기존 법령·임베딩·검색 준비 테이블을 수정하지 않고 다음 8개 테이블을 추가한다.
+
+```text
+corpus_snapshots
+├─ snapshot_id                  corpus 세대의 안정 ID
+├─ fingerprint_sha256           세대의 고유 SHA-256 지문
+├─ parser_schema_version        파서 계약 버전
+├─ supported_as_of_from         검색을 보장하는 시작 기준일
+├─ supported_as_of_through      검색을 보장하는 마지막 기준일
+├─ document_count               세대의 문서 수
+├─ provision_count              세대의 검색 조각 수
+└─ created_at
+
+retrieval_profiles
+├─ profile_key                  독립 검색 계약 ID
+├─ retriever_kind               dense·keyword 같은 검색기 종류
+├─ engine                       실제 계산 엔진
+├─ implementation_version       구현 계약 버전
+├─ configuration                검색기별 JSON 설정
+├─ configuration_sha256         위 설정의 SHA-256
+├─ embedding_profile_key        dense일 때 연결할 임베딩 계약, 선택값
+└─ created_at
+
+retrieval_index_builds
+├─ build_id
+├─ snapshot_id / profile_key    어떤 corpus와 검색 계약의 build인지
+├─ state                        building | ready | failed | superseded
+├─ expected_count / indexed_count
+├─ artifact_fingerprint_sha256  완성 산출물 지문
+├─ build_metadata / error_code
+└─ started_at / finished_at
+
+retrieval_configurations
+├─ configuration_key
+├─ strategy / configuration_version
+├─ parameters / parameters_sha256
+└─ created_at
+
+retrieval_configuration_members
+├─ configuration_key / profile_key
+├─ role                         primary·fallback 등 구성 안의 역할
+├─ ordinal                      실행 순서
+└─ required                     release 실행에 반드시 참여해야 하는 member인지 표시
+
+retrieval_releases
+├─ release_key
+├─ snapshot_id / configuration_key
+├─ state                        draft | ready | retired
+├─ manifest_sha256
+└─ created_at / ready_at
+
+retrieval_release_builds
+├─ release_key / configuration_key / snapshot_id
+└─ profile_key / build_id         같은 snapshot·profile의 구체적인 build 연결
+
+active_retrieval_release
+└─ ready 상태 release 하나만 가리킬 수 있는 singleton pointer
+```
+
+관계는 다음처럼 분리한다.
+
+```text
+corpus snapshot ─┬─ index build ─────────────┐
+                 └─ release                  │
+                                                ├─ release build
+retrieval profile ─ configuration member ────┘
+                          │
+configuration ────────────┴─ release ── active pointer
+```
+
+DB는 SHA-256 형식, JSON object 형식, 날짜 순서, 음수가 아닌 count, build·release 상태별 완료 시각, ready build의 전체 count와 산출물 지문을 검사한다. configuration member는 configuration 안에서 profile과 ordinal이 각각 중복되지 않는다. release build는 해당 configuration member와 같은 profile이며 release와 같은 snapshot인 build만 연결할 수 있고, active pointer는 `ready` release만 가리킨다. `required=true` member와 물리 build 필요 여부를 해석하고 release를 ready로 승격하는 catalog writer는 이번 migration에 포함하지 않는다.
+
+`evaluation_runs`에는 `dataset_sha256`, `code_sha256`, `corpus_snapshot_id`, `retrieval_release_key`, `run_metadata`가 추가된다. 기존 행과 현재 평가 runner의 호환성을 위해 새 계보 열은 nullable이다. release key를 기록하면 snapshot도 반드시 있어야 하고, 복합 외래키가 평가 snapshot과 release snapshot의 일치를 검사한다. 실제 비교 가능한 평가를 게시하는 writer는 dataset·code·snapshot·release를 함께 기록해야 한다. release가 configuration을 가리키므로 평가 행에서 검색 조합까지 역추적할 수 있다.
+
+마이그레이션은 catalog의 빈 구조와 `runtime_flags['schema.retrieval_catalog_v1']` capability marker만 설치한다. 현재 corpus, exact dense, keyword fallback이나 역사적 HNSW를 catalog 행으로 자동 추정해 seed하지 않는다. 특히 `active_retrieval_release`가 비어 있어도 현재 runtime의 `corpus.search_ready`와 `embedding_profiles.active` 계약은 그대로 동작한다. catalog 기반 승격 writer와 runtime 선택은 별도 설계·검증 대상이다. snapshot·profile·configuration·release ID는 내용을 바꾸지 않고 새 세대를 추가하는 append-only 계보로 다뤄야 하지만, 이번 migration은 UPDATE를 막는 writer나 권한 정책을 구현하지 않는다.
 
 ## passage 입력 계약
 
@@ -122,6 +202,8 @@ BM25는 벡터 프로필이 아니며 `provision_embeddings`에 저장하지 않
 
 따라서 확장 가능성은 지금 RRF를 미리 실행하는 것이 아니라, 검색기별 저장·실행·평가 경계를 분리해 교체 가능하게 하는 데서 확보한다.
 
+`0011` catalog를 사용하는 후속 절차에서는 BM25를 먼저 독립 `retrieval_profile`로 등록하고, 특정 `corpus_snapshot`에 대한 build를 별도로 만든다. 기존 exact dense release와 같은 승인 gold로 평가한 `evaluation_run`을 비교한 뒤에만 새 configuration과 release 후보를 만들 수 있다. RRF가 필요하다는 결과가 나온 경우에도 별도 version의 configuration/profile로 추가하며 기존 dense release를 덮어쓰지 않는다. 이 절차를 실행하는 writer와 promotion command는 아직 구현하지 않았다.
+
 ## 운영 명령
 
 DB 마이그레이션:
@@ -129,6 +211,8 @@ DB 마이그레이션:
 ```powershell
 uv run --directory apps/api alembic upgrade head
 ```
+
+이 명령으로 `0011`까지 올리면 retrieval catalog schema와 capability marker가 추가된다. 임베딩 벡터를 생성·적재하거나 인덱스를 새로 구축하지 않으며, catalog 세대 행이나 active pointer도 만들지 않는다.
 
 DB 상태 확인(0010 적용 후):
 
@@ -186,3 +270,4 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: 위 HNSW 설치 사실은 보존하되, 실험 D와 근거 찾기 품질 검증에서는 HNSW 상태·결과를 사용하지 않는다. 1,000문항 gold와 근거 찾기를 전부 검증한 뒤 별도 설계 승인 전에는 HNSW 작업을 진행하지 않는다.
 - 2026-08-03: `hnsw_ready`를 backfill 승격과 exact 검색의 조건에서 제거하고 물리 상태 진단값으로만 남겼다.
 - 2026-08-03: 현재 corpus의 완전한 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고, 범위 밖 요청은 검색 전에 `422 unsupported_corpus_date`로 차단한다.
+- 2026-08-03: corpus snapshot, 독립 retrieval profile/build, configuration/member, release/build와 ready-only active pointer를 additive catalog로 분리했다. 평가 실행은 동일 release snapshot을 복합 외래키로 추적할 수 있게 했지만, catalog writer·runtime 선택·BM25·RRF·새 HNSW는 구현하지 않았다.

@@ -1,7 +1,7 @@
 # 데이터베이스 스키마
 
 > 기준 시점: 2026-08-03
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0010_corpus_search_readiness.py`
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0011_retrieval_catalog.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
@@ -11,10 +11,18 @@
 | `provisions` | 조·항·호·목 경로와 원문 |
 | `embedding_profiles` | provider·model·query/passage 입력·차원 축약·정규화·본문 템플릿 버전 |
 | `provision_embeddings` | 프로필·원문 입력 SHA-256별 차원 가변 `vector`와 생성 시각 |
+| `corpus_snapshots` | parser 버전·지원 기준일·문서/조문 수·고유 fingerprint로 식별한 corpus 세대 |
+| `retrieval_profiles` | retriever 종류·engine·구현 버전·설정 SHA와 선택적 임베딩 프로필을 묶은 독립 검색 계약 |
+| `retrieval_index_builds` | corpus snapshot과 retrieval profile별 물리 산출물의 구축 상태·수량·지문·진단 |
+| `retrieval_configurations` | 여러 retrieval profile의 실행 전략과 버전·파라미터 지문 |
+| `retrieval_configuration_members` | configuration에 속한 profile의 역할·순서·필수 참여 여부 |
+| `retrieval_releases` | 하나의 corpus snapshot과 retrieval configuration을 묶은 draft/ready/retired 세대 |
+| `retrieval_release_builds` | release member를 같은 snapshot·profile의 구체적인 index build에 연결 |
+| `active_retrieval_release` | `ready` release 하나만 가리킬 수 있는 singleton pointer |
 | `legal_relationships` | 상하위법·위임·인용 관계 |
 | `derived_obligations` | 행위자·조건·의무/금지/허가/신고 파생 데이터 |
 | `ingestion_runs` | 수집 실행 상태와 비민감 통계 |
-| `evaluation_runs` | 데이터셋·모델·색인·프롬프트별 평가 결과 |
+| `evaluation_runs` | 데이터셋·코드 SHA, corpus snapshot, retrieval release와 실행 metadata까지 추적하는 평가 결과 |
 | `runtime_flags` | 검색 전용 모드 등 런타임 상태 |
 | `anonymous_usage` | 일별 회전 HMAC별 AI/검색 횟수; 원문 IP 미저장 |
 | `user_profiles` | 내부 UUID와 Supabase `auth.users` 공급자 ID를 분리한 최소 프로필 |
@@ -32,6 +40,18 @@
 법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
 
 `0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 물리 HNSW의 `hnsw_ready`는 현재 진단값이며 승격 조건이 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
+
+`0011`은 현재 검색 쿼리를 바꾸지 않는 additive retrieval catalog다. `corpus_snapshots`의 지원 날짜 양끝과 count, 각 profile/configuration의 JSON object·SHA-256, build와 release의 허용 상태값과 상태별 완료 조건을 DB 제약으로 검사한다. `ready` 또는 `superseded` build는 `indexed_count=expected_count`이고 산출물 fingerprint가 있어야 하며, 실패 build만 `error_code`를 가진다. release build는 다음 세 관계를 복합 외래키로 동시에 만족해야 한다.
+
+- release가 선택한 configuration과 corpus snapshot
+- configuration에 실제로 등록된 profile member
+- 같은 profile과 같은 corpus snapshot으로 만든 index build
+
+`active_retrieval_release`는 `ready` 상태와의 복합 외래키로 준비된 release 하나만 가리킨다. `evaluation_runs.retrieval_release_key`를 기록할 때는 `corpus_snapshot_id`도 필수이고, 두 값이 같은 release 세대를 가리키도록 복합 외래키가 검사한다. 기존 평가 행을 보존하기 위해 새 계보 열은 nullable이다.
+
+조회용 B-tree index는 build의 `(profile_key, snapshot_id, state, started_at DESC)`, release의 `(snapshot_id, state, created_at DESC)`, 평가 계보의 `(corpus_snapshot_id, retrieval_release_key, created_at DESC)`에 추가된다. `0011`에는 새 HNSW나 lexical index가 없다.
+
+마이그레이션은 `runtime_flags['schema.retrieval_catalog_v1']` capability marker만 seed하고 snapshot·profile·build·configuration·release·active pointer 행은 자동 생성하지 않는다. 현재 runtime도 catalog를 읽어 검색 방식을 선택하지 않는다. 따라서 설치 직후 동작은 exhaustive exact dense와 dense 결과 0건일 때의 독립 keyword fallback 그대로다. BM25·RRF·새 HNSW profile이나 build는 추가하지 않는다.
 
 `0008`은 기존 4인자·5인자 `hybrid_search` 함수를 모두 제거한다. 현재 API는 dense-only SQL을 실행하고 dense 후보가 0개일 때만 독립 PGroonga keyword fallback을 실행한다. RRF는 현재 DB 동작이 아니다. 향후 BM25·RRF는 별도 retriever와 평가 버전을 추가해 비교한다.
 

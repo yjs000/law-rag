@@ -169,3 +169,52 @@ def test_corpus_search_readiness_migration_starts_fail_closed(monkeypatch) -> No
     assert "jsonb_build_object('enabled',true" in sql
     assert "ON CONFLICT(key) DO UPDATE" in sql
     assert all("false" not in text(statement)._bindparams for statement in statements)
+
+
+def test_retrieval_catalog_migration_tracks_independent_generations(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0011_retrieval_catalog.py"
+    )
+    spec = importlib.util.spec_from_file_location("retrieval_catalog_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0011"
+    assert migration.down_revision == "0010"
+    assert "CREATE TABLE corpus_snapshots" in sql
+    assert "CREATE TABLE retrieval_profiles" in sql
+    assert "CREATE TABLE retrieval_index_builds" in sql
+    assert "CREATE TABLE retrieval_configurations" in sql
+    assert "CREATE TABLE retrieval_configuration_members" in sql
+    assert "CREATE TABLE retrieval_releases" in sql
+    assert "CREATE TABLE retrieval_release_builds" in sql
+    assert "CREATE TABLE active_retrieval_release" in sql
+    assert "embedding_profile_key text REFERENCES embedding_profiles(profile_key)" in sql
+    assert "FOREIGN KEY(build_id,profile_key,snapshot_id)" in sql
+    assert "FOREIGN KEY(release_key,configuration_key,snapshot_id)" in sql
+    assert "FOREIGN KEY(configuration_key,profile_key)" in sql
+    assert "FOREIGN KEY(release_key,release_state)" in sql
+    assert "FOREIGN KEY(retrieval_release_key,corpus_snapshot_id)" in sql
+    assert "retrieval_release_key IS NULL OR corpus_snapshot_id IS NOT NULL" in sql
+    assert "CHECK(release_state='ready')" in sql
+    assert "UNIQUE(configuration_key,ordinal)" in sql
+    assert "ADD COLUMN dataset_sha256 text" in sql
+    assert "ADD COLUMN code_sha256 text" in sql
+    assert "ADD COLUMN corpus_snapshot_id text" in sql
+    assert "ADD COLUMN retrieval_release_key text" in sql
+    assert "schema.retrieval_catalog_v1" in sql
+    assert "retrieval_index_builds_profile_snapshot_state" in sql
+    assert "retrieval_releases_snapshot_state" in sql
+    assert "evaluation_runs_retrieval_provenance" in sql
+    assert "USING hnsw" not in sql
+    assert "bm25" not in sql.lower()
+    assert "rrf" not in sql.lower()

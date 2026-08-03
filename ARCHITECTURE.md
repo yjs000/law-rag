@@ -58,10 +58,12 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 - `legal_documents`: 안정적인 출처 ID와 정확 명칭
 - `document_versions`: `안정 ID + MST + 시행일` 버전 키, 공포/시행/종료일, 원문 포맷·해시·경로
 - `provisions`: 조·항·호·목 경로와 원문
-- `provision_embeddings`: 모델·차원·색인 버전별 512차원 벡터
+- `embedding_profiles`, `provision_embeddings`: 제공자·모델·입력 유형·축약·정규화·본문 템플릿 계약과 그 프로필로 만든 차원 가변 벡터
+- `corpus_snapshots`, `retrieval_profiles`, `retrieval_index_builds`: 코퍼스 세대와 dense·lexical 등 독립 검색기의 설정·구축 계보
+- `retrieval_configurations`, `retrieval_releases`: 검색기 구성과 특정 snapshot/build 조합을 고정한 배포 단위 및 활성 포인터
 - `legal_relationships`: 상하위법·위임·인용 관계
 - `derived_obligations`: 행위자·조건·의무 유형과 검증 상태
-- `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태
+- `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태와 dataset·code·corpus·retrieval release 계보
 
 검색은 먼저 corpus 전체 준비 게이트와 현재 corpus가 실제로 지원하는 기준일 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 현재 snapshot `mvp-current-corpus-2026-08-03`은 9개 open version과 3,066개 조문이 공통으로 갖춰진 `2026-06-03`부터 `2026-08-03`까지를 양끝 포함해 지원한다. 이 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`로 같은 계약을 노출한다. 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. HNSW 보류 기간에는 운영 dense와 실험 D 모두 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
 
