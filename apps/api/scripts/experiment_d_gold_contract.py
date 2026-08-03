@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Literal
 
@@ -23,6 +24,11 @@ ExpectedAction = Literal[
     "partial_answer_with_limits",
     "ask_clarifying_question",
     "insufficient_evidence",
+]
+ControlPairExpectation = Literal[
+    "same_direct_evidence",
+    "different_direct_evidence",
+    "answerability_contrast",
 ]
 
 
@@ -95,16 +101,32 @@ class GoldSplitManifest(StrictModel):
 class GoldMetricProtocol(StrictModel):
     retrieval_mode: Literal["dense_only"]
     retrieval_unit: Literal["provision"]
+    candidate_k: Literal[10]
+    cutoffs: tuple[Literal[1], Literal[3], Literal[5], Literal[10]]
     direct_relevance_grade: Literal[2]
     context_relevance_grade: Literal[1]
     recall_and_mrr_positive_grade: Literal[2]
+    recall_definition: Literal["macro_fraction_of_grade2_qrels"]
+    hit_rate_definition: Literal["macro_any_grade2_qrel"]
+    mrr_cutoff: Literal[10]
     ndcg_uses_graded_relevance: Literal[True]
+    ndcg_gain: Literal["exp2_minus_1"]
+    ndcg_discount: Literal["log2_rank_plus_1"]
+    facet_positive_grade: Literal[2]
     hierarchy_policy: Literal["exact_qrel_ids_with_explicit_evidence_closure"]
     query_average: Literal["macro"]
     facet_recall_denominator: Literal["supported_required_facets"]
     corpus_coverage_denominator: Literal["all_required_facets"]
     unjudged_policy: Literal["nonrelevant_in_frozen_pool_benchmark"]
     suite_aggregation: Literal["never_average_with_synthetic_control_suite"]
+    retrieved_duplicate_policy: Literal["fail_run"]
+    score_order: Literal["raw_cosine_similarity_desc_then_provision_id_asc"]
+    boundary_tie_policy: Literal["fail_on_equal_score_at_10_and_11"]
+    empty_fully_population_policy: Literal["fail_run"]
+    aggregate_decimal_places: Literal[12]
+    primary_split: Literal["test"]
+    calibration_aggregation: Literal["diagnostic_only"]
+    combined_aggregation: Literal["diagnostic_only"]
     recall_mrr_ndcg_population: tuple[Literal["fully_answerable"], ...]
     separate_answerability_reports: tuple[
         Literal[
@@ -153,6 +175,38 @@ class GoldPoolMethod(StrictModel):
             raise ValueError("full corpus review cannot declare top_k")
         if self.kind != "full_corpus_manual_review" and self.top_k is None:
             raise ValueError("pooled candidate method must declare top_k")
+        return self
+
+
+def canonical_provision_id_set_sha256(provision_ids: Sequence[str]) -> str:
+    """Return the frozen hash contract used for unordered provision-ID sets."""
+
+    return hashlib.sha256(
+        json.dumps(
+            sorted(provision_ids),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+class GoldPoolMethodCandidates(StrictModel):
+    method_id: str = Field(min_length=1)
+    top_k: int | None = Field(default=None, gt=0)
+    candidate_provision_ids: list[str]
+    candidate_set_sha256: Sha256
+
+    @model_validator(mode="after")
+    def candidate_set_is_frozen(self) -> GoldPoolMethodCandidates:
+        if any(not provision_id for provision_id in self.candidate_provision_ids):
+            raise ValueError("pool candidate provision IDs cannot be empty")
+        if len(set(self.candidate_provision_ids)) != len(self.candidate_provision_ids):
+            raise ValueError("pool candidate provision IDs must be unique per method")
+        if self.top_k is not None and len(self.candidate_provision_ids) > self.top_k:
+            raise ValueError("pool candidate count cannot exceed the method top_k")
+        actual_sha256 = canonical_provision_id_set_sha256(self.candidate_provision_ids)
+        if actual_sha256 != self.candidate_set_sha256:
+            raise ValueError("pool candidate set hash mismatch")
         return self
 
 
@@ -237,6 +291,7 @@ class GoldJudgmentCoverage(StrictModel):
     judged_count: int = Field(ge=0)
     judged_candidate_provision_ids: list[str]
     judged_candidate_set_sha256: Sha256
+    pool_method_candidates: list[GoldPoolMethodCandidates] = Field(min_length=1)
     all_candidates_judged: Literal[True]
     alternative_positive_search_completed: Literal[True]
     completeness_status: Literal["adjudicated"]
@@ -250,19 +305,27 @@ class GoldJudgmentCoverage(StrictModel):
             raise ValueError("judged candidate IDs and candidate count differ")
         if len(set(self.judged_candidate_provision_ids)) != self.candidate_count:
             raise ValueError("judged candidate IDs must be unique")
-        actual_candidate_set_sha = hashlib.sha256(
-            json.dumps(
-                sorted(self.judged_candidate_provision_ids),
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        actual_candidate_set_sha = canonical_provision_id_set_sha256(
+            self.judged_candidate_provision_ids
+        )
         if actual_candidate_set_sha != self.judged_candidate_set_sha256:
             raise ValueError("judged candidate set hash mismatch")
         if len(set(self.distractor_provision_ids)) != len(self.distractor_provision_ids):
             raise ValueError("distractor provision IDs must be unique")
         if not set(self.distractor_provision_ids) <= set(self.judged_candidate_provision_ids):
             raise ValueError("distractors must come from the judged candidate pool")
+        method_ids = [pool.method_id for pool in self.pool_method_candidates]
+        if len(set(method_ids)) != len(method_ids):
+            raise ValueError("pool method candidate entries must use unique method IDs")
+        pooled_candidates = {
+            provision_id
+            for pool in self.pool_method_candidates
+            for provision_id in pool.candidate_provision_ids
+        }
+        if pooled_candidates != set(self.judged_candidate_provision_ids):
+            raise ValueError(
+                "the union of per-method candidates must equal the judged candidate pool"
+            )
         return self
 
 
@@ -306,9 +369,12 @@ class ExperimentDGoldCase(StrictModel):
     evaluation_tags: list[str]
     boundary_type: str | None = None
     control_pair_id: str | None = None
+    control_pair_expectation: ControlPairExpectation | None = None
 
     @model_validator(mode="after")
     def validate_evidence_contract(self) -> ExperimentDGoldCase:
+        if (self.control_pair_id is None) != (self.control_pair_expectation is None):
+            raise ValueError("control pair ID and expectation must be declared together")
         actual_question_sha = hashlib.sha256(self.question.encode("utf-8")).hexdigest()
         if actual_question_sha != self.question_sha256:
             raise ValueError("question hash mismatch")
@@ -448,6 +514,37 @@ class ExperimentDGoldDataset(StrictModel):
         if self.source_bank.question_count != len(self.cases):
             raise ValueError("source bank count and gold case count differ")
 
+        protocol_by_id = {
+            method.method_id: method for method in self.annotation_protocol.pool_methods
+        }
+        protocol_method_ids = set(protocol_by_id)
+        for case in self.cases:
+            pools = case.judgment_coverage.pool_method_candidates
+            pool_method_ids = {pool.method_id for pool in pools}
+            if pool_method_ids != protocol_method_ids:
+                raise ValueError(
+                    "every case must record candidates for every annotation pool method"
+                )
+            pooled_candidates: set[str] = set()
+            for pool in pools:
+                method = protocol_by_id[pool.method_id]
+                if pool.top_k != method.top_k:
+                    raise ValueError("case pool top_k must match the annotation protocol")
+                if pool.top_k is not None:
+                    expected_candidate_count = min(
+                        pool.top_k,
+                        self.corpus_snapshot.searchable_provision_count,
+                    )
+                    if len(pool.candidate_provision_ids) != expected_candidate_count:
+                        raise ValueError(
+                            "non-full pool candidate count must equal min(top_k, corpus size)"
+                        )
+                pooled_candidates.update(pool.candidate_provision_ids)
+            if pooled_candidates != set(case.judgment_coverage.judged_candidate_provision_ids):
+                raise ValueError(
+                    "the union of per-method candidates must equal the judged candidate pool"
+                )
+
         calibration = sum(case.split == "calibration" for case in self.cases)
         test = sum(case.split == "test" for case in self.cases)
         if calibration != self.split_manifest.calibration_count:
@@ -483,4 +580,96 @@ class ExperimentDGoldDataset(StrictModel):
         ).hexdigest()
         if assignment_sha != self.split_manifest.assignment_sha256:
             raise ValueError("split assignment hash mismatch")
+
+        control_pairs: dict[str, list[ExperimentDGoldCase]] = {}
+        for case in self.cases:
+            if case.control_pair_id is not None:
+                control_pairs.setdefault(case.control_pair_id, []).append(case)
+        for pair_id, pair_cases in control_pairs.items():
+            if len(pair_cases) != 2:
+                raise ValueError(f"control pair {pair_id} must contain exactly two cases")
+            if len({case.split for case in pair_cases}) != 1:
+                raise ValueError("control pair cannot cross calibration and test")
+            expectations = {case.control_pair_expectation for case in pair_cases}
+            if len(expectations) != 1:
+                raise ValueError("control pair expectations must match")
+            expectation = next(iter(expectations))
+            direct_sets = [
+                {qrel.provision_id for qrel in case.qrels if qrel.relevance == 2}
+                for case in pair_cases
+            ]
+            if expectation == "same_direct_evidence" and direct_sets[0] != direct_sets[1]:
+                raise ValueError("same-evidence control pair must share grade-2 qrels")
+            if expectation == "different_direct_evidence" and direct_sets[0] & direct_sets[1]:
+                raise ValueError("different-evidence control pair grade-2 qrels must be disjoint")
+            if (
+                expectation == "answerability_contrast"
+                and pair_cases[0].answerability == pair_cases[1].answerability
+            ):
+                raise ValueError("answerability control pair must contrast answerability")
         return self
+
+
+class GoldAdjudicatedCase(StrictModel):
+    case_id: str = Field(min_length=1)
+    case_payload_sha256: Sha256
+
+
+class ExperimentDGoldAdjudicationManifest(StrictModel):
+    schema_version: Literal[1]
+    manifest_version: Literal["experiment-d-lay-energy-gold-adjudication-v1"]
+    status: Literal["approved"]
+    decision_scope: Literal["full_gold_dataset_and_case_payloads"]
+    approved_by: NonBlankStr
+    approved_at: datetime
+    dataset_sha256: Sha256
+    cases: list[GoldAdjudicatedCase] = Field(min_length=1000, max_length=1000)
+
+    @model_validator(mode="after")
+    def adjudication_is_unique_and_timestamped(
+        self,
+    ) -> ExperimentDGoldAdjudicationManifest:
+        if self.approved_at.tzinfo is None:
+            raise ValueError("gold adjudication timestamp must include a timezone")
+        case_ids = [case.case_id for case in self.cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise ValueError("gold adjudication manifest contains duplicate case IDs")
+        return self
+
+
+def canonical_gold_case_payload_sha256(
+    case: ExperimentDGoldCase | Mapping[str, object],
+) -> str:
+    """Hash one complete validated gold-case payload using canonical JSON."""
+
+    validated = (
+        case if isinstance(case, ExperimentDGoldCase) else ExperimentDGoldCase.model_validate(case)
+    )
+    return hashlib.sha256(
+        json.dumps(
+            validated.model_dump(mode="json"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def canonical_gold_dataset_sha256(
+    dataset: ExperimentDGoldDataset | Mapping[str, object],
+) -> str:
+    """Hash the complete validated gold dataset using canonical JSON."""
+
+    validated = (
+        dataset
+        if isinstance(dataset, ExperimentDGoldDataset)
+        else ExperimentDGoldDataset.model_validate(dataset)
+    )
+    return hashlib.sha256(
+        json.dumps(
+            validated.model_dump(mode="json"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()

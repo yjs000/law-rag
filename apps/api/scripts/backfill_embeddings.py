@@ -38,6 +38,10 @@ from app.domain.embedding_profiles import (
     embedding_text_sha256,
     legal_provision_embedding_text,
 )
+from app.domain.vector_index_contract import (
+    NEMOTRON_HNSW_INDEX_NAME,
+    NEMOTRON_HNSW_READY_SQL,
+)
 from app.settings import get_settings
 
 
@@ -61,33 +65,9 @@ DEFAULT_CACHE_PATH = (
     / "embeddings"
     / f"{NVIDIA_NEMOTRON_512_PROFILE.key}.jsonl"
 )
-_HNSW_INDEX_NAME = "provision_embeddings_nemotron_512_hnsw"
-_HNSW_READY_SQL = f"""EXISTS(
-  SELECT 1
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid=c.relnamespace
-  JOIN pg_index i ON i.indexrelid=c.oid
-  JOIN pg_am am ON am.oid=c.relam
-  JOIN pg_attribute index_column
-    ON index_column.attrelid=c.oid AND index_column.attnum=1
-  JOIN pg_opclass opclass ON opclass.oid=i.indclass[0]
-  WHERE n.nspname='public' AND c.relname='{_HNSW_INDEX_NAME}'
-    AND i.indrelid=to_regclass('public.provision_embeddings')
-    AND i.indisvalid AND i.indisready
-    AND i.indnkeyatts=1
-    AND am.amname='hnsw'
-    AND opclass.opcname='vector_cosine_ops'
-    AND format_type(index_column.atttypid,index_column.atttypmod)='vector(512)'
-    AND i.indexprs IS NOT NULL
-    AND position('embedding' in pg_get_expr(i.indexprs,i.indrelid))>0
-    AND i.indpred IS NOT NULL
-    AND regexp_replace(
-      pg_get_expr(i.indpred,i.indrelid),'[\\s()]','','g'
-    ) IN (
-      'profile_key=''{NVIDIA_NEMOTRON_512_PROFILE.key}''',
-      'profile_key=''{NVIDIA_NEMOTRON_512_PROFILE.key}''::text'
-    )
-)"""
+# Compatibility aliases for callers and tests that imported the historical names.
+_HNSW_INDEX_NAME = NEMOTRON_HNSW_INDEX_NAME
+_HNSW_READY_SQL = NEMOTRON_HNSW_READY_SQL
 
 
 def _arguments() -> argparse.Namespace:
@@ -212,8 +192,7 @@ def _pending(rows: list[dict]) -> tuple[list[PendingProvision], int, int]:
         stored_norm = row.get("stored_norm")
         vector_is_current = (
             row["stored_sha256"] == sha256
-            and row.get("stored_dimensions")
-            == NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions
+            and row.get("stored_dimensions") == NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions
             and isinstance(stored_norm, int | float)
             and abs(float(stored_norm) - 1.0) <= 0.0001
         )
@@ -232,9 +211,7 @@ def _validated_vector(value: object) -> list[float]:
     if not isinstance(value, list) or len(value) != dimensions:
         raise ValueError(f"cache vector must contain {dimensions} dimensions")
     if any(
-        isinstance(item, bool)
-        or not isinstance(item, int | float)
-        or not isfinite(item)
+        isinstance(item, bool) or not isinstance(item, int | float) or not isfinite(item)
         for item in value
     ):
         raise ValueError("cache vector contains a non-finite value")
@@ -346,9 +323,7 @@ def _cache_batch_values(
     return values
 
 
-def _append_cache(
-    path: Path, batch: list[PendingProvision], vectors: list[list[float]]
-) -> None:
+def _append_cache(path: Path, batch: list[PendingProvision], vectors: list[list[float]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     _prepare_cache_tail_for_append(path)
     with path.open("a", encoding="utf-8", newline="\n") as stream:
@@ -396,7 +371,7 @@ def _prepare_cache_tail_for_append(path: Path) -> None:
         tail = stream.read(end - tail_start)
         try:
             json.loads(tail.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except UnicodeDecodeError, json.JSONDecodeError:
             stream.truncate(tail_start)
         else:
             stream.seek(0, os.SEEK_END)
@@ -793,9 +768,7 @@ async def _generate_cache(
     passages = _source_passages(await _source_provisions(repository))
     records, line_count = _read_cache(arguments.cache)
     initial_pending, _, _ = _cache_pending(passages, records)
-    reusable_passages, reusable_vectors = _reusable_cache_vectors(
-        initial_pending, records
-    )
+    reusable_passages, reusable_vectors = _reusable_cache_vectors(initial_pending, records)
     if reusable_passages:
         _append_cache(arguments.cache, reusable_passages, reusable_vectors)
         records, _ = _read_cache(arguments.cache)
@@ -841,9 +814,7 @@ async def _generate_cache(
         "generated_count": generated,
         "reused_count": len(reusable_passages),
         "initial_cache_line_count": line_count,
-        "state": _cache_state(
-            arguments.cache, passages, final_records, final_line_count
-        ),
+        "state": _cache_state(arguments.cache, passages, final_records, final_line_count),
     }
 
 
@@ -921,9 +892,9 @@ async def _verify_dense_search(
     ):
         raise RuntimeError("dense index is not ready for verification")
     vector = (
-        await _embedder(
-            settings, input_type=NVIDIA_NEMOTRON_512_PROFILE.query_input_type
-        ).embed([query])
+        await _embedder(settings, input_type=NVIDIA_NEMOTRON_512_PROFILE.query_input_type).embed(
+            [query]
+        )
     )[0]
     hits, trace = await repository.search_with_trace(
         query,
@@ -1010,9 +981,7 @@ async def _run(arguments: argparse.Namespace) -> dict[str, object]:
     writes_database = arguments.command in {"load-cache", "run"}
     if writes_database and not settings.direct_url:
         raise SystemExit("load-cache와 run에는 session-mode DIRECT_URL이 필요합니다.")
-    repository = PostgresLegalRepository(
-        settings.direct_url if writes_database else database_url
-    )
+    repository = PostgresLegalRepository(settings.direct_url if writes_database else database_url)
     try:
         if arguments.command == "status":
             return await _database_state(repository)

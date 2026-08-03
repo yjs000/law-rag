@@ -11,7 +11,12 @@ from sqlalchemy import text
 import scripts.backfill_embeddings as backfill_module
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
+from app.domain.vector_index_contract import (
+    NEMOTRON_HNSW_INDEX_NAME,
+    NEMOTRON_HNSW_READY_SQL,
+)
 from scripts.backfill_embeddings import (
+    _HNSW_INDEX_NAME,
     _HNSW_READY_SQL,
     CachedEmbedding,
     PendingProvision,
@@ -302,9 +307,7 @@ def test_cache_pending_distinguishes_missing_stale_and_current() -> None:
         ),
     }
 
-    pending, missing_count, stale_count = _cache_pending(
-        [missing, stale, current], records
-    )
+    pending, missing_count, stale_count = _cache_pending([missing, stale, current], records)
 
     assert pending == [missing, stale]
     assert missing_count == 1
@@ -328,9 +331,7 @@ def test_cache_reuses_same_profile_vector_when_only_provision_id_changed() -> No
 
 
 @pytest.mark.asyncio
-async def test_generate_cache_id_only_migration_needs_no_nvidia_key(
-    monkeypatch, tmp_path
-) -> None:
+async def test_generate_cache_id_only_migration_needs_no_nvidia_key(monkeypatch, tmp_path) -> None:
     row = _row()
     current = _source_passages([row])[0]
     old = PendingProvision(uuid4(), current.text, current.source_text_sha256)
@@ -405,13 +406,12 @@ async def test_database_state_interpolates_the_searchable_corpus_sql(monkeypatch
     assert "source_record_state='available'" in connection.statement
     assert "parser_schema_version='3'" in connection.statement
     assert "corpus_search_ready" in connection.statement
+    assert NEMOTRON_HNSW_READY_SQL in connection.statement
 
 
 def test_cache_batch_values_rejects_vector_for_an_old_source_hash() -> None:
     provision = PendingProvision(uuid4(), "현재 본문", "1" * 64)
-    record = CachedEmbedding(
-        str(provision.provision_id), "0" * 64, [1.0] + [0.0] * 511
-    )
+    record = CachedEmbedding(str(provision.provision_id), "0" * 64, [1.0] + [0.0] * 511)
 
     with pytest.raises(RuntimeError, match="cache became stale"):
         _cache_batch_values([provision], {record.provision_id: record})
@@ -443,16 +443,23 @@ def test_profile_gate_requires_complete_current_unit_index() -> None:
     assert _profile_gate_failure({**state, "hnsw_ready": False}) is not None
 
 
-def test_hnsw_gate_checks_schema_table_operator_expression_and_profile() -> None:
+def test_hnsw_gate_reuses_shared_physical_index_contract() -> None:
+    assert _HNSW_INDEX_NAME == NEMOTRON_HNSW_INDEX_NAME
+    assert _HNSW_READY_SQL == NEMOTRON_HNSW_READY_SQL
     assert "n.nspname='public'" in _HNSW_READY_SQL
-    assert "c.relname='provision_embeddings_nemotron_512_hnsw'" in _HNSW_READY_SQL
+    assert f"c.relname='{NEMOTRON_HNSW_INDEX_NAME}'" in _HNSW_READY_SQL
     assert "to_regclass('public.provision_embeddings')" in _HNSW_READY_SQL
+    assert "i.indisvalid AND i.indisready" in _HNSW_READY_SQL
+    assert "i.indnkeyatts=1" in _HNSW_READY_SQL
     assert "am.amname='hnsw'" in _HNSW_READY_SQL
     assert "vector_cosine_ops" in _HNSW_READY_SQL
     assert "format_type(index_column.atttypid,index_column.atttypmod)='vector(512)'" in (
         _HNSW_READY_SQL
     )
     assert "pg_get_expr(i.indexprs,i.indrelid)" in _HNSW_READY_SQL
+    assert ")='embedding::vector512'" in _HNSW_READY_SQL
+    assert "position('embedding'" not in _HNSW_READY_SQL
+    assert "pg_get_expr(i.indpred,i.indrelid)" in _HNSW_READY_SQL
     assert NVIDIA_NEMOTRON_512_PROFILE.key in _HNSW_READY_SQL
 
 
@@ -649,9 +656,7 @@ async def test_verify_dense_search_uses_query_profile_without_printing_content(
 
     monkeypatch.setattr(backfill_module, "_database_state", database_state)
     monkeypatch.setattr(backfill_module, "_embedder", embedder)
-    arguments = SimpleNamespace(
-        query=" 태양광 발전 정의 ", as_of=date(2026, 8, 3), limit=3
-    )
+    arguments = SimpleNamespace(query=" 태양광 발전 정의 ", as_of=date(2026, 8, 3), limit=3)
 
     result = await _verify_dense_search(arguments, Repository(), object())
 

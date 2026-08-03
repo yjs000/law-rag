@@ -84,8 +84,7 @@ class PostgresLegalRepository:
         if any(len(embedding) != dimensions for _, _, embedding in values):
             raise ValueError("embedding vector dimensions do not match profile")
         values_by_id = {
-            provision_id: (source_sha, embedding)
-            for provision_id, source_sha, embedding in values
+            provision_id: (source_sha, embedding) for provision_id, source_sha, embedding in values
         }
         if len(values_by_id) != len(values):
             raise ValueError("embedding batch contains duplicate provision IDs")
@@ -138,8 +137,7 @@ class PostgresLegalRepository:
                 .all()
             )
             current_hashes = {
-                UUID(str(row["provision_id"])): row["source_text_sha256"]
-                for row in current_rows
+                UUID(str(row["provision_id"])): row["source_text_sha256"] for row in current_rows
             }
             if set(current_hashes) != set(values_by_id):
                 raise RuntimeError(
@@ -153,9 +151,7 @@ class PostgresLegalRepository:
                     "embedding batch source hash is stale; the complete batch was rolled back"
                 )
             schema_ready = (
-                await connection.execute(
-                    text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}")
-                )
+                await connection.execute(text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}"))
             ).scalar_one()
             if not schema_ready:
                 raise RuntimeError("database must be migrated to revision 0010 or later")
@@ -175,9 +171,7 @@ class PostgresLegalRepository:
                 ),
                 {
                     "key": CORPUS_SEARCH_READY_FLAG_KEY,
-                    "value": json.dumps(
-                        {"ready": False, "reason": "embedding_batch"}
-                    ),
+                    "value": json.dumps({"ready": False, "reason": "embedding_batch"}),
                 },
             )
             await connection.execute(
@@ -577,6 +571,73 @@ class PostgresLegalRepository:
         async with self.engine.connect() as connection:
             return await _corpus_search_status(connection)
 
+    async def corpus_search_status_on_connection(
+        self, connection: AsyncConnection
+    ) -> CorpusSearchStatus:
+        return await _corpus_search_status(connection)
+
+    async def search_dense_provisions_on_connection(
+        self,
+        connection: AsyncConnection,
+        as_of_date: date,
+        limit: int,
+        query_embedding: list[float],
+        embedding_profile_key: str,
+    ) -> list[SearchHit]:
+        """Return raw dense provision rows without path, keyword, or article fallback."""
+
+        embedding = _validate_dense_provision_request(
+            limit,
+            query_embedding,
+            embedding_profile_key,
+        )
+        await _require_corpus_search_ready(connection)
+        rows = await _execute_dense_search(
+            connection,
+            as_of_date,
+            embedding,
+            embedding_profile_key,
+            limit,
+            tie_break_by_provision_id=True,
+        )
+        provision_ids = [row["provision_id"] for row in rows]
+        if len(set(provision_ids)) != len(provision_ids):
+            raise ValueError("dense provision search returned duplicate IDs")
+        if any(not isfinite(float(row["score"])) for row in rows):
+            raise ValueError("dense provision search returned a non-finite score")
+        return [self._hit(row) for row in rows]
+
+    async def explain_dense_provisions_on_connection(
+        self,
+        connection: AsyncConnection,
+        as_of_date: date,
+        limit: int,
+        query_embedding: list[float],
+        embedding_profile_key: str,
+    ) -> object:
+        """Explain the exact raw dense provision query used by Experiment D."""
+
+        embedding = _validate_dense_provision_request(
+            limit,
+            query_embedding,
+            embedding_profile_key,
+        )
+        await _require_corpus_search_ready(connection)
+        return (
+            await connection.execute(
+                _dense_search_statement(
+                    tie_break_by_provision_id=True,
+                    explain=True,
+                ),
+                _dense_search_parameters(
+                    as_of_date,
+                    embedding,
+                    embedding_profile_key,
+                    limit,
+                ),
+            )
+        ).scalar_one()
+
     async def last_sync(self) -> datetime | None:
         async with self.engine.connect() as connection:
             return (
@@ -607,45 +668,97 @@ async def _execute_dense_search(
     embedding: str,
     embedding_profile_key: str,
     limit: int,
+    *,
+    tie_break_by_provision_id: bool = False,
 ) -> list[Mapping[str, Any]]:
     return list(
         (
             await connection.execute(
-                text(
-                    f"""SELECT p.id provision_id,d.id document_id,
-                    d.exact_title document_title,d.source_kind,
-                    'MST '||v.mst version_label,v.effective_from,v.effective_to,
-                    p.path,p.heading,p.content,v.source_url,
-                    1.0-(e.embedding::vector(512) <=> CAST(:embedding AS vector(512))) score
-                    FROM provisions p
-                    JOIN document_versions v ON v.id=p.version_id
-                    JOIN legal_documents d ON d.id=v.document_id
-                    JOIN provision_embeddings e ON e.provision_id=p.id
-                    JOIN embedding_profiles ep
-                      ON ep.profile_key=e.profile_key AND ep.stored_dimensions=e.dimensions
-                    WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
-                      AND (v.effective_to IS NULL OR v.effective_to>:as_of)
-                      AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
-                      AND {CORPUS_SEARCH_READY_SQL}
-                      AND e.profile_key=:embedding_profile_key
-                      AND e.dimensions=512
-                      AND ep.active IS TRUE
-                      AND ep.text_template_version='legal-provision-v1'
-                      AND e.source_text_sha256={LEGAL_PROVISION_V1_SOURCE_SHA_SQL}
-                    ORDER BY e.embedding::vector(512) <=> CAST(:embedding AS vector(512)),p.ordinal
-                    LIMIT :limit"""
+                _dense_search_statement(
+                    tie_break_by_provision_id=tie_break_by_provision_id,
                 ),
-                {
-                    "as_of": as_of_date,
-                    "embedding": embedding,
-                    "embedding_profile_key": embedding_profile_key,
-                    "limit": limit,
-                },
+                _dense_search_parameters(
+                    as_of_date,
+                    embedding,
+                    embedding_profile_key,
+                    limit,
+                ),
             )
         )
         .mappings()
         .all()
     )
+
+
+def _validate_dense_provision_request(
+    limit: int,
+    query_embedding: list[float],
+    embedding_profile_key: str,
+) -> str:
+    if embedding_profile_key != NVIDIA_NEMOTRON_512_PROFILE.key:
+        raise ValueError("unsupported embedding profile")
+    if not 1 <= limit <= 200:
+        raise ValueError("dense provision limit must be between 1 and 200")
+    if len(query_embedding) != NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions:
+        raise ValueError("query embedding dimensions do not match profile")
+    if any(
+        isinstance(component, bool)
+        or not isinstance(component, int | float)
+        or not isfinite(component)
+        for component in query_embedding
+    ):
+        raise ValueError("query embedding contains a non-finite value")
+    norm = sqrt(fsum(float(component) * float(component) for component in query_embedding))
+    if abs(norm - 1.0) > 0.0001:
+        raise ValueError("query embedding must be L2-normalized")
+    return str(query_embedding)
+
+
+def _dense_search_statement(
+    *,
+    tie_break_by_provision_id: bool = False,
+    explain: bool = False,
+):
+    tie_breaker = "p.id" if tie_break_by_provision_id else "p.ordinal"
+    explain_prefix = "EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n" if explain else ""
+    return text(
+        f"""{explain_prefix}SELECT p.id provision_id,d.id document_id,
+        d.exact_title document_title,d.source_kind,
+        'MST '||v.mst version_label,v.effective_from,v.effective_to,
+        p.path,p.heading,p.content,v.source_url,
+        1.0-(e.embedding::vector(512) <=> CAST(:embedding AS vector(512))) score
+        FROM provisions p
+        JOIN document_versions v ON v.id=p.version_id
+        JOIN legal_documents d ON d.id=v.document_id
+        JOIN provision_embeddings e ON e.provision_id=p.id
+        JOIN embedding_profiles ep
+          ON ep.profile_key=e.profile_key AND ep.stored_dimensions=e.dimensions
+        WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
+          AND (v.effective_to IS NULL OR v.effective_to>:as_of)
+          AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
+          AND {CORPUS_SEARCH_READY_SQL}
+          AND e.profile_key=:embedding_profile_key
+          AND e.dimensions=512
+          AND ep.active IS TRUE
+          AND ep.text_template_version='legal-provision-v1'
+          AND e.source_text_sha256={LEGAL_PROVISION_V1_SOURCE_SHA_SQL}
+        ORDER BY e.embedding::vector(512) <=> CAST(:embedding AS vector(512)),{tie_breaker}
+        LIMIT :limit"""
+    )
+
+
+def _dense_search_parameters(
+    as_of_date: date,
+    embedding: str,
+    embedding_profile_key: str,
+    limit: int,
+) -> dict[str, object]:
+    return {
+        "as_of": as_of_date,
+        "embedding": embedding,
+        "embedding_profile_key": embedding_profile_key,
+        "limit": limit,
+    }
 
 
 async def _corpus_search_status(connection: AsyncConnection) -> CorpusSearchStatus:

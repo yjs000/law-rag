@@ -28,12 +28,25 @@ class _MappingsResult:
         return self._rows[0] if self._rows else None
 
 
+class _ScalarResult:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar_one(self):
+        return self._value
+
+
 class _FakeConnection:
     def __init__(
-        self, rows_by_query: dict[str, list[dict]], *, search_ready: bool = True
+        self,
+        rows_by_query: dict[str, list[dict]],
+        *,
+        search_ready: bool = True,
+        explain_plan: object | None = None,
     ) -> None:
         self.rows_by_query = rows_by_query
         self.search_ready = search_ready
+        self.explain_plan = explain_plan
         self.readiness_checks = 0
         self.calls: list[dict] = []
         self.statements: list[str] = []
@@ -53,6 +66,8 @@ class _FakeConnection:
         assert isinstance(params, dict)
         self.calls.append(params)
         self.statements.append(sql)
+        if sql.startswith("EXPLAIN "):
+            return _ScalarResult(self.explain_plan)
         key = "__dense__" if "embedding" in params else params.get("query", "__direct__")
         return _MappingsResult(self.rows_by_query.get(key, []))
 
@@ -260,6 +275,7 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert "corpus.search_ready" in connection.statements[0]
     assert "schema.corpus_search_ready_v1" in connection.statements[0]
     assert "value->>'ready'='true'" in connection.statements[0]
+    assert ",p.ordinal" in connection.statements[0]
 
 
 @pytest.mark.asyncio
@@ -312,15 +328,150 @@ async def test_postgres_dense_zero_falls_back_to_separate_keyword_search() -> No
 
 
 @pytest.mark.asyncio
+async def test_experiment_dense_provision_path_has_no_grouping_or_keyword_fallback() -> None:
+    document_id = uuid4()
+    rows = [
+        _row(
+            "전기사업법",
+            "허가 직접 근거",
+            document_id=document_id,
+            path="제7조/항①",
+            score=0.91,
+        ),
+        _row(
+            "전기사업법",
+            "같은 조의 별도 근거",
+            document_id=document_id,
+            path="제7조/항②",
+            score=0.90,
+        ),
+    ]
+    connection = _FakeConnection({"__dense__": rows})
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    embedding = [1.0, *([0.0] * 511)]
+
+    hits = await repository.search_dense_provisions_on_connection(
+        connection,  # type: ignore[arg-type]
+        date(2026, 7, 18),
+        11,
+        embedding,
+        NVIDIA_NEMOTRON_512_PROFILE.key,
+    )
+
+    assert [hit.path for hit in hits] == ["제7조/항①", "제7조/항②"]
+    assert connection.readiness_checks == 1
+    assert len(connection.calls) == 1
+    assert "pgroonga" not in connection.statements[0].casefold()
+    assert "ORDER BY e.embedding::vector(512)" in connection.statements[0]
+    assert ",p.id" in connection.statements[0]
+
+
+@pytest.mark.asyncio
+async def test_experiment_dense_provision_path_returns_empty_without_keyword_fallback() -> None:
+    connection = _FakeConnection({"__dense__": []})
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+
+    hits = await repository.search_dense_provisions_on_connection(
+        connection,  # type: ignore[arg-type]
+        date(2026, 7, 18),
+        11,
+        [1.0, *([0.0] * 511)],
+        NVIDIA_NEMOTRON_512_PROFILE.key,
+    )
+
+    assert hits == []
+    assert len(connection.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_experiment_dense_explain_wraps_the_exact_search_statement() -> None:
+    plan = [{"Plan": {"Node Type": "Index Scan", "Index Name": "dense_hnsw"}}]
+    connection = _FakeConnection({"__dense__": []}, explain_plan=plan)
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    embedding = [1.0, *([0.0] * 511)]
+
+    await repository.search_dense_provisions_on_connection(
+        connection,  # type: ignore[arg-type]
+        date(2026, 7, 18),
+        11,
+        embedding,
+        NVIDIA_NEMOTRON_512_PROFILE.key,
+    )
+    returned_plan = await repository.explain_dense_provisions_on_connection(
+        connection,  # type: ignore[arg-type]
+        date(2026, 7, 18),
+        11,
+        embedding,
+        NVIDIA_NEMOTRON_512_PROFILE.key,
+    )
+
+    search_sql, explain_sql = connection.statements
+    assert returned_plan == plan
+    assert explain_sql.startswith("EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n")
+    assert (
+        explain_sql.removeprefix("EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n") == search_sql
+    )
+    assert search_sql.endswith("LIMIT :limit")
+    assert ",p.id" in search_sql
+    assert ",p.ordinal" not in search_sql
+    assert connection.calls[0] == connection.calls[1]
+    assert connection.readiness_checks == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "profile_key"),
+    [
+        ("search_dense_provisions_on_connection", "unsupported"),
+        ("explain_dense_provisions_on_connection", "unsupported"),
+    ],
+)
+async def test_experiment_dense_search_and_explain_share_request_validation(
+    method_name: str,
+    profile_key: str,
+) -> None:
+    connection = _FakeConnection({"__dense__": []})
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+
+    with pytest.raises(ValueError, match="unsupported embedding profile"):
+        await getattr(repository, method_name)(
+            connection,
+            date(2026, 7, 18),
+            11,
+            [1.0, *([0.0] * 511)],
+            profile_key,
+        )
+
+    assert connection.readiness_checks == 0
+    assert connection.calls == []
+
+
+@pytest.mark.asyncio
+async def test_experiment_dense_explain_checks_corpus_readiness_before_explain() -> None:
+    connection = _FakeConnection({"__dense__": []}, search_ready=False)
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+
+    with pytest.raises(CorpusSearchUnavailableError, match="embedding_backfill_started"):
+        await repository.explain_dense_provisions_on_connection(
+            connection,  # type: ignore[arg-type]
+            date(2026, 7, 18),
+            11,
+            [1.0, *([0.0] * 511)],
+            NVIDIA_NEMOTRON_512_PROFILE.key,
+        )
+
+    assert connection.readiness_checks == 1
+    assert connection.calls == []
+
+
+@pytest.mark.asyncio
 async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_versions() -> None:
     row = _row("전기사업법", "허가", path="제1조")
     direct_connection = _FakeConnection({"__direct__": [row]})
     repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
     repository.engine = _FakeEngine(direct_connection)  # type: ignore[assignment]
 
-    hits, trace = await repository.search_with_trace(
-        "전기사업법 제1조", date(2026, 7, 18), 10
-    )
+    hits, trace = await repository.search_with_trace("전기사업법 제1조", date(2026, 7, 18), 10)
 
     assert hits and trace.strategy == "direct_path"
     assert "source_record_state='available'" in direct_connection.statements[0]

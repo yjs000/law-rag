@@ -8,11 +8,14 @@ import pytest
 from pydantic import ValidationError
 
 from scripts.experiment_d_gold_contract import (
+    ExperimentDGoldAdjudicationManifest,
     ExperimentDGoldCase,
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
     GoldMetricProtocol,
     GoldSplitManifest,
+    canonical_gold_case_payload_sha256,
+    canonical_gold_dataset_sha256,
 )
 from scripts.experiment_d_question_identity import (
     question_scope_set_sha256,
@@ -99,8 +102,22 @@ def _case(index: int, split: str | None = None) -> dict[str, object]:
         "judgment_coverage": {
             "candidate_count": 2,
             "judged_count": 2,
-            "judged_candidate_provision_ids": candidate_ids,
+            "judged_candidate_provision_ids": list(candidate_ids),
             "judged_candidate_set_sha256": _json_sha256(sorted(candidate_ids)),
+            "pool_method_candidates": [
+                {
+                    "method_id": "manual-path-v1",
+                    "top_k": 1,
+                    "candidate_provision_ids": [f"provision-{index}"],
+                    "candidate_set_sha256": _json_sha256([f"provision-{index}"]),
+                },
+                {
+                    "method_id": "dense-pool-v1",
+                    "top_k": 2,
+                    "candidate_provision_ids": list(candidate_ids),
+                    "candidate_set_sha256": _json_sha256(sorted(candidate_ids)),
+                },
+            ],
             "all_candidates_judged": True,
             "alternative_positive_search_completed": True,
             "completeness_status": "adjudicated",
@@ -110,7 +127,7 @@ def _case(index: int, split: str | None = None) -> dict[str, object]:
             "annotator_id": "annotator-a",
             "reviewer_id": "reviewer-b",
             "status": "adjudicated",
-            "reviewed_at": "2026-08-03T12:00:00+09:00",
+            "reviewed_at": "2026-08-03T13:00:00+09:00",
             "disagreement_resolution": None,
         },
         "evaluation_tags": ["layperson"],
@@ -171,16 +188,32 @@ def _dataset() -> dict[str, object]:
         "metric_protocol": {
             "retrieval_mode": "dense_only",
             "retrieval_unit": "provision",
+            "candidate_k": 10,
+            "cutoffs": [1, 3, 5, 10],
             "direct_relevance_grade": 2,
             "context_relevance_grade": 1,
             "recall_and_mrr_positive_grade": 2,
+            "recall_definition": "macro_fraction_of_grade2_qrels",
+            "hit_rate_definition": "macro_any_grade2_qrel",
+            "mrr_cutoff": 10,
             "ndcg_uses_graded_relevance": True,
+            "ndcg_gain": "exp2_minus_1",
+            "ndcg_discount": "log2_rank_plus_1",
+            "facet_positive_grade": 2,
             "hierarchy_policy": "exact_qrel_ids_with_explicit_evidence_closure",
             "query_average": "macro",
             "facet_recall_denominator": "supported_required_facets",
             "corpus_coverage_denominator": "all_required_facets",
             "unjudged_policy": "nonrelevant_in_frozen_pool_benchmark",
             "suite_aggregation": "never_average_with_synthetic_control_suite",
+            "retrieved_duplicate_policy": "fail_run",
+            "score_order": "raw_cosine_similarity_desc_then_provision_id_asc",
+            "boundary_tie_policy": "fail_on_equal_score_at_10_and_11",
+            "empty_fully_population_policy": "fail_run",
+            "aggregate_decimal_places": 12,
+            "primary_split": "test",
+            "calibration_aggregation": "diagnostic_only",
+            "combined_aggregation": "diagnostic_only",
             "recall_mrr_ndcg_population": ["fully_answerable"],
             "separate_answerability_reports": [
                 "partially_answerable",
@@ -195,13 +228,13 @@ def _dataset() -> dict[str, object]:
                     "method_id": "manual-path-v1",
                     "kind": "manual_legal_path_lookup",
                     "configuration_sha256": CONFIG_SHA,
-                    "top_k": 20,
+                    "top_k": 1,
                 },
                 {
                     "method_id": "dense-pool-v1",
                     "kind": "dense_candidate_pool",
                     "configuration_sha256": CONFIG_SHA,
-                    "top_k": 50,
+                    "top_k": 2,
                 },
             ],
             "retrieval_system_labels_hidden_from_annotators": True,
@@ -247,6 +280,10 @@ def _append_direct_supported_facet(case: dict[str, object]) -> None:
     coverage["judged_candidate_set_sha256"] = _json_sha256(
         sorted(coverage["judged_candidate_provision_ids"])
     )
+    dense_pool = coverage["pool_method_candidates"][1]
+    dense_pool["candidate_provision_ids"].append(provision_id)
+    dense_pool["top_k"] = len(dense_pool["candidate_provision_ids"])
+    dense_pool["candidate_set_sha256"] = _json_sha256(sorted(dense_pool["candidate_provision_ids"]))
 
 
 def test_valid_gold_case_enforces_direct_evidence_and_frozen_context() -> None:
@@ -302,6 +339,26 @@ def test_inline_judged_candidate_set_hash_is_verified() -> None:
     case["judgment_coverage"]["judged_candidate_provision_ids"][1] = "changed-candidate"
 
     with pytest.raises(ValidationError, match="candidate set hash mismatch"):
+        ExperimentDGoldCase.model_validate(case)
+
+
+def test_pool_method_candidate_hash_is_verified() -> None:
+    case = _case(1)
+    case["judgment_coverage"]["pool_method_candidates"][1]["candidate_provision_ids"][1] = (
+        "changed-candidate"
+    )
+
+    with pytest.raises(ValidationError, match="pool candidate set hash mismatch"):
+        ExperimentDGoldCase.model_validate(case)
+
+
+def test_per_method_candidate_union_must_equal_judged_pool() -> None:
+    case = _case(1)
+    dense_pool = case["judgment_coverage"]["pool_method_candidates"][1]
+    dense_pool["candidate_provision_ids"][1] = "other-candidate"
+    dense_pool["candidate_set_sha256"] = _json_sha256(sorted(dense_pool["candidate_provision_ids"]))
+
+    with pytest.raises(ValidationError, match="union of per-method candidates"):
         ExperimentDGoldCase.model_validate(case)
 
 
@@ -367,6 +424,9 @@ def test_full_gold_preserves_family_level_calibration_test_split() -> None:
     assert len(dataset.cases) == 1000
     assert sum(case.split == "calibration" for case in dataset.cases) == 200
     assert dataset.split_manifest.algorithm == "frozen-scenario-family-assignment-v1"
+    assert dataset.metric_protocol.primary_split == "test"
+    assert dataset.metric_protocol.calibration_aggregation == "diagnostic_only"
+    assert dataset.metric_protocol.combined_aggregation == "diagnostic_only"
     assert dataset.metric_protocol.recall_mrr_ndcg_population == ("fully_answerable",)
     assert set(dataset.metric_protocol.separate_answerability_reports) == {
         "partially_answerable",
@@ -375,11 +435,70 @@ def test_full_gold_preserves_family_level_calibration_test_split() -> None:
     }
 
 
+def test_dataset_links_case_pools_to_protocol_method_and_top_k() -> None:
+    dataset = _dataset()
+    dataset["cases"][0]["judgment_coverage"]["pool_method_candidates"][0]["top_k"] = 2
+
+    with pytest.raises(ValidationError, match="top_k must match"):
+        ExperimentDGoldDataset.model_validate(dataset)
+
+
+def test_non_full_pool_requires_exact_min_top_k_candidate_count() -> None:
+    dataset = _dataset()
+    dataset["annotation_protocol"]["pool_methods"][1]["top_k"] = 3
+    for case in dataset["cases"]:
+        case["judgment_coverage"]["pool_method_candidates"][1]["top_k"] = 3
+
+    with pytest.raises(ValidationError, match=r"min\(top_k, corpus size\)"):
+        ExperimentDGoldDataset.model_validate(dataset)
+
+
+def test_non_full_pool_uses_corpus_size_when_it_is_below_top_k() -> None:
+    dataset = _dataset()
+    dataset["corpus_snapshot"]["searchable_provision_count"] = 2
+    dataset["annotation_protocol"]["pool_methods"][1]["top_k"] = 3
+    for case in dataset["cases"]:
+        case["judgment_coverage"]["pool_method_candidates"][1]["top_k"] = 3
+
+    validated = ExperimentDGoldDataset.model_validate(dataset)
+
+    assert validated.annotation_protocol.pool_methods[1].top_k == 3
+
+
+def test_dataset_requires_every_protocol_pool_method_per_case() -> None:
+    dataset = _dataset()
+    dataset["cases"][0]["judgment_coverage"]["pool_method_candidates"] = [
+        dataset["cases"][0]["judgment_coverage"]["pool_method_candidates"][1]
+    ]
+
+    with pytest.raises(ValidationError, match="every annotation pool method"):
+        ExperimentDGoldDataset.model_validate(dataset)
+
+
 def test_metric_protocol_rejects_mixed_retrieval_population() -> None:
     protocol = copy.deepcopy(_dataset()["metric_protocol"])
     protocol["recall_mrr_ndcg_population"] = []
 
     with pytest.raises(ValidationError, match="fully_answerable only"):
+        GoldMetricProtocol.model_validate(protocol)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("primary_split", "calibration"),
+        ("calibration_aggregation", "primary"),
+        ("combined_aggregation", "primary"),
+    ],
+)
+def test_metric_protocol_seals_primary_and_diagnostic_split_policy(
+    field: str,
+    invalid_value: str,
+) -> None:
+    protocol = copy.deepcopy(_dataset()["metric_protocol"])
+    protocol[field] = invalid_value
+
+    with pytest.raises(ValidationError):
         GoldMetricProtocol.model_validate(protocol)
 
 
@@ -429,6 +548,23 @@ def test_family_leakage_is_rejected() -> None:
         ExperimentDGoldDataset.model_validate(dataset)
 
 
+def test_control_pair_id_and_expectation_must_be_declared_together() -> None:
+    case = _case(1)
+    case["control_pair_id"] = "pair-1"
+
+    with pytest.raises(ValidationError, match="declared together"):
+        ExperimentDGoldCase.model_validate(case)
+
+
+def test_control_pair_must_have_exactly_two_cases() -> None:
+    dataset = _dataset()
+    dataset["cases"][0]["control_pair_id"] = "pair-1"
+    dataset["cases"][0]["control_pair_expectation"] = "same_direct_evidence"
+
+    with pytest.raises(ValidationError, match="exactly two cases"):
+        ExperimentDGoldDataset.model_validate(dataset)
+
+
 def test_external_question_approval_manifest_freezes_all_question_hashes() -> None:
     dataset = _dataset()
     manifest = {
@@ -466,3 +602,32 @@ def test_external_question_approval_manifest_freezes_all_question_hashes() -> No
     manifest["approved_by"] = " "
     with pytest.raises(ValidationError):
         ExperimentDQuestionApprovalManifest.model_validate(manifest)
+
+
+def test_gold_adjudication_manifest_seals_full_dataset_and_every_case() -> None:
+    dataset = _dataset()
+    manifest = {
+        "schema_version": 1,
+        "manifest_version": "experiment-d-lay-energy-gold-adjudication-v1",
+        "status": "approved",
+        "decision_scope": "full_gold_dataset_and_case_payloads",
+        "approved_by": "gold-owner",
+        "approved_at": "2026-08-03T14:00:00+09:00",
+        "dataset_sha256": canonical_gold_dataset_sha256(dataset),
+        "cases": [
+            {
+                "case_id": case["id"],
+                "case_payload_sha256": canonical_gold_case_payload_sha256(case),
+            }
+            for case in dataset["cases"]
+        ],
+    }
+
+    adjudication = ExperimentDGoldAdjudicationManifest.model_validate(manifest)
+
+    assert len(adjudication.cases) == 1000
+    assert adjudication.dataset_sha256 == canonical_gold_dataset_sha256(dataset)
+
+    manifest["approved_by"] = " "
+    with pytest.raises(ValidationError):
+        ExperimentDGoldAdjudicationManifest.model_validate(manifest)

@@ -15,6 +15,7 @@ import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +29,11 @@ from app.domain.embedding_profiles import (
 )
 from app.settings import get_settings
 from scripts.experiment_d_gold_contract import (
+    ExperimentDGoldAdjudicationManifest,
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
+    canonical_gold_case_payload_sha256,
+    canonical_gold_dataset_sha256,
 )
 from scripts.experiment_d_question_identity import (
     APPROVAL_SCOPE_FIELDS,
@@ -48,6 +52,9 @@ DEFAULT_SOURCE_BANK = (
 DEFAULT_APPROVAL_MANIFEST = (
     Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-question-approval-v1.json"
 )
+DEFAULT_ADJUDICATION_MANIFEST = (
+    Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-gold-adjudication-v1.json"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,9 +72,17 @@ class GoldPreflightReport:
     changed_qrel_count: int
     metadata_mismatch_count: int
     missing_judged_candidate_count: int
+    missing_pool_candidate_count: int
+    distractor_not_effective_as_of_count: int
+    pool_candidate_not_effective_as_of_count: int
+    full_corpus_pool_mismatch_count: int
     missing_qrel_sample: tuple[str, ...]
     changed_qrel_sample: tuple[str, ...]
     missing_judged_candidate_sample: tuple[str, ...]
+    missing_pool_candidate_sample: tuple[str, ...]
+    distractor_not_effective_as_of_sample: tuple[str, ...]
+    pool_candidate_not_effective_as_of_sample: tuple[str, ...]
+    full_corpus_pool_mismatch_sample: tuple[str, ...]
     gold_contract_valid: bool
     gold_contract_error_count: int
     gold_contract_error_sample: tuple[str, ...]
@@ -75,6 +90,13 @@ class GoldPreflightReport:
     approval_manifest_valid: bool
     approval_manifest_contract_error_count: int
     approval_manifest_contract_error_sample: tuple[str, ...]
+    adjudication_manifest_valid: bool
+    adjudication_manifest_contract_error_count: int
+    adjudication_manifest_contract_error_sample: tuple[str, ...]
+    adjudication_manifest_error_count: int
+    adjudication_manifest_error_sample: tuple[str, ...]
+    declared_gold_dataset_sha256: str | None
+    calculated_gold_dataset_sha256: str | None
     declared_question_set_sha256: str | None
     calculated_question_set_sha256: str | None
     declared_question_scope_set_sha256: str | None
@@ -100,6 +122,11 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--source-bank", type=Path, default=DEFAULT_SOURCE_BANK)
     parser.add_argument("--approval-manifest", type=Path, default=DEFAULT_APPROVAL_MANIFEST)
+    parser.add_argument(
+        "--adjudication-manifest",
+        type=Path,
+        default=DEFAULT_ADJUDICATION_MANIFEST,
+    )
     return parser.parse_args()
 
 
@@ -291,11 +318,51 @@ def _source_bank_binding_errors(
     return tuple(sorted(errors)), tuple(sorted(approval_errors))
 
 
+def gold_adjudication_manifest_errors(
+    dataset: ExperimentDGoldDataset,
+    question_approval: ExperimentDQuestionApprovalManifest,
+    adjudication_manifest: ExperimentDGoldAdjudicationManifest,
+) -> tuple[str, ...]:
+    """Return deterministic cross-artifact errors for the sealed gold decision."""
+
+    errors: set[str] = set()
+    if adjudication_manifest.dataset_sha256 != canonical_gold_dataset_sha256(dataset):
+        errors.add("adjudication_dataset_hash_mismatch")
+
+    manifest_by_case = {case.case_id: case for case in adjudication_manifest.cases}
+    dataset_by_case = {case.id: case for case in dataset.cases}
+    if set(manifest_by_case) != set(dataset_by_case):
+        errors.add("adjudication_case_set_mismatch")
+
+    for case_id, case in dataset_by_case.items():
+        sealed_case = manifest_by_case.get(case_id)
+        if sealed_case is None:
+            continue
+        if sealed_case.case_payload_sha256 != canonical_gold_case_payload_sha256(case):
+            errors.add(f"adjudication_case_payload_hash_mismatch:{case_id}")
+        if not question_approval.approved_at < case.annotation_review.reviewed_at:
+            errors.add(f"case_review_not_after_question_approval:{case_id}")
+        if not case.annotation_review.reviewed_at < adjudication_manifest.approved_at:
+            errors.add(f"gold_adjudication_not_after_case_review:{case_id}")
+    return tuple(sorted(errors))
+
+
+def _reason_code(error: str) -> str:
+    return error.split(":", maxsplit=1)[0]
+
+
+def _is_effective_at(provision: SourceProvision, as_of_date: date) -> bool:
+    return provision.effective_from <= as_of_date and (
+        provision.effective_to is None or as_of_date < provision.effective_to
+    )
+
+
 def audit_gold_dataset(
     dataset: Mapping[str, object],
     provisions: Sequence[SourceProvision],
     source_bank: Mapping[str, object] | None = None,
     approval_manifest: Mapping[str, object] | None = None,
+    adjudication_manifest: Mapping[str, object] | None = None,
     *,
     corpus_search_ready: bool = True,
     corpus_search_ready_reason: str | None = None,
@@ -305,8 +372,13 @@ def audit_gold_dataset(
         reasons.add("corpus_search_unready")
     contract_errors: tuple[str, ...] = ()
     approval_contract_errors: tuple[str, ...] = ()
+    adjudication_contract_errors: tuple[str, ...] = ()
+    adjudication_errors: tuple[str, ...] = ()
+    validated_dataset: ExperimentDGoldDataset | None = None
+    validated_approval: ExperimentDQuestionApprovalManifest | None = None
+    validated_adjudication: ExperimentDGoldAdjudicationManifest | None = None
     try:
-        ExperimentDGoldDataset.model_validate(dataset)
+        validated_dataset = ExperimentDGoldDataset.model_validate(dataset)
     except ValidationError as error:
         contract_errors = tuple(
             f"{'.'.join(str(part) for part in item['loc'])}:{item['type']}"
@@ -315,13 +387,39 @@ def audit_gold_dataset(
         reasons.add("gold_contract_invalid")
     if approval_manifest is not None:
         try:
-            ExperimentDQuestionApprovalManifest.model_validate(approval_manifest)
+            validated_approval = ExperimentDQuestionApprovalManifest.model_validate(
+                approval_manifest
+            )
         except ValidationError as error:
             approval_contract_errors = tuple(
                 f"{'.'.join(str(part) for part in item['loc'])}:{item['type']}"
                 for item in error.errors(include_url=False, include_input=False)
             )
             reasons.add("approval_manifest_contract_invalid")
+    if adjudication_manifest is None:
+        reasons.add("adjudication_manifest_missing")
+    else:
+        try:
+            validated_adjudication = ExperimentDGoldAdjudicationManifest.model_validate(
+                adjudication_manifest
+            )
+        except ValidationError as error:
+            adjudication_contract_errors = tuple(
+                f"{'.'.join(str(part) for part in item['loc'])}:{item['type']}"
+                for item in error.errors(include_url=False, include_input=False)
+            )
+            reasons.add("adjudication_manifest_contract_invalid")
+    if (
+        validated_dataset is not None
+        and validated_approval is not None
+        and validated_adjudication is not None
+    ):
+        adjudication_errors = gold_adjudication_manifest_errors(
+            validated_dataset,
+            validated_approval,
+            validated_adjudication,
+        )
+        reasons.update(_reason_code(error) for error in adjudication_errors)
     source_binding_errors, approval_errors = _source_bank_binding_errors(
         dataset, source_bank, approval_manifest
     )
@@ -374,17 +472,53 @@ def audit_gold_dataset(
     if declared_provision_count != len(provisions):
         reasons.add("searchable_provision_count_mismatch")
 
-    # The annotation pool must be checked against the same full searchable
-    # provision population that can produce retrieval hits.  Dataset-generation
-    # heuristics such as ``_is_evidence_eligible`` must not hide legitimate
-    # administrative-rule paths or distractor structure rows here.
-    by_id = {item.provision_id: item for item in provisions}
+    # Both qrels and the complete judgment pool must be checked against the
+    # full runtime-searchable population.  Dataset-generation evidence
+    # heuristics intentionally do not participate in this map: a human-approved
+    # gold qrel or distractor can legitimately use a flat ``본문/단락1`` path.
+    all_searchable_by_id = {item.provision_id: item for item in provisions}
     qrel_count = 0
     qrel_ids: set[str] = set()
     missing_ids: set[str] = set()
     changed_ids: set[str] = set()
     metadata_mismatches: set[tuple[str, str]] = set()
     missing_judged_candidate_ids: set[str] = set()
+    missing_pool_candidates: set[str] = set()
+    distractors_not_effective_as_of: set[str] = set()
+    pool_candidates_not_effective_as_of: set[str] = set()
+    full_corpus_pool_mismatches: set[str] = set()
+
+    if validated_dataset is not None:
+        pool_method_kinds = {
+            method.method_id: method.kind
+            for method in validated_dataset.annotation_protocol.pool_methods
+        }
+        for validated_case in validated_dataset.cases:
+            effective_population = {
+                provision_id
+                for provision_id, provision in all_searchable_by_id.items()
+                if _is_effective_at(provision, validated_case.as_of_date)
+            }
+            for provision_id in validated_case.judgment_coverage.distractor_provision_ids:
+                provision = all_searchable_by_id.get(provision_id)
+                if provision is not None and not _is_effective_at(
+                    provision, validated_case.as_of_date
+                ):
+                    distractors_not_effective_as_of.add(f"{validated_case.id}:{provision_id}")
+            for pool in validated_case.judgment_coverage.pool_method_candidates:
+                for provision_id in pool.candidate_provision_ids:
+                    provision = all_searchable_by_id.get(provision_id)
+                    candidate_identity = f"{validated_case.id}:{pool.method_id}:{provision_id}"
+                    if provision is None:
+                        missing_pool_candidates.add(candidate_identity)
+                    elif not _is_effective_at(provision, validated_case.as_of_date):
+                        pool_candidates_not_effective_as_of.add(candidate_identity)
+                if (
+                    pool_method_kinds[pool.method_id] == "full_corpus_manual_review"
+                    and set(pool.candidate_provision_ids) != effective_population
+                ):
+                    full_corpus_pool_mismatches.add(f"{validated_case.id}:{pool.method_id}")
+
     for case in cases:
         qrels = case.get("qrels")
         if not isinstance(qrels, list):
@@ -407,7 +541,7 @@ def audit_gold_dataset(
                 isinstance(item, str) and item for item in judged_candidate_ids
             ):
                 missing_judged_candidate_ids.update(
-                    item for item in judged_candidate_ids if item not in by_id
+                    item for item in judged_candidate_ids if item not in all_searchable_by_id
                 )
             else:
                 reasons.add("invalid_judged_candidate_ids")
@@ -427,7 +561,7 @@ def audit_gold_dataset(
             qrel_ids.add(provision_id)
             if relevance not in {1, 2}:
                 reasons.add("invalid_qrel_relevance")
-            source = by_id.get(provision_id)
+            source = all_searchable_by_id.get(provision_id)
             if source is None:
                 missing_ids.add(provision_id)
                 continue
@@ -468,6 +602,24 @@ def audit_gold_dataset(
         reasons.add("qrel_metadata_mismatch")
     if missing_judged_candidate_ids:
         reasons.add("judged_candidate_source_missing")
+    if missing_pool_candidates:
+        reasons.add("pool_candidate_source_missing")
+    if distractors_not_effective_as_of:
+        reasons.add("distractor_not_effective_as_of")
+    if pool_candidates_not_effective_as_of:
+        reasons.add("pool_candidate_not_effective_as_of")
+    if full_corpus_pool_mismatches:
+        reasons.add("full_corpus_pool_mismatch")
+
+    declared_gold_dataset_sha256 = (
+        adjudication_manifest.get("dataset_sha256")
+        if isinstance(adjudication_manifest, Mapping)
+        and isinstance(adjudication_manifest.get("dataset_sha256"), str)
+        else None
+    )
+    calculated_gold_dataset_sha256 = (
+        canonical_gold_dataset_sha256(validated_dataset) if validated_dataset is not None else None
+    )
 
     dataset_version = dataset.get("dataset_version", dataset.get("bank_version"))
     return GoldPreflightReport(
@@ -484,9 +636,19 @@ def audit_gold_dataset(
         changed_qrel_count=len(changed_ids),
         metadata_mismatch_count=len(metadata_mismatches),
         missing_judged_candidate_count=len(missing_judged_candidate_ids),
+        missing_pool_candidate_count=len(missing_pool_candidates),
+        distractor_not_effective_as_of_count=len(distractors_not_effective_as_of),
+        pool_candidate_not_effective_as_of_count=len(pool_candidates_not_effective_as_of),
+        full_corpus_pool_mismatch_count=len(full_corpus_pool_mismatches),
         missing_qrel_sample=tuple(sorted(missing_ids)[:10]),
         changed_qrel_sample=tuple(sorted(changed_ids)[:10]),
         missing_judged_candidate_sample=tuple(sorted(missing_judged_candidate_ids)[:10]),
+        missing_pool_candidate_sample=tuple(sorted(missing_pool_candidates)[:10]),
+        distractor_not_effective_as_of_sample=tuple(sorted(distractors_not_effective_as_of)[:10]),
+        pool_candidate_not_effective_as_of_sample=tuple(
+            sorted(pool_candidates_not_effective_as_of)[:10]
+        ),
+        full_corpus_pool_mismatch_sample=tuple(sorted(full_corpus_pool_mismatches)[:10]),
         gold_contract_valid=not contract_errors,
         gold_contract_error_count=len(contract_errors),
         gold_contract_error_sample=contract_errors[:10],
@@ -494,6 +656,19 @@ def audit_gold_dataset(
         approval_manifest_valid=not approval_errors and not approval_contract_errors,
         approval_manifest_contract_error_count=len(approval_contract_errors),
         approval_manifest_contract_error_sample=approval_contract_errors[:10],
+        adjudication_manifest_valid=(
+            validated_adjudication is not None
+            and validated_dataset is not None
+            and validated_approval is not None
+            and not adjudication_contract_errors
+            and not adjudication_errors
+        ),
+        adjudication_manifest_contract_error_count=len(adjudication_contract_errors),
+        adjudication_manifest_contract_error_sample=adjudication_contract_errors[:10],
+        adjudication_manifest_error_count=len(adjudication_errors),
+        adjudication_manifest_error_sample=adjudication_errors[:10],
+        declared_gold_dataset_sha256=declared_gold_dataset_sha256,
+        calculated_gold_dataset_sha256=calculated_gold_dataset_sha256,
         declared_question_set_sha256=declared_question_hash,
         calculated_question_set_sha256=calculated_question_hash,
         declared_question_scope_set_sha256=(
@@ -528,6 +703,13 @@ async def _run(arguments: argparse.Namespace) -> GoldPreflightReport:
         approval_manifest = json.loads(arguments.approval_manifest.read_text(encoding="utf-8"))
         if not isinstance(approval_manifest, dict):
             raise SystemExit("질문 승인 manifest의 최상위 값은 객체여야 합니다.")
+    adjudication_manifest = None
+    if arguments.adjudication_manifest.exists():
+        adjudication_manifest = json.loads(
+            arguments.adjudication_manifest.read_text(encoding="utf-8")
+        )
+        if not isinstance(adjudication_manifest, dict):
+            raise SystemExit("gold adjudication manifest must be a top-level JSON object")
     repository = PostgresLegalRepository(settings.database_url)
     try:
         corpus_status = await repository.corpus_search_status()
@@ -539,6 +721,7 @@ async def _run(arguments: argparse.Namespace) -> GoldPreflightReport:
         provisions,
         source_bank,
         approval_manifest,
+        adjudication_manifest,
         corpus_search_ready=corpus_status.ready,
         corpus_search_ready_reason=corpus_status.reason,
     )

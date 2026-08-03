@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 from law_rag_core.persistence import SEARCHABLE_DOCUMENT_VERSION_SQL
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.embedding_profiles import embedding_text_sha256
@@ -265,9 +266,7 @@ def _unique_semantic_candidates(
     by_question: dict[str, list[SourceProvision]] = defaultdict(list)
     for item in candidates:
         by_question[specs[item.provision_id][0]].append(item)
-    return [
-        item for item in candidates if len(by_question[specs[item.provision_id][0]]) == 1
-    ]
+    return [item for item in candidates if len(by_question[specs[item.provision_id][0]]) == 1]
 
 
 def _split(index: int) -> str:
@@ -513,8 +512,7 @@ def build_dataset(
             case_id=case_id,
             category="hierarchy_child",
             question=(
-                f"{item.document_title} {_render_path(item.path)}에서 "
-                "직접 정한 내용은 무엇인가요?"
+                f"{item.document_title} {_render_path(item.path)}에서 직접 정한 내용은 무엇인가요?"
             ),
             item=item,
             by_article=by_article,
@@ -529,8 +527,7 @@ def build_dataset(
         siblings = [
             other
             for other in by_version[(item.document_id, item.version_id)]
-            if other.provision_id != item.provision_id
-            and other.article_path != item.article_path
+            if other.provision_id != item.provision_id and other.article_path != item.article_path
         ]
         if not siblings:
             continue
@@ -545,9 +542,7 @@ def build_dataset(
         ).ratio()
         if similarity >= 0.30:
             contrast_matches[item.provision_id] = (sibling, similarity)
-    contrast_candidates = [
-        item for item in semantic if item.provision_id in contrast_matches
-    ]
+    contrast_candidates = [item for item in semantic if item.provision_id in contrast_matches]
 
     def contrast(item: SourceProvision, case_id: str, index: int) -> dict[str, object]:
         sibling, distractor_similarity = contrast_matches[item.provision_id]
@@ -657,8 +652,7 @@ def build_dataset(
         "schema_version": 2,
         "dataset_version": DATASET_VERSION,
         "method": (
-            "BEIR qrels + LlamaIndex-style labelled RAG references "
-            "+ deterministic legal boundaries"
+            "BEIR qrels + LlamaIndex-style labelled RAG references + deterministic legal boundaries"
         ),
         "corpus": {
             "eligible_provision_count": len(eligible),
@@ -715,9 +709,7 @@ def validate_dataset(dataset: dict[str, object], provisions: list[SourceProvisio
             source = by_id.get(str(qrel.get("provision_id"))) if isinstance(qrel, dict) else None
             if source is None or source.content_sha256 != qrel.get("content_sha256"):
                 raise ValueError("qrel source is missing or changed")
-        qrel_ids = {
-            str(qrel.get("provision_id")) for qrel in qrels if isinstance(qrel, dict)
-        }
+        qrel_ids = {str(qrel.get("provision_id")) for qrel in qrels if isinstance(qrel, dict)}
         distractor_ids = case.get("distractor_provision_ids")
         if not isinstance(distractor_ids, list):
             raise ValueError("invalid distractor ids")
@@ -738,26 +730,27 @@ def validate_dataset(dataset: dict[str, object], provisions: list[SourceProvisio
                 raise ValueError("enumerated evidence is missing descendant qrels")
 
 
-async def _load_provisions(repository: PostgresLegalRepository) -> list[SourceProvision]:
-    async with repository.engine.connect() as connection:
-        rows = (
-            (
-                await connection.execute(
-                    text(
-                        f"""SELECT p.id provision_id,p.version_id,d.id document_id,
-                        d.exact_title document_title,d.source_kind,v.mst,v.effective_from,
-                        v.effective_to,v.source_url,p.path,p.parent_path,p.heading,p.content,p.ordinal
-                        FROM provisions p
-                        JOIN document_versions v ON v.id=p.version_id
-                        JOIN legal_documents d ON d.id=v.document_id
-                        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
-                        ORDER BY d.exact_title,v.effective_from,p.ordinal,p.path"""
-                    )
+async def _load_provisions_from_connection(
+    connection: AsyncConnection,
+) -> list[SourceProvision]:
+    rows = (
+        (
+            await connection.execute(
+                text(
+                    f"""SELECT p.id provision_id,p.version_id,d.id document_id,
+                    d.exact_title document_title,d.source_kind,v.mst,v.effective_from,
+                    v.effective_to,v.source_url,p.path,p.parent_path,p.heading,p.content,p.ordinal
+                    FROM provisions p
+                    JOIN document_versions v ON v.id=p.version_id
+                    JOIN legal_documents d ON d.id=v.document_id
+                    WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                    ORDER BY d.exact_title,v.effective_from,p.ordinal,p.path"""
                 )
             )
-            .mappings()
-            .all()
         )
+        .mappings()
+        .all()
+    )
     return [
         SourceProvision(
             provision_id=str(row["provision_id"]),
@@ -777,6 +770,11 @@ async def _load_provisions(repository: PostgresLegalRepository) -> list[SourcePr
         )
         for row in rows
     ]
+
+
+async def _load_provisions(repository: PostgresLegalRepository) -> list[SourceProvision]:
+    async with repository.engine.connect() as connection:
+        return await _load_provisions_from_connection(connection)
 
 
 def _write_outputs(
