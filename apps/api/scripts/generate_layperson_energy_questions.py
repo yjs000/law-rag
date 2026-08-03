@@ -15,6 +15,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.experiment_d_question_identity import question_scope_set_sha256
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 MODULE_COMMAND = "scripts.generate_layperson_energy_questions"
 DEFAULT_OUTPUT = (
@@ -34,7 +36,13 @@ CORPUS_CATALOG = (
     "전기저장시설의 화재안전성능기준(NFPC 607)",
     "전기저장시설의 화재안전기술기준(NFTC 607)",
 )
-CORPUS_FINGERPRINT_SHA256 = "3b5e2686ff7f353dc67f266310f130cd385efc7ed0ae516b656cca18cf59ee01"
+CATALOG_TITLE_SET_SHA256 = hashlib.sha256(
+    json.dumps(
+        list(CORPUS_CATALOG),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+).hexdigest()
 
 SOURCES = {
     "knrec_general_faq": "https://www.knrec.or.kr/biz/faq/faq_list02.do?depth_1=&depth_2=&page=2",
@@ -2411,6 +2419,9 @@ def build_bank() -> dict[str, object]:
             sort_keys=True,
         )
     )
+    approval_scope_set_sha256 = question_scope_set_sha256(cases)
+    if approval_scope_set_sha256 is None:
+        raise ValueError("question approval scope fields are incomplete")
     forbidden = [
         str(case["id"])
         for case in cases
@@ -2450,9 +2461,10 @@ def build_bank() -> dict[str, object]:
         "relationship_to_labelled_v3": ("supplemental_candidate_bank_not_a_replacement"),
         "question_count": len(cases),
         "question_set_sha256": question_set_sha256,
+        "question_scope_set_sha256": approval_scope_set_sha256,
         "generation_method": {
             "scenario_count": 200,
-            "question_facets_per_scenario": 5,
+            "query_variants_per_scenario": 5,
             "scenario_prompt_pairing": "manually_curated_compatible_groups",
             "wording": "newly_synthesized_not_verbatim_source_copy",
             "human_read_through_override_count": len(CURATED_QUESTION_OVERRIDES),
@@ -2466,9 +2478,13 @@ def build_bank() -> dict[str, object]:
         "corpus_context": {
             "as_of_date": CHECKED_AT,
             "catalog_titles": list(CORPUS_CATALOG),
-            "catalog_fingerprint_sha256": CORPUS_FINGERPRINT_SHA256,
+            "catalog_title_set_sha256": CATALOG_TITLE_SET_SHA256,
+            "parser_corpus_snapshot_assigned": False,
             "scope_labels_assigned": False,
-            "reason": "question approval must precede corpus coverage annotation",
+            "reason": (
+                "catalog title scope is not a parser corpus snapshot; question approval "
+                "must precede corpus coverage annotation"
+            ),
         },
         "evaluation_readiness": {
             "retrieval_metrics_available": False,
@@ -2477,15 +2493,21 @@ def build_bank() -> dict[str, object]:
                 "Recall·MRR·nDCG를 계산할 수 있음"
             ),
             "required_gold_fields": [
+                "evaluation_status",
                 "source_bank",
+                "approval_manifest",
                 "corpus_snapshot",
                 "question_review_status",
                 "split",
                 "answerability",
+                "expected_action",
+                "missing_user_facts",
                 "insufficient_reason",
                 "required_answer_facets",
                 "qrels",
-                "reference_answer",
+                "reference_contexts",
+                "reference_response",
+                "judgment_coverage",
                 "annotation_review",
             ],
             "answerability_values": [
@@ -2508,6 +2530,8 @@ def build_bank() -> dict[str, object]:
                 "abstention_or_clarification_accuracy",
             ],
             "planned_gold_artifact": "experiment-d-lay-energy-gold-v1.json",
+            "gold_contract_module": "scripts.experiment_d_gold_contract",
+            "preflight_module": "scripts.preflight_experiment_d_gold",
         },
         "research": {
             "checked_at": CHECKED_AT,
@@ -2555,6 +2579,7 @@ def render_review(bank: dict[str, object]) -> str:
         f"> 생성 명령: `uv run --directory apps/api python -m {MODULE_COMMAND}`",
         f"> bank version: `{bank['bank_version']}`",
         f"> question set SHA-256: `{bank['question_set_sha256']}`",
+        f"> question scope set SHA-256: `{bank['question_scope_set_sha256']}`",
         "> 상태: 질문 검토 초안 — 정답·qrels 없음, 검색 실험 실행 안 함",
         "",
         "## 읽기 전에",
@@ -2575,8 +2600,9 @@ def render_review(bank: dict[str, object]) -> str:
         "",
         (
             "이 파일만으로는 Recall·MRR 같은 검색 정확도를 계산할 수 없다. 질문을 "
-            "승인한 뒤 검색 결과와 독립적으로 답변 가능 여부·필수 답변 요소·"
-            "직접 근거 조문 목록(qrels)·기준 답변을 주석한 별도 gold 파일이 필요하다."
+            "승인하면 별도 승인 manifest로 질문 해시를 먼저 고정한다. 그 뒤 검색 "
+            "결과와 독립적으로 답변 가능 여부·필수 답변 요소·직접 근거 조문 "
+            "목록(qrels)·기준 응답을 주석한 별도 gold 파일이 필요하다."
         ),
         "",
         (
@@ -2589,8 +2615,9 @@ def render_review(bank: dict[str, object]) -> str:
         "## 구성",
         "",
         (
-            "상황 200개를 만들고 각 상황에 의미가 맞는 질문 관점 5개를 직접 "
-            "짝지어 총 1,000개로 구성했다."
+            "상황 200개를 만들고 각 상황에 의미가 맞는 질문 변형 5개를 직접 "
+            "짝지어 총 1,000개로 구성했다. 질문 변형은 gold의 필수 답변 요소와 "
+            "다른 개념이다."
         ),
         "",
         "| 질문 의도 | 개수 |",

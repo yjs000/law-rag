@@ -1,0 +1,553 @@
+"""Read-only preflight for the future Experiment D gold evaluation runner.
+
+This command is read-only.  It compares the frozen question/qrel metadata with
+the current searchable corpus and never embeds a question or calls search.  A
+runner must repeat this audit while holding the corpus read lock for the whole
+retrieval window; this standalone command is not that runtime lock.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import hashlib
+import json
+import sys
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
+from pydantic import ValidationError
+
+from app.adapters.postgres_repository import PostgresLegalRepository
+from app.domain.embedding_profiles import (
+    embedding_text_sha256,
+    legal_provision_embedding_text,
+)
+from app.settings import get_settings
+from scripts.experiment_d_gold_contract import (
+    ExperimentDGoldDataset,
+    ExperimentDQuestionApprovalManifest,
+)
+from scripts.experiment_d_question_identity import (
+    APPROVAL_SCOPE_FIELDS,
+    question_scope_set_sha256,
+    question_scope_sha256,
+)
+from scripts.generate_experiment_d_dataset import (
+    SourceProvision,
+    _load_provisions,
+)
+
+APPROVED_GOLD_STATUS = "approved_gold"
+DEFAULT_SOURCE_BANK = (
+    Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-query-bank-v1-draft.json"
+)
+DEFAULT_APPROVAL_MANIFEST = (
+    Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-question-approval-v1.json"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class GoldPreflightReport:
+    ready: bool
+    reasons: tuple[str, ...]
+    corpus_search_ready: bool
+    corpus_search_ready_reason: str | None
+    dataset_version: str | None
+    evaluation_status: str | None
+    case_count: int
+    qrel_count: int
+    unique_qrel_count: int
+    missing_qrel_count: int
+    changed_qrel_count: int
+    metadata_mismatch_count: int
+    missing_judged_candidate_count: int
+    missing_qrel_sample: tuple[str, ...]
+    changed_qrel_sample: tuple[str, ...]
+    missing_judged_candidate_sample: tuple[str, ...]
+    gold_contract_valid: bool
+    gold_contract_error_count: int
+    gold_contract_error_sample: tuple[str, ...]
+    source_bank_binding_valid: bool
+    approval_manifest_valid: bool
+    approval_manifest_contract_error_count: int
+    approval_manifest_contract_error_sample: tuple[str, ...]
+    declared_question_set_sha256: str | None
+    calculated_question_set_sha256: str | None
+    declared_question_scope_set_sha256: str | None
+    calculated_question_scope_set_sha256: str | None
+    declared_corpus_fingerprint_sha256: str | None
+    current_corpus_fingerprint_sha256: str
+    declared_parser_contract_version: str | None
+    current_parser_contract_version: str
+    declared_searchable_provision_count: int | None
+    current_searchable_provision_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "실험 D gold의 승인 상태·질문 해시·qrels·corpus 해시를 "
+            "검색 실행 전에 읽기 전용으로 검증"
+        )
+    )
+    parser.add_argument("--dataset", type=Path, required=True)
+    parser.add_argument("--source-bank", type=Path, default=DEFAULT_SOURCE_BANK)
+    parser.add_argument("--approval-manifest", type=Path, default=DEFAULT_APPROVAL_MANIFEST)
+    return parser.parse_args()
+
+
+def corpus_fingerprint_sha256(provisions: Sequence[SourceProvision]) -> str:
+    searchable = sorted(provisions, key=lambda item: item.provision_id)
+    rows = [
+        {
+            "parser_schema_version": PARSER_SCHEMA_VERSION,
+            "document_id": item.document_id,
+            "version_id": item.version_id,
+            "provision_id": item.provision_id,
+            "path": item.path,
+            "effective_from": item.effective_from.isoformat(),
+            "effective_to": item.effective_to.isoformat() if item.effective_to else None,
+            "content_sha256": item.content_sha256,
+            "passage_text_sha256": embedding_text_sha256(
+                legal_provision_embedding_text(
+                    document_title=item.document_title,
+                    path=item.path,
+                    heading=item.heading,
+                    content=item.content,
+                )
+            ),
+        }
+        for item in searchable
+    ]
+    return hashlib.sha256(
+        json.dumps(
+            rows,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def question_set_sha256(cases: Sequence[Mapping[str, object]]) -> str | None:
+    frozen: list[dict[str, str]] = []
+    for case in cases:
+        case_id = case.get("id")
+        question = case.get("question", case.get("user_input"))
+        if not isinstance(case_id, str) or not case_id or not isinstance(question, str):
+            return None
+        frozen.append({"id": case_id, "question": question})
+    return hashlib.sha256(
+        json.dumps(
+            frozen,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _declared_question_set_sha256(dataset: Mapping[str, object]) -> str | None:
+    direct = dataset.get("question_set_sha256")
+    if isinstance(direct, str):
+        return direct
+    source_bank = dataset.get("source_bank")
+    if isinstance(source_bank, Mapping):
+        value = source_bank.get("question_set_sha256")
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _declared_corpus_fingerprint_sha256(dataset: Mapping[str, object]) -> str | None:
+    for key in ("corpus_snapshot", "corpus"):
+        snapshot = dataset.get(key)
+        if isinstance(snapshot, Mapping):
+            value = snapshot.get("fingerprint_sha256")
+            if isinstance(value, str):
+                return value
+    return None
+
+
+def _source_bank_binding_errors(
+    dataset: Mapping[str, object],
+    source_bank: Mapping[str, object] | None,
+    approval_manifest: Mapping[str, object] | None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    unavailable_approval_reason = (
+        "approval_manifest_missing"
+        if approval_manifest is None
+        else "approval_manifest_unverifiable"
+    )
+    if source_bank is None:
+        return ("source_bank_missing",), (unavailable_approval_reason,)
+    raw_questions = source_bank.get("questions")
+    if not isinstance(raw_questions, list) or any(
+        not isinstance(item, Mapping) for item in raw_questions
+    ):
+        return ("source_bank_questions_invalid",), (unavailable_approval_reason,)
+    bank_questions = [item for item in raw_questions if isinstance(item, Mapping)]
+    calculated_bank_hash = question_set_sha256(bank_questions)
+    declared_bank_hash = source_bank.get("question_set_sha256")
+    if calculated_bank_hash is None or calculated_bank_hash != declared_bank_hash:
+        return ("source_bank_self_hash_mismatch",), (unavailable_approval_reason,)
+    calculated_scope_hash = question_scope_set_sha256(bank_questions)
+    declared_scope_hash = source_bank.get("question_scope_set_sha256")
+    if calculated_scope_hash is None or calculated_scope_hash != declared_scope_hash:
+        return ("source_bank_scope_hash_mismatch",), (unavailable_approval_reason,)
+
+    binding = dataset.get("source_bank")
+    if not isinstance(binding, Mapping):
+        return ("gold_source_bank_binding_missing",), (unavailable_approval_reason,)
+    expected_binding = {
+        "bank_version": source_bank.get("bank_version"),
+        "question_count": source_bank.get("question_count"),
+        "question_set_sha256": declared_bank_hash,
+        "question_scope_set_sha256": declared_scope_hash,
+    }
+    errors: set[str] = set()
+    for key, expected in expected_binding.items():
+        if binding.get(key) != expected:
+            errors.add("gold_source_bank_binding_mismatch")
+
+    raw_cases = dataset.get("cases")
+    if not isinstance(raw_cases, list):
+        return tuple(sorted(errors | {"gold_cases_missing"})), (unavailable_approval_reason,)
+    gold_by_id = {
+        str(case.get("id")): case
+        for case in raw_cases
+        if isinstance(case, Mapping) and case.get("id") is not None
+    }
+    if len(gold_by_id) != len(bank_questions):
+        errors.add("gold_source_bank_question_count_mismatch")
+    for bank_case in bank_questions:
+        case_id = bank_case.get("id")
+        gold_case = gold_by_id.get(str(case_id))
+        if gold_case is None:
+            errors.add("gold_source_bank_question_missing")
+            continue
+        if gold_case.get("question") != bank_case.get("question"):
+            errors.add("gold_source_bank_question_text_mismatch")
+        if gold_case.get("question_sha256") != bank_case.get("question_sha256"):
+            errors.add("gold_source_bank_question_hash_mismatch")
+        if gold_case.get("question_review_status") != "approved":
+            errors.add("gold_source_bank_question_unapproved")
+        for field in APPROVAL_SCOPE_FIELDS:
+            if gold_case.get(field) != bank_case.get(field):
+                errors.add("gold_source_bank_question_scope_mismatch")
+
+    approval_errors: set[str] = set()
+    if approval_manifest is None:
+        approval_errors.add("approval_manifest_missing")
+    else:
+        if approval_manifest.get("status") != "approved":
+            approval_errors.add("approval_manifest_not_approved")
+        approved_source = approval_manifest.get("source_bank")
+        if not isinstance(approved_source, Mapping):
+            approval_errors.add("approval_manifest_source_bank_missing")
+        else:
+            for key, expected in expected_binding.items():
+                if approved_source.get(key) != expected:
+                    approval_errors.add("approval_manifest_source_bank_mismatch")
+        reviews = approval_manifest.get("questions")
+        if not isinstance(reviews, list):
+            approval_errors.add("approval_manifest_questions_invalid")
+        else:
+            review_by_id = {
+                str(review.get("id")): review
+                for review in reviews
+                if isinstance(review, Mapping) and review.get("id") is not None
+            }
+            if len(review_by_id) != len(bank_questions):
+                approval_errors.add("approval_manifest_question_count_mismatch")
+            for bank_case in bank_questions:
+                review = review_by_id.get(str(bank_case.get("id")))
+                if review is None:
+                    approval_errors.add("approval_manifest_question_missing")
+                    continue
+                if review.get("status") != "approved":
+                    approval_errors.add("approval_manifest_question_unapproved")
+                if review.get("question_sha256") != bank_case.get("question_sha256"):
+                    approval_errors.add("approval_manifest_question_hash_mismatch")
+                if review.get("question_scope_sha256") != question_scope_sha256(bank_case):
+                    approval_errors.add("approval_manifest_question_scope_hash_mismatch")
+        approval_sha = hashlib.sha256(
+            json.dumps(
+                approval_manifest,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        if binding.get("approval_manifest_sha256") != approval_sha:
+            approval_errors.add("gold_approval_manifest_hash_mismatch")
+    return tuple(sorted(errors)), tuple(sorted(approval_errors))
+
+
+def audit_gold_dataset(
+    dataset: Mapping[str, object],
+    provisions: Sequence[SourceProvision],
+    source_bank: Mapping[str, object] | None = None,
+    approval_manifest: Mapping[str, object] | None = None,
+    *,
+    corpus_search_ready: bool = True,
+    corpus_search_ready_reason: str | None = None,
+) -> GoldPreflightReport:
+    reasons: set[str] = set()
+    if not corpus_search_ready:
+        reasons.add("corpus_search_unready")
+    contract_errors: tuple[str, ...] = ()
+    approval_contract_errors: tuple[str, ...] = ()
+    try:
+        ExperimentDGoldDataset.model_validate(dataset)
+    except ValidationError as error:
+        contract_errors = tuple(
+            f"{'.'.join(str(part) for part in item['loc'])}:{item['type']}"
+            for item in error.errors(include_url=False, include_input=False)
+        )
+        reasons.add("gold_contract_invalid")
+    if approval_manifest is not None:
+        try:
+            ExperimentDQuestionApprovalManifest.model_validate(approval_manifest)
+        except ValidationError as error:
+            approval_contract_errors = tuple(
+                f"{'.'.join(str(part) for part in item['loc'])}:{item['type']}"
+                for item in error.errors(include_url=False, include_input=False)
+            )
+            reasons.add("approval_manifest_contract_invalid")
+    source_binding_errors, approval_errors = _source_bank_binding_errors(
+        dataset, source_bank, approval_manifest
+    )
+    reasons.update(source_binding_errors)
+    reasons.update(approval_errors)
+    evaluation_status = dataset.get("evaluation_status")
+    if evaluation_status != APPROVED_GOLD_STATUS:
+        reasons.add("dataset_not_approved_gold")
+
+    raw_cases = dataset.get("cases")
+    if not isinstance(raw_cases, list) or not raw_cases:
+        raw_cases = []
+        reasons.add("invalid_or_empty_cases")
+    cases = [case for case in raw_cases if isinstance(case, Mapping)]
+    if len(cases) != len(raw_cases):
+        reasons.add("invalid_case_shape")
+
+    declared_question_hash = _declared_question_set_sha256(dataset)
+    calculated_question_hash = question_set_sha256(cases)
+    if declared_question_hash is None:
+        reasons.add("question_set_hash_missing")
+    elif calculated_question_hash != declared_question_hash:
+        reasons.add("question_set_hash_mismatch")
+    binding = dataset.get("source_bank")
+    declared_scope_hash = (
+        binding.get("question_scope_set_sha256") if isinstance(binding, Mapping) else None
+    )
+    calculated_scope_hash = question_scope_set_sha256(cases)
+    if declared_scope_hash is None:
+        reasons.add("question_scope_set_hash_missing")
+    elif calculated_scope_hash != declared_scope_hash:
+        reasons.add("question_scope_set_hash_mismatch")
+
+    current_corpus_hash = corpus_fingerprint_sha256(provisions)
+    declared_corpus_hash = _declared_corpus_fingerprint_sha256(dataset)
+    if declared_corpus_hash is None:
+        reasons.add("corpus_fingerprint_missing")
+    elif declared_corpus_hash != current_corpus_hash:
+        reasons.add("corpus_fingerprint_mismatch")
+
+    snapshot = dataset.get("corpus_snapshot")
+    declared_parser_version = (
+        snapshot.get("parser_contract_version") if isinstance(snapshot, Mapping) else None
+    )
+    if declared_parser_version != PARSER_SCHEMA_VERSION:
+        reasons.add("parser_contract_version_mismatch")
+    declared_provision_count = (
+        snapshot.get("searchable_provision_count") if isinstance(snapshot, Mapping) else None
+    )
+    if declared_provision_count != len(provisions):
+        reasons.add("searchable_provision_count_mismatch")
+
+    # The annotation pool must be checked against the same full searchable
+    # provision population that can produce retrieval hits.  Dataset-generation
+    # heuristics such as ``_is_evidence_eligible`` must not hide legitimate
+    # administrative-rule paths or distractor structure rows here.
+    by_id = {item.provision_id: item for item in provisions}
+    qrel_count = 0
+    qrel_ids: set[str] = set()
+    missing_ids: set[str] = set()
+    changed_ids: set[str] = set()
+    metadata_mismatches: set[tuple[str, str]] = set()
+    missing_judged_candidate_ids: set[str] = set()
+    for case in cases:
+        qrels = case.get("qrels")
+        if not isinstance(qrels, list):
+            reasons.add("invalid_qrels_shape")
+            continue
+        answerability = case.get("answerability")
+        legacy_answerable = case.get("answerable")
+        if answerability == "unanswerable" and qrels:
+            reasons.add("unanswerable_case_has_qrels")
+        if legacy_answerable is False and qrels:
+            reasons.add("unanswerable_case_has_qrels")
+        if answerability in {"fully_answerable", "partially_answerable"} and not qrels:
+            reasons.add("answerable_case_has_no_qrels")
+        if legacy_answerable is True and not qrels:
+            reasons.add("answerable_case_has_no_qrels")
+        judgment_coverage = case.get("judgment_coverage")
+        if isinstance(judgment_coverage, Mapping):
+            judged_candidate_ids = judgment_coverage.get("judged_candidate_provision_ids")
+            if isinstance(judged_candidate_ids, list) and all(
+                isinstance(item, str) and item for item in judged_candidate_ids
+            ):
+                missing_judged_candidate_ids.update(
+                    item for item in judged_candidate_ids if item not in by_id
+                )
+            else:
+                reasons.add("invalid_judged_candidate_ids")
+        else:
+            reasons.add("judgment_coverage_missing")
+        for qrel in qrels:
+            qrel_count += 1
+            if not isinstance(qrel, Mapping):
+                reasons.add("invalid_qrel_shape")
+                continue
+            provision_id = qrel.get("provision_id")
+            source_sha = qrel.get("content_sha256")
+            relevance = qrel.get("relevance")
+            if not isinstance(provision_id, str) or not provision_id:
+                reasons.add("invalid_qrel_identity")
+                continue
+            qrel_ids.add(provision_id)
+            if relevance not in {1, 2}:
+                reasons.add("invalid_qrel_relevance")
+            source = by_id.get(provision_id)
+            if source is None:
+                missing_ids.add(provision_id)
+                continue
+            if source_sha != source.content_sha256:
+                changed_ids.add(provision_id)
+            passage_sha = qrel.get("passage_text_sha256")
+            if passage_sha is not None:
+                current_passage_sha = embedding_text_sha256(
+                    legal_provision_embedding_text(
+                        document_title=source.document_title,
+                        path=source.path,
+                        heading=source.heading,
+                        content=source.content,
+                    )
+                )
+                if passage_sha != current_passage_sha:
+                    metadata_mismatches.add((provision_id, "passage_text_sha256"))
+            expected_metadata = {
+                "document_id": source.document_id,
+                "version_id": source.version_id,
+                "path": source.path,
+                "heading": source.heading,
+                "effective_from": source.effective_from.isoformat(),
+                "effective_to": (source.effective_to.isoformat() if source.effective_to else None),
+            }
+            for field, expected_value in expected_metadata.items():
+                declared_value = qrel.get(field)
+                if field in qrel and str(declared_value) != str(expected_value):
+                    metadata_mismatches.add((provision_id, field))
+
+    if not qrel_count:
+        reasons.add("dataset_has_no_qrels")
+    if missing_ids:
+        reasons.add("qrel_source_missing")
+    if changed_ids:
+        reasons.add("qrel_source_changed")
+    if metadata_mismatches:
+        reasons.add("qrel_metadata_mismatch")
+    if missing_judged_candidate_ids:
+        reasons.add("judged_candidate_source_missing")
+
+    dataset_version = dataset.get("dataset_version", dataset.get("bank_version"))
+    return GoldPreflightReport(
+        ready=not reasons,
+        reasons=tuple(sorted(reasons)),
+        corpus_search_ready=corpus_search_ready,
+        corpus_search_ready_reason=corpus_search_ready_reason,
+        dataset_version=dataset_version if isinstance(dataset_version, str) else None,
+        evaluation_status=(evaluation_status if isinstance(evaluation_status, str) else None),
+        case_count=len(cases),
+        qrel_count=qrel_count,
+        unique_qrel_count=len(qrel_ids),
+        missing_qrel_count=len(missing_ids),
+        changed_qrel_count=len(changed_ids),
+        metadata_mismatch_count=len(metadata_mismatches),
+        missing_judged_candidate_count=len(missing_judged_candidate_ids),
+        missing_qrel_sample=tuple(sorted(missing_ids)[:10]),
+        changed_qrel_sample=tuple(sorted(changed_ids)[:10]),
+        missing_judged_candidate_sample=tuple(sorted(missing_judged_candidate_ids)[:10]),
+        gold_contract_valid=not contract_errors,
+        gold_contract_error_count=len(contract_errors),
+        gold_contract_error_sample=contract_errors[:10],
+        source_bank_binding_valid=not source_binding_errors,
+        approval_manifest_valid=not approval_errors and not approval_contract_errors,
+        approval_manifest_contract_error_count=len(approval_contract_errors),
+        approval_manifest_contract_error_sample=approval_contract_errors[:10],
+        declared_question_set_sha256=declared_question_hash,
+        calculated_question_set_sha256=calculated_question_hash,
+        declared_question_scope_set_sha256=(
+            declared_scope_hash if isinstance(declared_scope_hash, str) else None
+        ),
+        calculated_question_scope_set_sha256=calculated_scope_hash,
+        declared_corpus_fingerprint_sha256=declared_corpus_hash,
+        current_corpus_fingerprint_sha256=current_corpus_hash,
+        declared_parser_contract_version=(
+            str(declared_parser_version) if declared_parser_version is not None else None
+        ),
+        current_parser_contract_version=PARSER_SCHEMA_VERSION,
+        declared_searchable_provision_count=(
+            declared_provision_count if isinstance(declared_provision_count, int) else None
+        ),
+        current_searchable_provision_count=len(provisions),
+    )
+
+
+async def _run(arguments: argparse.Namespace) -> GoldPreflightReport:
+    settings = get_settings()
+    if not settings.database_url:
+        raise SystemExit("DATABASE_URL이 필요합니다.")
+    dataset = json.loads(arguments.dataset.read_text(encoding="utf-8"))
+    if not isinstance(dataset, dict):
+        raise SystemExit("평가셋 JSON의 최상위 값은 객체여야 합니다.")
+    source_bank = json.loads(arguments.source_bank.read_text(encoding="utf-8"))
+    if not isinstance(source_bank, dict):
+        raise SystemExit("질문은행 JSON의 최상위 값은 객체여야 합니다.")
+    approval_manifest = None
+    if arguments.approval_manifest.exists():
+        approval_manifest = json.loads(arguments.approval_manifest.read_text(encoding="utf-8"))
+        if not isinstance(approval_manifest, dict):
+            raise SystemExit("질문 승인 manifest의 최상위 값은 객체여야 합니다.")
+    repository = PostgresLegalRepository(settings.database_url)
+    try:
+        corpus_status = await repository.corpus_search_status()
+        provisions = await _load_provisions(repository)
+    finally:
+        await repository.engine.dispose()
+    return audit_gold_dataset(
+        dataset,
+        provisions,
+        source_bank,
+        approval_manifest,
+        corpus_search_ready=corpus_status.ready,
+        corpus_search_ready_reason=corpus_status.reason,
+    )
+
+
+if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    report = asyncio.run(_run(_arguments()))
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    if not report.ready:
+        raise SystemExit(2)

@@ -7,9 +7,13 @@ from urllib.parse import urlparse
 
 import pytest
 
+from scripts.experiment_d_question_identity import (
+    question_scope_set_sha256,
+    question_scope_sha256,
+)
 from scripts.generate_layperson_energy_questions import (
+    CATALOG_TITLE_SET_SHA256,
     CORPUS_CATALOG,
-    CORPUS_FINGERPRINT_SHA256,
     CURATED_QUESTION_OVERRIDES,
     DEFAULT_REVIEW,
     EXPECTED_COUNTS,
@@ -64,7 +68,10 @@ FORBIDDEN_CASE_FIELDS = {
     "reference",
     "reference_answer",
     "reference_contexts",
+    "reference_response",
     "required_answer_facets",
+    "judgment_coverage",
+    "annotation_review",
 }
 
 LEGAL_TEMPLATE_PATTERN = re.compile(
@@ -98,7 +105,7 @@ def test_bank_has_exactly_one_thousand_questions_with_expected_distributions(
     assert len(questions) == 1000
     assert bank["generation_method"] == {
         "scenario_count": 200,
-        "question_facets_per_scenario": 5,
+        "query_variants_per_scenario": 5,
         "scenario_prompt_pairing": "manually_curated_compatible_groups",
         "wording": "newly_synthesized_not_verbatim_source_copy",
         "human_read_through_override_count": bank["static_audit"]["curated_override_count"],
@@ -123,15 +130,27 @@ def test_questions_are_not_annotated_and_contain_no_gold_answer_fields(
     assert bank["evaluation_readiness"]["planned_gold_artifact"] == (
         "experiment-d-lay-energy-gold-v1.json"
     )
+    assert bank["evaluation_readiness"]["gold_contract_module"] == (
+        "scripts.experiment_d_gold_contract"
+    )
+    assert bank["evaluation_readiness"]["preflight_module"] == (
+        "scripts.preflight_experiment_d_gold"
+    )
     assert bank["corpus_context"] == {
         "as_of_date": "2026-08-03",
         "catalog_titles": list(CORPUS_CATALOG),
-        "catalog_fingerprint_sha256": CORPUS_FINGERPRINT_SHA256,
+        "catalog_title_set_sha256": CATALOG_TITLE_SET_SHA256,
+        "parser_corpus_snapshot_assigned": False,
         "scope_labels_assigned": False,
-        "reason": "question approval must precede corpus coverage annotation",
+        "reason": (
+            "catalog title scope is not a parser corpus snapshot; question approval "
+            "must precede corpus coverage annotation"
+        ),
     }
     assert isinstance(questions, list)
+    assert bank["question_scope_set_sha256"] == question_scope_set_sha256(questions)
     for case in questions:
+        assert question_scope_sha256(case) is not None
         assert case["evaluation_annotation_status"] == "not_annotated"
         assert case["source_origin"] == "source_inspired_synthetic"
         assert (
@@ -160,6 +179,9 @@ def test_questions_are_not_annotated_and_contain_no_gold_answer_fields(
         "unanswerable",
     ]
     assert "insufficient_reason" in bank["evaluation_readiness"]["required_gold_fields"]
+    assert "approval_manifest" in bank["evaluation_readiness"]["required_gold_fields"]
+    assert "reference_contexts" in bank["evaluation_readiness"]["required_gold_fields"]
+    assert "judgment_coverage" in bank["evaluation_readiness"]["required_gold_fields"]
 
 
 def test_every_question_only_references_registered_official_sources(
@@ -222,7 +244,7 @@ def test_questions_are_unique_nfkc_normalized_natural_korean_questions(
     assert _near_duplicate_pairs(questions) == []
 
 
-def test_each_curated_scenario_has_five_distinct_question_facets(
+def test_each_curated_scenario_has_five_distinct_query_variants(
     bank: dict[str, object],
 ) -> None:
     questions = bank["questions"]
