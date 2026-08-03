@@ -12,6 +12,7 @@ from scripts.create_experiment_d_question_approval import (
     QuestionApprovalError,
     build_question_approval_manifest,
     create_question_approval,
+    main,
     parse_approved_at,
 )
 from scripts.experiment_d_question_identity import question_scope_set_sha256
@@ -76,7 +77,7 @@ def test_explicit_confirmations_create_valid_question_only_manifest(tmp_path: Pa
     output_path = tmp_path / "approval.json"
     input_path.write_text(json.dumps(bank, ensure_ascii=False), encoding="utf-8")
 
-    manifest, output_sha256 = create_question_approval(
+    manifest, canonical_manifest_sha256, manifest_file_sha256 = create_question_approval(
         input_path,
         output_path,
         approved_by="question-owner",
@@ -100,7 +101,49 @@ def test_explicit_confirmations_create_valid_question_only_manifest(tmp_path: Pa
     }
     assert "qrels" not in output_path.read_text(encoding="utf-8")
     assert "answer" not in output_path.read_text(encoding="utf-8")
-    assert output_sha256 == hashlib.sha256(output_path.read_bytes()).hexdigest()
+    assert canonical_manifest_sha256 == _canonical_sha256(persisted)
+    assert manifest_file_sha256 == hashlib.sha256(output_path.read_bytes()).hexdigest()
+    assert canonical_manifest_sha256 != manifest_file_sha256
+
+
+def test_cli_prints_canonical_binding_hash_and_distinct_file_hash(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    bank = _bank()
+    input_path = tmp_path / "bank.json"
+    output_path = tmp_path / "approval.json"
+    input_path.write_text(json.dumps(bank, ensure_ascii=False), encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--approved-by",
+            "question-owner",
+            "--approved-at",
+            "2026-08-03T12:30:00+09:00",
+            "--confirm-question-set-sha256",
+            str(bank["question_set_sha256"]),
+            "--confirm-question-scope-set-sha256",
+            str(bank["question_scope_set_sha256"]),
+        ]
+    )
+
+    output = dict(
+        line.split("=", 1) for line in capsys.readouterr().out.splitlines() if "=" in line
+    )
+    persisted = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert output["approval_manifest_sha256"] == _canonical_sha256(persisted)
+    assert (
+        output["approval_manifest_file_sha256"]
+        == hashlib.sha256(output_path.read_bytes()).hexdigest()
+    )
+    assert output["approval_manifest_sha256"] != output["approval_manifest_file_sha256"]
+    assert output["approved_question_count"] == "1000"
 
 
 @pytest.mark.parametrize(

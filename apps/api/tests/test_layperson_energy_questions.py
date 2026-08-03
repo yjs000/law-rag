@@ -127,6 +127,19 @@ def test_questions_are_not_annotated_and_contain_no_gold_answer_fields(
         "retrieval_experiment_executed": False,
     }
     assert bank["evaluation_readiness"]["retrieval_metrics_available"] is False
+    assert bank["evaluation_readiness"]["planned_metrics"] == [
+        "recall_at_k",
+        "precision_at_k",
+        "direct_precision_at_k",
+        "mrr",
+        "ndcg_at_k",
+        "facet_recall_at_k",
+        "all_required_facets_covered_at_k",
+        "scenario_family_macro",
+        "family_bootstrap_confidence_interval_95",
+        "negative_false_positive_rate",
+        "abstention_or_clarification_accuracy",
+    ]
     assert bank["evaluation_readiness"]["planned_gold_artifact"] == (
         "experiment-d-lay-energy-gold-v1.json"
     )
@@ -138,6 +151,9 @@ def test_questions_are_not_annotated_and_contain_no_gold_answer_fields(
     )
     assert bank["corpus_context"] == {
         "as_of_date": "2026-08-03",
+        "corpus_snapshot_id": "mvp-current-corpus-2026-08-03",
+        "supported_as_of_from": "2026-06-03",
+        "supported_as_of_through": "2026-08-03",
         "catalog_titles": list(CORPUS_CATALOG),
         "catalog_title_set_sha256": CATALOG_TITLE_SET_SHA256,
         "parser_corpus_snapshot_assigned": False,
@@ -311,7 +327,7 @@ def test_review_contains_every_question_and_disclaims_search_and_gold_answers(
     assert "정답·qrels 없음, 검색 실험 실행 안 함" in review
     assert "질문별 정답처럼 붙이지 않았다" in review
     assert "실제 평가셋으로 쓰려면" in review
-    assert "Recall·MRR" in review
+    assert "Recall·Precision·MRR·nDCG" in review
     assert isinstance(questions, list)
     for case in questions:
         assert review.count(f"| {case['id']} |") == 1

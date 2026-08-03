@@ -15,6 +15,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.domain.corpus_temporal_contract import (
+    CURRENT_CORPUS_SNAPSHOT_ID,
+    CURRENT_CORPUS_SUPPORTED_FROM,
+    CURRENT_CORPUS_SUPPORTED_THROUGH,
+)
 from scripts.experiment_d_question_identity import question_scope_set_sha256
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -2477,6 +2482,9 @@ def build_bank() -> dict[str, object]:
         },
         "corpus_context": {
             "as_of_date": CHECKED_AT,
+            "corpus_snapshot_id": CURRENT_CORPUS_SNAPSHOT_ID,
+            "supported_as_of_from": CURRENT_CORPUS_SUPPORTED_FROM.isoformat(),
+            "supported_as_of_through": CURRENT_CORPUS_SUPPORTED_THROUGH.isoformat(),
             "catalog_titles": list(CORPUS_CATALOG),
             "catalog_title_set_sha256": CATALOG_TITLE_SET_SHA256,
             "parser_corpus_snapshot_assigned": False,
@@ -2490,7 +2498,7 @@ def build_bank() -> dict[str, object]:
             "retrieval_metrics_available": False,
             "reason": (
                 "질문 승인 뒤 독립적으로 answerability와 qrels를 주석해야 "
-                "Recall·MRR·nDCG를 계산할 수 있음"
+                "Recall·Precision·MRR·nDCG를 계산할 수 있음"
             ),
             "required_gold_fields": [
                 "evaluation_status",
@@ -2522,10 +2530,14 @@ def build_bank() -> dict[str, object]:
             },
             "planned_metrics": [
                 "recall_at_k",
+                "precision_at_k",
+                "direct_precision_at_k",
                 "mrr",
                 "ndcg_at_k",
                 "facet_recall_at_k",
                 "all_required_facets_covered_at_k",
+                "scenario_family_macro",
+                "family_bootstrap_confidence_interval_95",
                 "negative_false_positive_rate",
                 "abstention_or_clarification_accuracy",
             ],
@@ -2599,7 +2611,8 @@ def render_review(bank: dict[str, object]) -> str:
         ),
         "",
         (
-            "이 파일만으로는 Recall·MRR 같은 검색 정확도를 계산할 수 없다. 질문을 "
+            "이 파일만으로는 Recall·Precision·MRR·nDCG 같은 검색 정확도를 계산할 수 "
+            "없다. 질문을 "
             "승인하면 별도 승인 manifest로 질문 해시를 먼저 고정한다. 그 뒤 검색 "
             "결과와 독립적으로 답변 가능 여부·필수 답변 요소·직접 근거 조문 "
             "목록(qrels)·기준 응답을 주석한 별도 gold 파일이 필요하다."

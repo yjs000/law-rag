@@ -239,7 +239,7 @@ def create_question_approval(
     approved_at: datetime,
     confirmed_question_set_sha256: str | None,
     confirmed_question_scope_set_sha256: str | None,
-) -> tuple[ExperimentDQuestionApprovalManifest, str]:
+) -> tuple[ExperimentDQuestionApprovalManifest, str, str]:
     bank = load_question_bank(input_path)
     manifest = build_question_approval_manifest(
         bank,
@@ -248,8 +248,9 @@ def create_question_approval(
         confirmed_question_set_sha256=confirmed_question_set_sha256,
         confirmed_question_scope_set_sha256=confirmed_question_scope_set_sha256,
     )
-    output_sha256 = atomic_write_manifest(output_path, manifest)
-    return manifest, output_sha256
+    canonical_manifest_sha256 = _canonical_sha256(manifest.model_dump(mode="json"))
+    manifest_file_sha256 = atomic_write_manifest(output_path, manifest)
+    return manifest, canonical_manifest_sha256, manifest_file_sha256
 
 
 def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -271,7 +272,7 @@ def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _arguments(argv)
-    manifest, output_sha256 = create_question_approval(
+    manifest, canonical_manifest_sha256, manifest_file_sha256 = create_question_approval(
         args.input,
         args.output,
         approved_by=args.approved_by,
@@ -280,7 +281,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         confirmed_question_scope_set_sha256=args.confirm_question_scope_set_sha256,
     )
     print(f"approval_manifest={args.output}")
-    print(f"approval_manifest_sha256={output_sha256}")
+    print(f"approval_manifest_sha256={canonical_manifest_sha256}")
+    print(f"approval_manifest_file_sha256={manifest_file_sha256}")
     print(f"approved_question_count={len(manifest.questions)}")
     return 0
 
