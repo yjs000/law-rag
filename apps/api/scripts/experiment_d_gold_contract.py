@@ -108,6 +108,11 @@ class GoldMetricProtocol(StrictModel):
     recall_and_mrr_positive_grade: Literal[2]
     recall_definition: Literal["macro_fraction_of_grade2_qrels"]
     hit_rate_definition: Literal["macro_any_grade2_qrel"]
+    precision_positive_grades: tuple[Literal[1], Literal[2]]
+    precision_definition: Literal["count_grade1_or_grade2_qrels_in_top_k_divided_by_k"]
+    direct_precision_positive_grade: Literal[2]
+    direct_precision_definition: Literal["count_grade2_qrels_in_top_k_divided_by_k"]
+    precision_denominator: Literal["fixed_k_even_when_fewer_candidates_returned"]
     mrr_cutoff: Literal[10]
     ndcg_uses_graded_relevance: Literal[True]
     ndcg_gain: Literal["exp2_minus_1"]
@@ -127,7 +132,27 @@ class GoldMetricProtocol(StrictModel):
     primary_split: Literal["test"]
     calibration_aggregation: Literal["diagnostic_only"]
     combined_aggregation: Literal["diagnostic_only"]
+    primary_ranking_metric: Literal["ndcg_at_10"]
+    completeness_gate_metric: Literal["recall_at_10"]
+    top_context_purity_diagnostic: Literal["precision_at_5"]
+    report_primary_aggregation: Literal["scenario_family_macro_of_within_family_case_macro"]
+    legacy_primary_aggregation: Literal["case_macro_backward_compatible"]
+    confidence_interval_population: Literal["held_out_test_fully_answerable_only"]
+    confidence_interval_metrics: tuple[
+        Literal["ndcg_at_10"],
+        Literal["recall_at_10"],
+        Literal["precision_at_5"],
+    ]
+    bootstrap_resampling_unit: Literal["scenario_family_id"]
+    bootstrap_algorithm: Literal["sha256_counter_family_resample_with_replacement_v1"]
+    bootstrap_seed: Literal[20260803]
+    bootstrap_replicates: Literal[2000]
+    bootstrap_confidence_level: Literal[0.95]
+    bootstrap_interval_method: Literal["equal_tailed_percentile_type7"]
+    bootstrap_family_order: Literal["scenario_family_id_utf8_lexicographic"]
+    bootstrap_draw_method: Literal["sha256_prefix_uint64_big_endian_mod_family_count"]
     recall_mrr_ndcg_population: tuple[Literal["fully_answerable"], ...]
+    precision_population: tuple[Literal["fully_answerable"], ...]
     separate_answerability_reports: tuple[
         Literal[
             "partially_answerable",
@@ -144,6 +169,8 @@ class GoldMetricProtocol(StrictModel):
     ) -> GoldMetricProtocol:
         if self.recall_mrr_ndcg_population != ("fully_answerable",):
             raise ValueError("Recall/MRR/nDCG population must be fully_answerable only")
+        if self.precision_population != ("fully_answerable",):
+            raise ValueError("Precision population must be fully_answerable only")
         expected_separate = {
             "partially_answerable",
             "clarification_required",

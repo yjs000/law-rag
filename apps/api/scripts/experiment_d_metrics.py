@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import fsum, log2
+from math import floor, fsum, log2
 from typing import Literal
 
 from scripts.experiment_d_gold_contract import ExperimentDGoldDataset
 
 DEFAULT_KS = (1, 3, 5, 10)
+PRIMARY_RANKING_METRIC = "ndcg_at_10"
+COMPLETENESS_GATE_METRIC = "recall_at_10"
+TOP_CONTEXT_PURITY_DIAGNOSTIC = "precision_at_5"
+FAMILY_BOOTSTRAP_ALGORITHM = "sha256_counter_family_resample_with_replacement_v1"
+FAMILY_BOOTSTRAP_SEED = 20260803
+FAMILY_BOOTSTRAP_REPLICATES = 2000
+FAMILY_BOOTSTRAP_CONFIDENCE_LEVEL = 0.95
+FAMILY_BOOTSTRAP_INTERVAL_METHOD = "equal_tailed_percentile_type7"
+FAMILY_BOOTSTRAP_FAMILY_ORDER = "scenario_family_id_utf8_lexicographic"
+FAMILY_BOOTSTRAP_DRAW_METHOD = "sha256_prefix_uint64_big_endian_mod_family_count"
+HEADLINE_METRICS = (
+    PRIMARY_RANKING_METRIC,
+    COMPLETENESS_GATE_METRIC,
+    TOP_CONTEXT_PURITY_DIAGNOSTIC,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +39,7 @@ class MetricQrel:
 @dataclass(frozen=True, slots=True)
 class MetricCase:
     case_id: str
+    scenario_family_id: str
     split: Literal["calibration", "test"]
     answerability: str
     supported_facet_ids: tuple[str, ...]
@@ -37,6 +54,7 @@ def metric_cases_from_gold(dataset: ExperimentDGoldDataset) -> tuple[MetricCase,
     return tuple(
         MetricCase(
             case_id=case.id,
+            scenario_family_id=case.scenario_family_id,
             split=case.split,
             answerability=case.answerability,
             supported_facet_ids=tuple(
@@ -85,6 +103,7 @@ def _case_metrics(
 ) -> dict[str, object]:
     ranking = _validate_ranking(ranked_ids)
     grade_by_id = {qrel.provision_id: qrel.relevance for qrel in case.qrels}
+    relevant_ids = set(grade_by_id)
     direct_ids = {qrel.provision_id for qrel in case.qrels if qrel.relevance == 2}
     direct_facets_by_id = {
         qrel.provision_id: set(qrel.facet_ids) for qrel in case.qrels if qrel.relevance == 2
@@ -99,6 +118,7 @@ def _case_metrics(
     ]
     values: dict[str, object] = {
         "case_id": case.case_id,
+        "scenario_family_id": case.scenario_family_id,
         "split": case.split,
         "answerability": case.answerability,
         "first_direct_rank": direct_ranks[0] if direct_ranks else None,
@@ -109,7 +129,12 @@ def _case_metrics(
     ideal_grades = sorted(grade_by_id.values(), reverse=True)
     for k in ks:
         top = ranking[:k]
+        retrieved_relevant = set(top) & relevant_ids
         retrieved_direct = set(top) & direct_ids
+        # Precision uses the predeclared cutoff as its denominator. Returning
+        # fewer than k candidates must not inflate a sparse result to 1.0.
+        values[f"precision_at_{k}"] = len(retrieved_relevant) / k
+        values[f"direct_precision_at_{k}"] = len(retrieved_direct) / k
         values[f"recall_at_{k}"] = len(retrieved_direct) / len(direct_ids)
         values[f"hit_rate_at_{k}"] = float(bool(retrieved_direct))
         actual_grades = [grade_by_id.get(item, 0) for item in top]
@@ -140,6 +165,8 @@ def _macro_average(
                 key: None
                 for k in ks
                 for key in (
+                    f"precision_at_{k}",
+                    f"direct_precision_at_{k}",
                     f"recall_at_{k}",
                     f"hit_rate_at_{k}",
                     f"ndcg_at_{k}",
@@ -154,6 +181,8 @@ def _macro_average(
             key
             for k in ks
             for key in (
+                f"precision_at_{k}",
+                f"direct_precision_at_{k}",
                 f"recall_at_{k}",
                 f"hit_rate_at_{k}",
                 f"ndcg_at_{k}",
@@ -174,6 +203,131 @@ def _macro_average(
     }
 
 
+def _family_macro_average(
+    case_metrics: Sequence[Mapping[str, object]],
+    ks: tuple[int, ...],
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Average cases within a family, then give every family equal weight."""
+
+    grouped: dict[str, list[Mapping[str, object]]] = defaultdict(list)
+    for record in case_metrics:
+        grouped[str(record["scenario_family_id"])].append(record)
+    per_family = [
+        {
+            "scenario_family_id": family_id,
+            **_macro_average(
+                sorted(grouped[family_id], key=lambda item: str(item["case_id"])),
+                ks,
+            ),
+        }
+        for family_id in sorted(grouped)
+    ]
+    family_macro = _macro_average(per_family, ks)
+    family_count = int(family_macro.pop("evaluated_query_count"))
+    return (
+        {
+            "evaluated_query_count": len(case_metrics),
+            "evaluated_scenario_family_count": family_count,
+            **family_macro,
+        },
+        per_family,
+    )
+
+
+def _percentile_type7(values: Sequence[float], probability: float) -> float:
+    """Return the deterministic R/NumPy-style type-7 sample quantile."""
+
+    if not values:
+        raise ValueError("a percentile requires at least one value")
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * probability
+    lower_index = floor(position)
+    upper_index = min(lower_index + 1, len(ordered) - 1)
+    fraction = position - lower_index
+    return ordered[lower_index] + fraction * (ordered[upper_index] - ordered[lower_index])
+
+
+def _family_bootstrap_confidence_intervals(
+    per_family: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, float]]:
+    """Bootstrap whole scenario families without depending on Python's RNG.
+
+    Family IDs are sorted once. Each replacement draw is the first unsigned
+    64-bit big-endian integer of SHA-256(seed|replicate|draw), modulo the family
+    count. The same family sample is used for every predeclared headline metric.
+    """
+
+    if not per_family:
+        raise ValueError("family bootstrap requires at least one scenario family")
+    ordered_families = sorted(per_family, key=lambda item: str(item["scenario_family_id"]))
+    family_count = len(ordered_families)
+    replicates: dict[str, list[float]] = {metric: [] for metric in HEADLINE_METRICS}
+    for replicate_index in range(FAMILY_BOOTSTRAP_REPLICATES):
+        totals = {metric: 0.0 for metric in HEADLINE_METRICS}
+        for draw_index in range(family_count):
+            draw_key = (
+                f"experiment-d-family-bootstrap-v1|{FAMILY_BOOTSTRAP_SEED}|"
+                f"{replicate_index}|{draw_index}"
+            ).encode("ascii")
+            digest = hashlib.sha256(draw_key).digest()
+            family_index = int.from_bytes(digest[:8], "big") % family_count
+            selected = ordered_families[family_index]
+            for metric in HEADLINE_METRICS:
+                totals[metric] += float(selected[metric])
+        for metric in HEADLINE_METRICS:
+            replicates[metric].append(totals[metric] / family_count)
+
+    tail_probability = (1.0 - FAMILY_BOOTSTRAP_CONFIDENCE_LEVEL) / 2.0
+    return {
+        metric: {
+            "lower": round(_percentile_type7(values, tail_probability), 12),
+            "upper": round(_percentile_type7(values, 1.0 - tail_probability), 12),
+        }
+        for metric, values in replicates.items()
+    }
+
+
+def _family_primary_report(
+    primary_case_metrics: Sequence[Mapping[str, object]],
+    ks: tuple[int, ...],
+) -> dict[str, object]:
+    family_metrics, per_family = _family_macro_average(primary_case_metrics, ks)
+    confidence_intervals = _family_bootstrap_confidence_intervals(per_family)
+    roles = {
+        PRIMARY_RANKING_METRIC: "primary_ranking_metric",
+        COMPLETENESS_GATE_METRIC: "completeness_gate",
+        TOP_CONTEXT_PURITY_DIAGNOSTIC: "top_context_purity_diagnostic",
+    }
+    return {
+        "population": {
+            "split": "test",
+            "answerability": "fully_answerable",
+        },
+        "aggregation": "scenario_family_macro_of_within_family_case_macro",
+        "metrics": family_metrics,
+        "headline_metrics": {
+            metric: {
+                "role": roles[metric],
+                "value": family_metrics[metric],
+                "confidence_interval_95": confidence_intervals[metric],
+            }
+            for metric in HEADLINE_METRICS
+        },
+        "bootstrap": {
+            "resampling_unit": "scenario_family_id",
+            "algorithm": FAMILY_BOOTSTRAP_ALGORITHM,
+            "seed": FAMILY_BOOTSTRAP_SEED,
+            "replicates": FAMILY_BOOTSTRAP_REPLICATES,
+            "confidence_level": FAMILY_BOOTSTRAP_CONFIDENCE_LEVEL,
+            "interval_method": FAMILY_BOOTSTRAP_INTERVAL_METHOD,
+            "family_order": FAMILY_BOOTSTRAP_FAMILY_ORDER,
+            "draw_method": FAMILY_BOOTSTRAP_DRAW_METHOD,
+            "confidence_intervals": confidence_intervals,
+        },
+        "per_family": per_family,
+    }
+
+
 def _separate_case_diagnostic(
     case: MetricCase,
     ranking: Sequence[str],
@@ -190,6 +344,7 @@ def _separate_case_diagnostic(
     ]
     values: dict[str, object] = {
         "case_id": case.case_id,
+        "scenario_family_id": case.scenario_family_id,
         "split": case.split,
         "answerability": case.answerability,
         "grade2_qrel_count": len(direct_ids),
@@ -409,13 +564,27 @@ def evaluate_dense_retrieval(
     Report all other aggregates as diagnostics.
     """
 
-    if not ks or tuple(sorted(set(ks))) != ks or any(k <= 0 for k in ks) or ks[-1] != 10:
+    if (
+        not ks
+        or tuple(sorted(set(ks))) != ks
+        or any(k <= 0 for k in ks)
+        or 5 not in ks
+        or ks[-1] != 10
+    ):
         raise ValueError(
-            "metric cutoffs must be unique positive integers in ascending order ending at 10"
+            "metric cutoffs must be unique positive integers in ascending order "
+            "including 5 and ending at 10"
         )
     case_ids = [case.case_id for case in cases]
     if len(set(case_ids)) != len(case_ids):
         raise ValueError("metric cases must have unique IDs")
+    if any(not case.scenario_family_id for case in cases):
+        raise ValueError("metric cases must have non-empty scenario family IDs")
+    family_splits: dict[str, set[str]] = defaultdict(set)
+    for case in cases:
+        family_splits[case.scenario_family_id].add(case.split)
+    if any(len(splits) != 1 for splits in family_splits.values()):
+        raise ValueError("scenario families cannot cross calibration and test splits")
     ranking_ids = set(rankings_by_case)
     expected_ids = set(case_ids)
     if ranking_ids != expected_ids:
@@ -441,6 +610,8 @@ def evaluate_dense_retrieval(
         for split in ("calibration", "test")
     }
     primary = by_split["test"]
+    primary_case_metrics = [item for item in per_case if item["split"] == "test"]
+    family_primary = _family_primary_report(primary_case_metrics, ks)
     diagnostic_aggregates = {
         "calibration_fully_answerable": _fully_answerable_diagnostic(
             [item for item in per_case if item["split"] == "calibration"],
@@ -482,8 +653,11 @@ def evaluate_dense_retrieval(
             "answerability": "fully_answerable",
         },
         "primary": primary,
+        "primary_semantics": "backward_compatible_held_out_test_case_macro",
         "overall": primary,
         "overall_semantics": "backward_compatible_alias_of_primary",
+        "reporting_primary_key": "family_primary",
+        "family_primary": family_primary,
         "diagnostic_aggregates": diagnostic_aggregates,
         "by_split": by_split,
         "by_split_semantics": {
@@ -510,9 +684,17 @@ def evaluate_dense_retrieval(
 
 
 __all__ = [
+    "COMPLETENESS_GATE_METRIC",
     "DEFAULT_KS",
+    "FAMILY_BOOTSTRAP_ALGORITHM",
+    "FAMILY_BOOTSTRAP_CONFIDENCE_LEVEL",
+    "FAMILY_BOOTSTRAP_REPLICATES",
+    "FAMILY_BOOTSTRAP_SEED",
+    "HEADLINE_METRICS",
     "MetricCase",
     "MetricQrel",
+    "PRIMARY_RANKING_METRIC",
+    "TOP_CONTEXT_PURITY_DIAGNOSTIC",
     "evaluate_dense_retrieval",
     "metric_cases_from_gold",
 ]

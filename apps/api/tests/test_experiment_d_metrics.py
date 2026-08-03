@@ -5,18 +5,26 @@ from math import isclose, log2
 
 import pytest
 
-from scripts.experiment_d_metrics import MetricCase, MetricQrel, evaluate_dense_retrieval
+from scripts.experiment_d_metrics import (
+    FAMILY_BOOTSTRAP_REPLICATES,
+    FAMILY_BOOTSTRAP_SEED,
+    MetricCase,
+    MetricQrel,
+    evaluate_dense_retrieval,
+)
 
 
 def _case(
     case_id: str,
     *,
+    scenario_family_id: str | None = None,
     split: str = "test",
     answerability: str = "fully_answerable",
     boundary_type: str | None = None,
 ) -> MetricCase:
     return MetricCase(
         case_id=case_id,
+        scenario_family_id=scenario_family_id or f"family-{case_id}",
         split=split,  # type: ignore[arg-type]
         answerability=answerability,
         supported_facet_ids=("permit",),
@@ -41,6 +49,12 @@ def test_dense_metrics_use_direct_grade_two_and_graded_ndcg() -> None:
     }
     assert primary["recall_at_1"] == 0.0
     assert primary["recall_at_3"] == 1.0
+    assert primary["precision_at_1"] == 1.0
+    assert primary["direct_precision_at_1"] == 0.0
+    assert isclose(primary["precision_at_3"], 2 / 3)
+    assert isclose(primary["direct_precision_at_3"], 1 / 3)
+    assert primary["precision_at_5"] == 0.4
+    assert primary["direct_precision_at_5"] == 0.2
     assert primary["mrr_at_10"] == 0.5
     assert isclose(primary["ndcg_at_1"], 1 / 3)
     expected_ndcg_at_3 = (1 + 3 / log2(3)) / (3 + 1 / log2(3))
@@ -53,6 +67,84 @@ def test_dense_metrics_use_direct_grade_two_and_graded_ndcg() -> None:
     assert result["by_boundary_type"]["near_threshold"]["recall_at_3"] == 1.0
 
 
+def test_family_macro_is_report_primary_and_bootstrap_is_deterministic() -> None:
+    cases = [
+        _case("family-a-1", scenario_family_id="family-a"),
+        _case("family-a-2", scenario_family_id="family-a"),
+        _case("family-b-1", scenario_family_id="family-b"),
+    ]
+    rankings = {
+        "family-a-1": ["direct"],
+        "family-a-2": ["direct"],
+        "family-b-1": ["noise"],
+    }
+
+    first = evaluate_dense_retrieval(cases, rankings)
+    second = evaluate_dense_retrieval(cases, rankings)
+
+    assert first == second
+    assert first["primary"]["recall_at_10"] == pytest.approx(2 / 3)
+    assert first["primary_semantics"] == "backward_compatible_held_out_test_case_macro"
+    assert first["reporting_primary_key"] == "family_primary"
+    family_primary = first["family_primary"]
+    assert family_primary["aggregation"] == ("scenario_family_macro_of_within_family_case_macro")
+    assert family_primary["metrics"]["evaluated_query_count"] == 3
+    assert family_primary["metrics"]["evaluated_scenario_family_count"] == 2
+    assert family_primary["metrics"]["recall_at_10"] == 0.5
+    assert family_primary["headline_metrics"]["ndcg_at_10"]["role"] == ("primary_ranking_metric")
+    assert family_primary["headline_metrics"]["recall_at_10"]["role"] == ("completeness_gate")
+    assert family_primary["headline_metrics"]["precision_at_5"]["role"] == (
+        "top_context_purity_diagnostic"
+    )
+    assert family_primary["bootstrap"]["seed"] == FAMILY_BOOTSTRAP_SEED
+    assert family_primary["bootstrap"]["replicates"] == FAMILY_BOOTSTRAP_REPLICATES
+    recall_interval = family_primary["bootstrap"]["confidence_intervals"]["recall_at_10"]
+    assert recall_interval["lower"] <= 0.5 <= recall_interval["upper"]
+
+
+def test_family_macro_excludes_calibration_and_non_fully_answerable_cases() -> None:
+    test_full = _case("test-full", scenario_family_id="test-family")
+    calibration_full = _case(
+        "calibration-full",
+        scenario_family_id="calibration-family",
+        split="calibration",
+    )
+    test_partial = _case(
+        "test-partial",
+        scenario_family_id="partial-family",
+        answerability="partially_answerable",
+    )
+
+    result = evaluate_dense_retrieval(
+        [test_full, calibration_full, test_partial],
+        {
+            "test-full": ["direct"],
+            "calibration-full": ["noise"],
+            "test-partial": ["noise"],
+        },
+    )
+
+    family_primary = result["family_primary"]
+    assert family_primary["metrics"]["evaluated_query_count"] == 1
+    assert family_primary["metrics"]["evaluated_scenario_family_count"] == 1
+    assert [item["scenario_family_id"] for item in family_primary["per_family"]] == ["test-family"]
+
+
+def test_scenario_family_cannot_cross_calibration_and_test() -> None:
+    calibration = _case(
+        "calibration",
+        scenario_family_id="shared-family",
+        split="calibration",
+    )
+    test = _case("test", scenario_family_id="shared-family")
+
+    with pytest.raises(ValueError, match="cannot cross"):
+        evaluate_dense_retrieval(
+            [calibration, test],
+            {"calibration": ["direct"], "test": ["direct"]},
+        )
+
+
 def test_duplicate_hit_fails_closed() -> None:
     case = _case("q1")
 
@@ -63,6 +155,7 @@ def test_duplicate_hit_fails_closed() -> None:
 def test_recall_is_fraction_of_direct_qrels_and_hit_rate_is_separate() -> None:
     case = MetricCase(
         case_id="q1",
+        scenario_family_id="family-q1",
         split="test",
         answerability="fully_answerable",
         supported_facet_ids=("permit",),
@@ -192,6 +285,7 @@ def test_core_metrics_require_a_fully_answerable_population() -> None:
 def test_fully_answerable_case_requires_direct_qrel_and_supported_facet() -> None:
     missing_direct = MetricCase(
         case_id="missing-direct",
+        scenario_family_id="family-missing-direct",
         split="test",
         answerability="fully_answerable",
         supported_facet_ids=("permit",),
@@ -201,6 +295,7 @@ def test_fully_answerable_case_requires_direct_qrel_and_supported_facet() -> Non
     )
     missing_facet = MetricCase(
         case_id="missing-facet",
+        scenario_family_id="family-missing-facet",
         split="test",
         answerability="fully_answerable",
         supported_facet_ids=(),

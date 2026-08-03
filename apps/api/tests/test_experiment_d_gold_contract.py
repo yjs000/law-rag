@@ -195,6 +195,11 @@ def _dataset() -> dict[str, object]:
             "recall_and_mrr_positive_grade": 2,
             "recall_definition": "macro_fraction_of_grade2_qrels",
             "hit_rate_definition": "macro_any_grade2_qrel",
+            "precision_positive_grades": [1, 2],
+            "precision_definition": ("count_grade1_or_grade2_qrels_in_top_k_divided_by_k"),
+            "direct_precision_positive_grade": 2,
+            "direct_precision_definition": ("count_grade2_qrels_in_top_k_divided_by_k"),
+            "precision_denominator": "fixed_k_even_when_fewer_candidates_returned",
             "mrr_cutoff": 10,
             "ndcg_uses_graded_relevance": True,
             "ndcg_gain": "exp2_minus_1",
@@ -214,7 +219,27 @@ def _dataset() -> dict[str, object]:
             "primary_split": "test",
             "calibration_aggregation": "diagnostic_only",
             "combined_aggregation": "diagnostic_only",
+            "primary_ranking_metric": "ndcg_at_10",
+            "completeness_gate_metric": "recall_at_10",
+            "top_context_purity_diagnostic": "precision_at_5",
+            "report_primary_aggregation": ("scenario_family_macro_of_within_family_case_macro"),
+            "legacy_primary_aggregation": "case_macro_backward_compatible",
+            "confidence_interval_population": "held_out_test_fully_answerable_only",
+            "confidence_interval_metrics": [
+                "ndcg_at_10",
+                "recall_at_10",
+                "precision_at_5",
+            ],
+            "bootstrap_resampling_unit": "scenario_family_id",
+            "bootstrap_algorithm": ("sha256_counter_family_resample_with_replacement_v1"),
+            "bootstrap_seed": 20260803,
+            "bootstrap_replicates": 2000,
+            "bootstrap_confidence_level": 0.95,
+            "bootstrap_interval_method": "equal_tailed_percentile_type7",
+            "bootstrap_family_order": "scenario_family_id_utf8_lexicographic",
+            "bootstrap_draw_method": ("sha256_prefix_uint64_big_endian_mod_family_count"),
             "recall_mrr_ndcg_population": ["fully_answerable"],
+            "precision_population": ["fully_answerable"],
             "separate_answerability_reports": [
                 "partially_answerable",
                 "clarification_required",
@@ -428,6 +453,25 @@ def test_full_gold_preserves_family_level_calibration_test_split() -> None:
     assert dataset.metric_protocol.calibration_aggregation == "diagnostic_only"
     assert dataset.metric_protocol.combined_aggregation == "diagnostic_only"
     assert dataset.metric_protocol.recall_mrr_ndcg_population == ("fully_answerable",)
+    assert dataset.metric_protocol.precision_positive_grades == (1, 2)
+    assert dataset.metric_protocol.precision_denominator == (
+        "fixed_k_even_when_fewer_candidates_returned"
+    )
+    assert dataset.metric_protocol.precision_population == ("fully_answerable",)
+    assert dataset.metric_protocol.primary_ranking_metric == "ndcg_at_10"
+    assert dataset.metric_protocol.completeness_gate_metric == "recall_at_10"
+    assert dataset.metric_protocol.top_context_purity_diagnostic == "precision_at_5"
+    assert dataset.metric_protocol.report_primary_aggregation == (
+        "scenario_family_macro_of_within_family_case_macro"
+    )
+    assert dataset.metric_protocol.bootstrap_resampling_unit == "scenario_family_id"
+    assert dataset.metric_protocol.bootstrap_seed == 20260803
+    assert dataset.metric_protocol.bootstrap_replicates == 2000
+    assert dataset.metric_protocol.confidence_interval_metrics == (
+        "ndcg_at_10",
+        "recall_at_10",
+        "precision_at_5",
+    )
     assert set(dataset.metric_protocol.separate_answerability_reports) == {
         "partially_answerable",
         "clarification_required",
@@ -480,6 +524,51 @@ def test_metric_protocol_rejects_mixed_retrieval_population() -> None:
     protocol["recall_mrr_ndcg_population"] = []
 
     with pytest.raises(ValidationError, match="fully_answerable only"):
+        GoldMetricProtocol.model_validate(protocol)
+
+    protocol = copy.deepcopy(_dataset()["metric_protocol"])
+    protocol["precision_population"] = []
+
+    with pytest.raises(ValidationError, match="Precision population"):
+        GoldMetricProtocol.model_validate(protocol)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("precision_positive_grades", [2, 1]),
+        ("precision_definition", "unspecified"),
+        ("direct_precision_positive_grade", 1),
+        ("direct_precision_definition", "unspecified"),
+        ("precision_denominator", "returned_count"),
+        ("primary_ranking_metric", "mrr_at_10"),
+        ("completeness_gate_metric", "hit_rate_at_10"),
+        ("top_context_purity_diagnostic", "direct_precision_at_5"),
+        ("report_primary_aggregation", "case_macro"),
+        ("legacy_primary_aggregation", "scenario_family_macro"),
+        ("confidence_interval_population", "calibration_and_test"),
+        (
+            "confidence_interval_metrics",
+            ["recall_at_10", "ndcg_at_10", "precision_at_5"],
+        ),
+        ("bootstrap_resampling_unit", "case_id"),
+        ("bootstrap_algorithm", "python_random"),
+        ("bootstrap_seed", 7),
+        ("bootstrap_replicates", 1000),
+        ("bootstrap_confidence_level", 0.9),
+        ("bootstrap_interval_method", "normal"),
+        ("bootstrap_family_order", "input_order"),
+        ("bootstrap_draw_method", "python_random_choices"),
+    ],
+)
+def test_metric_protocol_seals_precision_headlines_and_family_bootstrap(
+    field: str,
+    invalid_value: object,
+) -> None:
+    protocol = copy.deepcopy(_dataset()["metric_protocol"])
+    protocol[field] = invalid_value
+
+    with pytest.raises(ValidationError):
         GoldMetricProtocol.model_validate(protocol)
 
 
