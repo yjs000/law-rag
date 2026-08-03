@@ -598,15 +598,13 @@ def _profile_gate_failure(state: dict[str, object] | None) -> str | None:
         return "embedding dimensions do not match the active profile"
     if state["non_unit_count"]:
         return "one or more embeddings are not L2-normalized"
-    if not state["hnsw_ready"]:
-        return "profile HNSW index is not ready"
     return None
 
 
 async def _promote_embedding_profile(
     repository: PostgresLegalRepository,
 ) -> dict[str, object]:
-    """Atomically verify the complete index and expose it to dense retrieval."""
+    """Atomically verify the complete vector profile and expose exact dense retrieval."""
     failure: str | None = None
     state: dict[str, object] | None = None
     async with repository.engine.begin() as connection:
@@ -885,12 +883,11 @@ async def _verify_dense_search(
     state = await _database_state(repository)
     if (
         state["pending_count"]
-        or not state["hnsw_ready"]
         or not state["profile_active"]
         or not state["corpus_search_capability"]
         or not state["corpus_search_ready"]
     ):
-        raise RuntimeError("dense index is not ready for verification")
+        raise RuntimeError("dense retrieval is not ready for verification")
     vector = (
         await _embedder(settings, input_type=NVIDIA_NEMOTRON_512_PROFILE.query_input_type).embed(
             [query]

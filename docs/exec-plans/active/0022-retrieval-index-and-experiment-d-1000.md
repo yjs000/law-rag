@@ -96,6 +96,7 @@
 - [x] raw provision top 11 경계 검사, Recall/HitRate/Precision/MRR@10/nDCG/facet metric core, query plan·retrieval state·critical code 지문과 원자적 결과 게시를 구현하고 합성 fixture로 검증한다.
 - [x] 실험 D runner에서 HNSW 상태·게이트·결과 비교를 제거하고 exhaustive exact cosine만 남긴다.
 - [x] 운영 dense 검색도 exhaustive exact cosine으로 고정해 HNSW가 수동 검색 검증에 섞이지 않게 한다.
+- [x] 기존 `hnsw_ready`를 backfill 프로필 승격과 exact 검색 준비 조건에서 제거하고 상태 진단값으로만 남긴다.
 - [x] 현재 corpus 지원 기준일 `2026-06-03..2026-08-03`을 backend에 고정하고 범위 밖 요청을 검색 전에 차단하며 상태 API에 경계를 노출한다.
 - [ ] 프런트 날짜 선택기가 상태 API의 지원 범위를 표시하고 범위 밖 선택·제출을 막는다. 서버 `422`는 최종 권위로 유지한다.
 - [x] 일반인 gold의 질문 승인·answerability·facet·qrel·기준문맥·blind 주석·split 불변조건을 실행 가능한 Pydantic 계약으로 고정한다.

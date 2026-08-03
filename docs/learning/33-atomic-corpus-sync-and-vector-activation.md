@@ -254,8 +254,7 @@ JSONL은 append 후 flush와 `fsync`를 수행한다. 프로세스가 마지막 
 2. 모든 저장 SHA가 현재 `legal-provision-v1` 입력과 같은가
 3. provider, model, 원본·저장 차원, query/passage 유형, 축약, 정규화와 profile version이 같은가
 4. 벡터가 유한하고 L2 norm이 1인가
-5. profile 전용 HNSW index가 valid·ready이며 정의도 기대 계약과 같은가
-6. eligible corpus가 비어 있지 않은가
+5. eligible corpus가 비어 있지 않은가
 
 하나라도 실패하면 `active=true`나 `corpus.search_ready=true`를 쓰지 않는다. 모두 성공하면 collector run lock과 mutation lock을 보유한 같은 승격 transaction에서 profile을 활성화하고 corpus 게이트를 true로 바꾼다. 운영자가 profile이나 runtime flag를 수동으로 켜면 이 안전 게이트를 우회하므로 금지한다.
 
@@ -298,7 +297,7 @@ parser v3와 시간 모델, 벡터 gate를 운영에 넣는 순서는 다음과 
 7. run lock 아래 `sync-current`로 현재 허용 corpus를 v3로 재수집한다. 변경이 있으면 게이트는 false로 유지한다.
 8. `generate-cache`로 동일 SHA 벡터를 재사용하고 나머지만 생성한다.
 9. `load-cache`로 DB missing/stale 벡터만 적재한다.
-10. 전체 coverage·SHA·norm·HNSW 검증을 통과한 승격 transaction이 profile과 corpus 게이트를 함께 활성화한 뒤 `status`와 실제 query `verify`를 확인한다.
+10. 전체 coverage·SHA·norm 검증을 통과한 승격 transaction이 profile과 corpus 게이트를 함께 활성화한 뒤 `status`와 실제 exhaustive exact query `verify`를 확인한다. `hnsw_ready`는 물리 상태 진단값일 뿐 승격 조건이 아니다.
 11. collector 운영을 재개한다. 삭제 목록은 `sync-current`에 포함해 계속 동기화하되, 전체 과거 본문 수집이 별도로 구현·검증될 때까지 `sync-history`는 켜지 않는다.
 
 순서의 핵심은 “collector 정지 → gate-aware API 완전 배포 확인 → 0010 → sync/backfill”이다. 구버전 reader는 capability와 gate를 모르므로, 그것이 살아 있는 동안 corpus를 변경하면 새 API는 닫혀 있어도 구버전 API가 부분 corpus를 읽을 수 있다. 따라서 혼합 버전 배포 중에는 migration 0010 이후의 corpus 변경을 시작하지 않는다.

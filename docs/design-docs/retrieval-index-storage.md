@@ -160,15 +160,14 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 
 `load-cache`는 체크포인트가 현재 검색 가능 corpus 전체와 일치하지 않거나 DB가 migration 0010 capability marker·전체 검색 준비 게이트·임베딩 스키마와 필수 프로필을 갖추지 않으면 적재를 거부한다. 단순히 같은 이름의 runtime flag 행이 존재하는지만으로 0010 적용을 추정하지 않는다. DB에 이미 현재 해시의 벡터가 있는 조문은 다시 쓰지 않고 누락되었거나 낡은 행만 적재한다. 기존 `run`은 NVIDIA 생성과 DB upsert를 한 번에 수행하는 운영 경로로 유지하지만, 마이그레이션과 외부 API 호출을 분리해야 할 때는 체크포인트 경로를 사용한다.
 
-`run`과 `load-cache`는 첫 DB batch 전에 프로필을 비활성화한다. 현재 설치된 backfill 계보는 모든 batch가 끝나면 같은 corpus mutation lock 안에서 다음을 한 번에 검사하고, 전부 통과할 때만 `active=true`로 승격한다.
+`run`과 `load-cache`는 첫 DB batch 전에 프로필을 비활성화한다. 현재 backfill은 모든 batch가 끝나면 같은 corpus mutation lock 안에서 다음을 한 번에 검사하고, 전부 통과할 때만 `active=true`로 승격한다.
 
 1. 검색 가능한 모든 조문에 현재 원문 해시의 벡터가 있는가
 2. 저장 차원이 프로필과 일치하는가
 3. 모든 벡터의 L2 norm이 허용 오차 안에서 1인가
-4. 프로필 전용 HNSW 인덱스가 valid·ready 상태인가
-5. DB 프로필 계약이 런타임의 provider·모델·입력 유형·축약·정규화·템플릿 버전과 같은가
+4. DB 프로필 계약이 런타임의 provider·모델·입력 유형·축약·정규화·템플릿 버전과 같은가
 
-위 4번과 기존 `hnsw_ready` 출력은 보류 결정 전에 구현된 물리 설치 확인의 역사적 동작이다. 이를 실험 D 통과 조건이나 근거 찾기 품질 증거로 해석하지 않는다. 기존 인덱스 삭제나 backfill 계약 변경은 이 단계에서 수행하지 않으며, gold와 근거 검증 이후 승인받을 HNSW 설계에서 함께 다룬다. 어느 batch나 최종 검사에서 실패하면 프로필은 inactive, `corpus.search_ready`는 false로 남는다. `verify`도 capability와 두 준비 게이트가 모두 열리지 않으면 dense 검색을 실행하지 않는다.
+`status`와 `verify`의 `hnsw_ready`는 기존 물리 구조가 남아 있는지 보여 주는 진단값일 뿐 프로필 승격·exact 검색의 조건이 아니다. 기존 인덱스는 삭제하지 않으며, gold와 근거 검증 이후 승인받을 HNSW 설계에서 유지·재구축·제거를 함께 결정한다. 위 승격 검사 중 하나라도 실패하면 프로필은 inactive, `corpus.search_ready`는 false로 남는다. `verify`도 capability와 두 준비 게이트가 모두 열리지 않으면 dense 검색을 실행하지 않는다.
 
 마이그레이션 `0009`는 기존 프로필을 먼저 비활성화한다. `0010`은 capability marker와 false인 전체 검색 준비 게이트를 같은 migration transaction에 설치한다. 파서 v3 재수집과 전체 벡터 검증이 끝나기 전에는 direct·keyword·dense 어느 경로도 중간 corpus를 노출하지 않는다.
 
@@ -181,8 +180,9 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: 차원 가변 열과 프로필별 partial expression index로 미래 모델을 격리한다.
 - 2026-08-03: BM25는 별도 retriever로 평가하며 현재 검색에 미리 결합하지 않는다.
 - 2026-08-03: NIM 호출과 운영 DB 변경을 분리하기 위해 원문 없는 재개 가능 로컬 벡터 체크포인트를 추가했다.
-- 2026-08-03: 코퍼스 변경과 벡터 적재를 공용 advisory lock으로 직렬화하고, 전체 coverage·해시·norm·HNSW 검증 뒤에만 dense 프로필을 활성화하도록 했다.
+- 2026-08-03: 코퍼스 변경과 벡터 적재를 공용 advisory lock으로 직렬화하고, 전체 coverage·해시·norm 검증 뒤에만 dense 프로필을 활성화하도록 했다.
 - 2026-08-03: 모델 독립 `corpus.search_ready` 게이트로 direct·keyword까지 같은 corpus 세대 전환에 묶었다.
 - 2026-08-03: migration capability marker로 flag 행을 임의 생성한 구버전 DB와 0010 적용 DB를 구분하고, 준비 중 상태를 HTTP 503으로 명시했다.
 - 2026-08-03: 위 HNSW 설치 사실은 보존하되, 실험 D와 근거 찾기 품질 검증에서는 HNSW 상태·결과를 사용하지 않는다. 1,000문항 gold와 근거 찾기를 전부 검증한 뒤 별도 설계 승인 전에는 HNSW 작업을 진행하지 않는다.
+- 2026-08-03: `hnsw_ready`를 backfill 승격과 exact 검색의 조건에서 제거하고 물리 상태 진단값으로만 남겼다.
 - 2026-08-03: 현재 corpus의 완전한 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고, 범위 밖 요청은 검색 전에 `422 unsupported_corpus_date`로 차단한다.

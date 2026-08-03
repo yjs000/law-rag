@@ -31,7 +31,7 @@
 
 법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
 
-`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm·HNSW 계약 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
+`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 물리 HNSW의 `hnsw_ready`는 현재 진단값이며 승격 조건이 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
 
 `0008`은 기존 4인자·5인자 `hybrid_search` 함수를 모두 제거한다. 현재 API는 dense-only SQL을 실행하고 dense 후보가 0개일 때만 독립 PGroonga keyword fallback을 실행한다. RRF는 현재 DB 동작이 아니다. 향후 BM25·RRF는 별도 retriever와 평가 버전을 추가해 비교한다.
 

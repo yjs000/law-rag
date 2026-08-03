@@ -440,10 +440,10 @@ def test_profile_gate_requires_complete_current_unit_index() -> None:
     assert _profile_gate_failure(state) is None
     assert _profile_gate_failure({**state, "current_count": 9}) is not None
     assert _profile_gate_failure({**state, "non_unit_count": 1}) is not None
-    assert _profile_gate_failure({**state, "hnsw_ready": False}) is not None
+    assert _profile_gate_failure({**state, "hnsw_ready": False}) is None
 
 
-def test_hnsw_gate_reuses_shared_physical_index_contract() -> None:
+def test_hnsw_status_diagnostic_reuses_shared_physical_index_contract() -> None:
     assert _HNSW_INDEX_NAME == NEMOTRON_HNSW_INDEX_NAME
     assert _HNSW_READY_SQL == NEMOTRON_HNSW_READY_SQL
     assert "n.nspname='public'" in _HNSW_READY_SQL
@@ -518,6 +518,61 @@ async def test_failed_profile_promotion_commits_inactive_without_exposing_index(
     assert "SET active=false" in connection.statements[2]
     assert any("INSERT INTO runtime_flags" in sql for sql in connection.statements)
     assert not any("SET active=true" in sql for sql in connection.statements)
+
+
+@pytest.mark.asyncio
+async def test_profile_promotion_does_not_depend_on_hnsw_diagnostic() -> None:
+    profile = NVIDIA_NEMOTRON_512_PROFILE
+    gate_state = {
+        "profile_active": False,
+        "provider": profile.provider,
+        "model": profile.model,
+        "native_dimensions": profile.native_dimensions,
+        "stored_dimensions": profile.stored_dimensions,
+        "document_input_type": profile.document_input_type,
+        "query_input_type": profile.query_input_type,
+        "truncation": profile.truncation,
+        "normalization": profile.normalization,
+        "text_template_version": profile.text_template_version,
+        "profile_version": profile.profile_version,
+        "provision_count": 10,
+        "current_count": 10,
+        "wrong_dimensions_count": 0,
+        "non_unit_count": 0,
+        "hnsw_ready": False,
+    }
+
+    class GateResult(_RowsResult):
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return self.rows[0] if self.rows else None
+
+    class Connection:
+        def __init__(self) -> None:
+            self.statements = []
+
+        async def execute(self, statement, _params=None):
+            sql = str(statement)
+            self.statements.append(sql)
+            if "SELECT ep.active profile_active" in sql:
+                return GateResult([gate_state])
+            if "schema.corpus_search_ready_v1" in sql:
+                return GateResult(scalar=True)
+            return GateResult()
+
+    connection = Connection()
+
+    class Repository:
+        engine = _EmbeddingEngine(connection)
+
+    result = await _promote_embedding_profile(Repository())  # type: ignore[arg-type]
+
+    assert result["hnsw_ready"] is False
+    assert result["profile_active"] is True
+    assert result["corpus_search_ready"] is True
+    assert any("SET active=true" in sql for sql in connection.statements)
 
 
 @pytest.mark.asyncio
@@ -624,7 +679,7 @@ async def test_verify_dense_search_uses_query_profile_without_printing_content(
     async def database_state(_repository):
         return {
             "pending_count": 0,
-            "hnsw_ready": True,
+            "hnsw_ready": False,
             "profile_active": True,
             "corpus_search_capability": True,
             "corpus_search_ready": True,
@@ -662,6 +717,7 @@ async def test_verify_dense_search_uses_query_profile_without_printing_content(
 
     assert result["retrieval_strategy"] == "dense_only"
     assert result["query_dimensions"] == 512
+    assert result["hnsw_ready"] is False
     assert result["profile_active"] is True
     assert result["corpus_search_ready"] is True
     assert result["results"][0]["document_title"] == "신에너지법"
