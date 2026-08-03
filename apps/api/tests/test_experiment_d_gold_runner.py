@@ -83,10 +83,6 @@ def _retrieval_state(
         },
         pgvector_version="0.8.1",
         retrieval_settings={
-            "hnsw_ef_search": "40",
-            "hnsw_iterative_scan": "off",
-            "hnsw_max_scan_tuples": "20000",
-            "hnsw_scan_mem_multiplier": "1",
             "transaction_isolation": transaction_isolation,
             "transaction_read_only": "on",
             "postgresql_version": "17.5",
@@ -245,10 +241,14 @@ class FakeBackend:
             else [
                 {
                     "Plan": {
-                        "Node Type": "Index Scan",
-                        "Index Name": "provision_embeddings_nemotron_512_hnsw",
+                        "Node Type": "Sort",
+                        "Plans": [
+                            {
+                                "Node Type": "CTE Scan",
+                                "CTE Name": "exact_eligible_distances",
+                            }
+                        ],
                     },
-                    "Settings": {"hnsw.ef_search": "40"},
                 }
             ]
         )
@@ -611,14 +611,21 @@ async def test_search_failure_releases_lock_and_publishes_nothing(
 
 
 @pytest.mark.asyncio
-async def test_missing_hnsw_access_path_stops_before_search_and_output(
+async def test_hnsw_access_path_stops_exact_search_before_output(
     gold_bundle: GoldFixtureBundle,
     tmp_path: Path,
 ) -> None:
     events: list[str] = []
     backend = FakeBackend(
         gold_bundle.snapshot,
-        query_plan=[{"Plan": {"Node Type": "Seq Scan", "Relation Name": "provisions"}}],
+        query_plan=[
+            {
+                "Plan": {
+                    "Node Type": "Index Scan",
+                    "Index Name": "provision_embeddings_nemotron_512_hnsw",
+                }
+            }
+        ],
         events=events,
     )
     publisher = PublisherSpy(events)
@@ -630,12 +637,12 @@ async def test_missing_hnsw_access_path_stops_before_search_and_output(
             lambda: FakeEmbedder(events),
             tmp_path,
             code_provenance=TEST_CODE_PROVENANCE,
-            run_id_factory=lambda: "experiment-d-test-hnsw-plan-reject",
+            run_id_factory=lambda: "experiment-d-test-exact-plan-reject",
             clock=_fixed_clock(),
             publisher=publisher,
         )
 
-    assert raised.value.code == "expected_hnsw_index_not_planned"
+    assert raised.value.code == "hnsw_index_planned_for_exact_cosine"
     assert backend.plan_count >= 1
     assert backend.search_count == 0
     assert publisher.calls == 0
@@ -703,6 +710,7 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     assert backend.plan_count >= 1
     assert publisher.calls == 1
     assert events.index("lock_release") < events.index("publish")
+    assert published.payload["schema_version"] == 2
     assert published.payload["case_count"] == 1000
     assert published.payload["search_count"] == 1000
     assert published.payload["metrics"]["overall"]["recall_at_10"] == 1.0
@@ -711,9 +719,16 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     assert published.payload["payload_without_self_hash_sha256"]
     assert published.payload["metric_payload_sha256"]
     assert published.payload["retrieval_observation_sha256"]
+    assert published.payload["retrieval_execution_mode"] == "exact_cosine"
     assert published.payload["retrieval_state"]["vector_count"] == 2000
     assert published.payload["query_plans"]
-    assert published.payload["all_query_plans_use_expected_hnsw"] is True
+    assert published.payload["all_query_plans_exclude_hnsw"] is True
+    assert all(
+        plan["retrieval_execution_mode"] == "exact_cosine"
+        and plan["forbidden_hnsw_index_used"] is False
+        for plan in published.payload["query_plans"]
+    )
+    assert published.payload["inputs"]["retrieval_execution_mode"] == "exact_cosine"
     assert published.payload["inputs"]["query_plans_sha256"]
 
 
@@ -782,14 +797,10 @@ async def test_postgres_backend_uses_one_transaction_and_shared_mutation_key_for
 
     assert connection.transaction_entries == 1
     assert connection.transaction_exits == 1
-    assert len(connection.calls) == 7
+    assert len(connection.calls) == 3
     assert "SET TRANSACTION ISOLATION LEVEL READ COMMITTED, READ ONLY" in (connection.calls[0][0])
     assert "SET LOCAL search_path=pg_catalog,public,extensions,pg_temp" in (connection.calls[1][0])
     assert "pg_try_advisory_xact_lock_shared" in connection.calls[2][0]
-    assert "SET LOCAL hnsw.ef_search=40" in connection.calls[3][0]
-    assert "SET LOCAL hnsw.iterative_scan='off'" in connection.calls[4][0]
-    assert "SET LOCAL hnsw.max_scan_tuples=20000" in connection.calls[5][0]
-    assert "SET LOCAL hnsw.scan_mem_multiplier=1" in connection.calls[6][0]
     assert connection.calls[2][1] == {"lock_key": CORPUS_MUTATION_LOCK_KEY}
 
 

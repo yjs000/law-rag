@@ -362,8 +362,13 @@ async def test_experiment_dense_provision_path_has_no_grouping_or_keyword_fallba
     assert connection.readiness_checks == 1
     assert len(connection.calls) == 1
     assert "pgroonga" not in connection.statements[0].casefold()
-    assert "ORDER BY e.embedding::vector(512)" in connection.statements[0]
-    assert ",p.id" in connection.statements[0]
+    assert "WITH exact_eligible_distances AS MATERIALIZED" in connection.statements[0]
+    assert "ORDER BY distance,provision_id" in connection.statements[0]
+    assert "ORDER BY e.embedding::vector(512)" not in connection.statements[0]
+    assert "e.profile_key=:embedding_profile_key" in connection.statements[0]
+    assert "e.dimensions=512" in connection.statements[0]
+    assert "ep.active IS TRUE" in connection.statements[0]
+    assert "e.source_text_sha256=encode(digest" in connection.statements[0]
 
 
 @pytest.mark.asyncio
@@ -385,7 +390,7 @@ async def test_experiment_dense_provision_path_returns_empty_without_keyword_fal
 
 @pytest.mark.asyncio
 async def test_experiment_dense_explain_wraps_the_exact_search_statement() -> None:
-    plan = [{"Plan": {"Node Type": "Index Scan", "Index Name": "dense_hnsw"}}]
+    plan = [{"Plan": {"Node Type": "CTE Scan", "CTE Name": "exact_eligible_distances"}}]
     connection = _FakeConnection({"__dense__": []}, explain_plan=plan)
     repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
     embedding = [1.0, *([0.0] * 511)]
@@ -412,8 +417,9 @@ async def test_experiment_dense_explain_wraps_the_exact_search_statement() -> No
         explain_sql.removeprefix("EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n") == search_sql
     )
     assert search_sql.endswith("LIMIT :limit")
-    assert ",p.id" in search_sql
-    assert ",p.ordinal" not in search_sql
+    assert "WITH exact_eligible_distances AS MATERIALIZED" in search_sql
+    assert "ORDER BY distance,provision_id" in search_sql
+    assert "ORDER BY e.embedding::vector(512)" not in search_sql
     assert connection.calls[0] == connection.calls[1]
     assert connection.readiness_checks == 2
 

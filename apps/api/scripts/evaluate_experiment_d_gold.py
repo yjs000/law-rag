@@ -39,11 +39,7 @@ from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.schemas import CorpusSearchStatus, SearchHit
 from app.domain.vector_index_contract import (
-    NEMOTRON_HNSW_EF_SEARCH,
     NEMOTRON_HNSW_INDEX_NAME,
-    NEMOTRON_HNSW_ITERATIVE_SCAN,
-    NEMOTRON_HNSW_MAX_SCAN_TUPLES,
-    NEMOTRON_HNSW_SCAN_MEM_MULTIPLIER,
     NEMOTRON_HNSW_STATE_SQL,
 )
 from app.settings import Settings, get_settings
@@ -66,6 +62,7 @@ from scripts.preflight_experiment_d_gold import (
 REPOSITORY_ROOT = Path(__file__).parents[3]
 DEFAULT_OUTPUT_DIR = REPOSITORY_ROOT / ".data" / "experiments" / "experiment-d" / "runs"
 SEARCH_LIMIT_WITH_TIE_SENTINEL = 11
+RETRIEVAL_EXECUTION_MODE = "exact_cosine"
 CRITICAL_CODE_PATHS = (
     Path("apps/api/scripts/evaluate_experiment_d_gold.py"),
     Path("apps/api/scripts/experiment_d_metrics.py"),
@@ -379,11 +376,6 @@ async def _load_retrieval_state(connection: AsyncConnection) -> RetrievalState:
             await connection.execute(
                 text(
                     """SELECT
-                    current_setting('hnsw.ef_search',true) hnsw_ef_search,
-                    current_setting('hnsw.iterative_scan',true) hnsw_iterative_scan,
-                    current_setting('hnsw.max_scan_tuples',true) hnsw_max_scan_tuples,
-                    current_setting('hnsw.scan_mem_multiplier',true)
-                      hnsw_scan_mem_multiplier,
                     current_setting('transaction_isolation',true) transaction_isolation,
                     current_setting('transaction_read_only',true) transaction_read_only,
                     current_setting('server_version',true) postgresql_version,
@@ -491,19 +483,6 @@ async def _snapshot_on_connection(
     )
 
 
-async def _configure_hnsw(connection: AsyncConnection) -> None:
-    """Freeze pgvector settings that can alter approximate retrieval."""
-
-    statements = (
-        f"SET LOCAL hnsw.ef_search={NEMOTRON_HNSW_EF_SEARCH}",
-        f"SET LOCAL hnsw.iterative_scan='{NEMOTRON_HNSW_ITERATIVE_SCAN}'",
-        f"SET LOCAL hnsw.max_scan_tuples={NEMOTRON_HNSW_MAX_SCAN_TUPLES}",
-        f"SET LOCAL hnsw.scan_mem_multiplier={NEMOTRON_HNSW_SCAN_MEM_MULTIPLIER}",
-    )
-    for statement in statements:
-        await connection.execute(text(statement))
-
-
 async def _configure_search_path(connection: AsyncConnection) -> None:
     # Keep public corpus relations ahead of extension and temporary schemas,
     # while resolving built-in functions from pg_catalog first.
@@ -578,7 +557,6 @@ class PostgresExperimentDBackend:
             async with connection.begin():
                 await _set_repeatable_read_only(connection)
                 await _configure_search_path(connection)
-                await _configure_hnsw(connection)
                 return await _snapshot_on_connection(self.repository, connection)
 
     @asynccontextmanager
@@ -595,7 +573,6 @@ class PostgresExperimentDBackend:
                 ).scalar_one()
                 if acquired is not True:
                     raise GoldRunError("corpus_mutation_in_progress")
-                await _configure_hnsw(connection)
                 yield _PostgresLockedDenseReader(self.repository, connection)
 
     async def close(self) -> None:
@@ -688,10 +665,6 @@ def _validate_retrieval_state(stage: str, snapshot: CorpusSnapshot) -> None:
         errors.append("pgvector_version_missing")
     expected_transaction_isolation = "read committed" if stage == "locked" else "repeatable read"
     expected_retrieval_settings = {
-        "hnsw_ef_search": str(NEMOTRON_HNSW_EF_SEARCH),
-        "hnsw_iterative_scan": NEMOTRON_HNSW_ITERATIVE_SCAN,
-        "hnsw_max_scan_tuples": str(NEMOTRON_HNSW_MAX_SCAN_TUPLES),
-        "hnsw_scan_mem_multiplier": str(NEMOTRON_HNSW_SCAN_MEM_MULTIPLIER),
         "transaction_isolation": expected_transaction_isolation,
         "transaction_read_only": "on",
     }
@@ -699,7 +672,7 @@ def _validate_retrieval_state(stage: str, snapshot: CorpusSnapshot) -> None:
         state.retrieval_settings.get(key) != value
         for key, value in expected_retrieval_settings.items()
     ):
-        errors.append("hnsw_runtime_settings_mismatch")
+        errors.append("retrieval_runtime_settings_mismatch")
     planner_setting_keys = {
         "enable_seqscan",
         "enable_indexscan",
@@ -1000,8 +973,9 @@ async def _capture_query_plans(
                 "as_of_date": as_of_date.isoformat(),
                 "representative_case_id": case_id,
                 "query_embedding_sha256": _embedding_sha256(vector),
-                "expected_hnsw_index": NEMOTRON_HNSW_INDEX_NAME,
-                "expected_hnsw_index_used": _plan_uses_index(
+                "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
+                "forbidden_hnsw_index": NEMOTRON_HNSW_INDEX_NAME,
+                "forbidden_hnsw_index_used": _plan_uses_index(
                     plan,
                     NEMOTRON_HNSW_INDEX_NAME,
                 ),
@@ -1009,16 +983,16 @@ async def _capture_query_plans(
             }
         )
     records_sha256 = _sha256(_canonical_json_bytes(records))
-    missing_dates = [
+    hnsw_dates = [
         str(record["as_of_date"])
         for record in records
-        if record["expected_hnsw_index_used"] is not True
+        if record["forbidden_hnsw_index_used"] is True
     ]
-    if missing_dates:
+    if hnsw_dates:
         raise GoldRunError(
-            "expected_hnsw_index_not_planned",
+            "hnsw_index_planned_for_exact_cosine",
             details={
-                "as_of_dates": missing_dates,
+                "as_of_dates": hnsw_dates,
                 "query_plans_sha256": records_sha256,
                 "query_plans": records,
             },
@@ -1100,6 +1074,7 @@ async def evaluate_approved_gold(
         "corpus_fingerprint_sha256": (locked_preflight.current_corpus_fingerprint_sha256),
         "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
         "embedding_batch_size": batch_size,
+        "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
         "retrieval_state_fingerprint_sha256": (
             locked_snapshot.retrieval_state.state_fingerprint_sha256
         ),
@@ -1109,12 +1084,13 @@ async def evaluate_approved_gold(
     }
     completed_at = completed_at_factory()
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": "D",
         "status": "completed",
         "run_id": run_id,
         "started_at": _iso_utc(started_at),
         "completed_at": _iso_utc(completed_at),
+        "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
         "retrieval_contract": artifacts.dataset.metric_protocol.model_dump(mode="json"),
         "inputs": {
             "dataset_sha256": artifacts.dataset_sha256,
@@ -1126,6 +1102,7 @@ async def evaluate_approved_gold(
             "corpus_fingerprint_sha256": (locked_preflight.current_corpus_fingerprint_sha256),
             "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
             "embedding_batch_size": batch_size,
+            "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
             "retrieval_state_fingerprint_sha256": (
                 locked_snapshot.retrieval_state.state_fingerprint_sha256
             ),
@@ -1138,8 +1115,8 @@ async def evaluate_approved_gold(
         "search_count": len(case_records),
         "retrieval_state": locked_snapshot.retrieval_state.to_dict(),
         "query_plans": query_plans,
-        "all_query_plans_use_expected_hnsw": all(
-            bool(record["expected_hnsw_index_used"]) for record in query_plans
+        "all_query_plans_exclude_hnsw": all(
+            record["forbidden_hnsw_index_used"] is False for record in query_plans
         ),
         "retrieval_observation_sha256": retrieval_observation_sha256,
         "metrics": metrics,
