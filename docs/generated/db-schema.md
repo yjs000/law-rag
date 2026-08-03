@@ -1,13 +1,13 @@
 # 데이터베이스 스키마
 
 > 기준 시점: 2026-08-03
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0008_dense_embedding_profiles.py`
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0009_temporal_document_versions.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
 |---|---|
 | `legal_documents` | 안정적인 법령 ID, 정확 명칭, 문서 종류 |
-| `document_versions` | MST, 공포/시행 기간, 원문 포맷·해시·Storage 경로 |
+| `document_versions` | 문서·MST·시행일별 버전, 법적 생명주기, 출처 가용성, 효력 기간, 부칙 여부, 원문 계보 |
 | `provisions` | 조·항·호·목 경로와 원문 |
 | `embedding_profiles` | provider·model·query/passage 입력·차원 축약·정규화·본문 템플릿 버전 |
 | `provision_embeddings` | 프로필·원문 입력 SHA-256별 차원 가변 `vector`와 생성 시각 |
@@ -26,6 +26,10 @@
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 
 `legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index를 만든다. 다른 차원 모델은 같은 차원 가변 열에 저장하되 새 프로필 전용 partial index를 추가할 수 있다.
+
+`0009`부터 `document_versions`의 자연키는 `(document_id, mst, effective_from)`이고 `effective_from`은 필수다. `effective_to`는 `NULL`이거나 `effective_from`보다 뒤여야 한다. `document_versions_one_open_per_document` partial unique index는 `effective_to IS NULL`인 open version을 문서마다 하나로 제한한다. 동일 시행일의 복수 MST는 수집기의 연혁 검증에서 거부하므로 exclusion constraint는 두지 않는다.
+
+법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
 
 `0008`은 기존 4인자·5인자 `hybrid_search` 함수를 모두 제거한다. 현재 API는 dense-only SQL을 실행하고 dense 후보가 0개일 때만 독립 PGroonga keyword fallback을 실행한다. RRF는 현재 DB 동작이 아니다. 향후 BM25·RRF는 별도 retriever와 평가 버전을 추가해 비교한다.
 

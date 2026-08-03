@@ -26,12 +26,21 @@ def test_process_environment_overrides_env_local(tmp_path, monkeypatch) -> None:
 
 
 def test_partial_supabase_configuration_is_rejected(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://example.test/postgres")
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
     monkeypatch.delenv("DIRECT_URL", raising=False)
-    monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
 
     with pytest.raises(ValidationError, match="모두 필요"):
+        CollectorSettings(_env_file=None)
+
+
+def test_transaction_pooler_url_cannot_replace_collector_direct_url(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://pooler.example.test/postgres")
+    monkeypatch.delenv("DIRECT_URL", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+
+    with pytest.raises(ValidationError, match="DIRECT_URL"):
         CollectorSettings(_env_file=None)
 
 

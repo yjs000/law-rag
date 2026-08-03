@@ -80,6 +80,22 @@ def test_raw_hash_mismatch_blocks_activation() -> None:
         validate_for_activation(document, raw, today=date(2026, 7, 14))
 
 
+def test_noncanonical_provision_id_blocks_activation() -> None:
+    document, raw = _json_document("law-deleted.json")
+    document.provisions[0].id = uuid4()
+
+    with pytest.raises(ValueError, match="정규 UUID"):
+        validate_for_activation(document, raw, today=date(2026, 7, 14))
+
+
+def test_old_parser_schema_blocks_activation() -> None:
+    document, raw = _json_document("law-deleted.json")
+    document.parser_schema_version = "2"
+
+    with pytest.raises(ValueError, match="파서 스키마"):
+        validate_for_activation(document, raw, today=date(2026, 7, 14))
+
+
 def test_structure_marker_cannot_replace_article_body() -> None:
     document, raw = _json_document("law-deleted.json")
     document.provisions[0].content = "제1장 총칙"

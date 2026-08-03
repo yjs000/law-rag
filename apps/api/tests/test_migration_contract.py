@@ -93,3 +93,49 @@ def test_dense_profile_migration_removes_hybrid_and_tracks_vector_provenance(mon
     assert "embedding::vector(512)" in sql
     assert "WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1'" in sql
     assert "CREATE OR REPLACE FUNCTION hybrid_search" not in sql
+
+
+def test_temporal_version_migration_enforces_version_identity_and_state(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0009_temporal_document_versions.py"
+    )
+    spec = importlib.util.spec_from_file_location("temporal_version_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0009"
+    assert migration.down_revision == "0008"
+    assert "effective_from IS NULL" in statements[0]
+    assert "effective_to <= effective_from" in statements[0]
+    assert "HAVING count(*) > 1" in statements[0]
+    assert "ADD COLUMN lifecycle_state text" in sql
+    assert "ADD COLUMN source_record_state text" in sql
+    assert "source_deleted_on date" in sql
+    assert "ADD COLUMN has_supplementary_provisions boolean" in sql
+    assert "SET lifecycle_state='active'" in sql
+    assert "source_record_state='available'" in sql
+    assert "has_supplementary_provisions=false" in sql
+    assert "UPDATE embedding_profiles SET active=false" in sql
+    assert "ALTER COLUMN lifecycle_state SET NOT NULL" in sql
+    assert "ALTER COLUMN source_record_state SET NOT NULL" in sql
+    assert "ALTER COLUMN has_supplementary_provisions SET NOT NULL" in sql
+    assert "DEFAULT 'active'" not in sql
+    assert "DEFAULT 'available'" not in sql
+    assert "lifecycle_state IN ('active','scheduled','abolished')" in sql
+    assert "source_record_state IN ('available','deleted')" in sql
+    assert "effective_to IS NULL OR effective_to > effective_from" in sql
+    assert "ALTER COLUMN effective_from SET NOT NULL" in sql
+    assert "DROP CONSTRAINT document_versions_document_id_mst_key" in sql
+    assert "UNIQUE (document_id,mst,effective_from)" in sql
+    assert "CREATE UNIQUE INDEX document_versions_one_open_per_document" in sql
+    assert "WHERE effective_to IS NULL" in sql
+    assert "EXCLUDE" not in sql.upper()

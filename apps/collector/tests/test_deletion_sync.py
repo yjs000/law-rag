@@ -53,7 +53,7 @@ async def test_weekly_deletion_sync_quarantines_source_record_without_legal_end_
     client = DeletionClient()
     service = CollectorService(client, repository, today=lambda: date(2026, 7, 14))
 
-    first = await service.sync_history(entries=[])
+    first = await service.sync_current(entries=[])
     manifest = json.loads(repository.manifest_path.read_text(encoding="utf-8"))
     document = next(iter(manifest["documents"].values()))
     assert document["lifecycle_state"] == "active"
@@ -67,7 +67,7 @@ async def test_weekly_deletion_sync_quarantines_source_record_without_legal_end_
     ]
     assert first[0].state == "ready"
 
-    second = await service.sync_history(entries=[])
+    second = await service.sync_current(entries=[])
     assert all(item.state == "unchanged" for item in second)
     assert client.windows[2:] == [
         (1, date(2026, 7, 13), date(2026, 7, 14)),
@@ -84,7 +84,7 @@ async def test_any_deletion_lookup_failure_preserves_active_document_and_checkpo
     client = DeletionClient(fail_admin=True)
     service = CollectorService(client, repository, today=lambda: date(2026, 7, 14))
 
-    results = await service.sync_history(entries=[])
+    results = await service.sync_current(entries=[])
     manifest = json.loads(repository.manifest_path.read_text(encoding="utf-8"))
     document = next(iter(manifest["documents"].values()))
 

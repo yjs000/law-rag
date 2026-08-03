@@ -26,25 +26,24 @@ class CollectorSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_supabase_configuration(self):
         values = (
-            self.direct_url or self.database_url,
+            self.direct_url,
             self.supabase_url,
             self.supabase_secret_key,
         )
         if any(values) and not all(values):
             raise ValueError(
-                "Supabase collector에는 DB URL, SUPABASE_URL, SUPABASE_SECRET_KEY가 모두 필요합니다"
+                "Supabase collector에는 DIRECT_URL, SUPABASE_URL, "
+                "SUPABASE_SECRET_KEY가 모두 필요합니다"
             )
-        if self.supabase_secret_key and not self.supabase_secret_key.startswith("sb_secret_"):
+        if self.supabase_secret_key and not self.supabase_secret_key.startswith(
+            "sb_secret_"
+        ):
             raise ValueError("SUPABASE_SECRET_KEY must start with sb_secret_")
         return self
 
     @property
     def supabase_enabled(self) -> bool:
-        return bool(
-            (self.direct_url or self.database_url)
-            and self.supabase_url
-            and self.supabase_secret_key
-        )
+        return bool(self.direct_url and self.supabase_url and self.supabase_secret_key)
 
 
 @lru_cache

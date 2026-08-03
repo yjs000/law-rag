@@ -223,6 +223,7 @@ class LawOpenApiClient:
                 source_kind=source_kind,
                 source_url=self.safe_url("lawService.do", params),
                 mst_override=mst,
+                effective_from_override=effective_date,
             )
 
         def parse_xml(body: str) -> LegalDocumentRecord:
@@ -232,6 +233,7 @@ class LawOpenApiClient:
                 source_kind=source_kind,
                 source_url=self.safe_url("lawService.do", params),
                 mst_override=mst,
+                effective_from_override=effective_date,
             )
 
         parsed = await self._parsed("lawService.do", params, parse_json, parse_xml)

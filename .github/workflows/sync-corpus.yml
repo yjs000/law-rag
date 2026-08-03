@@ -9,7 +9,7 @@ on:
         options:
           - sync-current
           - sync-history
-        default: sync-history
+        default: sync-current
 
 permissions:
   contents: read
@@ -33,3 +33,6 @@ jobs:
       - run: uv run law-rag-collector ${{ inputs.command }}
         env:
           LAW_OPEN_API_OC: ${{ secrets.LAW_OPEN_API_OC }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

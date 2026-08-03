@@ -14,6 +14,14 @@ async def resolve[T](value: T | Awaitable[T]) -> T:
 
 
 class CollectorRepository(Protocol):
+    def preview(
+        self,
+        document: LegalDocumentRecord,
+        raw: RawResponse,
+        *,
+        effective_to: date | None,
+    ) -> dict[str, Any] | Awaitable[dict[str, Any]]: ...
+
     def upsert(
         self,
         document: LegalDocumentRecord,

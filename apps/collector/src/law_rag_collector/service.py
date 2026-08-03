@@ -25,11 +25,44 @@ class CollectorService:
         self, entries: Sequence[CatalogEntry] = MVP_CATALOG
     ) -> list[IngestionResult]:
         results = [await self._safe_current(entry) for entry in entries]
+        # The current-corpus command is the production ingestion path.  Apply
+        # the official deletion feed here as well; Supabase history ingestion
+        # remains disabled and must not be required to quarantine deleted
+        # source records.
+        results.extend(await self._sync_deletions())
         await resolve(
             self.repository.record_run(
                 "sync-current", [item.model_dump(mode="json") for item in results]
             )
         )
+        return results
+
+    async def preview_current(
+        self, entries: Sequence[CatalogEntry] = MVP_CATALOG
+    ) -> list[dict[str, object]]:
+        results: list[dict[str, object]] = []
+        for entry in entries:
+            try:
+                search_item = await self._exact_search(entry)
+                parsed = await self.client.document(
+                    expected_title=entry.title,
+                    source_kind=entry.source_kind,
+                    source_id=search_item.source_id,
+                    mst=search_item.mst,
+                    historical=False,
+                )
+                preview = await resolve(
+                    self.repository.preview(parsed.value, parsed.raw, effective_to=None)
+                )
+                results.append({"state": "ready", **preview})
+            except Exception as exc:
+                results.append(
+                    {
+                        "state": "failed",
+                        "title": entry.title,
+                        "detail": _safe_detail(exc),
+                    }
+                )
         return results
 
     async def sync_history(
@@ -157,9 +190,6 @@ class CollectorService:
                 historical=period.mst != current.mst,
                 effective_date=period.effective_from,
             )
-            # eflaw는 최신 MST 본문을 과거 efYd로 조회할 수 있어 본문 메타데이터의
-            # 시행일과 조회 스냅샷 시작일이 다를 수 있다. 효력 경계는 목록의 efYd가 권위다.
-            parsed.value.effective_from = period.effective_from
             changed = await resolve(
                 self.repository.upsert(
                     parsed.value,

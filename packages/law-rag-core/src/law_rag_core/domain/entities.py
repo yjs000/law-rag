@@ -3,6 +3,7 @@ from datetime import date
 from uuid import UUID
 
 from law_rag_core.domain.catalog import SourceKind
+from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 
 
 @dataclass(slots=True)
@@ -28,7 +29,7 @@ class LegalDocumentRecord:
     source_url: str
     raw_format: str
     raw_sha256: str
-    parser_schema_version: str = "2"
+    parser_schema_version: str = PARSER_SCHEMA_VERSION
     fallback_reason: str | None = None
     raw_storage_path: str | None = None
     provisions: list[ProvisionRecord] = field(default_factory=list)

@@ -1,17 +1,19 @@
 import hashlib
 import json
 from datetime import date
-from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
+from law_rag_core.domain.identifiers import canonical_provision_id
 
 from law_rag_collector.client import RawResponse
 from law_rag_collector.repository import MockCorpusRepository
 
 
-def _document(raw_body: str = "{}") -> LegalDocumentRecord:
+def _document(
+    raw_body: str = "{}", *, effective_from: date = date(2020, 2, 1)
+) -> LegalDocumentRecord:
     return LegalDocumentRecord(
         source_id="001",
         mst="1000",
@@ -19,14 +21,20 @@ def _document(raw_body: str = "{}") -> LegalDocumentRecord:
         source_kind=SourceKind.LAW,
         promulgation_number="제1호",
         promulgated_on=date(2020, 1, 1),
-        effective_from=date(2020, 2, 1),
+        effective_from=effective_from,
         ministry="산업통상자원부",
         source_url="https://example.test/lawService.do?OC=%5Bredacted%5D",
         raw_format="JSON",
         raw_sha256=hashlib.sha256(raw_body.encode("utf-8")).hexdigest(),
         provisions=[
             ProvisionRecord(
-                id=uuid5(NAMESPACE_URL, "test#1"),
+                id=canonical_provision_id(
+                    source_kind=SourceKind.LAW,
+                    source_id="001",
+                    mst="1000",
+                    effective_from=effective_from,
+                    path="제1조",
+                ),
                 path="제1조",
                 heading="목적",
                 content="목적 조문",
@@ -57,10 +65,9 @@ def test_mock_repository_preserves_staged_effective_dates_for_same_mst(tmp_path)
     first_raw = RawResponse(first_body, "JSON", "https://example.test?OC=%5Bredacted%5D")
     second_raw = RawResponse(second_body, "JSON", "https://example.test?OC=%5Bredacted%5D")
     first = _document(first_body)
-    second = _document(second_body)
-    second.effective_from = date(2020, 3, 1)
+    second = _document(second_body, effective_from=date(2020, 3, 1))
 
-    repository.upsert(first, first_raw, effective_to=date(2020, 2, 29))
+    repository.upsert(first, first_raw, effective_to=date(2020, 3, 1))
     repository.upsert(second, second_raw, effective_to=None)
 
     assert repository.status()["documents"] == 2

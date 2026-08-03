@@ -15,7 +15,10 @@ from law_rag_collector.supabase_repository import SupabaseCurrentCorpusRepositor
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="국가법령정보 Open API 독립 수집기")
-    parser.add_argument("command", choices=("sync-current", "sync-history", "status"))
+    parser.add_argument(
+        "command",
+        choices=("preview-current", "sync-current", "sync-history", "status"),
+    )
     parser.add_argument(
         "--title",
         help="본문은 허용 목록의 한 문서만 수집한다. 삭제 목록은 전체 manifest에 적용한다.",
@@ -27,7 +30,7 @@ async def _run(command: str, title: str | None = None) -> int:
     settings = get_settings()
     repository = (
         SupabaseCurrentCorpusRepository(
-            database_url=settings.direct_url or settings.database_url or "",
+            database_url=settings.direct_url or "",
             supabase_url=settings.supabase_url or "",
             supabase_secret_key=settings.supabase_secret_key or "",
             bucket=settings.supabase_raw_bucket,
@@ -50,11 +53,26 @@ async def _run(command: str, title: str | None = None) -> int:
     if command == "sync-history" and isinstance(repository, SupabaseCurrentCorpusRepository):
         print(
             json.dumps(
-                {"error": "Supabase 연혁·삭제 동기화는 아직 활성화되지 않았습니다"},
+                {
+                    "error": (
+                        "Supabase 과거 버전 전체 수집은 아직 활성화되지 않았습니다. "
+                        "공식 삭제 이력은 sync-current에서 반영합니다."
+                    )
+                },
                 ensure_ascii=False,
             )
         )
         await repository.close()
+        return 2
+    if command == "preview-current" and not isinstance(
+        repository, SupabaseCurrentCorpusRepository
+    ):
+        print(
+            json.dumps(
+                {"error": "preview-current는 Supabase corpus에서만 지원합니다"},
+                ensure_ascii=False,
+            )
+        )
         return 2
     if not settings.law_open_api_oc:
         print(
@@ -80,11 +98,34 @@ async def _run(command: str, title: str | None = None) -> int:
                     )
                 )
                 return 2
-            results = (
-                await service.sync_current(entries)
-                if command == "sync-current"
-                else await service.sync_history(entries)
-            )
+            if command == "preview-current":
+                async with repository.sync_run_lock():
+                    previews = await service.preview_current(entries)
+                failed_previews = [item for item in previews if item["state"] == "failed"]
+                print(
+                    json.dumps(
+                        {
+                            "command": command,
+                            "ready": len(previews) - len(failed_previews),
+                            "failed": len(failed_previews),
+                            "results": previews,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                return 1 if failed_previews else 0
+            if command == "sync-current" and isinstance(
+                repository, SupabaseCurrentCorpusRepository
+            ):
+                async with repository.sync_run_lock():
+                    results = await service.sync_current(entries)
+            else:
+                results = (
+                    await service.sync_current(entries)
+                    if command == "sync-current"
+                    else await service.sync_history(entries)
+                )
     finally:
         if isinstance(repository, SupabaseCurrentCorpusRepository):
             await repository.close()

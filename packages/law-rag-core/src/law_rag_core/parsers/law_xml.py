@@ -1,12 +1,12 @@
 import hashlib
 import re
 from datetime import date
-from uuid import NAMESPACE_URL, uuid5
 
 from defusedxml import ElementTree as ET
 
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
+from law_rag_core.domain.identifiers import canonical_provision_id
 
 
 class LawXmlParseError(ValueError):
@@ -110,7 +110,10 @@ def parse_history_msts(xml: str) -> set[str]:
 
 def _provision(
     *,
-    namespace: str,
+    source_kind: SourceKind,
+    source_id: str,
+    mst: str,
+    effective_from: date | None,
     path: str,
     heading: str | None,
     content: str,
@@ -121,7 +124,13 @@ def _provision(
     if not content:
         return None
     return ProvisionRecord(
-        id=uuid5(NAMESPACE_URL, f"{namespace}#{path}"),
+        id=canonical_provision_id(
+            source_kind=source_kind,
+            source_id=source_id,
+            mst=mst,
+            effective_from=effective_from,
+            path=path,
+        ),
         path=path,
         heading=clean_text(heading) or None,
         content=content,
@@ -132,7 +141,10 @@ def _provision(
 
 def _parse_nested(
     article: ET.Element,
-    namespace: str,
+    source_kind: SourceKind,
+    source_id: str,
+    mst: str,
+    effective_from: date | None,
     article_path: str,
     start_ordinal: int,
 ) -> list[ProvisionRecord]:
@@ -163,7 +175,10 @@ def _parse_nested(
         parent_path = parent_by_element.get(id(parent), article_path)
         path = f"{parent_path}/{label}{clean_text(number)}"
         record = _provision(
-            namespace=namespace,
+            source_kind=source_kind,
+            source_id=source_id,
+            mst=mst,
+            effective_from=effective_from,
             path=path,
             heading=None,
             content=content,
@@ -184,6 +199,7 @@ def parse_legal_document(
     source_kind: SourceKind,
     source_url: str,
     mst_override: str | None = None,
+    effective_from_override: date | None = None,
 ) -> LegalDocumentRecord:
     try:
         root = ET.fromstring(xml)
@@ -201,7 +217,7 @@ def parse_legal_document(
     if not source_id or not mst:
         raise LawXmlParseError("법령 ID 또는 일련번호가 없습니다")
 
-    namespace = f"{source_kind}:{source_id}:{mst}"
+    effective_from = effective_from_override or parse_date(first_text(root, "시행일자"))
     provisions: list[ProvisionRecord] = []
     ordinal = 0
     article_nodes = [
@@ -225,7 +241,10 @@ def parse_legal_document(
         if branch and branch not in {"0", "00"}:
             path += f"의{clean_text(branch)}"
         record = _provision(
-            namespace=namespace,
+            source_kind=source_kind,
+            source_id=source_id,
+            mst=mst,
+            effective_from=effective_from,
             path=path,
             heading=first_text(article, "조문제목"),
             content=first_text(article, "조문내용") or "",
@@ -235,14 +254,25 @@ def parse_legal_document(
         if record:
             provisions.append(record)
             ordinal += 1
-            nested = _parse_nested(article, namespace, path, ordinal)
+            nested = _parse_nested(
+                article,
+                source_kind,
+                source_id,
+                mst,
+                effective_from,
+                path,
+                ordinal,
+            )
             provisions.extend(nested)
             ordinal += len(nested)
 
     if not provisions:
         body = first_text(root, "조문내용", "본문", "내용")
         record = _provision(
-            namespace=namespace,
+            source_kind=source_kind,
+            source_id=source_id,
+            mst=mst,
+            effective_from=effective_from,
             path="본문",
             heading=title,
             content=body or "",
@@ -262,7 +292,7 @@ def parse_legal_document(
         source_kind=source_kind,
         promulgation_number=first_text(root, "공포번호", "발령번호"),
         promulgated_on=parse_date(first_text(root, "공포일자", "발령일자")),
-        effective_from=parse_date(first_text(root, "시행일자")),
+        effective_from=effective_from,
         ministry=first_text(root, "소관부처", "소관부처명"),
         source_url=source_url,
         raw_format="XML",

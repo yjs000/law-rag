@@ -4,10 +4,10 @@ import re
 from collections.abc import Iterator
 from datetime import date
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
 
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
+from law_rag_core.domain.identifiers import canonical_provision_id
 
 
 class LawJsonParseError(ValueError):
@@ -187,6 +187,7 @@ def parse_legal_document(
     source_kind: SourceKind,
     source_url: str,
     mst_override: str | None = None,
+    effective_from_override: date | None = None,
 ) -> LegalDocumentRecord:
     payload = load_json(body)
     title = _first(payload, "법령명_한글", "법령명한글", "행정규칙명")
@@ -199,7 +200,7 @@ def parse_legal_document(
     if not source_id or not mst:
         raise LawJsonParseError("법령 ID 또는 일련번호가 없습니다")
 
-    namespace = f"{source_kind}:{source_id}:{mst}"
+    effective_from = effective_from_override or _date(_first(payload, "시행일자"))
     provisions: list[ProvisionRecord] = []
 
     def nodes(value: Any) -> list[dict[str, Any]]:
@@ -212,7 +213,13 @@ def parse_legal_document(
             return
         provisions.append(
             ProvisionRecord(
-                id=uuid5(NAMESPACE_URL, f"{namespace}#{path}"),
+                id=canonical_provision_id(
+                    source_kind=source_kind,
+                    source_id=source_id,
+                    mst=mst,
+                    effective_from=effective_from,
+                    path=path,
+                ),
                 path=path,
                 heading=heading,
                 content=content,
@@ -311,7 +318,7 @@ def parse_legal_document(
         source_kind=source_kind,
         promulgation_number=_first(payload, "공포번호", "발령번호"),
         promulgated_on=_date(_first(payload, "공포일자", "발령일자")),
-        effective_from=_date(_first(payload, "시행일자")),
+        effective_from=effective_from,
         ministry=_first(payload, "소관부처", "소관부처명"),
         source_url=source_url,
         raw_format="JSON",

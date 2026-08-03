@@ -8,6 +8,7 @@ from typing import Any, Literal
 from defusedxml import ElementTree as ET
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord
+from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION, canonical_provision_id
 
 from law_rag_collector.client import RawResponse
 
@@ -40,6 +41,11 @@ def validate_for_activation(
         raise ValueError("MST가 없습니다")
     if document.effective_from is None:
         raise ValueError("시행일이 없습니다")
+    if document.parser_schema_version != PARSER_SCHEMA_VERSION:
+        raise ValueError(
+            "지원하지 않는 파서 스키마입니다: "
+            f"expected={PARSER_SCHEMA_VERSION}, actual={document.parser_schema_version}"
+        )
     if not document.provisions:
         raise ValueError("검색 가능한 조문이 없습니다")
     paths = [provision.path for provision in document.provisions]
@@ -48,6 +54,16 @@ def validate_for_activation(
     if any(not provision.content.strip() for provision in document.provisions):
         raise ValueError("내용이 없는 조문이 있습니다")
     _validate_provision_hierarchy(document)
+    for provision in document.provisions:
+        expected_id = canonical_provision_id(
+            source_kind=document.source_kind,
+            source_id=document.source_id,
+            mst=document.mst,
+            effective_from=document.effective_from,
+            path=provision.path,
+        )
+        if provision.id != expected_id:
+            raise ValueError(f"조문 ID가 정규 UUID와 일치하지 않습니다: {provision.path}")
     if document.raw_format.upper() != raw.wire_format:
         raise ValueError("파서 포맷과 원문 포맷이 다릅니다")
     import hashlib
