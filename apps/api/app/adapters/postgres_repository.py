@@ -723,48 +723,13 @@ def _dense_search_statement(
     tie_break_by_provision_id: bool = False,
     explain: bool = False,
 ):
-    tie_breaker = "p.id" if tie_break_by_provision_id else "p.ordinal"
-    explain_prefix = "EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n" if explain else ""
-    return text(
-        f"""{explain_prefix}SELECT p.id provision_id,d.id document_id,
-        d.exact_title document_title,d.source_kind,
-        'MST '||v.mst version_label,v.effective_from,v.effective_to,
-        p.path,p.heading,p.content,v.source_url,
-        1.0-(e.embedding::vector(512) <=> CAST(:embedding AS vector(512))) score
-        FROM provisions p
-        JOIN document_versions v ON v.id=p.version_id
-        JOIN legal_documents d ON d.id=v.document_id
-        JOIN provision_embeddings e ON e.provision_id=p.id
-        JOIN embedding_profiles ep
-          ON ep.profile_key=e.profile_key AND ep.stored_dimensions=e.dimensions
-        WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
-          AND (v.effective_to IS NULL OR v.effective_to>:as_of)
-          AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
-          AND {CORPUS_SEARCH_READY_SQL}
-          AND e.profile_key=:embedding_profile_key
-          AND e.dimensions=512
-          AND ep.active IS TRUE
-          AND ep.text_template_version='legal-provision-v1'
-          AND e.source_text_sha256={LEGAL_PROVISION_V1_SOURCE_SHA_SQL}
-        ORDER BY e.embedding::vector(512) <=> CAST(:embedding AS vector(512)),{tie_breaker}
-        LIMIT :limit"""
-    )
+    """Build the exhaustive dense query used while approximate search is deferred."""
 
-
-def _experiment_dense_search_statement(*, explain: bool = False):
-    """Build Experiment D's exhaustive exact-cosine provision query.
-
-    The materialized CTE computes every eligible distance before the outer
-    ordering and limit.  Keeping KNN ORDER BY/LIMIT out of the CTE prevents
-    PostgreSQL from substituting the approximate HNSW access path.  The outer
-    provision ID key only makes equal-distance ordering deterministic; the
-    runner still rejects an unresolved raw-score tie at the top-10 boundary.
-    """
-
+    tie_breaker = "provision_id" if tie_break_by_provision_id else "ordinal"
     explain_prefix = "EXPLAIN (FORMAT JSON, COSTS OFF, SETTINGS TRUE)\n" if explain else ""
     return text(
         f"""{explain_prefix}WITH exact_eligible_distances AS MATERIALIZED (
-        SELECT p.id provision_id,d.id document_id,
+        SELECT p.id provision_id,p.ordinal,d.id document_id,
         d.exact_title document_title,d.source_kind,
         'MST '||v.mst version_label,v.effective_from,v.effective_to,
         p.path,p.heading,p.content,v.source_url,
@@ -789,8 +754,24 @@ def _experiment_dense_search_statement(*, explain: bool = False):
         version_label,effective_from,effective_to,path,heading,content,source_url,
         1.0-distance score
         FROM exact_eligible_distances
-        ORDER BY distance,provision_id
+        ORDER BY distance,{tie_breaker}
         LIMIT :limit"""
+    )
+
+
+def _experiment_dense_search_statement(*, explain: bool = False):
+    """Build Experiment D's exhaustive exact-cosine provision query.
+
+    The materialized CTE computes every eligible distance before the outer
+    ordering and limit.  Keeping KNN ORDER BY/LIMIT out of the CTE preserves
+    exhaustive distance calculation over the eligible population.  The outer
+    provision ID key only makes equal-distance ordering deterministic; the
+    runner still rejects an unresolved raw-score tie at the top-10 boundary.
+    """
+
+    return _dense_search_statement(
+        tie_break_by_provision_id=True,
+        explain=explain,
     )
 
 

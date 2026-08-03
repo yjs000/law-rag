@@ -275,7 +275,9 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert "corpus.search_ready" in connection.statements[0]
     assert "schema.corpus_search_ready_v1" in connection.statements[0]
     assert "value->>'ready'='true'" in connection.statements[0]
-    assert ",p.ordinal" in connection.statements[0]
+    assert "WITH exact_eligible_distances AS MATERIALIZED" in connection.statements[0]
+    assert "ORDER BY distance,ordinal" in connection.statements[0]
+    assert "ORDER BY e.embedding::vector(512)" not in connection.statements[0]
 
 
 @pytest.mark.asyncio

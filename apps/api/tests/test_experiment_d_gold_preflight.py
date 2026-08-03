@@ -96,6 +96,7 @@ def _approved_dataset(source: SourceProvision) -> dict[str, object]:
             "approval_manifest_sha256": "0" * 64,
         },
         "corpus_snapshot": {
+            "snapshot_id": "mvp-current-corpus-2026-08-03",
             "parser_contract_version": "3",
             "searchable_provision_count": 1,
             "fingerprint_sha256": corpus_fingerprint_sha256([source]),

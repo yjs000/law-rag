@@ -215,6 +215,9 @@ class CorpusSearchStatus(BaseModel):
 
 class CorpusStatus(BaseModel):
     last_successful_sync: datetime | None
+    corpus_snapshot_id: str
+    supported_as_of_from: date
+    supported_as_of_through: date
     corpus_search_ready: bool
     corpus_search_unavailable_reason: str | None = None
     ai_available: bool

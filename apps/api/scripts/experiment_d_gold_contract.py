@@ -8,7 +8,16 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from app.domain.corpus_temporal_contract import require_supported_corpus_date
 
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 NonBlankStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -81,6 +90,7 @@ class ExperimentDQuestionApprovalManifest(StrictModel):
 
 
 class GoldCorpusSnapshot(StrictModel):
+    snapshot_id: Literal["mvp-current-corpus-2026-08-03"]
     parser_contract_version: Literal["3"]
     as_of_date: date
     retrieval_unit: Literal["provision"]
@@ -88,6 +98,11 @@ class GoldCorpusSnapshot(StrictModel):
     fingerprint_sha256: Sha256
     passage_template_version: Literal["legal-provision-v1"]
     embedding_profile_key: Literal["nvidia-nemotron-3-embed-1b-512-v1"]
+
+    @field_validator("as_of_date")
+    @classmethod
+    def snapshot_date_is_supported_by_current_corpus(cls, value: date) -> date:
+        return require_supported_corpus_date(value)
 
 
 class GoldSplitManifest(StrictModel):
@@ -397,6 +412,11 @@ class ExperimentDGoldCase(StrictModel):
     boundary_type: str | None = None
     control_pair_id: str | None = None
     control_pair_expectation: ControlPairExpectation | None = None
+
+    @field_validator("as_of_date")
+    @classmethod
+    def case_date_is_supported_by_current_corpus(cls, value: date) -> date:
+        return require_supported_corpus_date(value)
 
     @model_validator(mode="after")
     def validate_evidence_contract(self) -> ExperimentDGoldCase:

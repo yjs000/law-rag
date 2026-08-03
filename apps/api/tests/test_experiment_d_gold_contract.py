@@ -12,6 +12,7 @@ from scripts.experiment_d_gold_contract import (
     ExperimentDGoldCase,
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
+    GoldCorpusSnapshot,
     GoldMetricProtocol,
     GoldSplitManifest,
     canonical_gold_case_payload_sha256,
@@ -170,6 +171,7 @@ def _dataset() -> dict[str, object]:
             "approval_manifest_sha256": CONFIG_SHA,
         },
         "corpus_snapshot": {
+            "snapshot_id": "mvp-current-corpus-2026-08-03",
             "parser_contract_version": "3",
             "as_of_date": "2026-08-03",
             "retrieval_unit": "provision",
@@ -319,6 +321,42 @@ def test_valid_gold_case_enforces_direct_evidence_and_frozen_context() -> None:
     assert case.qrels[0].relevance == 2
     assert case.reference_contexts[0].content == CONTENT
     assert "pool_manifest_artifact" not in case.judgment_coverage.model_dump()
+
+
+@pytest.mark.parametrize("as_of_date", ["2026-06-03", "2026-08-03"])
+def test_gold_case_accepts_current_corpus_date_boundaries(as_of_date: str) -> None:
+    case = _case(1)
+    case["as_of_date"] = as_of_date
+
+    validated = ExperimentDGoldCase.model_validate(case)
+
+    assert validated.as_of_date.isoformat() == as_of_date
+
+
+@pytest.mark.parametrize("as_of_date", ["2026-06-02", "2026-08-04"])
+def test_gold_case_rejects_dates_outside_current_corpus_window(as_of_date: str) -> None:
+    case = _case(1)
+    case["as_of_date"] = as_of_date
+
+    with pytest.raises(ValidationError, match="current corpus supports"):
+        ExperimentDGoldCase.model_validate(case)
+
+
+@pytest.mark.parametrize("as_of_date", ["2026-06-02", "2026-08-04"])
+def test_gold_snapshot_rejects_dates_outside_current_corpus_window(as_of_date: str) -> None:
+    snapshot = _dataset()["corpus_snapshot"]
+    snapshot["as_of_date"] = as_of_date
+
+    with pytest.raises(ValidationError, match="current corpus supports"):
+        GoldCorpusSnapshot.model_validate(snapshot)
+
+
+def test_gold_snapshot_rejects_another_snapshot_identity() -> None:
+    snapshot = _dataset()["corpus_snapshot"]
+    snapshot["snapshot_id"] = "another-corpus-snapshot"
+
+    with pytest.raises(ValidationError):
+        GoldCorpusSnapshot.model_validate(snapshot)
 
 
 def test_supported_facet_cannot_use_context_only_qrel() -> None:

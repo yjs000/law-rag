@@ -60,27 +60,6 @@ def _retrieval_state(
         vector_count=vector_count,
         non_unit_vector_count=0,
         vector_fingerprint_sha256="c" * 64,
-        hnsw_index={
-            "index_oid": "12345",
-            "index_relfilenode": "67890",
-            "index_size_bytes": 16384,
-            "index_name": "provision_embeddings_nemotron_512_hnsw",
-            "indexed_relation": "provision_embeddings",
-            "key_attribute_count": 1,
-            "access_method": "hnsw",
-            "operator_class": "vector_cosine_ops",
-            "indexed_type": "vector(512)",
-            "index_expression": "(embedding)::vector(512)",
-            "index_predicate": ("profile_key = 'nvidia-nemotron-3-embed-1b-512-v1'::text"),
-            "index_valid": True,
-            "index_ready": True,
-            "contract_ready": True,
-            "index_definition": (
-                "CREATE INDEX provision_embeddings_nemotron_512_hnsw "
-                "USING hnsw ((embedding::vector(512)) vector_cosine_ops) "
-                "WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1'"
-            ),
-        },
         pgvector_version="0.8.1",
         retrieval_settings={
             "transaction_isolation": transaction_isolation,
@@ -611,45 +590,6 @@ async def test_search_failure_releases_lock_and_publishes_nothing(
 
 
 @pytest.mark.asyncio
-async def test_hnsw_access_path_stops_exact_search_before_output(
-    gold_bundle: GoldFixtureBundle,
-    tmp_path: Path,
-) -> None:
-    events: list[str] = []
-    backend = FakeBackend(
-        gold_bundle.snapshot,
-        query_plan=[
-            {
-                "Plan": {
-                    "Node Type": "Index Scan",
-                    "Index Name": "provision_embeddings_nemotron_512_hnsw",
-                }
-            }
-        ],
-        events=events,
-    )
-    publisher = PublisherSpy(events)
-
-    with pytest.raises(GoldRunError) as raised:
-        await run_and_publish_approved_gold(
-            gold_bundle.artifacts,
-            backend,
-            lambda: FakeEmbedder(events),
-            tmp_path,
-            code_provenance=TEST_CODE_PROVENANCE,
-            run_id_factory=lambda: "experiment-d-test-exact-plan-reject",
-            clock=_fixed_clock(),
-            publisher=publisher,
-        )
-
-    assert raised.value.code == "hnsw_index_planned_for_exact_cosine"
-    assert backend.plan_count >= 1
-    assert backend.search_count == 0
-    assert publisher.calls == 0
-    assert events[-1] == "lock_release"
-
-
-@pytest.mark.asyncio
 async def test_equal_raw_scores_at_rank_10_and_11_fail_closed(
     gold_bundle: GoldFixtureBundle,
     tmp_path: Path,
@@ -710,7 +650,7 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     assert backend.plan_count >= 1
     assert publisher.calls == 1
     assert events.index("lock_release") < events.index("publish")
-    assert published.payload["schema_version"] == 2
+    assert published.payload["schema_version"] == 3
     assert published.payload["case_count"] == 1000
     assert published.payload["search_count"] == 1000
     assert published.payload["metrics"]["overall"]["recall_at_10"] == 1.0
@@ -721,11 +661,26 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     assert published.payload["retrieval_observation_sha256"]
     assert published.payload["retrieval_execution_mode"] == "exact_cosine"
     assert published.payload["retrieval_state"]["vector_count"] == 2000
+    assert set(published.payload["retrieval_state"]) == {
+        "profile",
+        "vector_count",
+        "non_unit_vector_count",
+        "vector_fingerprint_sha256",
+        "pgvector_version",
+        "retrieval_settings",
+        "state_fingerprint_sha256",
+    }
     assert published.payload["query_plans"]
-    assert published.payload["all_query_plans_exclude_hnsw"] is True
     assert all(
-        plan["retrieval_execution_mode"] == "exact_cosine"
-        and plan["forbidden_hnsw_index_used"] is False
+        set(plan)
+        == {
+            "as_of_date",
+            "representative_case_id",
+            "query_embedding_sha256",
+            "retrieval_execution_mode",
+            "plan",
+        }
+        and plan["retrieval_execution_mode"] == "exact_cosine"
         for plan in published.payload["query_plans"]
     )
     assert published.payload["inputs"]["retrieval_execution_mode"] == "exact_cosine"

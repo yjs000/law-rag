@@ -38,10 +38,6 @@ from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.schemas import CorpusSearchStatus, SearchHit
-from app.domain.vector_index_contract import (
-    NEMOTRON_HNSW_INDEX_NAME,
-    NEMOTRON_HNSW_STATE_SQL,
-)
 from app.settings import Settings, get_settings
 from scripts.experiment_d_gold_contract import (
     ExperimentDGoldAdjudicationManifest,
@@ -73,10 +69,10 @@ CRITICAL_CODE_PATHS = (
     Path("apps/api/app/adapters/postgres_repository.py"),
     Path("apps/api/app/adapters/nvidia_nim_embedder.py"),
     Path("apps/api/app/domain/catalog.py"),
+    Path("apps/api/app/domain/corpus_temporal_contract.py"),
     Path("apps/api/app/domain/embedding_profiles.py"),
     Path("apps/api/app/domain/errors.py"),
     Path("apps/api/app/domain/schemas.py"),
-    Path("apps/api/app/domain/vector_index_contract.py"),
     Path("apps/api/app/settings.py"),
     Path("packages/law-rag-core/src/law_rag_core/domain/catalog.py"),
     Path("packages/law-rag-core/src/law_rag_core/persistence.py"),
@@ -126,7 +122,6 @@ class RetrievalState:
     vector_count: int
     non_unit_vector_count: int
     vector_fingerprint_sha256: str
-    hnsw_index: dict[str, object] | None
     pgvector_version: str | None
     retrieval_settings: dict[str, str | None]
     state_fingerprint_sha256: str
@@ -137,7 +132,6 @@ class RetrievalState:
             "vector_count": self.vector_count,
             "non_unit_vector_count": self.non_unit_vector_count,
             "vector_fingerprint_sha256": self.vector_fingerprint_sha256,
-            "hnsw_index": self.hnsw_index,
             "pgvector_version": self.pgvector_version,
             "retrieval_settings": self.retrieval_settings,
             "state_fingerprint_sha256": self.state_fingerprint_sha256,
@@ -366,8 +360,6 @@ async def _load_retrieval_state(connection: AsyncConnection) -> RetrievalState:
         .one_or_none()
     )
     profile = dict(profile_row) if profile_row is not None else None
-    index_row = (await connection.execute(text(NEMOTRON_HNSW_STATE_SQL))).mappings().one_or_none()
-    hnsw_index = dict(index_row) if index_row is not None else None
     pgvector_version = (
         await connection.execute(text("SELECT extversion FROM pg_extension WHERE extname='vector'"))
     ).scalar_one_or_none()
@@ -453,7 +445,6 @@ async def _load_retrieval_state(connection: AsyncConnection) -> RetrievalState:
         "vector_count": len(vector_rows),
         "non_unit_vector_count": non_unit_vector_count,
         "vector_fingerprint_sha256": vector_fingerprint,
-        "hnsw_index": hnsw_index,
         "pgvector_version": pgvector_version_text,
         "retrieval_settings": retrieval_settings,
     }
@@ -462,7 +453,6 @@ async def _load_retrieval_state(connection: AsyncConnection) -> RetrievalState:
         vector_count=len(vector_rows),
         non_unit_vector_count=non_unit_vector_count,
         vector_fingerprint_sha256=vector_fingerprint,
-        hnsw_index=hnsw_index,
         pgvector_version=pgvector_version_text,
         retrieval_settings=retrieval_settings,
         state_fingerprint_sha256=_sha256(_canonical_json_bytes(state_without_hash)),
@@ -624,43 +614,6 @@ def _validate_retrieval_state(stage: str, snapshot: CorpusSnapshot) -> None:
         errors.append("active_vector_coverage_mismatch")
     if state.non_unit_vector_count != 0:
         errors.append("passage_embedding_not_l2_normalized")
-    index = state.hnsw_index
-    if index is None:
-        errors.append("hnsw_index_missing")
-    else:
-        expected_index_values = {
-            "index_name": NEMOTRON_HNSW_INDEX_NAME,
-            "key_attribute_count": 1,
-            "access_method": "hnsw",
-            "operator_class": "vector_cosine_ops",
-            "indexed_type": "vector(512)",
-            "index_valid": True,
-            "index_ready": True,
-            "contract_ready": True,
-        }
-        if any(index.get(key) != value for key, value in expected_index_values.items()):
-            errors.append("hnsw_index_contract_mismatch")
-        if index.get("indexed_relation") not in {
-            "provision_embeddings",
-            "public.provision_embeddings",
-        }:
-            errors.append("hnsw_index_relation_mismatch")
-        if not all(
-            isinstance(index.get(key), str)
-            and str(index[key]).isdigit()
-            and int(str(index[key])) > 0
-            for key in ("index_oid", "index_relfilenode")
-        ) or not (
-            isinstance(index.get("index_size_bytes"), int) and int(index["index_size_bytes"]) > 0
-        ):
-            errors.append("hnsw_index_physical_identity_missing")
-        definition = index.get("index_definition")
-        if (
-            not isinstance(definition, str)
-            or NVIDIA_NEMOTRON_512_PROFILE.key not in definition
-            or "vector(512)" not in definition
-        ):
-            errors.append("hnsw_index_definition_mismatch")
     if not state.pgvector_version:
         errors.append("pgvector_version_missing")
     expected_transaction_isolation = "read committed" if stage == "locked" else "repeatable read"
@@ -940,16 +893,6 @@ def _normalize_explain_plan(value: object) -> list[dict[str, object]]:
     return normalized
 
 
-def _plan_uses_index(value: object, index_name: str) -> bool:
-    if isinstance(value, Mapping):
-        if value.get("Index Name") == index_name:
-            return True
-        return any(_plan_uses_index(item, index_name) for item in value.values())
-    if isinstance(value, list):
-        return any(_plan_uses_index(item, index_name) for item in value)
-    return False
-
-
 async def _capture_query_plans(
     dataset: ExperimentDGoldDataset,
     query_vectors: Sequence[list[float]],
@@ -974,29 +917,10 @@ async def _capture_query_plans(
                 "representative_case_id": case_id,
                 "query_embedding_sha256": _embedding_sha256(vector),
                 "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
-                "forbidden_hnsw_index": NEMOTRON_HNSW_INDEX_NAME,
-                "forbidden_hnsw_index_used": _plan_uses_index(
-                    plan,
-                    NEMOTRON_HNSW_INDEX_NAME,
-                ),
                 "plan": plan,
             }
         )
     records_sha256 = _sha256(_canonical_json_bytes(records))
-    hnsw_dates = [
-        str(record["as_of_date"])
-        for record in records
-        if record["forbidden_hnsw_index_used"] is True
-    ]
-    if hnsw_dates:
-        raise GoldRunError(
-            "hnsw_index_planned_for_exact_cosine",
-            details={
-                "as_of_dates": hnsw_dates,
-                "query_plans_sha256": records_sha256,
-                "query_plans": records,
-            },
-        )
     return records, records_sha256
 
 
@@ -1084,7 +1008,7 @@ async def evaluate_approved_gold(
     }
     completed_at = completed_at_factory()
     payload: dict[str, object] = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": "D",
         "status": "completed",
         "run_id": run_id,
@@ -1115,9 +1039,6 @@ async def evaluate_approved_gold(
         "search_count": len(case_records),
         "retrieval_state": locked_snapshot.retrieval_state.to_dict(),
         "query_plans": query_plans,
-        "all_query_plans_exclude_hnsw": all(
-            record["forbidden_hnsw_index_used"] is False for record in query_plans
-        ),
         "retrieval_observation_sha256": retrieval_observation_sha256,
         "metrics": metrics,
         "metric_payload_sha256": _sha256(_canonical_json_bytes(metric_payload)),

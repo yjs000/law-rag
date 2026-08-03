@@ -26,6 +26,13 @@ from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
+from app.domain.corpus_temporal_contract import (
+    CURRENT_CORPUS_SNAPSHOT_ID,
+    CURRENT_CORPUS_SUPPORTED_FROM,
+    CURRENT_CORPUS_SUPPORTED_THROUGH,
+    UnsupportedCorpusDateError,
+    require_supported_corpus_date,
+)
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
@@ -73,6 +80,8 @@ postgres_identity = (
 collector_load_errors: list[str] = []
 if repository is memory_repository:
     _, collector_load_errors = memory_repository.load_collector_state(settings.collector_state_dir)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
@@ -170,6 +179,7 @@ async def health() -> dict[str, str]:
 
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
+    _require_supported_as_of_date(payload.as_of_date)
     await _check_quota(request, "search", settings.search_daily_limit)
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
@@ -187,6 +197,7 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    _require_supported_as_of_date(payload.as_of_date)
     user = await _optional_user(request.headers.get("authorization"))
     owner = _question_owner(request, user)
     task = asyncio.current_task()
@@ -254,9 +265,7 @@ async def _answer_question(
         embedding_stage.update({"attempted": True, "status": "started"})
         try:
             query_embedding = (await _embedder().embed([payload.question]))[0]
-            embedding_stage.update(
-                {"status": "succeeded", "dimensions": len(query_embedding)}
-            )
+            embedding_stage.update({"status": "succeeded", "dimensions": len(query_embedding)})
         except Exception:
             embedding_failed = True
             embedding_stage.update({"status": "failed", "dimensions": None})
@@ -312,14 +321,16 @@ async def _answer_question(
     generation_stage = diagnostics["generation"]
     assert isinstance(generation_stage, dict)
     generation_hits = select_generation_hits(hits, settings.answer_evidence_max_characters)
-    generation_stage.update({
-        "attempted": True,
-        "status": "started",
-        "retrieved_evidence_count": len(hits),
-        "selected_evidence_count": len(generation_hits),
-        "dropped_evidence_count": len(hits) - len(generation_hits),
-        "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
-    })
+    generation_stage.update(
+        {
+            "attempted": True,
+            "status": "started",
+            "retrieved_evidence_count": len(hits),
+            "selected_evidence_count": len(generation_hits),
+            "dropped_evidence_count": len(hits) - len(generation_hits),
+            "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
+        }
+    )
     try:
         draft = await _answerer().answer(payload, generation_hits)
     except Exception as exc:
@@ -541,8 +552,10 @@ async def export_checklist(
 
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
+    requested_date = as_of_date or date.today()
+    _require_supported_as_of_date(requested_date)
     try:
-        hit = await repository.provision(provision_id, as_of_date or date.today())
+        hit = await repository.provision(provision_id, requested_date)
     except CorpusSearchUnavailableError as exc:
         raise _corpus_unready_http_error() from exc
     if hit is None or not is_allowed_source_url(hit.source_url):
@@ -577,6 +590,9 @@ async def corpus_status() -> CorpusStatus:
         warnings.append(f"collector 목업 원문 {len(collector_load_errors)}건을 읽지 못했습니다.")
     return CorpusStatus(
         last_successful_sync=await repository.last_sync(),
+        corpus_snapshot_id=CURRENT_CORPUS_SNAPSHOT_ID,
+        supported_as_of_from=CURRENT_CORPUS_SUPPORTED_FROM,
+        supported_as_of_through=CURRENT_CORPUS_SUPPORTED_THROUGH,
         corpus_search_ready=search_status.ready,
         corpus_search_unavailable_reason=search_status.reason,
         ai_available=_ai_available(),
@@ -594,6 +610,23 @@ def _corpus_unready_http_error() -> HTTPException:
             "message": "법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.",
         },
     )
+
+
+def _require_supported_as_of_date(requested_date: date) -> None:
+    try:
+        require_supported_corpus_date(requested_date)
+    except UnsupportedCorpusDateError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "unsupported_corpus_date",
+                "message": "현재 corpus는 검증된 기준일 범위 안에서만 검색할 수 있습니다.",
+                "requested_as_of_date": exc.requested_date.isoformat(),
+                "supported_from": exc.supported_from.isoformat(),
+                "supported_through": exc.supported_through.isoformat(),
+                "corpus_snapshot_id": exc.snapshot_id,
+            },
+        ) from exc
 
 
 def _embedder() -> NvidiaNimEmbedder:
@@ -643,9 +676,7 @@ def _question_owner(request: Request, user: MockUser | None) -> str:
         request.client.host if request.client else None,
         trust_vercel_proxy=settings.environment == "production",
     )
-    return "anonymous:" + daily_subject_hash(
-        subject, settings.rate_limit_secret, date.today()
-    )
+    return "anonymous:" + daily_subject_hash(subject, settings.rate_limit_secret, date.today())
 
 
 def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
@@ -657,9 +688,9 @@ def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
             timeout_seconds=settings.answer_timeout_seconds,
             max_output_tokens=settings.answer_max_output_tokens,
         )
-    return OpenAIAnswerer(
-        api_key=settings.openai_api_key or "", model=settings.openai_answer_model
-    )
+    return OpenAIAnswerer(api_key=settings.openai_api_key or "", model=settings.openai_answer_model)
+
+
 def _ai_unavailable_reason() -> str | None:
     if not settings.ai_enabled:
         return AiFallbackReason.AI_DISABLED.value
