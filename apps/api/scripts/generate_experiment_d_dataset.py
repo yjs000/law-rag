@@ -15,6 +15,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
+from law_rag_core.persistence import SEARCHABLE_DOCUMENT_VERSION_SQL
 from sqlalchemy import text
 
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -743,12 +744,13 @@ async def _load_provisions(repository: PostgresLegalRepository) -> list[SourcePr
             (
                 await connection.execute(
                     text(
-                        """SELECT p.id provision_id,p.version_id,d.id document_id,
+                        f"""SELECT p.id provision_id,p.version_id,d.id document_id,
                         d.exact_title document_title,d.source_kind,v.mst,v.effective_from,
                         v.effective_to,v.source_url,p.path,p.parent_path,p.heading,p.content,p.ordinal
                         FROM provisions p
                         JOIN document_versions v ON v.id=p.version_id
                         JOIN legal_documents d ON d.id=v.document_id
+                        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
                         ORDER BY d.exact_title,v.effective_from,p.ordinal,p.path"""
                     )
                 )

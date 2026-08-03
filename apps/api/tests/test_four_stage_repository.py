@@ -23,6 +23,9 @@ class _MappingsResult:
     def all(self):
         return self._rows
 
+    def first(self):
+        return self._rows[0] if self._rows else None
+
 
 class _FakeConnection:
     def __init__(self, rows_by_query: dict[str, list[dict]]) -> None:
@@ -33,7 +36,7 @@ class _FakeConnection:
     async def execute(self, statement, params: dict):
         self.calls.append(params)
         self.statements.append(str(statement))
-        key = "__dense__" if "embedding" in params else params["query"]
+        key = "__dense__" if "embedding" in params else params.get("query", "__direct__")
         return _MappingsResult(self.rows_by_query.get(key, []))
 
 
@@ -232,6 +235,11 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert connection.calls[0]["embedding"] == "[0.1, 0.2]"
     assert "hybrid_search" not in connection.statements[0]
     assert "pgroonga" not in connection.statements[0].casefold()
+    assert "ep.active IS TRUE" in connection.statements[0]
+    assert "e.source_text_sha256=encode(digest" in connection.statements[0]
+    assert "source_record_state='available'" in connection.statements[0]
+    assert "lifecycle_state IN ('active','scheduled')" in connection.statements[0]
+    assert "parser_schema_version='3'" in connection.statements[0]
 
 
 @pytest.mark.asyncio
@@ -274,6 +282,38 @@ async def test_postgres_dense_zero_falls_back_to_separate_keyword_search() -> No
     assert "embedding" in connection.calls[0]
     assert all("embedding" not in call for call in connection.calls[1:])
     assert all("hybrid_search" not in statement for statement in connection.statements)
+    assert all(
+        "source_record_state='available'" in statement
+        and "lifecycle_state IN ('active','scheduled')" in statement
+        and "parser_schema_version='3'" in statement
+        for statement in connection.statements
+    )
+
+
+@pytest.mark.asyncio
+async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_versions() -> None:
+    row = _row("전기사업법", "허가", path="제1조")
+    direct_connection = _FakeConnection({"__direct__": [row]})
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(direct_connection)  # type: ignore[assignment]
+
+    hits, trace = await repository.search_with_trace(
+        "전기사업법 제1조", date(2026, 7, 18), 10
+    )
+
+    assert hits and trace.strategy == "direct_path"
+    assert "source_record_state='available'" in direct_connection.statements[0]
+    assert "lifecycle_state IN ('active','scheduled')" in direct_connection.statements[0]
+    assert "parser_schema_version='3'" in direct_connection.statements[0]
+
+    provision_connection = _FakeConnection({"__direct__": [row]})
+    repository.engine = _FakeEngine(provision_connection)  # type: ignore[assignment]
+    hit = await repository.provision(row["provision_id"], date(2026, 7, 18))
+
+    assert hit is not None
+    assert "source_record_state='available'" in provision_connection.statements[0]
+    assert "lifecycle_state IN ('active','scheduled')" in provision_connection.statements[0]
+    assert "parser_schema_version='3'" in provision_connection.statements[0]
 
 
 @pytest.mark.asyncio

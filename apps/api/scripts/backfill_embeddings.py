@@ -7,6 +7,8 @@ import asyncio
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import date
 from math import fsum, isfinite, sqrt
@@ -14,8 +16,16 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
+from law_rag_core.persistence import (
+    CORPUS_MUTATION_LOCK_KEY,
+    CORPUS_SYNC_RUN_LOCK_KEY,
+    EMBEDDING_BACKFILL_LOCK_KEY,
+    LEGAL_PROVISION_V1_SOURCE_SHA_SQL,
+    SEARCHABLE_DOCUMENT_VERSION_SQL,
+)
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -47,6 +57,33 @@ DEFAULT_CACHE_PATH = (
     / "embeddings"
     / f"{NVIDIA_NEMOTRON_512_PROFILE.key}.jsonl"
 )
+_HNSW_INDEX_NAME = "provision_embeddings_nemotron_512_hnsw"
+_HNSW_READY_SQL = f"""EXISTS(
+  SELECT 1
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid=c.relnamespace
+  JOIN pg_index i ON i.indexrelid=c.oid
+  JOIN pg_am am ON am.oid=c.relam
+  JOIN pg_attribute index_column
+    ON index_column.attrelid=c.oid AND index_column.attnum=1
+  JOIN pg_opclass opclass ON opclass.oid=i.indclass[0]
+  WHERE n.nspname='public' AND c.relname='{_HNSW_INDEX_NAME}'
+    AND i.indrelid=to_regclass('public.provision_embeddings')
+    AND i.indisvalid AND i.indisready
+    AND i.indnkeyatts=1
+    AND am.amname='hnsw'
+    AND opclass.opcname='vector_cosine_ops'
+    AND format_type(index_column.atttypid,index_column.atttypmod)='vector(512)'
+    AND i.indexprs IS NOT NULL
+    AND position('embedding' in pg_get_expr(i.indexprs,i.indrelid))>0
+    AND i.indpred IS NOT NULL
+    AND regexp_replace(
+      pg_get_expr(i.indpred,i.indrelid),'[\\s()]','','g'
+    ) IN (
+      'profile_key=''{NVIDIA_NEMOTRON_512_PROFILE.key}''',
+      'profile_key=''{NVIDIA_NEMOTRON_512_PROFILE.key}''::text'
+    )
+)"""
 
 
 def _arguments() -> argparse.Namespace:
@@ -87,17 +124,18 @@ def _arguments() -> argparse.Namespace:
 
 
 async def _source_provisions(repository: PostgresLegalRepository) -> list[dict]:
-    """Read embedding inputs without depending on the post-0008 embedding schema."""
+    """Read the available active/scheduled corpus without using embedding rows."""
     async with repository.engine.connect() as connection:
         rows = (
             (
                 await connection.execute(
                     text(
-                        """SELECT p.id provision_id,d.exact_title document_title,
+                        f"""SELECT p.id provision_id,d.exact_title document_title,
                         p.path,p.heading,p.content
                         FROM provisions p
                         JOIN document_versions v ON v.id=p.version_id
                         JOIN legal_documents d ON d.id=v.document_id
+                        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
                         ORDER BY d.exact_title,v.effective_from,p.ordinal,p.path"""
                     )
                 )
@@ -133,13 +171,17 @@ async def _provisions(repository: PostgresLegalRepository) -> list[dict]:
             (
                 await connection.execute(
                     text(
-                        """SELECT p.id provision_id,d.exact_title document_title,
-                        p.path,p.heading,p.content,e.source_text_sha256 stored_sha256
+                        f"""SELECT p.id provision_id,d.exact_title document_title,
+                        p.path,p.heading,p.content,e.source_text_sha256 stored_sha256,
+                        e.dimensions stored_dimensions,
+                        CASE WHEN e.embedding IS NULL THEN NULL
+                             ELSE vector_norm(e.embedding) END stored_norm
                         FROM provisions p
                         JOIN document_versions v ON v.id=p.version_id
                         JOIN legal_documents d ON d.id=v.document_id
                         LEFT JOIN provision_embeddings e
                           ON e.provision_id=p.id AND e.profile_key=:profile_key
+                        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
                         ORDER BY d.exact_title,v.effective_from,p.ordinal,p.path"""
                     ),
                     {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
@@ -163,7 +205,15 @@ def _pending(rows: list[dict]) -> tuple[list[PendingProvision], int, int]:
             content=row["content"],
         )
         sha256 = embedding_text_sha256(passage)
-        if row["stored_sha256"] == sha256:
+        stored_norm = row.get("stored_norm")
+        vector_is_current = (
+            row["stored_sha256"] == sha256
+            and row.get("stored_dimensions")
+            == NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions
+            and isinstance(stored_norm, int | float)
+            and abs(float(stored_norm) - 1.0) <= 0.0001
+        )
+        if vector_is_current:
             continue
         if row["stored_sha256"] is None:
             missing += 1
@@ -196,8 +246,14 @@ def _read_cache(path: Path) -> tuple[dict[str, CachedEmbedding], int]:
     line_count = 0
     if not path.exists():
         return records, line_count
+    ends_with_newline = path.stat().st_size == 0
+    if not ends_with_newline:
+        with path.open("rb") as binary_stream:
+            binary_stream.seek(-1, os.SEEK_END)
+            ends_with_newline = binary_stream.read(1) == b"\n"
     with path.open(encoding="utf-8") as stream:
-        for line_number, line in enumerate(stream, start=1):
+        lines = stream.readlines()
+        for line_number, line in enumerate(lines, start=1):
             if not line.strip():
                 continue
             line_count += 1
@@ -216,7 +272,14 @@ def _read_cache(path: Path) -> tuple[dict[str, CachedEmbedding], int]:
                 ):
                     raise ValueError("cache source hash is not a lowercase SHA-256")
                 vector = _validated_vector(payload["embedding"])
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            except json.JSONDecodeError as exc:
+                if line_number == len(lines) and not ends_with_newline:
+                    # A process can stop between writing a JSON record and the
+                    # batch fsync. The next append truncates this partial tail.
+                    line_count -= 1
+                    continue
+                raise ValueError(f"invalid cache record at line {line_number}: {exc}") from exc
+            except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(f"invalid cache record at line {line_number}: {exc}") from exc
             records[provision_id] = CachedEmbedding(provision_id, source_sha, vector)
     return records, line_count
@@ -240,10 +303,50 @@ def _cache_pending(
     return pending, missing, stale
 
 
+def _reusable_cache_vectors(
+    pending: list[PendingProvision], records: dict[str, CachedEmbedding]
+) -> tuple[list[PendingProvision], list[list[float]]]:
+    """Reuse a vector when only the deterministic provision ID changed."""
+    by_source_sha256: dict[str, list[float]] = {}
+    for record in sorted(records.values(), key=lambda item: item.provision_id):
+        by_source_sha256.setdefault(record.source_text_sha256, record.embedding)
+
+    reusable_passages: list[PendingProvision] = []
+    reusable_vectors: list[list[float]] = []
+    for passage in pending:
+        vector = by_source_sha256.get(passage.source_text_sha256)
+        if vector is None:
+            continue
+        reusable_passages.append(passage)
+        reusable_vectors.append(vector)
+    return reusable_passages, reusable_vectors
+
+
+def _cache_batch_values(
+    batch: list[PendingProvision], records: dict[str, CachedEmbedding]
+) -> list[tuple[UUID, str, list[float]]]:
+    values: list[tuple[UUID, str, list[float]]] = []
+    for item in batch:
+        record = records.get(str(item.provision_id))
+        if record is None or record.source_text_sha256 != item.source_text_sha256:
+            raise RuntimeError(
+                "cache became stale relative to the locked database corpus; regenerate it"
+            )
+        values.append(
+            (
+                UUID(str(item.provision_id)),
+                item.source_text_sha256,
+                record.embedding,
+            )
+        )
+    return values
+
+
 def _append_cache(
     path: Path, batch: list[PendingProvision], vectors: list[list[float]]
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    _prepare_cache_tail_for_append(path)
     with path.open("a", encoding="utf-8", newline="\n") as stream:
         for passage, vector in zip(batch, vectors, strict=True):
             validated = _validated_vector(vector)
@@ -263,6 +366,74 @@ def _append_cache(
             )
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def _prepare_cache_tail_for_append(path: Path) -> None:
+    if not path.exists() or path.stat().st_size == 0:
+        return
+    with path.open("r+b") as stream:
+        stream.seek(-1, os.SEEK_END)
+        if stream.read(1) == b"\n":
+            return
+
+        end = stream.tell()
+        cursor = end
+        tail_start = 0
+        while cursor > 0:
+            chunk_start = max(0, cursor - 65_536)
+            stream.seek(chunk_start)
+            chunk = stream.read(cursor - chunk_start)
+            newline = chunk.rfind(b"\n")
+            if newline >= 0:
+                tail_start = chunk_start + newline + 1
+                break
+            cursor = chunk_start
+        stream.seek(tail_start)
+        tail = stream.read(end - tail_start)
+        try:
+            json.loads(tail.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            stream.truncate(tail_start)
+        else:
+            stream.seek(0, os.SEEK_END)
+            stream.write(b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+@contextmanager
+def _cache_file_lock(path: Path) -> Iterator[None]:
+    """Prevent concurrent processes from reading or appending one checkpoint."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f"{path.name}.lock")
+    stream = lock_path.open("a+b")
+    try:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RuntimeError(f"embedding cache is already in use: {path}") from exc
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    finally:
+        stream.close()
 
 
 def _cache_state(
@@ -288,6 +459,177 @@ def _cache_state(
     }
 
 
+async def _acquire_corpus_mutation_lock(connection: AsyncConnection) -> None:
+    await connection.execute(
+        text("SELECT pg_catalog.pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": CORPUS_MUTATION_LOCK_KEY},
+    )
+
+
+async def _acquire_corpus_sync_run_lock(connection: AsyncConnection) -> None:
+    await connection.execute(
+        text("SELECT pg_catalog.pg_advisory_xact_lock(:lock_key)"),
+        {"lock_key": CORPUS_SYNC_RUN_LOCK_KEY},
+    )
+
+
+@asynccontextmanager
+async def _embedding_backfill_run_lock(repository: PostgresLegalRepository):
+    """Hold a direct-session lock across a complete DB-writing backfill run."""
+    async with repository.engine.connect() as connection:
+        acquired = (
+            await connection.execute(
+                text("SELECT pg_try_advisory_lock(:lock_key)"),
+                {"lock_key": EMBEDDING_BACKFILL_LOCK_KEY},
+            )
+        ).scalar_one()
+        await connection.commit()
+        if not acquired:
+            raise RuntimeError("another embedding backfill is already running")
+        try:
+            yield
+        finally:
+            await connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_key)"),
+                {"lock_key": EMBEDDING_BACKFILL_LOCK_KEY},
+            )
+            await connection.commit()
+
+
+async def _deactivate_embedding_profile(repository: PostgresLegalRepository) -> None:
+    """Commit the fail-closed state before any multi-batch vector write."""
+    async with repository.engine.begin() as connection:
+        await _acquire_corpus_mutation_lock(connection)
+        profile_key = (
+            await connection.execute(
+                text(
+                    """UPDATE embedding_profiles SET active=false
+                    WHERE profile_key=:profile_key RETURNING profile_key"""
+                ),
+                {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
+            )
+        ).scalar_one_or_none()
+    if profile_key is None:
+        raise RuntimeError("database does not contain the required embedding profile")
+
+
+async def _profile_gate_state(connection: AsyncConnection) -> dict[str, object] | None:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    f"""WITH eligible AS (
+                      SELECT p.id provision_id,
+                        {LEGAL_PROVISION_V1_SOURCE_SHA_SQL} source_text_sha256
+                      FROM provisions p
+                      JOIN document_versions v ON v.id=p.version_id
+                      JOIN legal_documents d ON d.id=v.document_id
+                      WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                    ), coverage AS (
+                      SELECT COUNT(*) provision_count,
+                        COUNT(e.provision_id) FILTER (
+                          WHERE e.source_text_sha256=eligible.source_text_sha256
+                            AND e.dimensions=:dimensions
+                        ) current_count,
+                        COUNT(e.provision_id) FILTER (
+                          WHERE e.dimensions<>:dimensions
+                        ) wrong_dimensions_count,
+                        COUNT(e.provision_id) FILTER (
+                          WHERE abs(vector_norm(e.embedding)-1.0)>0.0001
+                        ) non_unit_count
+                      FROM eligible
+                      LEFT JOIN provision_embeddings e
+                        ON e.provision_id=eligible.provision_id
+                       AND e.profile_key=:profile_key
+                    )
+                    SELECT ep.active profile_active,ep.provider,ep.model,
+                      ep.native_dimensions,ep.stored_dimensions,
+                      ep.document_input_type,ep.query_input_type,ep.truncation,
+                      ep.normalization,ep.text_template_version,ep.profile_version,
+                      coverage.provision_count,coverage.current_count,
+                      coverage.wrong_dimensions_count,coverage.non_unit_count,
+                      {_HNSW_READY_SQL} hnsw_ready
+                    FROM embedding_profiles ep CROSS JOIN coverage
+                    WHERE ep.profile_key=:profile_key"""
+                ),
+                {
+                    "profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
+                    "dimensions": NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
+                },
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    return dict(row) if row is not None else None
+
+
+def _profile_gate_failure(state: dict[str, object] | None) -> str | None:
+    if state is None:
+        return "required embedding profile is missing"
+    profile = NVIDIA_NEMOTRON_512_PROFILE
+    expected_contract = {
+        "provider": profile.provider,
+        "model": profile.model,
+        "native_dimensions": profile.native_dimensions,
+        "stored_dimensions": profile.stored_dimensions,
+        "document_input_type": profile.document_input_type,
+        "query_input_type": profile.query_input_type,
+        "truncation": profile.truncation,
+        "normalization": profile.normalization,
+        "text_template_version": profile.text_template_version,
+        "profile_version": profile.profile_version,
+    }
+    if any(state[key] != value for key, value in expected_contract.items()):
+        return "embedding profile contract does not match the runtime profile"
+    if state["provision_count"] == 0:
+        return "eligible corpus is empty"
+    if state["current_count"] != state["provision_count"]:
+        return "embedding coverage or source hashes are incomplete"
+    if state["wrong_dimensions_count"]:
+        return "embedding dimensions do not match the active profile"
+    if state["non_unit_count"]:
+        return "one or more embeddings are not L2-normalized"
+    if not state["hnsw_ready"]:
+        return "profile HNSW index is not ready"
+    return None
+
+
+async def _promote_embedding_profile(
+    repository: PostgresLegalRepository,
+) -> dict[str, object]:
+    """Atomically verify the complete index and expose it to dense retrieval."""
+    failure: str | None = None
+    state: dict[str, object] | None = None
+    async with repository.engine.begin() as connection:
+        # Lock order matches collector: whole-run gate, then per-mutation gate.
+        await _acquire_corpus_sync_run_lock(connection)
+        await _acquire_corpus_mutation_lock(connection)
+        await connection.execute(
+            text(
+                """UPDATE embedding_profiles SET active=false
+                WHERE profile_key=:profile_key"""
+            ),
+            {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
+        )
+        state = await _profile_gate_state(connection)
+        failure = _profile_gate_failure(state)
+        if failure is None:
+            await connection.execute(
+                text(
+                    """UPDATE embedding_profiles SET active=true
+                    WHERE profile_key=:profile_key"""
+                ),
+                {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
+            )
+            assert state is not None
+            state["profile_active"] = True
+    if failure is not None:
+        raise RuntimeError(f"embedding profile activation refused: {failure}")
+    assert state is not None
+    return state
+
+
 async def _database_state(repository: PostgresLegalRepository) -> dict[str, object]:
     rows = await _provisions(repository)
     pending, missing, stale = _pending(rows)
@@ -296,21 +638,25 @@ async def _database_state(repository: PostgresLegalRepository) -> dict[str, obje
             (
                 await connection.execute(
                     text(
-                        """SELECT
+                        f"""SELECT
                         (SELECT version_num FROM alembic_version LIMIT 1) db_revision,
                         EXISTS(
                           SELECT 1 FROM pg_proc WHERE proname='hybrid_search'
                         ) hybrid_function_exists,
-                        EXISTS(
-                          SELECT 1 FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid
-                          WHERE c.relname='provision_embeddings_nemotron_512_hnsw'
-                            AND i.indisvalid AND i.indisready
-                        ) hnsw_ready,
+                        {_HNSW_READY_SQL} hnsw_ready,
+                        COALESCE((
+                          SELECT active FROM embedding_profiles
+                          WHERE profile_key=:profile_key
+                        ),false) profile_active,
                         (SELECT COUNT(*) FROM provision_embeddings
                           WHERE profile_key=:profile_key) stored_count,
-                        (SELECT COUNT(*) FROM provision_embeddings
-                          WHERE profile_key=:profile_key
-                            AND abs(vector_norm(embedding)-1.0)>0.0001) non_unit_count"""
+                        (SELECT COUNT(*) FROM provision_embeddings e
+                          JOIN provisions p ON p.id=e.provision_id
+                          JOIN document_versions v ON v.id=p.version_id
+                          WHERE e.profile_key=:profile_key
+                            AND {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                            AND abs(vector_norm(e.embedding)-1.0)>0.0001
+                        ) non_unit_count"""
                     ),
                     {"profile_key": NVIDIA_NEMOTRON_512_PROFILE.key},
                 )
@@ -333,6 +679,7 @@ async def _database_state(repository: PostgresLegalRepository) -> dict[str, obje
         "longest_pending_characters": longest,
         "non_unit_vector_count": state["non_unit_count"],
         "hnsw_ready": state["hnsw_ready"],
+        "profile_active": state["profile_active"],
         "hybrid_function_exists": state["hybrid_function_exists"],
     }
 
@@ -396,13 +743,31 @@ async def _generate_cache(
     _validate_batch_arguments(arguments)
     passages = _source_passages(await _source_provisions(repository))
     records, line_count = _read_cache(arguments.cache)
+    initial_pending, _, _ = _cache_pending(passages, records)
+    reusable_passages, reusable_vectors = _reusable_cache_vectors(
+        initial_pending, records
+    )
+    if reusable_passages:
+        _append_cache(arguments.cache, reusable_passages, reusable_vectors)
+        records, _ = _read_cache(arguments.cache)
+        print(
+            json.dumps(
+                {
+                    "event": "cache_vectors_reused",
+                    "reused": len(reusable_passages),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
     pending, _, _ = _cache_pending(passages, records)
     if arguments.max_items is not None:
         pending = pending[: arguments.max_items]
-    embedder = _embedder(settings)
+    embedder = _embedder(settings) if pending else None
     generated = 0
     for start in range(0, len(pending), arguments.batch_size):
         batch = pending[start : start + arguments.batch_size]
+        assert embedder is not None
         vectors = await _embed_with_retry(
             embedder,
             [item.text for item in batch],
@@ -425,6 +790,7 @@ async def _generate_cache(
     final_records, final_line_count = _read_cache(arguments.cache)
     return {
         "generated_count": generated,
+        "reused_count": len(reusable_passages),
         "initial_cache_line_count": line_count,
         "state": _cache_state(
             arguments.cache, passages, final_records, final_line_count
@@ -436,55 +802,47 @@ async def _load_cache(
     arguments: argparse.Namespace, repository: PostgresLegalRepository
 ) -> dict[str, object]:
     _validate_batch_arguments(arguments)
-    passages = _source_passages(await _source_provisions(repository))
-    records, line_count = _read_cache(arguments.cache)
-    state = _cache_state(arguments.cache, passages, records, line_count)
-    if not state["complete"]:
-        raise RuntimeError("cache is incomplete or stale; generate it before loading")
     async with repository.engine.connect() as connection:
         schema_ready = (
             await connection.execute(
                 text(
                     """SELECT to_regclass('embedding_profiles') IS NOT NULL
-                    AND to_regclass('provision_embeddings') IS NOT NULL"""
+                    AND to_regclass('provision_embeddings') IS NOT NULL
+                    AND EXISTS(
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_name='document_versions'
+                        AND column_name='source_record_state'
+                    )"""
                 )
             )
         ).scalar_one()
         if not schema_ready:
-            raise RuntimeError("database must be migrated to revision 0008 or later")
-        profile_exists = (
-            await connection.execute(
-                text(
-                    "SELECT EXISTS(SELECT 1 FROM embedding_profiles WHERE profile_key=:key)"
-                ),
-                {"key": NVIDIA_NEMOTRON_512_PROFILE.key},
-            )
-        ).scalar_one()
-    if not profile_exists:
-        raise RuntimeError("database does not contain the required embedding profile")
+            raise RuntimeError("database must be migrated to revision 0009 or later")
+    passages = _source_passages(await _source_provisions(repository))
+    records, line_count = _read_cache(arguments.cache)
+    state = _cache_state(arguments.cache, passages, records, line_count)
+    if not state["complete"]:
+        raise RuntimeError("cache is incomplete or stale; generate it before loading")
+
+    await _deactivate_embedding_profile(repository)
+    pending, _, _ = _pending(await _provisions(repository))
     loaded = 0
-    for start in range(0, len(passages), arguments.batch_size):
-        batch = passages[start : start + arguments.batch_size]
+    for start in range(0, len(pending), arguments.batch_size):
+        batch = pending[start : start + arguments.batch_size]
         await repository.upsert_embeddings(
-            [
-                (
-                    UUID(str(item.provision_id)),
-                    item.source_text_sha256,
-                    records[str(item.provision_id)].embedding,
-                )
-                for item in batch
-            ],
+            _cache_batch_values(batch, records),
             NVIDIA_NEMOTRON_512_PROFILE.key,
             NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
         )
         loaded += len(batch)
         print(
             json.dumps(
-                {"event": "db_batch_committed", "loaded": loaded, "target": len(passages)},
+                {"event": "db_batch_committed", "loaded": loaded, "target": len(pending)},
                 ensure_ascii=False,
             ),
             flush=True,
         )
+    await _promote_embedding_profile(repository)
     return {"loaded_count": loaded, "state": await _database_state(repository)}
 
 
@@ -499,7 +857,11 @@ async def _verify_dense_search(
     if arguments.limit < 1 or arguments.limit > 20:
         raise ValueError("limit must be between 1 and 20")
     state = await _database_state(repository)
-    if state["pending_count"] or not state["hnsw_ready"]:
+    if (
+        state["pending_count"]
+        or not state["hnsw_ready"]
+        or not state["profile_active"]
+    ):
         raise RuntimeError("dense index is not ready for verification")
     vector = (
         await _embedder(
@@ -523,6 +885,7 @@ async def _verify_dense_search(
         "retrieval_strategy": trace.strategy,
         "candidate_count": trace.candidate_count,
         "hnsw_ready": state["hnsw_ready"],
+        "profile_active": state["profile_active"],
         "hybrid_function_exists": state["hybrid_function_exists"],
         "results": [
             {
@@ -537,11 +900,60 @@ async def _verify_dense_search(
     }
 
 
+async def _backfill_database(
+    arguments: argparse.Namespace,
+    repository: PostgresLegalRepository,
+    settings,
+) -> dict[str, object]:
+    _validate_batch_arguments(arguments)
+    await _deactivate_embedding_profile(repository)
+    rows = await _provisions(repository)
+    pending, _, _ = _pending(rows)
+    if arguments.max_items is not None:
+        pending = pending[: arguments.max_items]
+    embedder = _embedder(settings) if pending else None
+    generated = 0
+    for start in range(0, len(pending), arguments.batch_size):
+        batch = pending[start : start + arguments.batch_size]
+        assert embedder is not None
+        vectors = await _embed_with_retry(
+            embedder,
+            [item.text for item in batch],
+            max_retries=arguments.max_retries,
+            retry_base_seconds=arguments.retry_base_seconds,
+        )
+        await repository.upsert_embeddings(
+            [
+                (item.provision_id, item.source_text_sha256, vector)
+                for item, vector in zip(batch, vectors, strict=True)
+            ],
+            NVIDIA_NEMOTRON_512_PROFILE.key,
+            NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
+        )
+        generated += len(batch)
+        print(
+            json.dumps(
+                {"event": "batch_committed", "generated": generated, "target": len(pending)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    await _promote_embedding_profile(repository)
+    final = await _database_state(repository)
+    return {"generated_count": generated, "state": final}
+
+
 async def _run(arguments: argparse.Namespace) -> dict[str, object]:
     settings = get_settings()
-    if not settings.database_url:
+    database_url = settings.database_url or settings.direct_url
+    if not database_url:
         raise SystemExit("DATABASE_URL이 필요합니다.")
-    repository = PostgresLegalRepository(settings.database_url)
+    writes_database = arguments.command in {"load-cache", "run"}
+    if writes_database and not settings.direct_url:
+        raise SystemExit("load-cache와 run에는 session-mode DIRECT_URL이 필요합니다.")
+    repository = PostgresLegalRepository(
+        settings.direct_url if writes_database else database_url
+    )
     try:
         if arguments.command == "status":
             return await _database_state(repository)
@@ -553,43 +965,14 @@ async def _run(arguments: argparse.Namespace) -> dict[str, object]:
                 records, line_count = _read_cache(arguments.cache)
                 return _cache_state(arguments.cache, passages, records, line_count)
             if arguments.command == "generate-cache":
-                return await _generate_cache(arguments, repository, settings)
-            return await _load_cache(arguments, repository)
+                with _cache_file_lock(arguments.cache):
+                    return await _generate_cache(arguments, repository, settings)
+            with _cache_file_lock(arguments.cache):
+                async with _embedding_backfill_run_lock(repository):
+                    return await _load_cache(arguments, repository)
 
-        _validate_batch_arguments(arguments)
-
-        rows = await _provisions(repository)
-        pending, _, _ = _pending(rows)
-        if arguments.max_items is not None:
-            pending = pending[: arguments.max_items]
-        embedder = _embedder(settings)
-        generated = 0
-        for start in range(0, len(pending), arguments.batch_size):
-            batch = pending[start : start + arguments.batch_size]
-            vectors = await _embed_with_retry(
-                embedder,
-                [item.text for item in batch],
-                max_retries=arguments.max_retries,
-                retry_base_seconds=arguments.retry_base_seconds,
-            )
-            await repository.upsert_embeddings(
-                [
-                    (item.provision_id, item.source_text_sha256, vector)
-                    for item, vector in zip(batch, vectors, strict=True)
-                ],
-                NVIDIA_NEMOTRON_512_PROFILE.key,
-                NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
-            )
-            generated += len(batch)
-            print(
-                json.dumps(
-                    {"event": "batch_committed", "generated": generated, "target": len(pending)},
-                    ensure_ascii=False,
-                ),
-                flush=True,
-            )
-        final = await _database_state(repository)
-        return {"generated_count": generated, "state": final}
+        async with _embedding_backfill_run_lock(repository):
+            return await _backfill_database(arguments, repository, settings)
     finally:
         await repository.engine.dispose()
 
