@@ -54,7 +54,7 @@ corpus 범위 밖이면 `insufficient_evidence`로 차단한다. 이 기준선�
 - [x] M3 — context builder, 법률 계층 복원, 안전 게이트 구현
 - [x] M4 — dense-only 재측정과 lexical+dense 비교·채택 여부 결정
 - [x] M5 — 자동 기록, 실제 결과, 근거 문서와 학습 문서 생성
-- [ ] M6 — 전체 검증, 기능별 커밋, main 병합·푸시와 브랜치 정리
+- [x] M6 — 전체 검증, 기능별 커밋, main 병합·푸시와 브랜치 정리
 
 ## 작업 TODO
 
@@ -68,7 +68,7 @@ corpus 범위 밖이면 `insufficient_evidence`로 차단한다. 이 기준선�
 | 완료 | 주 에이전트 | `experiment_context.py` 계층 복원·안전 게이트·원자 기록 | corpus/evidence 계약 | D 정상/실패/경계/반복 테스트 |
 | 완료 | 주 에이전트 | dense 기준선 재생성과 lexical+dense 비교 | 위 구현 | 고정 평가 실제 지표 비교 |
 | 완료 | 주 에이전트 | 설계·학습·근거·생성 문서 갱신 | 실제 측정 | 문서 검사와 링크 검사 |
-| 대기 | 주 에이전트 | 커밋·main 병합·푸시·브랜치 정리 | 전체 검증 | 원격 main 확인, main 외 브랜치 0개 |
+| 완료 | 주 에이전트 | 커밋·main 병합·푸시·브랜치 정리 | 전체 검증 | 원격 main 확인, main 외 브랜치 0개 |
 
 ## 검증과 롤백
 
@@ -120,3 +120,4 @@ pnpm.cmd verify
 - 실험 D CLI와 원자 기록을 구현하고 실제 6개 실행을 저장했다.
 - dense-only 최종 기준선이 고정 평가의 모든 검색·근거 지표에서 1.0이므로 hybrid는 보류했다.
 - 설계 근거, 공식 참고 자료, 영어 개념 학습 문서를 추가했다.
+- 전체 검증을 통과하고 `merge: experiments A through D` 병합 커밋으로 main에 통합했다.
