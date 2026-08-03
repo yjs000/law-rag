@@ -6,12 +6,16 @@ from datetime import date
 from typing import Any, Literal
 
 from defusedxml import ElementTree as ET
+from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord
 
 from law_rag_collector.client import RawResponse
 
 LifecycleState = Literal["active", "scheduled", "abolished"]
 SourceRecordState = Literal["available", "deleted"]
+
+_ARTICLE_PATH = re.compile(r"^(제\d+조(?:의\d+)?)(?:/|$)")
+_STRUCTURE_MARKER = re.compile(r"^\s*제\s*\d+\s*(?:장|절)(?:의\s*\d+)?(?:\s|$)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +47,7 @@ def validate_for_activation(
         raise ValueError("조문 경로가 중복되었습니다")
     if any(not provision.content.strip() for provision in document.provisions):
         raise ValueError("내용이 없는 조문이 있습니다")
+    _validate_provision_hierarchy(document)
     if document.raw_format.upper() != raw.wire_format:
         raise ValueError("파서 포맷과 원문 포맷이 다릅니다")
     import hashlib
@@ -63,6 +68,41 @@ def validate_for_activation(
         source_record_state="deleted" if markers["deleted"] else "available",
         has_supplementary_provisions=markers["supplementary"],
     )
+
+
+def _validate_provision_hierarchy(document: LegalDocumentRecord) -> None:
+    """검색·임베딩 전에 원문 위치와 부모 관계를 결정적으로 검증한다."""
+    by_path = {provision.path: provision for provision in document.provisions}
+    for provision in document.provisions:
+        if provision.parent_path is not None and provision.parent_path not in by_path:
+            raise ValueError(f"상위 조문 경로가 없습니다: {provision.path}")
+
+    if document.source_kind is not SourceKind.LAW:
+        return
+
+    roots: set[str] = set()
+    expected_roots: set[str] = set()
+    for provision in document.provisions:
+        match = _ARTICLE_PATH.match(provision.path)
+        if match is None:
+            raise ValueError(f"법률 조문 경로 형식이 아닙니다: {provision.path}")
+        article_path = match.group(1)
+        expected_roots.add(article_path)
+        if provision.parent_path is None:
+            if provision.path != article_path:
+                raise ValueError(f"하위 조문에 상위 경로가 없습니다: {provision.path}")
+            if _STRUCTURE_MARKER.match(provision.content):
+                raise ValueError(f"조문 본문이 장·절 구조 표지입니다: {provision.path}")
+            roots.add(provision.path)
+            continue
+
+        parent_match = _ARTICLE_PATH.match(provision.parent_path)
+        if parent_match is None or parent_match.group(1) != article_path:
+            raise ValueError(f"상위 경로가 다른 조문을 가리킵니다: {provision.path}")
+
+    missing_roots = expected_roots - roots
+    if missing_roots:
+        raise ValueError(f"조문 루트가 없습니다: {', '.join(sorted(missing_roots))}")
 
 
 def _markers(raw: RawResponse) -> dict[str, bool]:
