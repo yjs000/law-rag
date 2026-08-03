@@ -4,7 +4,13 @@ import re
 from datetime import date
 from pathlib import Path
 
-from scripts.generate_experiment_d_dataset import SourceProvision, build_dataset
+from scripts.generate_experiment_d_dataset import (
+    SourceProvision,
+    _actor,
+    _positive_case,
+    _unique_semantic_candidates,
+    build_dataset,
+)
 from scripts.render_experiment_d_question_review import render_review
 
 DATASET = Path(__file__).parents[1] / "evaluation" / "experiment-d-v3-1000.json"
@@ -91,6 +97,77 @@ def test_small_dataset_builds_all_control_and_boundary_categories() -> None:
     assert sum(not case["answerable"] for case in dataset["cases"]) == 2
 
 
+def test_subtree_evidence_includes_enumerated_children() -> None:
+    parent = _source(
+        "parent",
+        "제3조/항①",
+        "① 다음 각 호의 사업을 실시할 수 있다.",
+        parent_path="제3조",
+    )
+    child = _source(
+        "number",
+        "제3조/항①/호1.",
+        "1. 기술개발 지원 사업",
+        parent_path="제3조/항①",
+        ordinal=1,
+    )
+    by_article = {("document-1", "version-1", "제3조"): [parent, child]}
+
+    case = _positive_case(
+        case_id="case-1",
+        category="semantic_paraphrase",
+        question="어떤 사업을 할 수 있나요?",
+        item=parent,
+        by_article=by_article,
+        index=0,
+        template="permitted_action",
+        evidence_scope="subtree",
+    )
+
+    assert [qrel["provision_id"] for qrel in case["qrels"]] == ["parent", "number"]
+    assert case["qrels"][0]["relevance"] == 2
+    assert case["qrels"][1]["relevance"] == 1
+    assert "기술개발 지원 사업" in case["reference"]
+    assert len(case["reference_contexts"]) == 2
+
+
+def test_semantic_candidates_require_one_fixed_evidence_contract() -> None:
+    first = _source("first", "제1조/항①", "① 허가를 받아야 한다.")
+    second = _source("second", "제1조/항②", "② 변경허가를 받아야 한다.")
+    unique = _source("unique", "제2조/항①", "① 신고하여야 한다.")
+    specs = {
+        "first": ("동일한 질문", "approval_requirement"),
+        "second": ("동일한 질문", "approval_requirement"),
+        "unique": ("고유한 질문", "reporting_duty"),
+    }
+
+    selected = _unique_semantic_candidates([first, second, unique], specs)
+
+    assert selected == [unique]
+
+
+def test_actor_uses_role_noun_instead_of_korean_verb_ending() -> None:
+    received = _source(
+        "received",
+        "제1조/항①",
+        "① 제2항에 따라 과징금을 받은 수납기관은 영수증을 발급하여야 한다.",
+    )
+    conditional = _source(
+        "conditional",
+        "제1조/항②",
+        "② 설비를 이용하는 발전사업자는 허가를 받아야 한다.",
+    )
+    universal = _source(
+        "universal",
+        "제1조/항③",
+        "③ 누구든지 보호구역에서 손상행위를 하여서는 아니 된다.",
+    )
+
+    assert _actor(received) == "수납기관"
+    assert _actor(conditional) == "발전사업자"
+    assert _actor(universal) == "누구든지"
+
+
 def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
     dataset = json.loads(DATASET.read_text(encoding="utf-8"))
     cases = dataset["cases"]
@@ -111,7 +188,10 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
     assert len({case["id"] for case in cases}) == 1000
     assert len({case["user_input"] for case in cases}) == 1000
     assert sum(case["answerable"] for case in cases) == 850
-    assert sum(case["review"]["status"] == "needs_human_review" for case in cases) == 11
+    assert sum(case["review"]["status"] == "needs_human_review" for case in cases) == 10
+    assert dataset["corpus"]["eligible_provision_count"] == 2502
+    assert dataset["corpus"]["evidence_provision_count"] == 2833
+    assert dataset["corpus"]["ambiguous_semantic_candidate_count"] == 212
     assert sum(
         case["generation"]["template_id"] == "document_outside_corpus"
         for case in cases
@@ -123,6 +203,7 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
         if case["answerable"]:
             assert case["primary_evidence"] is not None
             assert case["qrels"]
+            assert case["generation"]["evidence_scope"] in {"article", "leaf", "subtree"}
             primary_id = case["primary_evidence"]["provision_id"]
             assert any(
                 qrel["provision_id"] == primary_id and qrel["relevance"] == 2
@@ -148,6 +229,17 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
             assert not set(case["distractor_provision_ids"]).intersection(
                 qrel["provision_id"] for qrel in case["qrels"]
             )
+        if (
+            case["answerable"]
+            and case["generation"]["evidence_scope"] == "subtree"
+            and re.search(r"다음\s+각\s+(?:호|목)", case["reference"])
+            and not re.search(r"(?:^|\s)(?:1\.|가\.)\s*\S", case["reference"])
+        ):
+            primary_path = f"{case['primary_evidence']['path']}/"
+            assert any(qrel["path"].startswith(primary_path) for qrel in case["qrels"])
+        assert not re.search(
+            r"(?:받|하|되|있|없|필요|변경하려|전기설비)에게", case["user_input"]
+        )
 
 
 def test_question_review_is_explicitly_not_a_search_result() -> None:
@@ -160,3 +252,4 @@ def test_question_review_is_explicitly_not_a_search_result() -> None:
     assert "structure_marker_as_answer` | 0" in review
     assert "semantic_near_copy` | 0" in review
     assert "weak_hard_contrast` | 0" in review
+    assert "missing_enumerated_context` | 0" in review

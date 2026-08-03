@@ -34,6 +34,9 @@ STATIC_FLAG_DESCRIPTIONS = {
         "의미 변형 질문이 기준 답과 문자열 유사도 0.80 이상 — 난이도 과대평가 위험"
     ),
     "weak_hard_contrast": "hard-contrast의 정답·distractor 유사도 0.30 미만 — 대조 난이도 부족",
+    "missing_enumerated_context": (
+        "다음 각 호·목을 여는 근거에 하위 조각이 없음 — 기준 답과 qrels 불완전"
+    ),
     "synthetic_outside_corpus": "실재하지 않는 제9000조대 질문 — 극단 경계값용 합성 음성 대조군",
 }
 
@@ -81,6 +84,16 @@ def _static_flags(case: dict[str, Any]) -> list[str]:
         case["generation"].get("distractor_similarity", 0.0)
     ) < 0.30:
         flags.append("weak_hard_contrast")
+    primary = case.get("primary_evidence")
+    if (
+        isinstance(primary, dict)
+        and case["generation"].get("evidence_scope") == "subtree"
+        and re.search(r"다음\s+각\s+(?:호|목)", reference)
+        and not re.search(r"(?:^|\s)(?:1\.|가\.)\s*\S", reference)
+    ):
+        primary_path = f"{primary['path']}/"
+        if not any(str(qrel["path"]).startswith(primary_path) for qrel in case["qrels"]):
+            flags.append("missing_enumerated_context")
     return flags
 
 
@@ -168,7 +181,8 @@ def render_review(dataset: dict[str, Any]) -> str:
         [
             "",
             "`structure_marker_as_answer`, `deleted_provision_control`, "
-            "`semantic_near_copy`, `weak_hard_contrast`는 0이어야 한다. "
+            "`semantic_near_copy`, `weak_hard_contrast`, "
+            "`missing_enumerated_context`는 0이어야 한다. "
             "`synthetic_outside_corpus`는 의도된 비교군이므로 유지 여부만 확인한다.",
         ]
     )
@@ -177,6 +191,7 @@ def render_review(dataset: dict[str, Any]) -> str:
         "deleted_provision_control",
         "semantic_near_copy",
         "weak_hard_contrast",
+        "missing_enumerated_context",
     ):
         lines.extend(
             [

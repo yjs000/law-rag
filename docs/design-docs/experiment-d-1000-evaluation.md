@@ -26,7 +26,11 @@ NVIDIA의 검색/답변 분리와 BEIR qrels, LlamaIndex의 labelled RAG dataset
 
 LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되, 법률 답은 LLM 생성문이 아니라 원문 조각으로 고정했다. 의미 질문은 원문 전체를 의문형으로 복사하지 않고 조 표제와 `허가·신고·의무·금지·허용` 행위 유형을 결합한다. 조 표제가 없는 조각은 의미 질문 후보에서 제외한다.
 
-장점은 재생성해도 같은 문항이 나오고 정답 환각이 없다는 것이다. 한계는 자연스러운 질문인지, 질문이 정답을 유일하게 지시하는지는 템플릿만으로 보장되지 않는다는 것이다. 현재 11개 수동 검토와 전체 읽기용 검토본을 제공하며, 후속 human-authored holdout으로 보완한다.
+장점은 재생성해도 같은 문항이 나오고 정답 환각이 없다는 것이다. 한계는 자연스러운 질문인지까지 템플릿만으로 보장할 수 없다는 것이다. 현재 10개 수동 검토와 전체 읽기용 검토본을 제공하며, 후속 human-authored holdout으로 보완한다.
+
+의미 질문은 법령명·조 표제·행위 유형에 행위 주체 역할명(`전기사업자`, `장관`, `공급의무자` 등)을 선택적으로 결합한다. 같은 질문 문자열을 만드는 후보 조각이 둘 이상이면 어느 조각이 정답인지 고정할 수 없으므로 모두 의미 질문 후보에서 제외한다. 현재 corpus에서는 이러한 후보 212개가 제외됐고, 남은 후보에서 200개 의미 질문과 100개 hard contrast를 구성했다.
+
+`다음 각 호` 또는 `다음 각 목`을 여는 조각은 그 문장만으로 목록 내용을 다 담지 못한다. 이 경우 primary evidence와 그 하위 호·목을 `subtree` evidence closure로 묶는다. primary 조각은 relevance 2, 답을 완성하는 하위 조각은 relevance 1이며, `reference`와 `reference_contexts`에도 함께 들어간다. 짧아서 질문 후보가 될 수 없는 호·목도 삭제·구조 표지가 아니라면 근거 문맥에는 포함한다.
 
 ## 1,000문항 구성
 
@@ -73,7 +77,7 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 - `document_id`, `version_id`, `provision_id`, `path`, `content_sha256`
 - 관련 조각과 relevance 등급인 `qrels`
 - hard contrast의 `distractor_provision_ids`
-- 생성 템플릿과 사람 검토 상태
+- 생성 템플릿, `evidence_scope`와 사람 검토 상태
 
 BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/experiments/context/beir-v3/`에 로컬 생성한다. 전체 법률 원문 corpus는 실행 산출물이므로 Git에 넣지 않는다.
 
@@ -92,8 +96,10 @@ BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/ex
 - semantic 질문과 reference의 문자열 유사도 0.80 미만
 - hard contrast distractor가 qrel과 겹치지 않고 정답과 본문 유사도 0.30 이상
 - outside-corpus가 실제 corpus 밖 법률 60개와 극단 조문 경계 15개로 구성됨
+- 같은 의미 질문 문자열이 정확히 하나의 근거 후보만 가리킴
+- `다음 각 호·목`을 여는 subtree 근거에 실제 하위 조각이 있으면 qrels와 기준 문맥에 포함됨
 
-표제가 없거나 근거가 매우 짧고 교차참조 중심인 문항은 자동 통과로 숨기지 않는다. 현재 11개를 [사람이 직접 확인할 문항](../generated/experiment-d-v3-review.md)에 질문·기준 답·이유와 함께 분리했다. 범주별 대표 질문과 전체 1,000문항은 [전체 질문 검토본](../generated/experiment-d-v3-question-review.md)에 있다.
+표제가 없거나 근거가 매우 짧고 교차참조 중심인 문항은 자동 통과로 숨기지 않는다. 현재 10개를 [사람이 직접 확인할 문항](../generated/experiment-d-v3-review.md)에 질문·기준 답·이유와 함께 분리했다. 범주별 대표 질문과 전체 1,000문항은 [전체 질문 검토본](../generated/experiment-d-v3-question-review.md)에 있다.
 
 v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개, reference와 문자열 유사도 0.80 이상인 의미 질문 116개를 발견했다. v3 초안에서는 세 항목이 모두 0개다. 다만 운영 corpus에는 과거 파서가 저장한 구조 표지 7개가 남아 있어 데이터셋 후보에서 제외한 상태다. 검색 실험 전에 현재 파서로 corpus를 재수집하고 벡터·qrels를 다시 생성해야 한다.
 
@@ -118,3 +124,5 @@ LLM judge를 쓰는 지표는 모델·프롬프트·실패/NaN 수를 함께 기
 - 2026-08-03: v2 정적 감사 결과를 반영해 구조 표지·삭제 조문을 제외하고, 의미 질문을 조 표제·행위 유형 기반으로 바꾼 v3 검토 초안을 생성했다.
 - 2026-08-03: hard distractor는 같은 법령 버전의 다른 조문 중 가장 유사한 본문으로 선택하고 최소 유사도 0.30을 요구한다.
 - 2026-08-03: outside-corpus는 corpus 밖 실제 법률 질문 60개와 존재하지 않는 조문 15개로 분리했다.
+- 2026-08-03: 의미 질문에 행위 주체 역할명을 추가하고, 동일 질문이 복수 근거 후보를 가리키는 212개 후보는 제외했다.
+- 2026-08-03: 목록 도입 조각의 답을 완성하는 짧은 하위 호·목까지 subtree evidence closure와 qrels에 포함했다.
