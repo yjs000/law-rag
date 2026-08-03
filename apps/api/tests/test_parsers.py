@@ -37,6 +37,61 @@ def test_json_and_xml_normalize_to_equivalent_core_document() -> None:
     assert xml_doc.raw_format == "XML"
 
 
+@pytest.mark.parametrize("wire_format", ["json", "xml"])
+def test_chapter_marker_does_not_replace_first_article(wire_format: str) -> None:
+    if wire_format == "json":
+        body = json.dumps(
+            {
+                "법령": {
+                    "기본정보": {
+                        "법령ID": "001",
+                        "법령일련번호": "1001",
+                        "법령명_한글": "전기사업법",
+                    },
+                    "조문": {
+                        "조문단위": [
+                            {
+                                "조문번호": "1",
+                                "조문여부": "전문",
+                                "조문내용": "제1장 총칙",
+                            },
+                            {
+                                "조문번호": "1",
+                                "조문여부": "조문",
+                                "조문제목": "목적",
+                                "조문내용": "제1조(목적) 실제 본문",
+                            },
+                        ]
+                    },
+                }
+            },
+            ensure_ascii=False,
+        )
+        document = parse_json(
+            body,
+            expected_title="전기사업법",
+            source_kind=SourceKind.LAW,
+            source_url="https://example.test/json",
+        )
+    else:
+        body = """\
+<법령><기본정보><법령ID>001</법령ID><법령일련번호>1001</법령일련번호>
+<법령명_한글>전기사업법</법령명_한글></기본정보><조문>
+<조문단위><조문번호>1</조문번호><조문여부>전문</조문여부><조문내용>제1장 총칙</조문내용></조문단위>
+<조문단위><조문번호>1</조문번호><조문여부>조문</조문여부><조문제목>목적</조문제목>
+<조문내용>제1조(목적) 실제 본문</조문내용></조문단위></조문></법령>"""
+        document = parse_xml(
+            body,
+            expected_title="전기사업법",
+            source_kind=SourceKind.LAW,
+            source_url="https://example.test/xml",
+        )
+
+    assert [(item.path, item.heading, item.content) for item in document.provisions] == [
+        ("제1조", "목적", "제1조(목적) 실제 본문")
+    ]
+
+
 @pytest.mark.parametrize(
     "parser,error", [(parse_json, LawJsonParseError), (parse_xml, LawXmlParseError)]
 )

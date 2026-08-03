@@ -180,6 +180,9 @@ def parse_legal_document(
 
     recorded_articles: set[str] = set()
     for article in article_nodes:
+        article_kind = _value(article, "조문여부")
+        if article_kind is not None and article_kind != "조문":
+            continue
         number = _value(article, "조문번호") or str(len(provisions) + 1)
         branch = _value(article, "조문가지번호")
         article_path = f"제{number}조"
