@@ -56,10 +56,13 @@ LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되
 
 - `Recall@1/3/5/10`: 각 질문의 전체 grade 2 직접 qrels 중 top k에서 찾은 비율을 질문별로 계산해 macro 평균한다.
 - `HitRate@1/3/5/10`: grade 2 직접 qrel이 하나라도 top k에 있으면 1이다. 직접 qrel이 여러 개인 질문에서는 Recall과 다르다.
+- `Precision@1/3/5/10`: top k에서 grade 1 보조 문맥 또는 grade 2 직접 근거로 판정된 결과 수를 고정 분모 k로 나눈다. `direct_precision@k`는 grade 2만 센다.
 - `MRR@10`: 처음 찾은 grade 2 직접 qrel이 10위 안에 있으면 그 순위의 역수, 없으면 0이다.
 - `nDCG@1/3/5/10`: 직접 근거 2, 보조 문맥 1, 그 밖의 후보 0을 `2^relevance - 1` gain과 `log2(rank + 1)` 할인으로 평가한다.
 - `facet_recall@k`와 `all_required_facets_covered@k`: retrieved grade 2 qrels가 corpus에서 supported인 필수 답변 요소를 얼마나 덮는지 본다.
 - HNSW exact 대조: indexed search가 exact cosine 순위에서 얼마나 근거를 놓치는지 본다.
+
+같은 scenario family의 다섯 표현은 독립 표본 다섯 개로 과대 계산하지 않는다. held-out test의 fully-answerable 문항에서 먼저 family 안의 문항을 평균한 뒤 family마다 같은 가중치로 다시 평균한 값을 보고 기준으로 삼는다. 기존 질문별 macro 평균은 호환 진단값으로 남긴다. 대표 순위 지표는 `nDCG@10`, 완전성 게이트는 `Recall@10`, 상위 문맥 순도 진단은 `Precision@5`다. 이 세 family-macro 값에는 scenario family를 재표집 단위로 하는 SHA-256 counter 기반 2,000회 deterministic bootstrap 95% 신뢰구간을 함께 기록한다. 이 1,000/200/800 구성과 bootstrap 방식은 외부 벤치마크의 고정 표준이 아니라 이 프로젝트가 미리 봉인한 평가 계약이다.
 - 근거 부족: 시행 전 75개, corpus 밖 실제 법률 60개, 존재하지 않는 조문 15개의 false-positive rate를 본다.
 - 생성 문맥: 후보 10개를 답변 문맥으로 줄이는 평가는 raw 검색 runner의 core 지표와 분리한 후속 문맥·답변 단계에서 수행한다.
 
@@ -123,15 +126,16 @@ v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개
 
 `uv run --directory apps/api python -m scripts.preflight_experiment_d_gold --dataset evaluation/experiment-d-lay-energy-gold-v1.json`
 
-이 명령은 독립적인 읽기 전용 검사이므로 그 자체가 검색 실행 전체를 잠그는 원자적 게이트는 아니다. 실제 `scripts.evaluate_experiment_d_gold` runner는 clean critical code provenance와 초기 preflight·검색 상태를 먼저 확인하고, 그 뒤에만 질문을 임베딩한다. 이어 같은 DB 연결의 transaction에서 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight·벡터 profile·coverage·L2 norm·HNSW identity와 설정을 다시 검사한 뒤 마지막 검색까지 잠금을 유지한다. 질문 승인 전에는 runner를 실행하지 않는다.
+이 명령은 독립적인 읽기 전용 검사이므로 그 자체가 검색 실행 전체를 잠그는 원자적 게이트는 아니다. 실제 `scripts.evaluate_experiment_d_gold` runner는 clean critical code provenance와 초기 preflight·검색 상태를 먼저 확인하고, 그 뒤에만 질문을 임베딩한다. 이어 같은 DB 연결의 transaction에서 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight·벡터 profile·coverage·L2 norm·HNSW 물리 identity·valid/ready 상태와 transaction·planner 설정을 다시 검사한 뒤 마지막 검색까지 잠금을 유지한다. 질문 승인 전에는 runner를 실행하지 않는다.
 
 runner의 검색 단위는 raw `provision_id`이며 production direct-path, keyword fallback과 article grouping을 사용하지 않는다. 각 질문에서 11개를 받아 raw cosine 내림차순과 provision ID 오름차순 tie-break를 검증하고, 10위와 11위 점수가 같으면 `unresolved_cutoff_tie`로 실패한다. 실행 계획, retrieval 상태, corpus·vector·질문·critical code 지문과 실제 순위를 기록하며, 전체 성공 뒤에만 `.data/experiments/experiment-d/runs/`에 새 JSON을 원자적으로 게시한다. 실패하면 완성 결과 파일을 만들지 않고 기존 run을 덮어쓰지 않는다.
 
 과거 v3 draft의 stale qrels를 재현해서 확인할 때만 보고서에 적힌 별도 명령처럼 `evaluation/experiment-d-v3-1000.json`을 명시한다. 이 파일은 통과 대상 gold가 아니다.
 
-- fully answerable의 Recall@1/3/5/10과 HitRate@1/3/5/10
+- fully answerable의 Recall@1/3/5/10, HitRate@1/3/5/10, Precision@1/3/5/10과 direct Precision@1/3/5/10
 - grade 2 직접 qrel 기준 MRR@10
 - grade 2/1 graded nDCG@1/3/5/10
+- held-out test fully-answerable의 family-macro 대표 지표와 family bootstrap 95% 신뢰구간
 - facet_recall@1/3/5/10과 all_required_facets_covered@1/3/5/10
 - partial·clarification·unanswerable 별도 모집단 보고
 - unanswerable false-positive rate

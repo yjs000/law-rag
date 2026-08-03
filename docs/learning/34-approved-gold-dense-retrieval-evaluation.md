@@ -13,7 +13,7 @@
 - 중복되거나 선행 문맥이 빠진 질문이 없는가
 - 특정 기술이나 상황에 지나치게 치우치지 않았는가
 
-하지만 검색 결과가 맞는지는 확인할 수 없다. Recall, MRR과 nDCG를 계산하려면 질문마다 어떤 원문이 직접 근거인지 미리 확정한 정답표가 필요하다.
+하지만 검색 결과가 맞는지는 확인할 수 없다. Recall, Precision, MRR과 nDCG를 계산하려면 질문마다 어떤 원문이 직접 근거인지 미리 확정한 정답표가 필요하다.
 
 ```text
 질문은행 draft
@@ -124,8 +124,8 @@ artifact 계약과 critical code provenance 확인
 → 질문 임베딩
 → READ COMMITTED, READ ONLY transaction의 첫 snapshot-taking statement로 shared lock 획득
 → locked preflight + retrieval 상태 재검사
-→ 기준일별 대표 query EXPLAIN에서 기대 HNSW 확인
-→ 모든 질문 raw dense 검색
+→ 기준일별 대표 query EXPLAIN에서 exact cosine 계획 확인
+→ 모든 질문 raw exact cosine 검색
 → lock 해제
 → 지표 계산
 → 완성 결과만 원자 게시
@@ -139,7 +139,7 @@ artifact 계약과 critical code provenance 확인
 
 ## 검색 상태 지문에는 무엇이 들어가는가
 
-같은 질문과 corpus라도 벡터나 HNSW 설정이 바뀌면 순위가 달라질 수 있다. runner는 다음 상태를 검증하고 결과에 기록한다.
+같은 질문과 corpus라도 벡터나 검색 실행 방식이 바뀌면 순위가 달라질 수 있다. runner는 exact cosine 평가 상태와 별도로 운영 인덱스 준비 상태를 검증하고 결과에 기록한다.
 
 - NVIDIA embedding profile의 모델, query/passage 유형, native·stored 차원, 축약·정규화와 템플릿 버전
 - 검색 가능한 provision 수와 active 벡터 수
@@ -148,21 +148,23 @@ artifact 계약과 critical code provenance 확인
 - HNSW index의 이름, OID, relfilenode, 크기, 정의, operator class, valid·ready 상태
 - PostgreSQL server와 pgvector extension 버전
 - transaction isolation·read-only 상태
-- `hnsw.ef_search`, iterative scan, scan tuple·memory 설정
 - `enable_seqscan`, `enable_indexscan`, `enable_bitmapscan`, `random_page_cost`, `effective_cache_size`, `work_mem` 같은 planner 설정
 
 이 값들을 canonical JSON으로 묶은 retrieval state fingerprint를 저장한다. 실행 입력에는 실제 NVIDIA embedding batch 크기도 기록한다. critical code는 clean Git commit과 평가에 영향을 주는 파일별 SHA-256으로 고정하며, 계약에 정한 핵심 파일이 하나라도 dirty하거나 해시 목록이 불완전하면 run을 시작하지 않는다.
 
 ## 실행 계획 지문은 상태 지문과 무엇이 다른가
 
-HNSW index가 존재해도 PostgreSQL planner가 실제 query에서 그 index를 선택했는지는 별개다. runner는 서로 다른 기준일마다 대표 질문 하나의 `EXPLAIN (FORMAT JSON)`을 같은 잠금 안에서 수집한다.
+HNSW index가 물리적으로 존재하고 valid·ready여도 PostgreSQL planner가 실제 query에서 그 index를 선택했는지는 별개다. 반대로 index가 준비됐다는 이유만으로 평가 기준선을 HNSW로 삼아야 하는 것도 아니다. HNSW는 빠른 근사 검색이므로, 기준일 필터가 적용된 과거 corpus에서는 현재 유효 행을 먼저 훑은 뒤 필터링하는 방식에 따라 exact cosine의 정답 후보를 덜 반환할 수 있다.
+
+실험 D primary dense baseline은 각 문항의 기준일에 유효한 전체 검색 population을 대상으로 하는 exact cosine이다. runner는 서로 다른 기준일마다 대표 질문 하나의 `EXPLAIN (FORMAT JSON)`을 같은 잠금 안에서 수집하고 다음을 확인한다.
 
 - raw plan
-- 기대 HNSW index가 plan에 나타났는지 여부
+- 실행 방식이 `exact_cosine`인지 여부
+- HNSW index가 plan에 나타나지 않았는지 여부
 - 대표 질문과 query embedding SHA-256
 - 전체 plan 기록의 SHA-256
 
-runner는 plan을 단순 관찰값으로만 남기지 않는다. 기준일별 대표 plan 중 하나라도 기대 HNSW index를 사용하지 않으면 `expected_hnsw_index_not_planned`로 첫 검색 전에 실패한다. 모든 plan이 통과한 성공 결과에만 raw plan, plan SHA-256과 `all_query_plans_use_expected_hnsw=true`를 기록한다. 이 검사는 HNSW 품질 점수가 아니라 “이번 run이 선언한 인덱스 검색 경로를 실제로 사용했는가”를 확인하는 재현성 게이트다.
+대표 plan 중 하나라도 HNSW를 사용하면 첫 검색 전에 실패한다. 성공 결과에는 raw plan, plan SHA-256과 exact 실행 방식이 기록된다. 물리 HNSW identity와 valid·ready 상태는 운영 준비 증거로 계속 남지만 primary 품질 점수의 검색 방식은 아니다. ANN/HNSW의 속도와 exact 결과 대비 누락률은 gold 평가와 섞지 않고 추후 별도 진단으로 측정한다.
 
 ## Production 검색과 평가 검색은 왜 다른가
 
@@ -177,13 +179,13 @@ production은 다음 사용자 편의 동작을 가진다.
 
 ```text
 질문 query embedding
-→ raw provision dense search
+→ raw provision exact cosine search
 → raw cosine 내림차순
 → 같은 점수면 provision ID 오름차순
 → top 10을 qrels와 비교
 ```
 
-그래야 조·항·호·목의 어느 `provision_id`를 실제로 찾았는지 qrels와 정확히 비교할 수 있다. keyword fallback이나 article grouping이 섞이면 dense embedding과 HNSW만 바꾼 효과를 분리할 수 없다.
+그래야 조·항·호·목의 어느 `provision_id`를 실제로 찾았는지 qrels와 정확히 비교할 수 있다. keyword fallback이나 article grouping이 섞이면 dense embedding 자체의 기준 성능을 분리할 수 없다.
 
 ## 왜 10개가 아니라 11개를 검색하는가
 
@@ -219,6 +221,17 @@ HitRate@3 = 1
 
 정답이 하나인 질문에서는 두 값이 같지만 넓은 질문에서는 다르다. 그래서 둘을 같은 이름으로 기록하지 않는다.
 
+## Precision@5와 Direct Precision@5
+
+질문 `q`의 relevance 1 보조 qrel 집합을 `G1(q)`라고 하자. `Precision@5`는 상위 5개 중 relevance 1 보조 문맥 또는 relevance 2 직접 근거가 차지하는 비율이다. `Direct Precision@5`는 그중 relevance 2 직접 근거만 센다.
+
+```text
+Precision@5(q) = |Top5(q) ∩ (G1(q) ∪ G2(q))| / 5
+Direct Precision@5(q) = |Top5(q) ∩ G2(q)| / 5
+```
+
+Recall이 필요한 근거를 놓치지 않았는지 본다면, 두 Precision은 생성 문맥으로 넘길 상위 후보에 잡음이 얼마나 섞였는지 본다. 관련 근거가 원래 한두 개뿐인 질문에서는 최대값이 1보다 작을 수 있으므로 단독 합격선이 아니라 top-context-purity 진단으로 해석한다.
+
 ## MRR@10과 nDCG
 
 `MRR@10`은 처음 찾은 grade 2 직접 qrel의 순위를 본다.
@@ -249,7 +262,9 @@ All Required Facets Covered@K(q)
 = supported 필수 요소를 모두 덮으면 1, 아니면 0
 ```
 
-질문마다 요소 수가 다르므로 질문별 값을 먼저 계산해 macro 평균한다. primary Recall·HitRate·MRR@10·nDCG와 facet 평균은 retrieval 설정 조정에 쓰지 않은 held-out `test` split의 `fully_answerable`만 포함한다. calibration fully-answerable과 calibration+test 결합값은 `diagnostic_only`로 기록하며 primary 성능처럼 해석하지 않는다. partially answerable, clarification required와 unanswerable도 같은 평균에 섞지 않고 별도 진단 모집단으로 보고한다.
+질문마다 요소 수가 다르므로 질문별 값을 먼저 계산한다. 다만 현재 질문은행은 같은 상황을 다르게 말한 5개 질문이 하나의 scenario family를 이루므로 1,000개 질문을 서로 독립인 표본처럼 평균하지 않는다. primary는 각 family 안에서 먼저 평균한 뒤 family에 같은 가중치를 주는 `scenario-family macro`이며, 95% 신뢰구간도 질문이 아니라 family를 단위로 2,000회 결정적 bootstrap 재표집해 계산한다.
+
+primary Recall·HitRate·MRR@10·nDCG·Precision과 facet 평균은 retrieval 설정 조정에 쓰지 않은 held-out `test` split의 `fully_answerable`만 포함한다. calibration fully-answerable과 calibration+test 결합값은 `diagnostic_only`로 기록하며 primary 성능처럼 해석하지 않는다. partially answerable, clarification required와 unanswerable도 같은 평균에 섞지 않고 별도 진단 모집단으로 보고한다.
 
 ## 실패하면 무엇이 기록되는가
 
@@ -270,14 +285,14 @@ runner는 fail-closed로 동작한다.
 - initial·locked preflight
 - retrieval state와 query plans
 - 입력 artifact·코드·corpus·vector·plan·실제 순위 지문
-- embedding batch 크기와 PostgreSQL·pgvector·HNSW·planner 설정
+- embedding batch 크기와 PostgreSQL·pgvector·HNSW 물리 상태·planner 설정·exact 실행 방식
 - 질문별 순위와 aggregate 지표
 
 결과 파일 자체 SHA-256은 파일 안에 자기 자신을 포함할 수 없으므로 성공 시 터미널에 출력되는 완료 요약에 기록한다. JSON 안에는 자기 해시 필드를 넣기 직전 payload의 SHA-256인 `payload_without_self_hash_sha256`을 둔다.
 
 ## 현재 상태
 
-approved-gold-only runner와 합성 fixture 검증은 구현됐다. 그러나 일반 사용자 질문은행 1,000개는 아직 사용자 승인과 독립 qrels·reference response 주석·adjudication을 마친 gold가 아니다. 따라서 실제 1,000개 질문의 NVIDIA query embedding, DB 검색, Recall·HitRate·MRR@10·nDCG·facet 결과는 아직 실행하거나 기록하지 않았다.
+approved-gold-only runner와 합성 fixture 검증은 구현됐다. 그러나 일반 사용자 질문은행 1,000개는 아직 사용자 승인과 독립 qrels·reference response 주석·adjudication을 마친 gold가 아니다. 따라서 실제 1,000개 질문의 NVIDIA query embedding, DB 검색, Recall·HitRate·Precision·MRR@10·nDCG·facet 결과는 아직 실행하거나 기록하지 않았다.
 
 ## 관련 문서와 구현
 

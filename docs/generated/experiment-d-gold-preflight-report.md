@@ -5,7 +5,7 @@
 > 범위: Supabase current corpus와 저장된 메타데이터의 읽기 전용 비교
 > 실행하지 않은 것: 질문 임베딩, 검색, 순위·점수 계산, Recall·MRR·nDCG 평가
 
-이 명령은 당시 corpus를 읽기 전용으로 대조한 독립 검사다. 아직 평가 runner와 연결되지 않았으며, 검사 뒤부터 검색 종료까지 corpus 공유 잠금을 유지하는 원자적 실행 게이트는 질문 승인 후 구현한다.
+이 명령은 당시 corpus를 읽기 전용으로 대조한 독립 검사다. 아래 수치는 과거 v3 draft를 검사한 시점의 기록이다. 이후 승인된 gold 전용 `scripts.evaluate_experiment_d_gold` runner와, 최종 preflight부터 검색 종료까지 corpus 공유 잠금을 유지하는 원자적 실행 게이트가 구현됐다. 다만 일반 사용자 질문 1,000개의 질문 승인·독립 정답 주석·gold adjudication은 아직 끝나지 않았으므로 실제 검색 평가는 실행하지 않았다.
 
 ## 판정
 

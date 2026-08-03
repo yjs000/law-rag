@@ -95,6 +95,12 @@ WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1';
 
 dense 쿼리도 같은 표현과 프로필 조건을 사용한다. 미래에 다른 차원 모델을 평가하면 기존 열을 바꾸지 않고 새 프로필과 해당 차원의 partial expression index를 추가한다. [pgvector 공식 저장소](https://github.com/pgvector/pgvector)
 
+### 물리 인덱스 준비와 평가 실행 방식은 다르다
+
+HNSW가 valid·ready라는 것은 필요할 때 근사 최근접 이웃 검색을 실행할 수 있다는 뜻이지, 모든 dense query가 그 인덱스를 사용한다는 뜻은 아니다. PostgreSQL planner는 현재 3,066개 corpus와 법률·버전·기준일 join 조건에서 전체 유효 행을 계산한 뒤 exact sort하는 계획을 선택한다.
+
+실험 D의 primary dense baseline도 문항별 기준일에 유효한 전체 population을 빠짐없이 비교하는 exact cosine으로 고정한다. 대표 `EXPLAIN`에 HNSW가 나타나면 실행을 실패시켜 근사 검색이 기준 점수에 섞이지 않게 한다. 물리 HNSW identity와 valid·ready 상태는 운영 준비 증거로 별도 기록한다. HNSW를 사용한 ANN 속도와 exact top-k 대비 누락률은 향후 독립 진단에서만 비교한다.
+
 ## BM25 확장 경계
 
 BM25는 벡터 프로필이 아니며 `provision_embeddings`에 저장하지 않는다. 향후 도입 순서는 다음과 같다.
@@ -168,3 +174,4 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: 코퍼스 변경과 벡터 적재를 공용 advisory lock으로 직렬화하고, 전체 coverage·해시·norm·HNSW 검증 뒤에만 dense 프로필을 활성화하도록 했다.
 - 2026-08-03: 모델 독립 `corpus.search_ready` 게이트로 direct·keyword까지 같은 corpus 세대 전환에 묶었다.
 - 2026-08-03: migration capability marker로 flag 행을 임의 생성한 구버전 DB와 0010 적용 DB를 구분하고, 준비 중 상태를 HTTP 503으로 명시했다.
+- 2026-08-03: 물리 HNSW 준비 상태와 검색 실행 계획을 분리하고, 실험 D primary dense baseline은 기준일 필터까지 완전한 exact cosine으로 고정했다.

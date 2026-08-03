@@ -84,16 +84,16 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 승인된 gold runner는 다음 순서를 강제한다.
 
 1. dataset, 질문은행, 질문 승인 manifest, gold adjudication manifest와 critical code provenance를 검증한다.
-2. 초기 `REPEATABLE READ, READ ONLY` transaction에서 corpus·벡터·HNSW 상태와 gold preflight를 통과하기 전에는 질문을 임베딩하지 않는다.
+2. 초기 `REPEATABLE READ, READ ONLY` transaction에서 corpus·벡터·물리 HNSW 준비 상태와 gold preflight를 통과하기 전에는 질문을 임베딩하지 않는다.
 3. 질문 임베딩 뒤 별도 `READ COMMITTED, READ ONLY` transaction의 첫 snapshot-taking statement로 PostgreSQL corpus mutation 공유 advisory lock을 얻는다.
-4. 같은 연결과 잠금 transaction 안에서 전체 검색 가능 corpus와 문항별 기준일 유효 population, qrels·distractor·후보 pool, 벡터 profile·coverage·L2 norm, HNSW 물리 identity와 runtime 설정을 다시 검증한다.
-5. 기준일별 대표 query의 `EXPLAIN` plan을 검색 전에 검사한다. 기대 HNSW index가 하나라도 plan에 없으면 검색을 시작하지 않는다. 통과한 경우에만 모든 질문을 raw provision dense 검색으로 11개까지 조회하며, 10위와 11위의 raw cosine 점수가 같으면 top 10 경계를 임의로 자르지 않고 실행을 실패시킨다.
+4. 같은 연결과 잠금 transaction 안에서 전체 검색 가능 corpus와 문항별 기준일 유효 population, qrels·distractor·후보 pool, 벡터 profile·coverage·L2 norm, HNSW 물리 identity·valid/ready 상태와 transaction·planner 설정을 다시 검증한다.
+5. 기준일별 대표 query의 `EXPLAIN` plan을 검색 전에 검사한다. 실험 D primary dense baseline은 기준일 유효 population 전체를 비교하는 exact cosine이므로 HNSW index가 하나라도 plan에 나타나면 검색을 시작하지 않는다. 통과한 경우에만 모든 질문을 raw provision exact cosine 검색으로 11개까지 조회하며, 10위와 11위의 raw cosine 점수가 같으면 top 10 경계를 임의로 자르지 않고 실행을 실패시킨다.
 6. 같은 공유 lock을 마지막 검색까지 유지한 뒤에만 지표를 계산한다. 결과에는 입력·질문·corpus·벡터·query plan·임베딩 batch 크기·PostgreSQL/pgvector 버전과 검색 설정·critical code commit 및 파일 해시를 기록한다.
 7. 전체 실행이 성공한 경우에만 새 run JSON을 임시 파일에서 원자적으로 게시한다. 기존 run을 덮어쓰지 않으며 실패 시 완성 결과 파일을 만들지 않는다.
 
 annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 ID와 후보 집합 해시를 보존한다. 비전체검사 방법은 후보 수가 `min(top_k, 기준 corpus 크기)`와 정확히 같아야 하고, 방법별 후보의 합집합은 문항별 판정 pool과 정확히 같아야 한다. `full_corpus_manual_review` 방법을 선언하면 그 후보 집합은 해당 문항 기준일에 유효한 전체 검색 가능 provision 집합과 정확히 같아야 한다.
 
-핵심 검색 평균의 primary 모집단은 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항이다. grade 2 직접 qrels를 기준으로 Recall@1/3/5/10, HitRate@1/3/5/10과 MRR@10을 계산하고, nDCG@1/3/5/10은 grade 2 직접 근거와 grade 1 보조 문맥의 차이를 반영한다. 넓은 질문에는 supported 필수 요소의 `facet_recall`과 `all_required_facets_covered`를 함께 계산한다. calibration과 calibration+test 결합값은 diagnostic-only이며 primary 성능으로 보고하지 않는다. partial·clarification·unanswerable도 core 평균에 섞지 않고 별도 진단 모집단으로 보고한다.
+핵심 검색 평균의 primary 모집단은 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항이다. grade 2 직접 qrels를 기준으로 Recall@1/3/5/10, HitRate@1/3/5/10, Direct Precision@5와 MRR@10을 계산하고, Precision@5는 grade 1 보조 문맥과 grade 2 직접 근거를 모두 센다. nDCG@1/3/5/10은 두 등급의 차이를 반영한다. 넓은 질문에는 supported 필수 요소의 `facet_recall`과 `all_required_facets_covered`를 함께 계산한다. primary 집계는 scenario-family macro이며 family를 단위로 결정적 bootstrap 2,000회의 95% 신뢰구간을 계산한다. calibration과 calibration+test 결합값은 diagnostic-only이고 partial·clarification·unanswerable도 core 평균과 분리한다.
 
 ## 공개 API
 
@@ -114,7 +114,7 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 - 법제처에 등록한 고정 공인 IPv4 Windows PC에서 `apps/collector`를 별도 프로세스로 실행한다. Vercel, 공용 runner와 브라우저에서 법령 API를 직접 호출하지 않으며 collector PC에 포트포워딩이나 공개 API를 열지 않는다.
 - 현재 버전 collector와 Vercel API, Google 인증과 사용자 질문 이력은 Supabase에 연결되어 있다. 연혁·삭제 격리와 영속 운영 플래그는 후속 단계다.
 - 익명 질문은 저장하지 않는다. 운영 로그인은 Supabase Google OAuth만 지원하며 질문 이력은 PostgreSQL에 생성일부터 1년 보존 후 삭제한다. 계정 삭제 시 질문·이력·세션·내보내기·동의 등 해당 사용자와 연결된 데이터를 삭제한다. 개발·테스트의 목업 인증은 production에서 비활성화한다.
-- 공개 서비스의 rate limit HMAC 저장과 승인 gold 기반 Recall·HitRate·MRR@10·nDCG·facet 회귀 게이트는 배포 전 필수 잔여 작업이다. 임계값은 calibration 결과를 보기 전에 임의로 확정하지 않는다.
+- 공개 서비스의 rate limit HMAC 저장과 승인 gold 기반 Recall·HitRate·Precision·MRR@10·nDCG·facet 회귀 게이트는 배포 전 필수 잔여 작업이다. 임계값은 calibration 결과를 보기 전에 임의로 확정하지 않는다.
 
 ## 결정 기록
 
@@ -141,3 +141,4 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-07-15 | collector `sync-current`는 검증된 원문을 content-addressed private Storage에 먼저 보존하고 DB 문서·버전·조문을 트랜잭션 반영 | 원문 계보와 재실행 멱등성을 유지하면서 Vercel API가 같은 Supabase 코퍼스를 읽게 함 |
 | 2026-07-19 | 생성 기본 후보를 NVIDIA hosted Nemotron 3 Ultra로 변경하고 기존 `terra` wire 값은 호환용으로 유지 | 로컬 PC 공개 없이 Vercel outbound 호출이 가능하며 provider 변경 중 기존 클라이언트 호환을 보존 |
 | 2026-07-23 | 임베딩 provider를 NVIDIA hosted Nemotron 3 Embed 1B로 교체하고 검색 시 모델 ID를 필터링 | 한국어 hosted 실험과 기존 512차원 계약을 유지하면서 OpenAI·NVIDIA 벡터 공간 혼합을 방지 |
+| 2026-08-03 | 실험 D primary dense baseline을 exact cosine으로 고정하고 HNSW를 물리 준비 상태·별도 ANN 진단으로 분리 | 기준일별 전체 유효 population의 완전성을 보존하고 근사 검색의 누락을 품질 기준선에 섞지 않음 |

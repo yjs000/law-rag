@@ -207,9 +207,9 @@ nDCG는 다음 조건에서 특히 유용하다.
 
 ## 실험 D의 고정 검색 지표 계약
 
-현재 실험 D runner는 production의 조 단위 grouping이나 keyword fallback을 사용하지 않고 raw `provision_id` dense top 10을 평가한다. 실제로는 11개를 요청해 10위와 11위 점수가 같은지 검사하며, 동점이면 경계를 임의로 자르지 않고 실행을 실패시킨다.
+현재 실험 D runner는 production의 조 단위 grouping이나 keyword fallback을 사용하지 않고, 문항 기준일에 유효한 전체 검색 population에서 raw `provision_id` exact cosine top 10을 평가한다. `EXPLAIN`에 HNSW가 나타나면 근사 검색이 기준선에 섞인 것이므로 첫 검색 전에 실패한다. 실제로는 11개를 요청해 10위와 11위 점수가 같은지 검사하며, 동점이면 경계를 임의로 자르지 않고 실행을 실패시킨다.
 
-core 평균에는 `fully_answerable` 질문만 포함하며 질문별 값을 먼저 계산한 뒤 macro 평균한다. 그중 retrieval 설정 조정에 쓰지 않은 held-out `test` split이 primary다. `calibration` fully-answerable과 calibration+test 결합값은 동작 확인과 비교를 위한 `diagnostic_only`이며 primary 성능처럼 보고하지 않는다.
+core 평균에는 `fully_answerable` 질문만 포함하며 질문별 값을 먼저 계산한 뒤 scenario family 단위로 집계한다. 그중 retrieval 설정 조정에 쓰지 않은 held-out `test` split이 primary다. `calibration` fully-answerable과 calibration+test 결합값은 동작 확인과 비교를 위한 `diagnostic_only`이며 primary 성능처럼 보고하지 않는다.
 
 ```text
 Recall@K(q)
@@ -217,6 +217,12 @@ Recall@K(q)
 
 HitRate@K(q)
 = top K에 relevance 2 qrel이 하나라도 있으면 1, 아니면 0
+
+Precision@5(q)
+= top 5의 relevance 1 또는 2 qrel 수 / 5
+
+Direct Precision@5(q)
+= top 5의 relevance 2 qrel 수 / 5
 
 MRR@10(q)
 = 첫 relevance 2 qrel 순위가 10 이내면 1 / 순위, 아니면 0
@@ -235,7 +241,9 @@ All Required Facets Covered@K(q)
 = supported 필수 요소를 모두 덮으면 1, 아니면 0
 ```
 
-cutoff는 `1, 3, 5, 10`이다. Recall·HitRate·MRR과 facet 지표는 relevance 2만 positive로 보며, nDCG만 relevance 2 직접 근거와 relevance 1 보조 문맥의 등급 차이를 함께 사용한다. partial·clarification·unanswerable은 이 core 평균에 섞지 않고 별도 모집단으로 보고한다.
+Recall·HitRate·nDCG와 facet 지표의 cutoff는 `1, 3, 5, 10`이고 MRR은 `@10`이다. top-context-purity 진단인 Precision은 `@5`로 고정한다. Recall·HitRate·MRR, Direct Precision과 facet 지표는 relevance 2만 positive로 보며, 일반 Precision은 relevance 1과 2를 모두 관련 문맥으로 센다. nDCG는 relevance 2 직접 근거와 relevance 1 보조 문맥의 등급 차이를 함께 사용한다. partial·clarification·unanswerable은 이 core 평균에 섞지 않고 별도 모집단으로 보고한다.
+
+질문별 값도 보존하지만 primary 집계는 `scenario_family_id`별 평균을 다시 같은 가중치로 평균한다. 같은 상황의 표현 변형 5개를 독립 표본 5개처럼 세어 과도하게 확신하지 않기 위해서다. 95% 신뢰구간도 질문이 아니라 scenario family를 2,000회 결정적으로 bootstrap 재표집하고 equal-tailed 구간을 사용한다. primary와 이 신뢰구간은 held-out `test`의 `fully_answerable`에만 적용한다.
 
 `calibration`은 cutoff나 설정을 정하는 조정용 자료다. `held-out test`는 그 조정 과정에서 보지 않고 봉인해 둔 최종 확인 자료다. 둘을 합친 평균을 primary로 사용하면 조정에 이미 본 질문의 성능이 섞여 실제 일반화 성능이 부풀 수 있다.
 
@@ -575,13 +583,15 @@ LLM judge 결과에는 반드시 다음을 기록한다.
 
 1. **데이터 무결성**: ID·path·SHA-256과 기준일이 모두 맞는지 확인한다.
 2. **후보 회수**: grade 2 qrels의 Recall@1/3/5/10과 HitRate@1/3/5/10으로 직접 근거 전체와 최소 한 건의 회수를 구분한다.
-3. **순위 품질**: MRR@10과 graded nDCG@1/3/5/10으로 핵심 근거가 보조 근거보다 앞서는지 본다.
-4. **넓은 질문**: facet_recall과 all_required_facets_covered로 supported 필수 답변 요소를 얼마나 덮었는지 본다.
-5. **문맥 축소**: Context/Evidence Precision과 Recall을 함께 보며 top 10에서 생성 문맥 3~5개로 줄였을 때 근거를 잃지 않는지 본다.
-6. **근거 부족**: unanswerable FPR과 answerable FNR을 함께 본다.
-7. **답변 생성**: Faithfulness, Answer Relevancy, Answer Correctness를 분리해 본다.
-8. **인용 검증**: Citation Correctness·Coverage와 ID·path·SHA 검사를 통과하는지 본다.
-9. **운영성**: latency, 비용, 오류, NaN과 반복 재현성을 확인한다.
+3. **상위 후보 순도**: Precision@5와 Direct Precision@5로 보조·직접 근거 대비 잡음 비율을 본다.
+4. **순위 품질**: MRR@10과 graded nDCG@1/3/5/10으로 핵심 근거가 보조 근거보다 앞서는지 본다.
+5. **넓은 질문**: facet_recall과 all_required_facets_covered로 supported 필수 답변 요소를 얼마나 덮었는지 본다.
+6. **집계 불확실성**: scenario-family macro와 family bootstrap 95% 신뢰구간으로 표현 변형의 상관성을 반영한다.
+7. **문맥 축소**: Context/Evidence Precision과 Recall을 함께 보며 top 10에서 생성 문맥 3~5개로 줄였을 때 근거를 잃지 않는지 본다.
+8. **근거 부족**: unanswerable FPR과 answerable FNR을 함께 본다.
+9. **답변 생성**: Faithfulness, Answer Relevancy, Answer Correctness를 분리해 본다.
+10. **인용 검증**: Citation Correctness·Coverage와 ID·path·SHA 검사를 통과하는지 본다.
+11. **운영성**: latency, 비용, 오류, NaN과 반복 재현성을 확인한다.
 
 ## 한 점수만 보면 생기는 오판
 
@@ -605,8 +615,10 @@ LLM judge 결과에는 반드시 다음을 기록한다.
 ```text
 검색 후보:
 Recall@1/3/5/10 + HitRate@1/3/5/10
+Precision@5 + Direct Precision@5
 MRR@10 + graded nDCG@1/3/5/10
 facet_recall@1/3/5/10 + all_required_facets_covered@1/3/5/10
+scenario-family macro + family bootstrap 95% CI
 
 실제 근거:
 Article Recall + Evidence Recall + Evidence Precision

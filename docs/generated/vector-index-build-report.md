@@ -2,7 +2,7 @@
 
 기준 시각: 2026-08-03T11:08:26Z
 
-생성 근거: 아래에 기록한 운영 CLI의 실제 stdout과 `GET /v1/corpus/status` 응답
+생성 근거: 아래에 기록한 운영 CLI의 실제 stdout, `GET /v1/corpus/status` 응답과 운영 DB 읽기 전용 `EXPLAIN (ANALYZE)` 감사
 
 대상: Supabase 운영 corpus, NVIDIA Nemotron 512차원 dense-only 프로필
 
@@ -47,6 +47,9 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 | stale 벡터 | 0 |
 | L2 비단위 벡터 | 0 |
 | HNSW valid·ready | `true` |
+| HNSW OID / relfilenode | `25460 / 25460` |
+| HNSW 크기 | `8,380,416 bytes` |
+| PostgreSQL / pgvector | `17.6 / 0.8.2` |
 | embedding profile active | `true` |
 | corpus search ready | `true` |
 | hybrid/RRF DB 함수 | 없음 |
@@ -70,6 +73,22 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 | 3 | 전기사업법 `제7조의3/항①` | 0.4522541434916352 |
 
 운영 API의 `GET /health`는 `ok`, `GET /v1/corpus/status`는 `corpus_search_ready=true`, 9개 문서 모두 `state=ready`를 반환했다.
+
+## 인덱스 준비와 실제 실행 계획 감사
+
+물리 HNSW 인덱스는 존재하고 valid·ready이며 단순 vector-only 최근접 이웃 query에서는 사용된다. 그러나 현재 production 형태의 법률·버전·기준일 join query는 3,066개 규모에서 HNSW가 아니라 유효 행의 exact cosine sort 계획을 선택했다. 따라서 `HNSW ready=true`와 `실제 query가 HNSW 사용`은 같은 뜻이 아니다.
+
+읽기 전용 비교에서 최종 runner의 materialized exact query는 현재 기준일(2026-08-03) 3,066개 행에서 중앙값 약 `70.846 ms`였고, 별도로 측정한 HNSW 후보 CTE는 약 `1.421 ms`였으며 현재 기준일 top 11은 같았다. 하지만 과거 기준일에서는 HNSW 후보를 먼저 제한한 뒤 효력 필터를 적용하면 결과가 부족했다.
+
+| 기준일 | 유효 population | exact 반환 | HNSW 후보 CTE 반환 |
+|---|---:|---:|---:|
+| 2025-07-19 | 16 | 11 | 0 |
+| 2025-10-01 | 426 | 11 | 3 |
+| 2026-01-02 | 956 | 11 | 7 |
+| 2026-06-03 | 3,066 | 11 | 11 |
+| 2026-08-03 | 3,066 | 11 | 11 |
+
+이 비교는 실험 D 질문은행을 실행한 품질 실험이 아니라 단일 query의 실행 계획·완전성 감사다. 실험 D primary dense baseline은 모든 문항 기준일의 유효 population을 완전히 비교하는 exact cosine으로 고정한다. 대표 `EXPLAIN`에 HNSW가 나타나면 실패하며, ANN/HNSW의 속도와 exact 대비 누락률은 추후 별도 진단으로 분리한다.
 
 ## 재실행 해석
 

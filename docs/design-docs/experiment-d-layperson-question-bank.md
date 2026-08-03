@@ -13,6 +13,16 @@
 
 `experiment-d-lay-energy-query-bank-v1-draft.json`은 질문을 검토하기 위한 후보 은행이다.
 
+이 파일은 최종 평가셋이 아니다. 실험 D의 산출물은 다음 세 단계를 거치며, 검색 품질 지표는 마지막 단계에서만 계산한다.
+
+| 단계 | 포함 내용 | 할 수 있는 평가 |
+|---|---|---|
+| 질문 후보군 | 질문 문구와 주제·표현 메타데이터 | 자연스러움·범위·중복 검토 |
+| 승인된 질문 집합 | 사용자가 승인한 질문 문구·범위와 해시 | 질문이 바뀌지 않았는지 검증 |
+| 승인 gold 평가셋 | 질문 + answerability + qrels + 기준 문맥·응답 | Recall·Precision·MRR·nDCG와 답변 평가 |
+
+따라서 “1,000개를 unlabelled로 만든다”는 말은 1,000개를 정답 없이 평가하겠다는 뜻이 아니다. 질문을 먼저 확정한 뒤 검색기와 독립적으로 정답 근거를 붙이기 위한 중간 상태다.
+
 - 1,000개 질문만 포함한다.
 - 공공기관 FAQ·절차 안내에서는 질문 주제만 참고하고 문구와 답을 복사하지 않는다.
 - 실제 사용자 로그나 질문 빈도 자료라고 주장하지 않는다.
@@ -41,6 +51,16 @@
 질문이 승인되면 별도 `experiment-d-lay-energy-gold-v1.json`을 만든다. 질문은행 원문은 고정하고 다음 필드를 독립적으로 주석한다. 질문 승인과 완성 gold 승인은 서로 다른 결정이며, 각각 별도 manifest로 남긴다.
 
 실행 가능한 필드·상태·불변조건은 `apps/api/scripts/experiment_d_gold_contract.py`의 Pydantic 계약이 권위 원본이다. 문서 설명만 통과하고 코드 계약을 통과하지 못한 파일은 gold로 취급하지 않는다.
+
+사용자가 전체 질문 문구와 범위를 명시적으로 승인한 뒤에만 다음 명령으로 질문 승인 manifest를 만든다. 이 명령은 두 전체 해시를 다시 입력받아 1,000개 문항의 개별 문구·범위 해시까지 재계산하며, 기존 승인 파일을 덮어쓰지 않는다. 답·qrels를 만들거나 DB·NVIDIA·평가 runner를 호출하지 않는다. 현재는 사용자 승인이 없으므로 실행하지 않았다.
+
+```powershell
+uv run --directory apps/api python -m scripts.create_experiment_d_question_approval `
+  --approved-by "yjs000" `
+  --approved-at "<시간대가 포함된 ISO 8601 승인 시각>" `
+  --confirm-question-set-sha256 "58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32" `
+  --confirm-question-scope-set-sha256 "f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7"
+```
 
 1. `evaluation_status`: 사람 검토와 승인 완료 전에는 `draft_for_review`, 완료 후에만 `approved_gold`
 2. `source_bank`: 질문은행 버전과 승인된 전체 질문 문구 SHA-256·범위 SHA-256, 외부 승인 manifest SHA-256
@@ -81,6 +101,8 @@
 
 검색 결과는 근거 후보를 찾는 보조 수단으로 사용할 수 있지만, 그 결과 자체를 gold로 확정하지 않는다. 전체 corpus 확인, 출처·버전·원문 해시 검증과 사람의 직접 근거 판단을 거친다. 넓은 질문은 하나의 조문이 아니라 필수 답변 요소별 여러 qrels를 가질 수 있다.
 
+질문 승인 직후 1,000개를 한 번에 주석하지 않는다. calibration에서 서로 다른 주제·answerability 경계를 대표하는 10개 scenario family, 즉 50문항을 먼저 이중 주석한다. 이 pilot에서 필수 답변 요소의 크기, 직접 근거와 보조 문맥의 구분, 범위 밖·추가 사실 필요 판정과 reference response 형식을 사람이 확인한 뒤 같은 계약을 나머지 문항에 적용한다. pilot 결과를 최종 검색 성능처럼 발표하거나 test qrels 조정에 사용하지 않는다.
+
 평가 실행 전에는 `scripts.preflight_experiment_d_gold`가 다음을 읽기 전용으로 확인한다.
 
 - `evaluation_status=approved_gold`
@@ -93,7 +115,7 @@
 
 독립 preflight는 빠른 읽기 전용 점검용이며 검사 뒤 DB 잠금을 해제한다. 실제 평가에는 `scripts.evaluate_experiment_d_gold` runner를 사용한다. runner는 critical code가 clean commit과 일치하는지 확인하고 초기 `REPEATABLE READ, READ ONLY` transaction에서 preflight와 검색 상태 검증을 통과해야만 질문을 임베딩한다. 그 다음 별도 `READ COMMITTED, READ ONLY` transaction에서 첫 snapshot-taking statement로 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight와 검색 상태를 다시 검증한 뒤 마지막 raw provision 검색까지 잠금을 유지한다. 프로젝트의 corpus writer는 같은 key의 배타 lock을 사용하므로 이 구간의 corpus 변경을 막는다. 독립 preflight만 통과했다고 실제 run이 같은 잠금 상태를 봤다고 주장하지 않는다.
 
-runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 사용하지 않는다. 기준일별 대표 query에 실제 평가 쿼리와 같은 `EXPLAIN (FORMAT JSON)`을 먼저 실행하고 기대 HNSW index가 plan에 없으면 검색 전에 실패한다. 통과하면 각 질문에서 raw cosine 순으로 `provision_id` 후보 11개를 요청해 10위와 11위 동점 여부를 검사하고, 동점이 없을 때만 앞의 10개를 지표 입력으로 사용한다. 동점, 중복 ID, 비유한 점수, 순서 위반, corpus·벡터·HNSW 상태 변화 중 하나라도 발견하면 결과 파일을 만들지 않는다. 성공한 run에는 실제 embedding batch 크기, PostgreSQL·pgvector 버전, HNSW·planner 설정과 clean Git commit·평가 핵심 파일 해시도 기록한다. `.data/experiments/experiment-d/runs/`에 새 JSON으로 원자적으로 게시하며 기존 run은 덮어쓰지 않는다.
+runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 사용하지 않는다. primary dense 기준선은 기준일에 유효한 모든 검색 가능 조문의 거리를 계산하는 exhaustive exact cosine이다. 기준일별 대표 query에 실제 평가 쿼리와 같은 `EXPLAIN (FORMAT JSON)`을 먼저 실행하고 HNSW index가 plan에 나타나면 검색 전에 실패한다. 물리 HNSW index의 유효성·프로필·차원 계약은 계속 기록하지만, ANN/HNSW의 exact 대비 recall과 latency는 core gold 지표와 분리한 후속 진단으로 둔다. 통과하면 각 질문에서 raw cosine 순으로 `provision_id` 후보 11개를 요청해 10위와 11위 동점 여부를 검사하고, 동점이 없을 때만 앞의 10개를 지표 입력으로 사용한다. 동점, 중복 ID, 비유한 점수, 순서 위반, corpus·벡터·index 상태 변화 중 하나라도 발견하면 결과 파일을 만들지 않는다. 성공한 run에는 실행 모드 `exact_cosine`, 실제 embedding batch 크기, PostgreSQL·pgvector 버전, index·planner 상태와 clean Git commit·평가 핵심 파일 해시도 기록한다. `.data/experiments/experiment-d/runs/`에 새 JSON으로 원자적으로 게시하며 기존 run은 덮어쓰지 않는다.
 
 ## 독립 주석과 blind 평가
 
@@ -114,9 +136,10 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 
 같은 상황의 다섯 질문 변형은 반드시 같은 split에 둔다. 200개 scenario family 중 사람이 확정한 40개 family, 즉 200문항을 calibration으로, 나머지 160개 family, 즉 800문항을 test로 고정한다. 현 계약은 검증하지 않는 `stratified`라는 이름이나 seed를 주장하지 않고, 실제 family별 배정 목록과 그 SHA-256을 동결한다. gold 완성 뒤 intent·technology·answerability·필수 요소 수의 두 split 분포를 별도 보고해 심한 불균형을 사람이 검토한다.
 
-- primary Recall·HitRate·MRR·nDCG 모집단은 retrieval 설정 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항으로 고정한다. calibration fully-answerable과 calibration+test 결합값은 `diagnostic_only`이며 primary 성능으로 보고하지 않는다. partial·clarification·unanswerable도 같은 평균에 섞지 않는다.
+- primary Recall·HitRate·Precision·MRR·nDCG 모집단은 retrieval 설정 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항으로 고정한다. calibration fully-answerable과 calibration+test 결합값은 `diagnostic_only`이며 primary 성능으로 보고하지 않는다. partial·clarification·unanswerable도 같은 평균에 섞지 않는다.
 - 질문별 `Recall@k`는 `top k에서 찾은 relevance 2 qrel 수 / 전체 relevance 2 qrel 수`이고, 질문별 값을 macro 평균한다.
 - 질문별 `HitRate@k`는 relevance 2 qrel을 하나라도 찾으면 1, 하나도 못 찾으면 0이다. 정답이 여러 개인 질문에서는 Recall과 다르므로 두 값을 모두 기록한다.
+- 질문별 `Precision@k`는 top k의 grade 1·2 근거 수를 고정 분모 k로 나눈다. `direct_precision@k`는 grade 2 직접 근거만 센다. 후보가 k개보다 적어도 분모를 줄여 점수를 부풀리지 않는다.
 - `MRR@10`은 처음 찾은 relevance 2 qrel의 순위가 10 이내면 그 순위의 역수, 없으면 0이며 질문별 값을 macro 평균한다. relevance `1` 보조 문맥만 찾으면 성공이 아니다.
 - `nDCG@1/3/5/10`은 직접 근거 `2`, 보조 문맥 `1`, 그 밖의 후보 `0`을 사용한다. 각 순위의 gain은 `2^relevance - 1`, 할인은 `log2(rank + 1)`이며 실제 DCG를 이상적 DCG로 나눈다.
 - 기본 검색 단위는 raw `provision_id`다. 부모·자식 조각은 자동으로 같은 정답으로 간주하지 않고, 필요한 계층 문맥을 qrels의 explicit evidence closure로 모두 기록한다.
@@ -124,6 +147,7 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 질문별 facet recall을 먼저 계산한 뒤 macro 평균한다. 한 질문의 요소 수가 많다는 이유로 전체 점수를 지배하게 하지 않는다.
 - `all_required_facets_covered@k`는 fully answerable 문항에서 모든 필수 요소의 relevance 2 근거가 후보 안에 있을 때만 1이다.
 - partial·clarification·unanswerable은 retrieval Recall 평균과 섞지 않고, 부분 근거 회수율·추가 질문 정확도·답변 보류 정확도·무관 근거 false-positive를 별도로 보고한다.
+- 같은 상황의 다섯 표현 변형이 독립 표본인 것처럼 과대 계산되지 않도록, test fully-answerable 문항은 먼저 scenario family 안에서 평균한 뒤 family별 동일 가중치로 다시 평균한다. 대표값은 `nDCG@10`, 완전성 gate는 `Recall@10`, 상위 문맥 순도 진단은 `Precision@5`이며 family 단위 bootstrap 95% 구간을 함께 기록한다. 기존 질문별 macro 값은 호환용 진단값으로 남긴다.
 - 일반인 gold와 기존 synthetic control suite의 점수는 한 평균으로 합치지 않는다.
 
 ## 평가에서 두 자료의 관계
@@ -131,12 +155,12 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 | 자료 | 강점 | 사용하는 평가 |
 |---|---|---|
 | 기존 실험 D v3 | 원문 기반 정답 라벨과 qrels를 정적으로 생성했지만 parser v3 이전 ID를 가진 합성 초안 | 현재 corpus로 재주석·독립 검토·승인한 뒤에만 별도 synthetic control로 사용 |
-| 일반 사용자 질문은행 초안 | 자연어 범위와 사용자 상황이 넓음 | 질문 품질·범위 검토만 가능 |
-| 향후 일반 사용자 gold | 자연스러운 질문과 독립 검증 근거를 함께 보유 | 현실적 Recall·MRR·nDCG와 답변 평가 |
+| 일반 사용자 질문 후보군 | 자연어 범위와 사용자 상황이 넓음 | 질문 품질·범위 검토만 가능; 검색 품질 평가는 불가 |
+| 향후 일반 사용자 gold | 자연스러운 질문과 독립 검증 근거를 함께 보유 | 현실적 Recall·Precision·MRR·nDCG와 답변 평가 |
 
 질문 가족별 표현 변형은 나중에 calibration과 test 양쪽으로 나누지 않는다. 같은 `scenario_family_id`는 한 분할에만 배정해 표현 누출로 점수가 부풀려지는 것을 막는다.
 
-일반 Recall·HitRate·MRR@10·nDCG@1/3/5/10과 함께 넓은 질문은 `facet_recall@k`와 `all_required_facets_covered@k`를 측정한다. partial·clarification·unanswerable 문항은 이 평균에서 빼고, 부분 근거 회수율·무관 근거를 정답처럼 제시한 비율·올바른 답변 보류·추가 질문 비율을 각각 별도로 측정한다. 특정 별도 모집단이 0개면 0점이 아니라 `not_applicable`로 기록한다.
+일반 Recall·HitRate·Precision·MRR@10·nDCG@1/3/5/10과 함께 넓은 질문은 `facet_recall@k`와 `all_required_facets_covered@k`를 측정한다. partial·clarification·unanswerable 문항은 이 평균에서 빼고, 부분 근거 회수율·무관 근거를 정답처럼 제시한 비율·올바른 답변 보류·추가 질문 비율을 각각 별도로 측정한다. 특정 별도 모집단이 0개면 0점이 아니라 `not_applicable`로 기록한다.
 
 ## 현재 제한
 
@@ -148,6 +172,7 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 
 - 2026-08-03: 일반 사용자 질문은행은 기존 v3 정답셋을 대체하지 않는 별도 초안으로 만든다.
 - 2026-08-03: `not_annotated` 상태는 최종 평가 방식이 아니라 질문 승인 전 중간 단계로 한정한다.
+- 2026-08-03: 일반 사용자 1,000개 산출물의 최종 목표는 unlabelled 질문 목록이 아니라 독립 qrels·기준 문맥·기준 응답을 갖춘 approved gold이며, 질문 후보군은 문구·범위를 먼저 승인하기 위한 준비물이다.
 - 2026-08-03: Recall 계산에는 답변 문장보다 먼저 독립적으로 검증한 qrels가 필요하며, 생성 답변 평가는 reference response까지 주석한 뒤 수행한다.
 - 2026-08-03: 넓은 질문의 answerability는 boolean으로 축약하지 않고 full·partial·clarification·unanswerable로 나누며, qrels를 필수 답변 요소와 연결한다.
 - 2026-08-03: 질문은행·질문·corpus 해시를 gold에 고정해 질문 또는 근거 변경을 감지한다.
