@@ -83,7 +83,7 @@
 
 - [x] 담당: 주 에이전트 — BM25를 구현하지 않고도 corpus snapshot, retriever profile, index build, retrieval configuration/release를 독립적으로 추적할 수 있는 additive migration `0011`과 계약 테스트를 추가한다.
 - [x] 담당: `retrieval_catalog_docs` — 확정 스키마와 현재 exact dense/HNSW 보류 경계를 설계·생성·학습 문서에 반영하고, 과거 실행 보고서의 HNSW 승격 조건 설명을 바로잡는다.
-- [ ] 담당: 주 에이전트 — 전체 diff와 기존 사용자 변경 비혼입을 검토하고 로컬 검증 후 운영 DB에 migration만 적용한다. 데이터셋 검색, NVIDIA 질문 임베딩, BM25/RRF, 새 HNSW 작업은 실행하지 않는다.
+- [x] 담당: 주 에이전트 — 전체 diff와 기존 사용자 변경 비혼입을 검토하고 로컬 검증 후 운영 DB에 migration만 적용한다. 데이터셋 검색, NVIDIA 질문 임베딩, BM25/RRF, 새 HNSW 작업은 실행하지 않는다.
 - [ ] 담당: 사용자 → 주 에이전트 — 1,000문항 질문 문구와 범위를 승인한다. 승인 전에는 approval manifest, pilot, gold/qrels, 실제 실험 D를 생성하거나 실행하지 않는다.
 
 - [x] 현재 코드·마이그레이션·문서와 기존 사용자 변경 범위를 감사한다.
@@ -188,6 +188,7 @@
 - 2026-08-03: runner 동작은 합성 fixture로만 검증했다. 사용자 승인, 독립 gold 주석과 adjudication이 끝나지 않았으므로 실제 일반 사용자 1,000문항의 NVIDIA 임베딩·검색·지표 실행은 하지 않았다.
 - 2026-08-03: 후속 결정으로 runner의 HNSW identity·valid/ready 상태와 plan 비교 필드를 제거했다. 기존 물리 인덱스와 과거 plan 감사값은 역사적 사실로만 보존하며 현재 품질 결과로 사용하지 않는다.
 - 2026-08-03: 운영 DB 읽기 전용 감사에서 9개 open version, 3,066개 provision, 가장 늦은 `effective_from=2026-06-03`, snapshot through `2026-08-03`을 확인해 현재 지원 범위를 코드·API에 고정했다.
+- 2026-08-03: retrieval 계보 재감사에서 독립 검색기의 설정·build·release와 평가 실행을 같은 corpus 세대에 묶을 DB 계약이 없음을 확인했다. Additive migration `0011`로 8개 catalog 테이블과 평가 계보 열을 추가해 운영 Supabase에 적용했다. 적용 후 `0011 (head)`, 조문·현재 벡터 각 3,066개, 누락·stale·비단위 벡터 0, profile·corpus gate 활성, `hybrid_search` 없음이 유지됐다. 질문 데이터셋, NVIDIA 질문 임베딩, BM25/RRF와 새 HNSW 작업은 실행하지 않았다.
 
 ## 잔여 검토
 

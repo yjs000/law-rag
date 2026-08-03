@@ -72,6 +72,8 @@ Migration `0011_retrieval_catalog.py`는 이 실행 뒤에 추가된 계보 cata
 
 현재 runtime은 catalog나 `active_retrieval_release`를 읽지 않는다. 검색 동작은 계속 exhaustive exact dense이고 dense 결과가 0건일 때만 독립 keyword fallback을 실행한다. BM25·RRF·새 HNSW profile/build/configuration은 이번 catalog migration에 포함되지 않는다.
 
+운영 적용 뒤 읽기 전용 상태 확인 결과는 `0011 (head)`, 조문 3,066개, 현재 NVIDIA profile 벡터 3,066개, 누락·stale·비단위 벡터 각 0개였다. `profile_active`, `corpus_search_ready`, `corpus_search_capability`는 계속 `true`였고 `hybrid_search` 함수는 없었다. 이 확인에서는 벡터를 재생성하거나 검색 질문을 실행하지 않았다.
+
 ## 운영 검색 확인
 
 운영 확인용 단일 질문은 실험 D 데이터셋 평가가 아니다. 실제 query embedding은 512차원이었고 검색 전략은 `dense_only`였다.
