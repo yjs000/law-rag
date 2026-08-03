@@ -3,6 +3,7 @@
 > 생성 명령: `uv run --directory apps/api python -m scripts.generate_layperson_energy_questions`
 > bank version: `experiment-d-lay-energy-query-bank-v1-draft`
 > question set SHA-256: `58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32`
+> question scope set SHA-256: `f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7`
 > 상태: 질문 검토 초안 — 정답·qrels 없음, 검색 실험 실행 안 함
 
 ## 읽기 전에
@@ -11,13 +12,13 @@
 
 현재 단계에서는 사용자 유형·사업 단계·현재 문서 모음의 답변 가능 여부를 질문별 정답처럼 붙이지 않았다. `not_annotated`는 평가용 정답 라벨이 없다는 뜻이며, 질문을 만든 주제·표현 방식 메타데이터는 존재한다. 실제 평가셋으로 쓰려면 필요한 답변 요소, 근거 범위, 기준일을 사람이 별도로 확정해야 한다.
 
-이 파일만으로는 Recall·MRR 같은 검색 정확도를 계산할 수 없다. 질문을 승인한 뒤 검색 결과와 독립적으로 답변 가능 여부·필수 답변 요소·직접 근거 조문 목록(qrels)·기준 답변을 주석한 별도 gold 파일이 필요하다.
+이 파일만으로는 Recall·MRR 같은 검색 정확도를 계산할 수 없다. 질문을 승인하면 별도 승인 manifest로 질문 해시를 먼저 고정한다. 그 뒤 검색 결과와 독립적으로 답변 가능 여부·필수 답변 요소·직접 근거 조문 목록(qrels)·기준 응답을 주석한 별도 gold 파일이 필요하다.
 
 설계: [일반 사용자 질문은행과 gold 주석 경계](../design-docs/experiment-d-layperson-question-bank.md) · [질문 주제 참고 자료](../references/energy-layperson-question-sources-2026-08-03.md)
 
 ## 구성
 
-상황 200개를 만들고 각 상황에 의미가 맞는 질문 관점 5개를 직접 짝지어 총 1,000개로 구성했다.
+상황 200개를 만들고 각 상황에 의미가 맞는 질문 변형 5개를 직접 짝지어 총 1,000개로 구성했다. 질문 변형은 gold의 필수 답변 요소와 다른 개념이다.
 
 | 질문 의도 | 개수 |
 |---|---:|

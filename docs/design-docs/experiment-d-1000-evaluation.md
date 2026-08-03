@@ -101,11 +101,23 @@ BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/ex
 
 표제가 없거나 근거가 매우 짧고 교차참조 중심인 문항은 자동 통과로 숨기지 않는다. 현재 10개를 [사람이 직접 확인할 문항](../generated/experiment-d-v3-review.md)에 질문·기준 답·이유와 함께 분리했다. 범주별 대표 질문과 전체 1,000문항은 [전체 질문 검토본](../generated/experiment-d-v3-question-review.md)에 있다.
 
-v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개, reference와 문자열 유사도 0.80 이상인 의미 질문 116개를 발견했다. v3 초안에서는 세 항목이 모두 0개다. 다만 운영 corpus에는 과거 파서가 저장한 구조 표지 7개가 남아 있어 데이터셋 후보에서 제외한 상태다. 검색 실험 전에 현재 파서로 corpus를 재수집하고 벡터·qrels를 다시 생성해야 한다.
+v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개, reference와 문자열 유사도 0.80 이상인 의미 질문 116개를 발견했다. v3 초안에서는 세 항목이 모두 0개다. 운영 corpus는 이후 parser v3로 재수집해 구조 표지와 실제 조문 계층을 분리했고 벡터도 다시 생성했다.
+
+운영 corpus와 벡터는 이후 parser v3로 재구축됐지만 이 파일의 qrels는 재생성하지 않았다. 현재 searchable corpus와 대조한 결과 고유 qrel ID 1,624개 중 1,624개가 모두 누락된다. 따라서 JSON 내부 정적 검사가 통과하더라도 이 draft를 검색 평가에 사용할 수 없으며, 질문 승인 후 현재 parser v3 ID와 직접 근거로 다시 주석해야 한다.
+
+실제 읽기 전용 검사값과 실패 이유는 [실험 D gold 사전검사 보고](../generated/experiment-d-gold-preflight-report.md)에 기록한다.
 
 ## 아직 측정하지 않은 것
 
 이 문서는 질문 초안 생성 결과이지 검색 품질 결과가 아니다. 사용자 질문 확인과 corpus 재수집이 끝난 뒤에만 다음을 실제 실행값으로 별도 기록한다.
+
+실행 직전에는 다음 명령이 `approved_gold` 상태, 승인 질문·범위 해시, 현재 corpus fingerprint와 모든 qrel 메타데이터를 통과해야 한다. 이 명령은 임베딩이나 검색을 호출하지 않는다.
+
+`uv run --directory apps/api python -m scripts.preflight_experiment_d_gold --dataset evaluation/experiment-d-lay-energy-gold-v1.json`
+
+현재 명령은 독립적인 읽기 전용 검사다. 아직 1,000문항 평가 runner와 연결되지 않았으므로 그 자체가 검색 실행 전체를 잠그는 원자적 게이트는 아니다. 평가 runner를 구현할 때는 동일 프로세스에서 corpus mutation 공유 잠금을 먼저 얻고, 잠금 안에서 이 검사를 다시 수행한 뒤 마지막 검색까지 잠금을 유지해야 한다. 질문 승인 전에는 runner를 실행하지 않는다.
+
+과거 v3 draft의 stale qrels를 재현해서 확인할 때만 보고서에 적힌 별도 명령처럼 `evaluation/experiment-d-v3-1000.json`을 명시한다. 이 파일은 통과 대상 gold가 아니다.
 
 - Recall@1/3/5/10, MRR, nDCG@3/5/10
 - answerable 범주의 Article/Evidence Recall

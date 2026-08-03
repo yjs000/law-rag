@@ -76,6 +76,9 @@
 - [x] v2 정적 감사에서 발견된 구조 표지 7개, 삭제 조문 32개, 근접 복사 의미 질문 116개를 v3 생성 규칙에서 제외·수정한다.
 - [x] 현재 파서로 운영 corpus를 재수집하고 변경된 조문의 벡터를 다시 생성한다.
 - [ ] 사용자가 질문을 승인한 뒤 v3 qrels를 현재 parser v3 ID와 직접 근거로 다시 확정한다.
+- [x] 미승인 draft 또는 현재 corpus와 맞지 않는 qrels를 탐지하는 독립 읽기 전용 gold preflight를 추가한다.
+- [ ] 승인 후 구현할 평가 runner에서 corpus 공유 잠금 안의 preflight를 강제하고 마지막 검색까지 같은 corpus를 유지한다.
+- [x] 일반인 gold의 질문 승인·answerability·facet·qrel·기준문맥·blind 주석·split 불변조건을 실행 가능한 Pydantic 계약으로 고정한다.
 - [ ] 사용자가 수동 검토 10문항과 실험 D 질문 구성을 확인한다.
 - [ ] 사용자 확인 후에만 1,000문항을 검색기에 입력해 실험 D 지표를 측정한다.
 - [x] 공식기관 공개 FAQ·절차 주제로 일반 사용자형 에너지 질문 후보 1,000개를 별도 생성한다.
@@ -125,6 +128,12 @@
 - 2026-08-03: 초기 200개 상황×공통 후속문 조합을 전체 읽기 감사한 결과 의미 충돌과 부정확한 사용자 유형·단계·scope 가설을 발견했다. 상황별 호환 질문 묶음으로 세분화하고 문항별 자동 메타데이터를 제거했으며, 출처는 주제 수준의 영감 자료임을 명시했다.
 - 2026-08-03: 1,000문항을 1–350, 351–700, 701–1000 세 구간으로 다시 전수 읽어 상황과 공통 문구가 어긋난 문항, 독립 질문에서 선행 문맥이 빠진 문항, 일반인이 전기설비를 직접 조작하도록 읽힐 수 있는 문항을 교정했다. 최종 생성기는 전수 읽기 교정 162건을 ID별로 고정하며, 질문 세트 SHA-256은 `58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32`이다.
 - 2026-08-03: 일반 사용자 gold는 질문 승인 뒤에만 작성한다. answerability를 full·partial·clarification·unanswerable로 구분하고, 넓은 질문은 필수 답변 요소별 qrels와 facet coverage를 평가하도록 계약을 보강했다.
+- 2026-08-03: 질문 문구 SHA와 별도로 scenario family·intent·technology·질문 변형까지 포함한 scope SHA를 도입했다. 승인 후 split에 영향을 주는 범위 메타데이터를 다시 계산해 바꾸는 것을 preflight가 거부한다.
+- 2026-08-03: 문항별 판정 pool은 외부 경로만 선언하지 않고 모든 후보 ID와 후보 집합 SHA를 gold 안에 직접 고정한다. 모든 후보는 positive qrel 또는 distractor로 전수 분류하며 실제 searchable provision 전체와 대조한다.
+- 2026-08-03: Recall·MRR·nDCG 모집단은 fully answerable로 한정하고 partial·clarification·unanswerable은 별도 지표로 보고한다. 검증하지 않는 stratified/seed 주장은 제거하고 200/800 family 배정 자체를 동결한다.
+- 2026-08-03: 후보 질문은행의 법령명 목록 해시를 실제 parser corpus fingerprint와 분리했다. 기존 v3의 고유 qrel ID 1,624개는 parser v3 corpus에서 1,624개 모두 누락되어 있어 stale이며 재사용하지 않는다.
+- 2026-08-03: `scripts.preflight_experiment_d_gold`가 승인 상태, 질문 문구·범위 해시, corpus fingerprint, qrel ID·원문 SHA·메타데이터를 읽기 전용으로 검증하도록 추가했다. 이 독립 CLI는 임베딩과 검색을 실행하지 않으며, 평가 runner의 공유 잠금 연결은 질문 승인 뒤 구현할 미완료 항목으로 남겼다.
+- 2026-08-03: 운영 DB에 읽기 전용 preflight를 실제 실행했다. 검색·임베딩 호출 없이 `ready=false`, qrel 2,787개·고유 ID 1,624개·현재 corpus 누락 1,624개, searchable provision 3,066개를 확인해 `docs/generated/experiment-d-gold-preflight-report.md`에 기록했다.
 - 2026-08-03: Vercel CLI 58.1의 backend framework rewrite 동작 변경으로 catch-all rewrite가 `/health`와 `/v1/*`를 `/app/main.py`로 바꾸어 404를 내는 것을 빌드·런타임 로그로 확인했다. rewrite를 제거하고 `app.main:app` entrypoint를 명시한 `f44f045`를 배포해 운영 별칭의 health와 OpenAPI route를 복구했다.
 - 2026-08-03: 운영 Supabase를 `0010 (head)`로 올리고 capability=true, corpus gate=false와 API `503 corpus_unready`를 확인한 뒤 parser v3로 9개 문서·3,066개 조문을 다시 동기화했다. 수집은 JSON 9/9, fallback·실패 0이고 재미리보기 변경도 0이다.
 - 2026-08-03: parser v3 체크포인트에서 2,956개 벡터를 동일 passage SHA로 재사용하고 110개만 NVIDIA NIM에서 새로 생성했다. 3,066개를 DB에 적재한 뒤 누락·stale·비단위 벡터 0, HNSW ready, profile active, corpus search ready를 확인했다. 체크포인트는 67,393,498 bytes, SHA-256 `3E335D908B00EA87F88648358A8CCB3DB2823A79562B781E6CBFC54350F9673F`다.
@@ -141,7 +150,7 @@
 - 현재 검색 경로는 dense-only이며 BM25·hybrid·RRF·reranker는 도입하지 않았다.
 - DB는 모델 이름만이 아니라 query/passage 유형, 원본·저장 차원, 축약·정규화, 본문 템플릿 버전을 프로필로 추적한다.
 - 운영 parser v3 corpus 9문서·3,066개 조문에 현재 NVIDIA 512차원 passage 벡터와 partial HNSW 인덱스가 준비됐고, 모델 독립 corpus gate와 profile gate가 모두 활성화됐다.
-- 실험 D v3 검토 초안은 고정 qrels를 가진 1,000문항, calibration 200/test 800, answerable 850/unanswerable 150, 수동 검토 10개로 생성됐다. 질문 구성은 사용자 확인 대기다.
+- 실험 D v3 검토 초안은 1,000문항, calibration 200/test 800, answerable 850/unanswerable 150, 수동 검토 10개로 생성됐지만 qrels는 parser v3 이전 ID라 현재 gold가 아니다. 질문 구성과 현재 corpus 기준 재주석은 사용자 확인 대기다.
 - 실험 D 검색 실행과 Recall/MRR/nDCG 등 결과 산출은 사용자 질문 검토가 끝난 뒤에만 진행한다.
 - 일반 사용자 질문은행은 아직 gold가 아니므로 자체로 Recall/MRR/nDCG를 산출할 수 없다. 사용자 승인 뒤 독립 근거 주석을 완료한 문항만 현실적 자연어 평가셋으로 사용한다.
 - 미래 BM25는 독립 retriever로 측정한 뒤 동일 qrels에서 dense-only보다 개선되는 경우에만 별도 실험으로 채택한다.
