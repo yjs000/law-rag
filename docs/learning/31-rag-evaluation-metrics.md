@@ -6,6 +6,8 @@
 
 ## 가장 중요한 원칙
 
+> **용어 요약:** `RAG`는 `Retrieval-Augmented Generation`, 즉 “검색으로 보강한 생성”이다. 먼저 외부 문서에서 근거를 검색하고, 그 근거를 생성 모델에 전달해 답변을 만드는 방식이다.
+
 RAG는 한 번에 하나의 점수로 평가할 수 없다. 다음 단계가 서로 다른 이유로 실패하기 때문이다.
 
 ```text
@@ -25,6 +27,8 @@ NVIDIA 공식 평가 문서도 문서 검색 지표와 답변 생성 지표를 �
 
 ### Corpus
 
+> **용어 요약:** `Corpus`(코퍼스)는 원래 “자료의 모음”이라는 뜻이다. 검색 시스템에서는 검색 대상이 되는 문서 전체 집합을 가리킨다.
+
 `corpus`는 검색 대상 문서 전체다. 법률 RAG에서는 각 조·항·호·목의 본문과 다음 추적 정보를 함께 가져야 한다.
 
 - 법률 문서 ID와 버전 ID
@@ -34,9 +38,13 @@ NVIDIA 공식 평가 문서도 문서 검색 지표와 답변 생성 지표를 �
 
 ### Query
 
+> **용어 요약:** `Query`(쿼리)는 시스템에 보내는 요청이나 검색 질문이다. 여기서는 사용자가 입력한 법률 질문 한 건을 뜻한다.
+
 `query`는 평가 질문이다. 실제 사용자 질문과 비슷한 질문뿐 아니라 정확한 조문 조회, 의미 변형, 인접 조문과 혼동하기 쉬운 질문, corpus 범위 밖 질문을 포함해야 한다.
 
 ### Qrels
+
+> **용어 요약:** `Qrels`는 `Query Relevance Judgments`의 줄임말로, “각 질문에 어떤 문서가 얼마나 관련 있는지 표시한 정답표”다. `binary relevance`는 관련·무관만 나누고, `graded relevance`는 직접 근거·보조 근거처럼 관련성의 정도까지 나눈다.
 
 `qrels`는 `query relevance judgments`의 줄임말이다. 각 질문과 문서가 얼마나 관련 있는지 적은 정답표다.
 
@@ -49,6 +57,8 @@ NVIDIA 공식 평가 문서도 문서 검색 지표와 답변 생성 지표를 �
 관련성을 `0/1`로만 기록하면 binary relevance이고, `0/1/2`처럼 중요도를 나누면 graded relevance다. Recall과 Precision은 보통 일정 등급 이상을 관련 문서로 보지만, nDCG는 등급 차이를 순위 품질에 반영할 수 있다.
 
 ### Reference contexts와 reference answer
+
+> **용어 요약:** `Reference`는 평가할 때 비교 기준으로 삼는 정답이다. `Reference contexts`는 정답 근거 원문, `reference answer`는 그 원문을 바탕으로 만든 기준 답변을 뜻한다.
 
 - `reference_contexts`: 질문에 답하는 기준 원문 조각
 - `reference_answer`: 비교 대상이 되는 기준 답변
@@ -78,6 +88,8 @@ LlamaIndex의 `LabelledRagDataset`은 각 사례에 `query`, `reference_contexts
 
 ## Recall@K
 
+> **용어 요약:** `Recall`(재현율)은 “찾아야 할 정답을 얼마나 빠뜨리지 않고 찾아냈는가”를 나타낸다. `@K`는 검색 결과의 상위 K개까지만 검사한다는 뜻이다.
+
 `Recall@K`는 전체 정답 문서 중 상위 K개 안에서 몇 개를 찾았는지 측정한다.
 
 ```text
@@ -106,6 +118,8 @@ Recall@3 = 2 / 2 = 1.0
 
 ## Precision@K
 
+> **용어 요약:** `Precision`(정밀도)은 “가져온 결과 중 실제 정답이 얼마나 되는가”를 나타낸다. Recall이 누락을 보는 지표라면 Precision은 불필요한 결과가 얼마나 섞였는지를 보는 지표다.
+
 `Precision@K`는 상위 K개 결과 중 실제 관련 문서가 차지하는 비율이다.
 
 ```text
@@ -121,6 +135,8 @@ Precision@3 = 2 / 3 ≈ 0.667
 Recall을 높이려고 후보를 많이 가져오면 Precision은 낮아질 수 있다. 후보 검색 단계에서는 높은 Recall이 중요하지만, 생성 모델에 전달하는 최종 문맥에서는 높은 Precision이 중요하다.
 
 ## MRR
+
+> **용어 요약:** `MRR`은 `Mean Reciprocal Rank`의 줄임말이다. `Rank`는 순위, `Reciprocal Rank`는 첫 정답 순위의 역수, `Mean`은 여러 질문에서 낸 평균을 뜻한다.
 
 `MRR`은 `Mean Reciprocal Rank`, 평균 역순위다. 각 질문에서 **첫 번째 관련 문서**가 몇 위인지 본다.
 
@@ -141,6 +157,8 @@ top K 안에 없음 → 0
 MRR은 “첫 정답 하나를 빨리 보여주는가”에는 적합하지만, 두 번째 이후 정답의 순서는 평가하지 않는다.
 
 ## DCG와 nDCG@K
+
+> **용어 요약:** `DCG`는 `Discounted Cumulative Gain`으로, 관련 문서의 가치를 더하되 뒤 순위일수록 할인한다. `nDCG`의 `n`은 `normalized`로, 이상적인 순위의 점수로 나누어 0~1 범위에서 비교 가능하게 만들었다는 뜻이다.
 
 `DCG`는 `Discounted Cumulative Gain`이다. 한국어로 풀면 “순위가 뒤로 갈수록 가치를 할인해서 더한 점수”다.
 
@@ -187,9 +205,13 @@ nDCG는 다음 조건에서 특히 유용하다.
 
 ## Article Recall과 Evidence Recall
 
+> **용어 요약:** `Article`은 여기서 법률의 “조”를 뜻하고, `Evidence`는 질문에 직접 답하는 근거 본문을 뜻한다. 따라서 Article Recall은 조문 ID 회수, Evidence Recall은 실제 답변 문구 회수를 검사한다.
+
 이 두 지표는 법률 RAG에 맞춘 프로젝트 지표다.
 
 ### Article Recall@K
+
+> **용어 요약:** 상위 K개 후보 안에 기대한 조문 `provision_id`가 들어왔는지를 보는 법률용 Recall이다. 조문 본문이 온전한지는 별도로 검사한다.
 
 기대 조문 ID가 상위 K개의 조문 후보에 포함됐는지 검사한다.
 
@@ -198,6 +220,8 @@ nDCG는 다음 조건에서 특히 유용하다.
 ```
 
 ### Evidence Recall@K
+
+> **용어 요약:** 상위 K개 후보와 복원된 법률 계층 안에 질문을 실제로 뒷받침하는 근거 문구가 들어왔는지를 본다. 조문 번호만 맞고 필요한 항·호·목이 빠진 경우는 실패다.
 
 조문 ID뿐 아니라 질문에 필요한 실제 본문이 복원된 문맥에 포함됐는지 검사한다.
 
@@ -210,11 +234,15 @@ nDCG는 다음 조건에서 특히 유용하다.
 
 ## Law@1
 
+> **용어 요약:** `Law`는 법률, `@1`은 검색 결과 1위만 검사한다는 뜻이다. 가장 먼저 나온 후보가 기대한 법률에 속하는지를 빠르게 확인하는 지표다.
+
 `Law@1`은 1위 결과가 기대 법률에 속하는지 보는 거친 진단 지표다.
 
 태양광 질문에서 신재생에너지법이 1위인지 빠르게 확인할 수 있지만, 같은 법 안에서 틀린 조문이 1위여도 성공한다. 따라서 Article Recall, Evidence Recall과 함께 사용해야 한다.
 
 ## Context Recall
+
+> **용어 요약:** `Context`는 답변 모델에 전달되는 검색 문맥이다. `Context Recall`은 기준 답변에 필요한 정보가 그 문맥에 얼마나 빠짐없이 들어 있는지를 뜻한다.
 
 `Context Recall`은 기준 답변이나 기준 원문에 필요한 정보 중 검색된 문맥이 얼마나 많이 포함하는지 본다.
 
@@ -232,6 +260,8 @@ qrels 기반 Recall@K와의 차이는 다음과 같다.
 법률 RAG에서는 ID·경로·원문으로 계산하는 Evidence Recall을 우선 사용하고, LLM 기반 Context Recall은 의미 보조 지표로 두는 편이 안전하다.
 
 ## Context Precision
+
+> **용어 요약:** 검색 문맥 중 직접 도움이 되는 청크가 얼마나 앞쪽에, 불필요한 청크보다 우선해서 놓였는지를 본다. 일반 `Precision@K`와 달리 관련 청크가 등장한 순서까지 반영한다. `Average Precision`은 관련 결과가 나타난 각 순위의 Precision을 평균한 값이다.
 
 `Context Precision`은 관련 문맥이 불필요한 문맥보다 앞에 배치되는지 본다. Ragas의 계산은 단순한 `관련 청크 수/K`보다 Average Precision에 가까운 순위 가중 방식이다.
 
@@ -254,17 +284,23 @@ Context Precision ≈ (1 + 0.667) / 2 = 0.833
 
 ## Context Relevance
 
+> **용어 요약:** `Relevance`는 질문과의 관련성이다. `Context Relevance`는 검색 문맥이 질문 주제와 얼마나 가까운지를 보지만, 그 문맥이 질문의 직접 근거인지까지 보장하지는 않는다.
+
 `Context Relevance`는 검색 문맥이 질문 주제와 얼마나 관련 있는지를 본다. reference answer가 없어도 계산할 수 있다는 장점이 있지만, “주제가 비슷하다”와 “질문에 직접 답한다”를 혼동할 수 있다.
 
 송전·배전 조문이 태양광 질문과 전력 분야라는 점에서는 관련 있어도 태양광의 법적 분류를 직접 설명하지 않을 수 있다. 따라서 직접 근거 판정과 `insufficient_evidence`를 Context Relevance 하나로 결정하면 안 된다.
 
 ## Context Entity Recall
 
+> **용어 요약:** `Entity`는 사람·기관·법률명·지역처럼 구별 가능한 중요 개체다. 이 지표는 기준 답변의 중요 개체가 검색 문맥에 얼마나 빠짐없이 나타났는지 본다.
+
 `Context Entity Recall`은 기준 답변의 중요 개체가 검색 문맥에 얼마나 포함됐는지 본다. 사람, 기관, 법률명, 허가 주체 같은 고유 개체 누락을 찾는 보조 지표다.
 
 하지만 개체가 모두 등장해도 법률 관계가 반대일 수 있다. “장관”, “허가”, “전기사업자”가 모두 포함됐다는 사실만으로 누가 누구에게 무엇을 허가하는지 검증할 수는 없다.
 
 ## Evidence Precision
+
+> **용어 요약:** 최종 근거로 선택한 문맥 중 실제로 질문을 직접 뒷받침하는 근거가 차지하는 비율이다. 후보를 넓게 찾은 뒤 답변에 넣을 근거를 깨끗하게 줄였는지를 본다.
 
 `Evidence Precision`은 최종 선택한 근거 중 실제 직접 근거의 비율이다.
 
@@ -275,6 +311,8 @@ Evidence Precision = 직접 근거로 판정된 선택 문맥 수 / 전체 선�
 후보 검색의 top 10은 Recall을 높이기 위한 넓은 집합이고, 답변 생성에 전달할 3~5개 근거는 Precision을 높인 좁은 집합이어야 한다. 이 지표는 실험 C의 후보 회수와 실험 D의 문맥 선택을 분리해서 평가하게 해준다.
 
 ## Faithfulness
+
+> **용어 요약:** `Faithfulness`는 “충실성”이다. 생성 답변이 검색 문맥에 적힌 내용만 사용했는지를 뜻하며, 검색 문맥 자체가 올바른지는 별개의 문제다.
 
 `Faithfulness`는 생성된 답변의 각 주장이 검색 문맥으로 뒷받침되는지 본다.
 
@@ -294,11 +332,15 @@ Faithfulness가 높은 것은 “주어진 문맥을 벗어나 말하지 않았�
 
 ## Response Groundedness
 
+> **용어 요약:** `Response`는 시스템이 생성한 답변이고, `Groundedness`는 그 답변이 제공된 근거에 발을 딛고 있는 정도다. 답변이 외부 지식이나 추측을 섞지 않았는지를 검사한다.
+
 `Response Groundedness`도 답변이 문맥에 근거하는지 평가한다. NVIDIA/Ragas 구현에서는 Faithfulness와 별도 지표로 제공되지만 두 지표의 의미 영역이 크게 겹친다.
 
 도구마다 프롬프트, 주장 분해 방식과 점수 계산이 다를 수 있으므로 이름만 보고 같은 값이라고 간주하면 안 된다. 실제 평가에서는 하나를 주 지표로 정하고 다른 하나는 보조 또는 교차검증으로 사용하는 편이 해석하기 쉽다.
 
 ## Response Relevancy 또는 Answer Relevancy
+
+> **용어 요약:** `Response`와 `Answer`는 모두 생성 답변을 뜻한다. `Relevancy`는 답변이 질문의 요점을 직접 다루는 정도이며, 사실이 맞는지를 뜻하는 `Correctness`와는 다르다.
 
 답변이 사용자 질문을 직접 다루는지 평가한다. 장황하거나 질문의 일부만 답하는 응답을 낮게 평가하는 데 사용한다.
 
@@ -312,6 +354,8 @@ Faithfulness가 높은 것은 “주어진 문맥을 벗어나 말하지 않았�
 이 답변은 질문 형식에는 정확히 대응하므로 relevant할 수 있지만, 실제 법률상 주체가 다르면 incorrect다.
 
 ## Answer Correctness
+
+> **용어 요약:** `Correctness`는 정답성·정확성이다. `TP`(`True Positive`)는 맞게 포함한 사실, `FP`(`False Positive`)는 잘못 추가한 사실, `FN`(`False Negative`)은 빠뜨린 사실이다. `F1`은 이 세 값을 이용해 정확성과 누락을 함께 나타내는 점수다.
 
 `Answer Correctness`는 생성 답변을 기준 답변과 비교해 정확한지를 본다. Ragas의 현재 설명은 사실 단위의 TP·FP·FN으로 계산한 factual similarity와 임베딩 기반 semantic similarity를 가중 결합한다.
 
@@ -329,6 +373,8 @@ F1 = TP / (TP + 0.5 × (FP + FN))
 
 ## Answer Similarity
 
+> **용어 요약:** `Similarity`는 두 문장의 의미적 유사성이다. 표현이 비슷한지를 보는 지표이지, 부정·예외·의무처럼 법적 효과까지 정확히 같은지를 보장하는 지표는 아니다.
+
 생성 답변과 기준 답변의 임베딩 의미 유사도를 본다. 표현이 달라도 비슷한 뜻인지 확인하는 데 유용하지만, 다음 차이에 둔감할 수 있다.
 
 - “해야 한다”와 “할 수 있다”
@@ -339,7 +385,11 @@ F1 = TP / (TP + 0.5 × (FP + FN))
 
 ## Citation Correctness와 Citation Coverage
 
+> **용어 요약:** `Citation`은 인용이다. `Citation Correctness`는 붙인 인용이 해당 주장을 실제로 지원하는지, `Citation Coverage`는 근거가 필요한 주장에 인용이 빠짐없이 붙었는지를 본다.
+
 ### Citation Correctness
+
+> **용어 요약:** 주장과 인용을 한 쌍으로 보았을 때 인용 원문이 그 주장을 실제로 뒷받침하는지를 검사한다.
 
 답변에 붙인 인용이 바로 그 주장을 실제로 뒷받침하는지 검사한다.
 
@@ -348,6 +398,8 @@ Citation Correctness = 지원되는 주장-인용 쌍 / 검사한 주장-인용 
 ```
 
 ### Citation Coverage
+
+> **용어 요약:** `Coverage`는 범위의 충족 정도다. 답변의 실질 주장 전체 중 유효한 인용이 붙은 주장이 얼마나 되는지를 본다.
 
 근거가 필요한 답변 주장 중 유효한 인용을 가진 비율이다.
 
@@ -358,6 +410,8 @@ Citation Coverage = 유효 인용이 있는 실질 주장 수 / 인용이 필요
 정확한 인용 하나만 붙여도 correctness는 높을 수 있지만 나머지 주장에 인용이 없으면 coverage가 낮다. 둘을 함께 봐야 한다.
 
 ### Source integrity
+
+> **용어 요약:** `Source`는 출처 원문, `integrity`는 무결성이다. 인용한 ID·경로·문구·문서 해시가 실제 원문과 변조 없이 정확히 연결되는지를 뜻한다.
 
 법률 RAG에서는 의미 판정 전에 다음을 결정적으로 검사한다.
 
@@ -370,6 +424,8 @@ Citation Coverage = 유효 인용이 있는 실질 주장 수 / 인용이 필요
 
 ## Noise Sensitivity
 
+> **용어 요약:** `Noise`는 질문에 불필요하거나 무관한 문맥이고, `Sensitivity`는 그 잡음에 영향을 받는 정도다. 관련 없는 조문이 섞였을 때 답변이 흔들리는지를 본다.
+
 `Noise Sensitivity`는 관련 없는 문맥이 섞였을 때 답변이 잘못된 정보에 얼마나 영향을 받는지 본다. NVIDIA의 현재 문서에서는 낮을수록 일반적으로 잡음에 덜 민감하다고 설명한다.
 
 예를 들어 정확한 태양에너지 조문과 무관한 송전사업 조문을 함께 넣어도 답변이 직접 근거만 사용해야 한다. top 10을 넉넉히 검색한 뒤 일부만 생성 문맥으로 줄이는 이유를 검증하는 지표다.
@@ -379,6 +435,8 @@ Citation Coverage = 유효 인용이 있는 실질 주장 수 / 인용이 필요
 평가셋에서 answerable을 양성, unanswerable을 음성으로 두면 다음 지표를 계산할 수 있다.
 
 ### Unanswerable false-positive rate
+
+> **용어 요약:** `Unanswerable`은 현재 corpus의 근거로 답할 수 없는 질문이다. `False positive`는 실제로는 답할 수 없는데 답할 수 있다고 잘못 판정한 경우이며, `rate`는 그 비율이다.
 
 근거가 없는 질문인데 답변 가능하다고 잘못 통과시킨 비율이다.
 
@@ -390,6 +448,8 @@ FPR = unanswerable인데 답변한 수 / 전체 unanswerable 수
 
 ### Abstention recall
 
+> **용어 요약:** `Abstention`은 답변을 억지로 만들지 않고 보류·거부하는 행동이다. 이 지표는 근거가 부족한 질문을 얼마나 빠짐없이 올바르게 거부했는지 본다.
+
 근거 부족 질문을 올바르게 `insufficient_evidence`로 판정한 비율이다.
 
 ```text
@@ -397,6 +457,8 @@ Abstention Recall = 올바르게 거부한 unanswerable 수 / 전체 unanswerabl
 ```
 
 ### Answerable false-negative rate
+
+> **용어 요약:** `Answerable`은 근거가 있어 답할 수 있는 질문이다. `False negative`는 실제로 답할 수 있는데 답할 수 없다고 잘못 거부한 경우이며, 이 지표는 그 비율이다.
 
 근거가 있는데도 근거 부족으로 잘못 거부한 비율이다.
 
@@ -407,6 +469,8 @@ FNR = answerable인데 거부한 수 / 전체 answerable 수
 무조건 많이 거부하면 FPR은 낮아지지만 FNR이 높아진다. 두 지표를 같이 보고 calibration 데이터에서 기준을 정한 뒤 test 데이터에는 기준을 고정해야 한다.
 
 ## HNSW exact-search 대비 recall
+
+> **용어 요약:** `HNSW`는 `Hierarchical Navigable Small World`의 줄임말로, 모든 벡터를 전부 비교하지 않고 그래프를 따라 빠르게 이웃을 찾는 근사 검색 방식이다. `ANN`은 `Approximate Nearest Neighbor`, 근사 최근접 이웃 검색을 뜻한다. `Exact search`는 모든 후보를 정확히 비교하며, 여기의 recall은 HNSW가 exact 상위 결과를 얼마나 재현했는지를 뜻한다.
 
 이 지표는 qrels 기반 검색 Recall과 다른 문제를 측정한다.
 
@@ -423,6 +487,8 @@ ANN Recall이 낮으면 임베딩 모델이 아니라 HNSW 인덱스 설정 때�
 
 ## 운영 지표
 
+> **용어 요약:** `Latency`는 요청부터 결과까지 걸린 시간이다. `p50`은 절반의 요청이 이 시간 안에 끝났다는 뜻이고, `p95`는 95%의 요청이 이 시간 안에 끝났다는 뜻이다. `NaN`은 `Not a Number`로, 정상 숫자 점수를 계산하지 못한 실패 상태를 나타낼 수 있다.
+
 품질이 같다면 더 빠르고 안정적인 구성이 낫다. 다음을 품질 지표와 함께 기록한다.
 
 - p50, p95, 최대 latency
@@ -436,6 +502,8 @@ NVIDIA 문서는 일부 RAGAS 지표가 judge 호출 실패 시 예외 대신 Na
 
 ## 결정적 지표와 LLM judge 지표
 
+> **용어 요약:** `LLM`은 `Large Language Model`, 대규모 언어 모델이다. `LLM judge`는 별도의 언어 모델이 답변·문맥의 품질을 심사하도록 하는 방식이며, 코드 공식만으로 계산하는 결정적 지표와 구분한다.
+
 ### 결정적 지표
 
 같은 입력이면 같은 결과가 나오며 코드로 직접 계산할 수 있다.
@@ -448,6 +516,8 @@ NVIDIA 문서는 일부 RAGAS 지표가 judge 호출 실패 시 예외 대신 Na
 - latency와 오류 수
 
 ### LLM judge 지표
+
+> **용어 요약:** 사람 대신 LLM이 의미를 읽고 점수를 매기는 지표다. 모델·프롬프트에 따라 판정이 달라질 수 있으므로 사람 정답표와의 일치율을 먼저 검증해야 한다.
 
 문장의 의미를 판정해야 하므로 모델과 프롬프트에 의존한다.
 
