@@ -27,6 +27,7 @@
 - [25 임베딩의 전체 개념: 차원, 내적, 코사인 유사도와 축약](25-embedding-concepts.md)
 - [26 법률 구조 범위를 보존하는 로컬 벡터 검색](26-local-vector-search.md)
 - [27 Dense 검색 후보와 답변 문맥의 분리](27-dense-retrieval-candidates-and-context.md)
+- [31 RAG 평가 지표: 검색, 문맥, 답변과 근거 부족 판정](31-rag-evaluation-metrics.md)
 
 ## 모델 실행, 폴백과 취소
 

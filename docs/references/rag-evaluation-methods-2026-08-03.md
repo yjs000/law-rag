@@ -33,6 +33,20 @@
 - 확인 내용: corpus, queries, qrels를 분리하고 nDCG@k, MAP@k, Recall@k, Precision@k, MRR을 계산한다.
 - 적용: 실험 D JSON과 함께 BEIR 호환 `corpus.jsonl`, `queries.jsonl`, `qrels/test.tsv`를 생성할 수 있는 내부 계약을 둔다.
 
+## NIST trec_eval
+
+- URL: https://github.com/usnistgov/trec_eval
+- 확인 내용: TREC 공동체의 표준 검색 평가 도구로, qrels와 검색 실행 결과를 입력받아 recall, reciprocal rank, nDCG 등 순위 지표를 계산한다.
+- 적용: 지표 이름이 같아도 프로젝트 자체 계산식과 표준 구현의 의미가 달라지지 않도록 qrels relevance 기준, cutoff K와 query별 평균 방식을 명시한다.
+
+## Ragas context와 answer metrics
+
+- URL: https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/
+- URL: https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/
+- URL: https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/answer_correctness/
+- 확인 내용: Context Precision은 관련 청크가 앞에 놓이는지를 순위 가중으로 평가하고, Faithfulness는 답변의 개별 주장이 검색 문맥으로 지원되는지 평가한다. Answer Correctness는 기준 답변과 생성 답변의 사실 단위 일치와 의미 유사도를 결합한다.
+- 적용: 의미 기반 judge 지표는 ID·path·SHA 기반 결정적 검색·인용 지표와 분리하고 judge 모델·프롬프트·실패/NaN을 함께 기록한다.
+
 ## pgvector
 
 - URL: https://github.com/pgvector/pgvector
