@@ -1,5 +1,6 @@
 import json
 import re
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
@@ -50,7 +51,13 @@ def validate_for_activation(
         raise ValueError("검색 가능한 조문이 없습니다")
     paths = [provision.path for provision in document.provisions]
     if len(paths) != len(set(paths)):
-        raise ValueError("조문 경로가 중복되었습니다")
+        duplicates = sorted(path for path, count in Counter(paths).items() if count > 1)
+        sample = ", ".join(duplicates[:5])
+        raise ValueError(
+            "조문 경로가 중복되었습니다: "
+            f"format={document.raw_format}, fallback={document.fallback_reason or 'none'}, "
+            f"count={len(duplicates)}, sample={sample}"
+        )
     if any(not provision.content.strip() for provision in document.provisions):
         raise ValueError("내용이 없는 조문이 있습니다")
     _validate_provision_hierarchy(document)

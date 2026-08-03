@@ -210,3 +210,68 @@ def test_effective_date_override_controls_record_and_provision_identity(parser, 
         effective_from=authoritative_date,
         path=document.provisions[0].path,
     )
+
+
+def test_flat_subitem_groups_ignore_items_that_only_reference_other_subitems() -> None:
+    body = json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "전기사업법 시행령",
+                    "시행일자": "20260102",
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "5",
+                        "조문제목": "평탄화 목 복원",
+                        "조문내용": "제5조(평탄화 목 복원) 상위 호를 복원한다.",
+                        "항": {
+                            "항번호": "①",
+                            "항내용": "① 다음 각 호를 따른다.",
+                            "호": [
+                                {
+                                    "호번호": "1.",
+                                    "호내용": "1. 다음 각 목의 어느 하나에 해당하는 자",
+                                },
+                                {"호번호": "2.", "호내용": "2. 다른 요건"},
+                                {
+                                    "호번호": "3.",
+                                    "호내용": "3. 다음 각 목의 어느 하나에 해당하는 방법",
+                                },
+                                {
+                                    "호번호": "4.",
+                                    "호내용": "4. 제3호 각 목의 방법을 통한 지배",
+                                },
+                            ],
+                            "목": [
+                                {"목번호": "가.", "목내용": "가. 첫 그룹 가목"},
+                                {"목번호": "나.", "목내용": "나. 첫 그룹 나목"},
+                                {"목번호": "가.", "목내용": "가. 둘째 그룹 가목"},
+                                {"목번호": "나.", "목내용": "나. 둘째 그룹 나목"},
+                                {"목번호": "다.", "목내용": "다. 둘째 그룹 다목"},
+                            ],
+                        },
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+    document = parse_json(
+        body,
+        expected_title="전기사업법 시행령",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/flattened",
+    )
+
+    subitems = [item for item in document.provisions if "/목" in item.path]
+    assert [(item.path, item.parent_path) for item in subitems] == [
+        ("제5조/항①/호1./목가.", "제5조/항①/호1."),
+        ("제5조/항①/호1./목나.", "제5조/항①/호1."),
+        ("제5조/항①/호3./목가.", "제5조/항①/호3."),
+        ("제5조/항①/호3./목나.", "제5조/항①/호3."),
+        ("제5조/항①/호3./목다.", "제5조/항①/호3."),
+    ]

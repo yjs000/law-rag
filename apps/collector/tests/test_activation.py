@@ -96,6 +96,18 @@ def test_old_parser_schema_blocks_activation() -> None:
         validate_for_activation(document, raw, today=date(2026, 7, 14))
 
 
+def test_duplicate_path_error_identifies_the_conflicting_path() -> None:
+    document, raw = _json_document("law-deleted.json")
+    duplicate_path = document.provisions[0].path
+    document.provisions.append(document.provisions[0])
+
+    with pytest.raises(
+        ValueError,
+        match=rf"format=JSON, fallback=none, count=1, sample={duplicate_path}",
+    ):
+        validate_for_activation(document, raw, today=date(2026, 7, 14))
+
+
 def test_structure_marker_cannot_replace_article_body() -> None:
     document, raw = _json_document("law-deleted.json")
     document.provisions[0].content = "제1장 총칙"

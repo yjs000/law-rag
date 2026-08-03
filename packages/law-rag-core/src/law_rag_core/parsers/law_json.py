@@ -109,7 +109,7 @@ def _flat_subitem_parents(
         pair
         for pair in item_paths
         if not has_nested_subitems(pair[0])
-        and "각 목" in (_value(pair[0], "호내용") or "")
+        and "다음 각 목" in (_value(pair[0], "호내용") or "")
     ]
     if len(explicit) == group_count:
         return explicit
@@ -126,7 +126,11 @@ def _flat_subitem_parents(
     if len(active) == group_count:
         return active
 
-    raise LawJsonParseError("평탄화된 목의 상위 호를 복원할 수 없습니다")
+    raise LawJsonParseError(
+        "평탄화된 목의 상위 호를 복원할 수 없습니다: "
+        f"groups={group_count}, items={len(item_paths)}, "
+        f"unnested={len(unnested)}, active={len(active)}, explicit={len(explicit)}"
+    )
 
 
 def load_json(body: str) -> Any:

@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import sys
 from collections.abc import Sequence
 
 from law_rag_core.domain.catalog import MVP_CATALOG
@@ -151,5 +152,7 @@ async def _run(command: str, title: str | None = None) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     args = _parser().parse_args(argv)
     raise SystemExit(asyncio.run(_run(args.command, args.title)))

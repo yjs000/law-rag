@@ -493,6 +493,8 @@ class SupabaseCurrentCorpusRepository:
             "effective_to": (
                 resolved_effective_to.isoformat() if resolved_effective_to else None
             ),
+            "raw_format": document.raw_format,
+            "fallback_reason": document.fallback_reason,
             "parser_schema_version": document.parser_schema_version,
             "lifecycle_state": activation.lifecycle_state,
             "source_record_state": activation.source_record_state,
