@@ -12,6 +12,7 @@
 | [실험 C 키워드 결합 검색](experiment-c-keyword-retrieval-options.md) | 제안·보류 | dense 기준선 이후 lexical·RRF를 비교할 후속 설계 |
 | [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
 | [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | dense-only 저장 계약, 프로필별 벡터 인덱스와 BM25 확장 경계 |
+| [실험 D 1,000문항 평가](experiment-d-1000-evaluation.md) | 데이터셋 생성 완료 | BEIR qrels, labelled reference, 경계·대조·비교군과 수동 검토 계약 |
 | [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
 | [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
 | [Vercel·Supabase 운영 전환](vercel-supabase-deployment.md) | 승인 | FastAPI 전환 조건, 외부 선행 입력, Preview 프록시와 운영 책임 |
