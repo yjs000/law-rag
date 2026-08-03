@@ -1,7 +1,7 @@
 # 데이터베이스 스키마
 
-> 기준 시점: 2026-07-19
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0006_history_retention_job.py`
+> 기준 시점: 2026-08-03
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0008_dense_embedding_profiles.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
@@ -9,7 +9,8 @@
 | `legal_documents` | 안정적인 법령 ID, 정확 명칭, 문서 종류 |
 | `document_versions` | MST, 공포/시행 기간, 원문 포맷·해시·Storage 경로 |
 | `provisions` | 조·항·호·목 경로와 원문 |
-| `provision_embeddings` | 모델·차원·버전별 `vector(512)` |
+| `embedding_profiles` | provider·model·query/passage 입력·차원 축약·정규화·본문 템플릿 버전 |
+| `provision_embeddings` | 프로필·원문 입력 SHA-256별 차원 가변 `vector`와 생성 시각 |
 | `legal_relationships` | 상하위법·위임·인용 관계 |
 | `derived_obligations` | 행위자·조건·의무/금지/허가/신고 파생 데이터 |
 | `ingestion_runs` | 수집 실행 상태와 비민감 통계 |
@@ -24,7 +25,11 @@
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 
-`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인, `provision_embeddings.embedding`에는 HNSW cosine 색인이 있다. `hybrid_search` SQL 함수가 기준일 유효 버전만 대상으로 제목·표제·본문 키워드와 선택적 벡터 순위를 RRF로 합친다. 의미 후보는 요청한 `model`, 512차원, embedding version 1과 일치하는 행만 사용해 서로 다른 provider의 벡터 공간을 혼합하지 않는다. `question_history.diagnostics`는 입력 검증, 파싱, 임베딩, 검색, 생성, 결과 단계를 보존한다. 대화 목록은 `(user_id, updated_at DESC, id DESC)`, 대화 턴은 `(conversation_id, turn_index DESC, id DESC)` 복합 색인으로 커서 페이지네이션한다. 기존 질문 이력은 마이그레이션 시 각각 하나의 대화로 이관된다.
+`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index를 만든다. 다른 차원 모델은 같은 차원 가변 열에 저장하되 새 프로필 전용 partial index를 추가할 수 있다.
+
+`0008`은 기존 4인자·5인자 `hybrid_search` 함수를 모두 제거한다. 현재 API는 dense-only SQL을 실행하고 dense 후보가 0개일 때만 독립 PGroonga keyword fallback을 실행한다. RRF는 현재 DB 동작이 아니다. 향후 BM25·RRF는 별도 retriever와 평가 버전을 추가해 비교한다.
+
+`question_history.diagnostics`는 입력 검증, 파싱, 임베딩, 검색, 생성, 결과 단계를 보존한다. 대화 목록은 `(user_id, updated_at DESC, id DESC)`, 대화 턴은 `(conversation_id, turn_index DESC, id DESC)` 복합 색인으로 커서 페이지네이션한다. 기존 질문 이력은 마이그레이션 시 각각 하나의 대화로 이관된다.
 
 사용자 테이블은 `auth.users` 삭제를 기준으로 연쇄 삭제된다. 대화를 삭제하면 질문 턴과 해당 턴의 체크리스트 내보내기 메타데이터가 연쇄 삭제된다. `purge_expired_question_history(cutoff)`는 저장 경로와 같은 순서로 영향받은 대화를 먼저 잠그고, cutoff에 만료된 질문의 내보내기를 `DELETE ... RETURNING`으로 정리해 실제 삭제 수를 얻은 뒤 질문 삭제·대화 요약 재집계·빈 대화 삭제를 수행한다. 실행은 advisory transaction lock으로 직렬화되며 `history_retention_runs`에는 원문·사용자 식별자 없이 집계와 SQLSTATE만 기록한다. 감사 table·identity sequence·함수는 `PUBLIC`, `anon`, `authenticated` 권한을 명시적으로 회수하고 필요한 `service_role` 권한만 부여했다.
 
