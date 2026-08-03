@@ -12,7 +12,10 @@ class LegalRepository(Protocol):
     async def upsert_document(self, document: LegalDocumentRecord) -> UUID: ...
 
     async def upsert_embeddings(
-        self, values: list[tuple[UUID, list[float]]], model: str, dimensions: int
+        self,
+        values: list[tuple[UUID, str, list[float]]],
+        profile_key: str,
+        dimensions: int,
     ) -> None: ...
 
     async def search(
@@ -21,7 +24,7 @@ class LegalRepository(Protocol):
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
-        embedding_model: str | None = None,
+        embedding_profile_key: str | None = None,
     ) -> list[SearchHit]: ...
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None: ...

@@ -7,6 +7,7 @@ from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.application.answering import search_only_answer
+from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.schemas import ProjectStage, QuestionRequest
 from app.settings import get_settings
 
@@ -85,7 +86,7 @@ async def main() -> None:
             date.fromisoformat(case["as_of_date"]),
             10,
             vector,
-            settings.nvidia_embedding_model if vector is not None else None,
+            NVIDIA_NEMOTRON_512_PROFILE.key if vector is not None else None,
         )
         actual = {hit.document_title for hit in hits}
         success = bool(actual.intersection(case["expected_documents"]))

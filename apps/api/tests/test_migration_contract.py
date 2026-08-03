@@ -66,3 +66,30 @@ def test_conversation_migration_backfills_ownership_and_cursor_indexes(monkeypat
     assert "conversations_user_updated_id" in sql
     assert "question_history_conversation_turn_id" in sql
     assert "CREATE POLICY own_conversations" in sql
+
+
+def test_dense_profile_migration_removes_hybrid_and_tracks_vector_provenance(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0008_dense_embedding_profiles.py"
+    )
+    spec = importlib.util.spec_from_file_location("dense_profile_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert "DROP FUNCTION IF EXISTS hybrid_search(text,date,text,integer)" in sql
+    assert "DROP FUNCTION IF EXISTS hybrid_search(text,date,text,text,integer)" in sql
+    assert "CREATE TABLE embedding_profiles" in sql
+    assert "source_text_sha256" in sql
+    assert "CHECK(vector_dims(embedding)=dimensions)" in sql
+    assert "embedding::vector(512)" in sql
+    assert "WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1'" in sql
+    assert "CREATE OR REPLACE FUNCTION hybrid_search" not in sql

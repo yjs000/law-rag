@@ -26,6 +26,7 @@ from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
+from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.schemas import (
     AiFallbackReason,
@@ -266,7 +267,7 @@ async def _answer_question(
             payload.as_of_date,
             10,
             query_embedding,
-            settings.nvidia_embedding_model if query_embedding is not None else None,
+            NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
         )
     except Exception as exc:
         raise HTTPException(

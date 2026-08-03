@@ -103,7 +103,10 @@ class MemoryLegalRepository:
         return loaded, errors
 
     async def upsert_embeddings(
-        self, values: list[tuple[UUID, list[float]]], model: str, dimensions: int
+        self,
+        values: list[tuple[UUID, str, list[float]]],
+        profile_key: str,
+        dimensions: int,
     ) -> None:
         return None
 
@@ -113,10 +116,10 @@ class MemoryLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
-        embedding_model: str | None = None,
+        embedding_profile_key: str | None = None,
     ) -> list[SearchHit]:
         hits, _ = await self.search_with_trace(
-            query, as_of_date, limit, query_embedding, embedding_model
+            query, as_of_date, limit, query_embedding, embedding_profile_key
         )
         return hits
 
@@ -126,7 +129,7 @@ class MemoryLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
-        embedding_model: str | None = None,
+        embedding_profile_key: str | None = None,
     ) -> tuple[list[SearchHit], SearchTrace]:
         started = perf_counter()
         prepared = prepare_search_query(query)

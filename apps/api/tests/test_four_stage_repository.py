@@ -7,6 +7,7 @@ import pytest
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.catalog import SourceKind
+from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import ProvisionRecord
 from app.domain.search_queries import prepare_search_query
 from app.parsers.law_json import parse_legal_document
@@ -221,7 +222,7 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
         date(2026, 7, 18),
         10,
         [0.1, 0.2],
-        "nvidia/nemotron-3-embed-1b",
+        NVIDIA_NEMOTRON_512_PROFILE.key,
     )
 
     assert [hit.path for hit in hits] == ["제7조/항①", "제8조"]
@@ -253,7 +254,7 @@ async def test_postgres_dense_zero_falls_back_to_separate_keyword_search() -> No
         date(2026, 7, 18),
         10,
         [0.1, 0.2],
-        "nvidia/nemotron-3-embed-1b",
+        NVIDIA_NEMOTRON_512_PROFILE.key,
     )
 
     assert [hit.document_title for hit in hits] == ["전기사업법"]

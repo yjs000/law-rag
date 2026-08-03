@@ -6,7 +6,7 @@
 - API: Python 3.14, FastAPI, Pydantic, SQLAlchemy 2, Alembic
 - Package: Node 24.18.0, pnpm 11.12.0, uv 0.11.28
 - Data: Supabase PostgreSQL, PGroonga, pgvector, Storage
-- AI: OpenAI Responses API, Structured Outputs, `gpt-5.6-terra`; `text-embedding-3-large` 512차원
+- AI: 답변은 OpenAI Responses API `gpt-5.6-terra` 또는 NVIDIA NIM, 임베딩은 NVIDIA NIM `nvidia/nemotron-3-embed-1b`의 앞 512차원 L2 재정규화
 - Runtime units: `apps/api`와 `apps/collector`를 독립 Python 프로젝트로 운영하고 `apps/web`을 프런트엔드로 유지
 - Batch/Deploy: 현재 고정 공인 IP Windows PC의 OS 스케줄러에서 collector 실행, 배포는 목업; 후속으로 Web과 stateless FastAPI는 Vercel, 영속 상태는 Supabase에 배치하고 collector는 등록된 고정 공인 IP PC에 유지
 - Auth: 목업 단계는 Google 로그인을 모사한 개발용 세션, 실제 서비스는 Google OAuth만 지원
@@ -29,3 +29,4 @@ LangChain 같은 대형 프레임워크로 핵심 검색·인용 계약을 감�
 - 2026-07-14: 위 단일 서버 배포 결정을 [Vercel·Supabase 운영 전환 설계](vercel-supabase-deployment.md)로 대체한다. Web과 stateless FastAPI는 Vercel, 영속 상태는 Supabase, collector는 등록된 고정 공인 IP Windows PC에 둔다.
 - 2026-07-14: Preview 브라우저는 Next.js 상대 `/api/*` 동일 출처 프록시로 FastAPI에 접근한다. FastAPI에 가변 `*.vercel.app` CORS wildcard를 허용하지 않는다.
 - 2026-07-15: 개발·CI·Vercel의 Python 런타임 계약은 3.14 계열로 통일하고 `.python-version`을 `3.14`로 지정한다. 환경별로 관리되는 패치 버전 차이 때문에 설치가 중단되지 않게 하기 위함이다.
+- 2026-08-03: 임베딩 provider를 NVIDIA NIM으로 고정하고 모델·입력 유형·차원 축약·정규화·본문 템플릿을 하나의 DB 프로필로 추적한다.

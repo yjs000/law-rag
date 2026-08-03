@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
+from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_references
 from app.domain.schemas import CorpusItemStatus, SearchHit
@@ -124,25 +125,42 @@ class PostgresLegalRepository:
         return document_id
 
     async def upsert_embeddings(
-        self, values: list[tuple[UUID, list[float]]], model: str, dimensions: int
+        self,
+        values: list[tuple[UUID, str, list[float]]],
+        profile_key: str,
+        dimensions: int,
     ) -> None:
         if not values:
             return
+        if profile_key != NVIDIA_NEMOTRON_512_PROFILE.key:
+            raise ValueError("unsupported embedding profile")
+        if dimensions != NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions:
+            raise ValueError("embedding dimensions do not match profile")
+        if any(len(embedding) != dimensions for _, _, embedding in values):
+            raise ValueError("embedding vector dimensions do not match profile")
         async with self.engine.begin() as connection:
-            for provision_id, embedding in values:
-                await connection.execute(
-                    text(
-                        """INSERT INTO provision_embeddings(provision_id,model,dimensions,embedding_version,embedding)
-                        VALUES(:id,:model,:dimensions,'1',CAST(:embedding AS vector))
-                        ON CONFLICT(provision_id,model,embedding_version) DO UPDATE SET embedding=excluded.embedding"""
-                    ),
+            await connection.execute(
+                text(
+                    """INSERT INTO provision_embeddings(
+                    provision_id,profile_key,dimensions,source_text_sha256,embedding,embedded_at)
+                    VALUES(:id,:profile_key,:dimensions,:source_text_sha256,CAST(:embedding AS vector),now())
+                    ON CONFLICT(provision_id,profile_key) DO UPDATE SET
+                    dimensions=excluded.dimensions,
+                    source_text_sha256=excluded.source_text_sha256,
+                    embedding=excluded.embedding,
+                    embedded_at=excluded.embedded_at"""
+                ),
+                [
                     {
                         "id": provision_id,
-                        "model": model,
+                        "profile_key": profile_key,
                         "dimensions": dimensions,
+                        "source_text_sha256": source_text_sha256,
                         "embedding": str(embedding),
-                    },
-                )
+                    }
+                    for provision_id, source_text_sha256, embedding in values
+                ],
+            )
 
     async def search(
         self,
@@ -150,10 +168,10 @@ class PostgresLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
-        embedding_model: str | None = None,
+        embedding_profile_key: str | None = None,
     ) -> list[SearchHit]:
         hits, _ = await self.search_with_trace(
-            query, as_of_date, limit, query_embedding, embedding_model
+            query, as_of_date, limit, query_embedding, embedding_profile_key
         )
         return hits
 
@@ -163,11 +181,16 @@ class PostgresLegalRepository:
         as_of_date: date,
         limit: int,
         query_embedding: list[float] | None = None,
-        embedding_model: str | None = None,
+        embedding_profile_key: str | None = None,
     ) -> tuple[list[SearchHit], SearchTrace]:
         started = perf_counter()
-        if (query_embedding is None) != (embedding_model is None):
-            raise ValueError("query embedding and model must be provided together")
+        if (query_embedding is None) != (embedding_profile_key is None):
+            raise ValueError("query embedding and profile must be provided together")
+        if (
+            embedding_profile_key is not None
+            and embedding_profile_key != NVIDIA_NEMOTRON_512_PROFILE.key
+        ):
+            raise ValueError("unsupported embedding profile")
         embedding = str(query_embedding) if query_embedding else None
         provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
@@ -246,13 +269,13 @@ class PostgresLegalRepository:
             stages: list[SearchStageTrace] = []
             candidate_limit = min(max(limit * 5, 50), 200)
             retrieval_strategy = "four_stage_keyword"
-            if embedding is not None and embedding_model is not None:
+            if embedding is not None and embedding_profile_key is not None:
                 dense_started = perf_counter()
                 dense_rows = await _execute_dense_search(
                     connection,
                     as_of_date,
                     embedding,
-                    embedding_model,
+                    embedding_profile_key,
                     candidate_limit,
                 )
                 dense_candidates = _unique_article_rows(dense_rows)
@@ -525,7 +548,7 @@ async def _execute_dense_search(
     connection: AsyncConnection,
     as_of_date: date,
     embedding: str,
-    embedding_model: str,
+    embedding_profile_key: str,
     limit: int,
 ) -> list[Mapping[str, Any]]:
     return list(
@@ -536,23 +559,22 @@ async def _execute_dense_search(
                     d.exact_title document_title,d.source_kind,
                     'MST '||v.mst version_label,v.effective_from,v.effective_to,
                     p.path,p.heading,p.content,v.source_url,
-                    1.0-(e.embedding <=> CAST(:embedding AS vector)) score
+                    1.0-(e.embedding::vector(512) <=> CAST(:embedding AS vector(512))) score
                     FROM provisions p
                     JOIN document_versions v ON v.id=p.version_id
                     JOIN legal_documents d ON d.id=v.document_id
                     JOIN provision_embeddings e ON e.provision_id=p.id
                     WHERE (v.effective_from IS NULL OR v.effective_from<=:as_of)
                       AND (v.effective_to IS NULL OR v.effective_to>:as_of)
-                      AND e.model=:embedding_model
+                      AND e.profile_key=:embedding_profile_key
                       AND e.dimensions=512
-                      AND e.embedding_version='1'
-                    ORDER BY e.embedding <=> CAST(:embedding AS vector),p.ordinal
+                    ORDER BY e.embedding::vector(512) <=> CAST(:embedding AS vector(512)),p.ordinal
                     LIMIT :limit"""
                 ),
                 {
                     "as_of": as_of_date,
                     "embedding": embedding,
-                    "embedding_model": embedding_model,
+                    "embedding_profile_key": embedding_profile_key,
                     "limit": limit,
                 },
             )
