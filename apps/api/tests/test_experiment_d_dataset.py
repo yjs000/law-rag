@@ -1,10 +1,13 @@
+import difflib
 import json
+import re
 from datetime import date
 from pathlib import Path
 
 from scripts.generate_experiment_d_dataset import SourceProvision, build_dataset
+from scripts.render_experiment_d_question_review import render_review
 
-DATASET = Path(__file__).parents[1] / "evaluation" / "experiment-d-v2-1000.json"
+DATASET = Path(__file__).parents[1] / "evaluation" / "experiment-d-v3-1000.json"
 
 
 def _source(
@@ -56,6 +59,20 @@ def test_small_dataset_builds_all_control_and_boundary_categories() -> None:
             parent_path="제1조",
             ordinal=2,
         ),
+        _source(
+            "root-2",
+            "제2조",
+            "제2조(변경허가) 전기사업의 변경허가에 필요한 사항을 정한다.",
+            heading="변경허가",
+            ordinal=3,
+        ),
+        _source(
+            "child-3",
+            "제2조/항①",
+            "① 전기사업자는 장관의 변경허가를 받아야 한다.",
+            parent_path="제2조",
+            ordinal=4,
+        ),
     ]
     quotas = {
         "exact_path_control": 1,
@@ -79,7 +96,7 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
     cases = dataset["cases"]
 
     assert dataset["schema_version"] == 2
-    assert dataset["dataset_version"] == "experiment-d-1000-v2"
+    assert dataset["dataset_version"] == "experiment-d-1000-v3-draft"
     assert len(cases) == 1000
     assert dataset["counts"]["splits"] == {"calibration": 200, "test": 800}
     assert dataset["counts"]["categories"] == {
@@ -94,7 +111,14 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
     assert len({case["id"] for case in cases}) == 1000
     assert len({case["user_input"] for case in cases}) == 1000
     assert sum(case["answerable"] for case in cases) == 850
-    assert sum(case["review"]["status"] == "needs_human_review" for case in cases) == 12
+    assert sum(case["review"]["status"] == "needs_human_review" for case in cases) == 11
+    assert sum(
+        case["generation"]["template_id"] == "document_outside_corpus"
+        for case in cases
+    ) == 60
+    assert sum(
+        case["generation"]["template_id"] == "nonexistent_article" for case in cases
+    ) == 15
     for case in cases:
         if case["answerable"]:
             assert case["primary_evidence"] is not None
@@ -107,3 +131,32 @@ def test_committed_experiment_d_dataset_has_balanced_fixed_contract() -> None:
         else:
             assert case["primary_evidence"] is None
             assert case["qrels"] == []
+        assert not re.match(r"^제\d+(?:의\d+)?(?:장|절)", case["reference"])
+        assert not re.match(
+            r"^\s*(?:제\s*\d+\s*조(?:의\s*\d+)?(?:\([^)]*\))?|"
+            r"[①-⑳]|\d+(?:의\d+)?\.|[가-힣]\.)?\s*삭제(?:\s|<|$)",
+            case["reference"],
+        )
+        if case["category"] == "semantic_paraphrase":
+            similarity = difflib.SequenceMatcher(
+                None, case["user_input"], case["reference"]
+            ).ratio()
+            assert similarity < 0.8
+        if case["category"] == "hard_contrast":
+            assert case["generation"]["distractor_similarity"] >= 0.3
+            assert case["distractor_provision_ids"]
+            assert not set(case["distractor_provision_ids"]).intersection(
+                qrel["provision_id"] for qrel in case["qrels"]
+            )
+
+
+def test_question_review_is_explicitly_not_a_search_result() -> None:
+    dataset = json.loads(DATASET.read_text(encoding="utf-8"))
+
+    review = render_review(dataset)
+
+    assert "1,000문항 검색 실험은 실행하지 않음" in review
+    assert "검색 순위·점수·실험 결과를 포함하지 않는다" in review
+    assert "structure_marker_as_answer` | 0" in review
+    assert "semantic_near_copy` | 0" in review
+    assert "weak_hard_contrast` | 0" in review

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import difflib
 import hashlib
 import json
 import re
@@ -21,10 +22,10 @@ from app.domain.embedding_profiles import embedding_text_sha256
 from app.settings import get_settings
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
-DEFAULT_DATASET = Path(__file__).parents[1] / "evaluation" / "experiment-d-v2-1000.json"
-DEFAULT_REVIEW = REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-1000-review.md"
-DEFAULT_BEIR = REPOSITORY_ROOT / ".data" / "experiments" / "context" / "beir-v2"
-DATASET_VERSION = "experiment-d-1000-v2"
+DEFAULT_DATASET = Path(__file__).parents[1] / "evaluation" / "experiment-d-v3-1000.json"
+DEFAULT_REVIEW = REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-v3-review.md"
+DEFAULT_BEIR = REPOSITORY_ROOT / ".data" / "experiments" / "context" / "beir-v3"
+DATASET_VERSION = "experiment-d-1000-v3-draft"
 DEFAULT_QUOTAS = {
     "exact_path_control": 200,
     "heading_lexical_control": 200,
@@ -34,9 +35,28 @@ DEFAULT_QUOTAS = {
     "temporal_before_effective": 75,
     "outside_corpus": 75,
 }
+OUTSIDE_CORPUS_TITLES = (
+    "에너지법",
+    "에너지이용 합리화법",
+    "수소경제 육성 및 수소 안전관리에 관한 법률",
+    "전기공사업법",
+    "전력기술관리법",
+    "원자력안전법",
+    "기후위기 대응을 위한 탄소중립ㆍ녹색성장 기본법",
+    "건축법",
+    "개인정보 보호법",
+    "저작권법",
+    "근로기준법",
+    "주택임대차보호법",
+)
+OUTSIDE_CORPUS_TOPICS = ("목적", "정의", "허가 요건", "신고 의무", "벌칙")
 _CIRCLED = {character: index for index, character in enumerate("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳", 1)}
 _ARTICLE = re.compile(r"^(제\d+조(?:의\d+)?)")
-_DELETED = re.compile(r"^\s*(?:\[?삭제\]?|<삭제>)\s*$")
+_DELETED_PROVISION = re.compile(
+    r"^\s*(?:제\s*\d+\s*조(?:의\s*\d+)?(?:\([^)]*\))?|"
+    r"[①-⑳]|\d+(?:의\d+)?\.|[가-힣]\.)?\s*삭제(?:\s|<|$)"
+)
+_STRUCTURE_MARKER = re.compile(r"^\s*제\s*\d+\s*(?:장|절)(?:의\s*\d+)?(?:\s|$)")
 _SPACE = re.compile(r"\s+")
 
 
@@ -123,36 +143,27 @@ def _has_direct_body(item: SourceProvision) -> bool:
     return len(without_number) >= 20
 
 
-def _semantic_question(item: SourceProvision) -> tuple[str, str]:
+def _semantic_question(item: SourceProvision, topic: str) -> tuple[str, str]:
     content = _clean(item.content)
-    topic = _topic(item)
-    patterns = [
-        ("받아야", "받아야 하나요?", "approval_requirement"),
-        ("신고하여야", "신고하거나 알려야 하나요?", "reporting_duty"),
-        ("하여야 한다", "해야 하나요?", "mandatory_action"),
-        ("해서는 아니", "해서는 안 되나요?", "prohibition"),
-        ("할 수 없다", "할 수 없나요?", "not_permitted"),
-        ("할 수 있다", "할 수 있나요?", "permitted_action"),
-    ]
-    for marker, suffix, template in patterns:
-        if marker in content:
-            raw_prefix = content.split(marker, 1)[0]
-            separator = " " if raw_prefix.endswith(" ") else ""
-            prefix = re.sub(
-                r"^(?:제\d+조(?:의\d+)?(?:\([^)]*\))?|[①-⑳]|\d+\.|[가-힣]\.)\s*",
-                "",
-                raw_prefix,
-            ).strip()
-            if 8 <= len(prefix) <= 350:
-                return f"{item.document_title}에 따르면 {prefix}{separator}{suffix}", template
-            return (
-                f"{item.document_title}에서 {topic}와 관련한 요건은 무엇인가요?",
-                f"{template}_long_prefix_fallback",
-            )
-    return (
-        f"{item.document_title}에서 {topic}에 관해 실제로 정한 내용은 무엇인가요?",
-        "topic_fallback",
-    )
+    if any(marker in content for marker in ("허가를 받아야", "인가를 받아야", "승인을 받아야")):
+        question = f"{topic}에 적용되는 허가·인가·승인 요건은 무엇인가요?"
+        template = "approval_requirement"
+    elif any(marker in content for marker in ("신고하여야", "보고하여야")):
+        question = f"{topic} 규정에서 요구하는 신고나 보고 의무는 무엇인가요?"
+        template = "reporting_duty"
+    elif any(marker in content for marker in ("해서는 아니", "하여서는 아니")):
+        question = f"{topic} 규정에서 금지하는 행위는 무엇인가요?"
+        template = "prohibition"
+    elif "할 수 없다" in content:
+        question = f"{topic} 규정에서 허용하지 않는 행위는 무엇인가요?"
+        template = "not_permitted"
+    elif "할 수 있다" in content:
+        question = f"{topic} 규정이 허용하는 조치나 행위는 무엇인가요?"
+        template = "permitted_action"
+    else:
+        question = f"{topic} 규정이 부과하는 의무는 무엇인가요?"
+        template = "mandatory_action"
+    return f"{item.document_title}에서 {question}", template
 
 
 def _review_reasons(item: SourceProvision, *, template: str) -> list[str]:
@@ -205,6 +216,7 @@ def _positive_case(
     template: str,
     exact_leaf: bool = False,
     distractor_ids: list[str] | None = None,
+    generation_details: dict[str, object] | None = None,
 ) -> dict[str, object]:
     reasons = (
         _review_reasons(item, template=template)
@@ -234,7 +246,11 @@ def _positive_case(
         },
         "qrels": _qrels(item, by_article, exact_leaf=exact_leaf),
         "distractor_provision_ids": distractor_ids or [],
-        "generation": {"method": "deterministic_template", "template_id": template},
+        "generation": {
+            "method": "deterministic_template",
+            "template_id": template,
+            **(generation_details or {}),
+        },
         "review": {
             "status": "needs_human_review" if reasons else "auto_validated",
             "reasons": reasons,
@@ -272,27 +288,12 @@ def build_dataset(
         for item in provisions
         if item.article_path
         and len(_clean(item.content)) >= 20
-        and not _DELETED.match(item.content)
+        and not _DELETED_PROVISION.match(item.content)
+        and not _STRUCTURE_MARKER.match(item.content)
     ]
     roots = [item for item in eligible if "/" not in item.path]
     children = [item for item in eligible if "/" in item.path]
     headings = [item for item in eligible if item.heading and _clean(item.heading)]
-    semantic = [
-        item
-        for item in eligible
-        if _has_direct_body(item)
-        and any(
-            marker in item.content
-            for marker in (
-                "받아야",
-                "신고하여야",
-                "하여야 한다",
-                "해서는 아니",
-                "할 수 없다",
-                "할 수 있다",
-            )
-        )
-    ]
     by_article: dict[tuple[str, str, str], list[SourceProvision]] = defaultdict(list)
     by_version: dict[tuple[str, str], list[SourceProvision]] = defaultdict(list)
     for item in eligible:
@@ -301,6 +302,32 @@ def build_dataset(
         by_version[(item.document_id, item.version_id)].append(item)
     for values in by_article.values():
         values.sort(key=lambda item: (item.ordinal, item.path))
+    article_topics = {
+        key: _clean(item.heading or "")
+        for key, values in by_article.items()
+        for item in values
+        if item.path == item.article_path and item.heading and _clean(item.heading)
+    }
+    semantic = [
+        item
+        for item in eligible
+        if _has_direct_body(item)
+        and item.article_path is not None
+        and (item.document_id, item.version_id, item.article_path) in article_topics
+        and any(
+            marker in item.content
+            for marker in (
+                "받아야",
+                "신고하여야",
+                "보고하여야",
+                "하여야 한다",
+                "해서는 아니",
+                "하여서는 아니",
+                "할 수 없다",
+                "할 수 있다",
+            )
+        )
+    ]
 
     cases: list[dict[str, object]] = []
     questions: set[str] = set()
@@ -363,11 +390,17 @@ def build_dataset(
         lambda item, case_id, index: _positive_case(
             case_id=case_id,
             category="semantic_paraphrase",
-            question=_semantic_question(item)[0],
+            question=_semantic_question(
+                item,
+                article_topics[(item.document_id, item.version_id, item.article_path)],
+            )[0],
             item=item,
             by_article=by_article,
             index=index,
-            template=_semantic_question(item)[1],
+            template=_semantic_question(
+                item,
+                article_topics[(item.document_id, item.version_id, item.article_path)],
+            )[1],
             exact_leaf="/" in item.path,
         ),
     )
@@ -389,20 +422,37 @@ def build_dataset(
         ),
     )
 
-    contrast_candidates = [
-        item
-        for item in semantic
-        if len(by_version[(item.document_id, item.version_id)]) > 1
-    ]
-
-    def contrast(item: SourceProvision, case_id: str, index: int) -> dict[str, object]:
+    contrast_matches: dict[str, tuple[SourceProvision, float]] = {}
+    for item in semantic:
         siblings = [
             other
             for other in by_version[(item.document_id, item.version_id)]
             if other.provision_id != item.provision_id
+            and other.article_path != item.article_path
         ]
-        sibling = min(siblings, key=lambda other: abs(other.ordinal - item.ordinal))
-        question, template = _semantic_question(item)
+        if not siblings:
+            continue
+        sibling = max(
+            siblings,
+            key=lambda other: difflib.SequenceMatcher(
+                None, _clean(item.content), _clean(other.content)
+            ).ratio(),
+        )
+        similarity = difflib.SequenceMatcher(
+            None, _clean(item.content), _clean(sibling.content)
+        ).ratio()
+        if similarity >= 0.30:
+            contrast_matches[item.provision_id] = (sibling, similarity)
+    contrast_candidates = [
+        item for item in semantic if item.provision_id in contrast_matches
+    ]
+
+    def contrast(item: SourceProvision, case_id: str, index: int) -> dict[str, object]:
+        sibling, distractor_similarity = contrast_matches[item.provision_id]
+        question, template = _semantic_question(
+            item,
+            article_topics[(item.document_id, item.version_id, item.article_path)],
+        )
         return _positive_case(
             case_id=case_id,
             category="hard_contrast",
@@ -413,6 +463,10 @@ def build_dataset(
             template=f"contrast_{template}",
             exact_leaf="/" in item.path,
             distractor_ids=[sibling.provision_id],
+            generation_details={
+                "distractor_selection": "highest_sequence_similarity_same_version_other_article",
+                "distractor_similarity": round(distractor_similarity, 6),
+            },
         )
 
     take("hard_contrast", contrast_candidates, contrast)
@@ -450,13 +504,34 @@ def build_dataset(
     documents = sorted(
         {item.document_id: item for item in roots}.values(), key=lambda item: item.document_title
     )
+    corpus_titles = {item.document_title for item in documents}
+    if corpus_titles.intersection(OUTSIDE_CORPUS_TITLES):
+        raise ValueError("outside-corpus title is present in the current corpus")
     outside_target = quotas["outside_corpus"]
-    for index in range(outside_target):
+    realistic_target = min(outside_target, len(OUTSIDE_CORPUS_TITLES) * len(OUTSIDE_CORPUS_TOPICS))
+    outside_index = 0
+    for title in OUTSIDE_CORPUS_TITLES:
+        for topic in OUTSIDE_CORPUS_TOPICS:
+            if outside_index == realistic_target:
+                break
+            outside_index += 1
+            add(
+                _negative_case(
+                    case_id=f"d2-outside_corpus-{outside_index:04d}",
+                    category="outside_corpus",
+                    question=f"{title}에서 {topic}에 관해 직접 정한 근거를 찾아주세요.",
+                    as_of_date=date(2026, 8, 3),
+                    index=len(cases),
+                    reason="document_outside_corpus",
+                )
+            )
+    for index in range(outside_target - realistic_target):
         item = documents[index % len(documents)]
         nonexistent = 9000 + index
+        outside_index += 1
         add(
             _negative_case(
-                case_id=f"d2-outside_corpus-{index + 1:04d}",
+                case_id=f"d2-outside_corpus-{outside_index:04d}",
                 category="outside_corpus",
                 question=f"{item.document_title} 제{nonexistent}조의 내용은 무엇인가요?",
                 as_of_date=max(item.effective_from, date(2026, 8, 3)),
@@ -464,6 +539,8 @@ def build_dataset(
                 reason="nonexistent_article",
             )
         )
+    if outside_index != outside_target:
+        raise ValueError("outside-corpus boundary count mismatch")
 
     expected_count = sum(quotas.values())
     if len(cases) != expected_count:
@@ -525,6 +602,14 @@ def validate_dataset(dataset: dict[str, object], provisions: list[SourceProvisio
             source = by_id.get(str(qrel.get("provision_id"))) if isinstance(qrel, dict) else None
             if source is None or source.content_sha256 != qrel.get("content_sha256"):
                 raise ValueError("qrel source is missing or changed")
+        qrel_ids = {
+            str(qrel.get("provision_id")) for qrel in qrels if isinstance(qrel, dict)
+        }
+        distractor_ids = case.get("distractor_provision_ids")
+        if not isinstance(distractor_ids, list):
+            raise ValueError("invalid distractor ids")
+        if any(str(item) not in by_id or str(item) in qrel_ids for item in distractor_ids):
+            raise ValueError("distractor is missing or marked relevant")
 
 
 async def _load_provisions(repository: PostgresLegalRepository) -> list[SourceProvision]:

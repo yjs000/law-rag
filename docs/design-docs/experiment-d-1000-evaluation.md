@@ -1,6 +1,6 @@
 # 실험 D 1,000문항 평가 설계
 
-상태: 데이터셋 v2 생성 완료, 검색·답변 측정 전
+상태: 데이터셋 v3 검토 초안 생성, 사용자 질문 확인·검색 측정 전
 확정일: 2026-08-03
 
 ## 선택한 방식
@@ -14,13 +14,19 @@ NVIDIA의 검색/답변 분리와 BEIR qrels, LlamaIndex의 labelled RAG dataset
 
 공식 자료와 확인 내용은 [RAG 평가 방법 공식 자료](../references/rag-evaluation-methods-2026-08-03.md)에 기록했다.
 
+## 정답을 정하는 방법
+
+정답을 질문에서 추론하지 않는다. 먼저 운영 corpus의 조·항·호·목 하나를 선택하고, 그 원문을 `reference`와 primary qrel로 고정한 뒤 해당 근거를 묻는 질문을 역으로 만든다. primary evidence에는 document/version/provision ID, path와 원문 SHA-256을 저장한다. 조 전체 문맥이 필요한 경우 같은 조의 부모·자식 조각을 relevance 1, 직접 답 조각을 relevance 2로 둔다.
+
+시행일 전·corpus 밖 음성 질문은 `answerable=false`, 빈 qrels, “현재 corpus와 기준일에서는 직접 근거를 찾을 수 없습니다”를 기준 응답으로 가진다. 모델 기억으로 정답을 보완하지 않는다.
+
 ## 왜 LLM이 1,000개 정답을 쓰게 하지 않았는가
 
-생성 모델이 자연스러운 질문을 만들 수는 있지만 원문에 없는 법률 요건을 추가하거나 정답 범위를 바꿀 수 있다. 이번 v2는 정답 신뢰성을 우선해 질문을 결정적 템플릿으로 만들고 reference는 원문 그대로 사용했다.
+생성 모델이 자연스러운 질문을 만들 수는 있지만 원문에 없는 법률 요건을 추가하거나 정답 범위를 바꿀 수 있다. 이번 v3 초안은 정답 신뢰성을 우선해 질문을 결정적 템플릿으로 만들고 reference는 원문 그대로 사용했다.
 
-LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset으로 보존한다”는 구조는 따르되, 법률 답은 LLM 생성문이 아니라 원문 조각으로 고정했다. 의미 변형은 `하여야 한다 → 해야 하나요`, `할 수 있다 → 할 수 있나요`, `받아야 한다 → 받아야 하나요`처럼 법적 의미를 바꾸지 않는 제한된 형태만 사용했다.
+LlamaIndex의 질문과 reference를 가진 labelled dataset 구조는 따르되, 법률 답은 LLM 생성문이 아니라 원문 조각으로 고정했다. 의미 질문은 원문 전체를 의문형으로 복사하지 않고 조 표제와 `허가·신고·의무·금지·허용` 행위 유형을 결합한다. 조 표제가 없는 조각은 의미 질문 후보에서 제외한다.
 
-장점은 재생성해도 같은 문항이 나오고 정답 환각이 없다는 것이다. 한계는 실제 사용자의 짧고 다양한 표현보다 문장이 길고 원문과 유사하다는 것이다. 이 한계는 현재 12개 수동 검토뿐 아니라 후속 human-authored holdout에서 보완해야 한다.
+장점은 재생성해도 같은 문항이 나오고 정답 환각이 없다는 것이다. 한계는 자연스러운 질문인지, 질문이 정답을 유일하게 지시하는지는 템플릿만으로 보장되지 않는다는 것이다. 현재 11개 수동 검토와 전체 읽기용 검토본을 제공하며, 후속 human-authored holdout으로 보완한다.
 
 ## 1,000문항 구성
 
@@ -28,11 +34,11 @@ LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset�
 |---|---:|---|
 | exact path control | 200 | 법률명·조문 번호 직접 조회 기준선 |
 | heading lexical control | 200 | 정확한 법률명·표제·조문 표현 대조군 |
-| semantic paraphrase | 200 | 의무·허가·금지·가능 표현의 제한된 의미 변형 |
+| semantic paraphrase | 200 | 조 표제와 의무·허가·신고·금지·허용 유형을 결합한 의미 질문 |
 | hierarchy child | 150 | 조→항→호→목 경로 복원과 하위 근거 확인 |
-| hard contrast | 100 | 같은 문서의 인접 규정을 distractor로 둔 구분 능력 |
+| hard contrast | 100 | 같은 법령 버전에서 본문이 가장 유사한 다른 조문을 distractor로 둔 구분 능력 |
 | temporal before effective | 75 | 첫 수록 버전 시행 전 기준일의 근거 부족 |
-| outside corpus | 75 | 존재하지 않는 조문을 억지로 답하지 않는지 |
+| outside corpus | 75 | corpus 밖 실제 법률 질문 60개와 존재하지 않는 조문 극단 경계 15개 |
 
 전체 중 850개는 answerable, 150개는 unanswerable이다. 각 범주에서 20%를 calibration으로 배정해 top-k·후속 임계값 후보를 관찰하고, 나머지 800개 test는 결정 후 최종 비교에 사용한다. test 결과를 보고 calibration 규칙을 바꾸지 않는다.
 
@@ -42,7 +48,7 @@ LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset�
 
 - `Recall@1/3/5/10`: 후보 수를 늘릴 때 직접 근거가 언제 들어오는지 본다.
 - HNSW exact 대조: indexed search가 exact cosine 순위에서 얼마나 근거를 놓치는지 본다.
-- 근거 부족: 시행 전 75개와 존재하지 않는 조문 75개의 false-positive rate를 본다.
+- 근거 부족: 시행 전 75개, corpus 밖 실제 법률 60개, 존재하지 않는 조문 15개의 false-positive rate를 본다.
 - 생성 문맥: 후보 10개와 생성 최대 5개 조문의 Evidence Recall/Precision 변화를 분리한다.
 
 고정 similarity cutoff는 아직 채택하지 않는다. calibration 200개의 positive/negative 점수 분포가 분리되는지 관찰할 뿐이며, 직접 근거 판정을 코사인 점수 하나로 대체하지 않는다.
@@ -50,8 +56,8 @@ LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset�
 ### 대조군
 
 - exact path/heading 400개: lexical하게 쉬운 양성 대조군
-- semantic 200개: 표현 종결을 바꾼 dense 검색군
-- hard contrast 100개: 인접 조문 distractor가 있는 어려운 양성군
+- semantic 200개: 원문 전체를 복사하지 않은 조문 주제·행위 유형 질문
+- hard contrast 100개: 정답과 본문 유사도 0.30 이상인 다른 조문 distractor가 있는 어려운 양성군
 - negative 150개: 결과가 없어야 하는 안전 대조군
 
 ### 향후 검색기 비교
@@ -60,7 +66,7 @@ LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset�
 
 ## 데이터 형식
 
-권위 데이터셋은 [experiment-d-v2-1000.json](../../apps/api/evaluation/experiment-d-v2-1000.json)이다. 각 문항은 다음을 가진다.
+현재 사용자 검토 대상은 [experiment-d-v3-1000.json](../../apps/api/evaluation/experiment-d-v3-1000.json)이다. `draft` 버전이며 질문 확인 전에는 검색 실험 입력으로 사용하지 않는다. 각 문항은 다음을 가진다.
 
 - `user_input`, `as_of_date`, `answerable`
 - 원문 기반 `reference`, `reference_contexts`
@@ -69,7 +75,7 @@ LlamaIndex의 “청크에서 질문과 reference를 생성해 labelled dataset�
 - hard contrast의 `distractor_provision_ids`
 - 생성 템플릿과 사람 검토 상태
 
-BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/experiments/context/beir-v2/`에 로컬 생성한다. 전체 법률 원문 corpus는 실행 산출물이므로 Git에 넣지 않는다.
+BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/experiments/context/beir-v3/`에 로컬 생성한다. 전체 법률 원문 corpus는 실행 산출물이므로 Git에 넣지 않는다.
 
 ## 자동 검증과 사람 검토
 
@@ -82,12 +88,18 @@ BEIR 호환 `corpus.jsonl`, `queries.jsonl`, calibration/test qrels는 `.data/ex
 - negative는 qrels가 비어 있음
 - qrel의 provision ID와 원문 SHA-256 일치
 - calibration 200 / test 800과 범주별 고정 수량
+- 장·절 구조 표지와 삭제 조문이 양성 reference에 없음
+- semantic 질문과 reference의 문자열 유사도 0.80 미만
+- hard contrast distractor가 qrel과 겹치지 않고 정답과 본문 유사도 0.30 이상
+- outside-corpus가 실제 corpus 밖 법률 60개와 극단 조문 경계 15개로 구성됨
 
-표제가 없거나 근거가 매우 짧고 교차참조 중심인 문항은 자동 통과로 숨기지 않는다. 현재 12개를 [사람이 직접 확인할 문항](../generated/experiment-d-1000-review.md)에 질문·기준 답·이유와 함께 분리했다.
+표제가 없거나 근거가 매우 짧고 교차참조 중심인 문항은 자동 통과로 숨기지 않는다. 현재 11개를 [사람이 직접 확인할 문항](../generated/experiment-d-v3-review.md)에 질문·기준 답·이유와 함께 분리했다. 범주별 대표 질문과 전체 1,000문항은 [전체 질문 검토본](../generated/experiment-d-v3-question-review.md)에 있다.
+
+v2 정적 감사에서는 장·절 표지가 정답인 7개, 삭제 조문 32개, reference와 문자열 유사도 0.80 이상인 의미 질문 116개를 발견했다. v3 초안에서는 세 항목이 모두 0개다. 다만 운영 corpus에는 과거 파서가 저장한 구조 표지 7개가 남아 있어 데이터셋 후보에서 제외한 상태다. 검색 실험 전에 현재 파서로 corpus를 재수집하고 벡터·qrels를 다시 생성해야 한다.
 
 ## 아직 측정하지 않은 것
 
-이 문서는 데이터셋 생성 결과이지 검색 품질 결과가 아니다. 벡터 backfill과 HNSW 검증 후 다음을 실제 실행값으로 별도 기록한다.
+이 문서는 질문 초안 생성 결과이지 검색 품질 결과가 아니다. 사용자 질문 확인과 corpus 재수집이 끝난 뒤에만 다음을 실제 실행값으로 별도 기록한다.
 
 - Recall@1/3/5/10, MRR, nDCG@3/5/10
 - answerable 범주의 Article/Evidence Recall
@@ -101,5 +113,8 @@ LLM judge를 쓰는 지표는 모델·프롬프트·실패/NaN 수를 함께 기
 
 - 2026-08-03: 1,000문항을 850 positive와 150 negative, calibration 200과 test 800으로 고정했다.
 - 2026-08-03: 법률 정답은 생성 모델 문장이 아니라 원문 reference와 qrels로 고정했다.
-- 2026-08-03: semantic 문항은 법적 의미를 보존하는 제한된 종결 변형만 사용했다.
-- 2026-08-03: 현재 12개 모호 문항은 삭제하거나 임의 수정하지 않고 별도 사람 검토 큐로 공개했다.
+- 2026-08-03: v2 semantic 문항은 법적 의미를 보존하는 제한된 종결 변형으로 만들었으나 근접 복사가 많아 v3에서 대체했다.
+- 2026-08-03: v2의 12개 모호 문항은 별도 검토 큐로 공개했고, v3 재생성 후 11개로 갱신했다.
+- 2026-08-03: v2 정적 감사 결과를 반영해 구조 표지·삭제 조문을 제외하고, 의미 질문을 조 표제·행위 유형 기반으로 바꾼 v3 검토 초안을 생성했다.
+- 2026-08-03: hard distractor는 같은 법령 버전의 다른 조문 중 가장 유사한 본문으로 선택하고 최소 유사도 0.30을 요구한다.
+- 2026-08-03: outside-corpus는 corpus 밖 실제 법률 질문 60개와 존재하지 않는 조문 15개로 분리했다.
