@@ -180,6 +180,13 @@ def test_public_retrieval_routes_fail_closed_when_temporal_corpus_is_unready(
     )
     monkeypatch.setattr(main_module, "repository", repository)
     monkeypatch.setattr(main_module, "_current_korea_date", lambda: KOREA_TODAY)
+    monkeypatch.setattr(
+        main_module,
+        "_embedder",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("corpus readiness must be checked before embedding provider creation")
+        ),
+    )
     client = TestClient(main_module.app, raise_server_exceptions=False)
 
     if route == "search":

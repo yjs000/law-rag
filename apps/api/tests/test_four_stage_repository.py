@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 from law_rag_core.parsers.law_json import parse_legal_document
-from law_rag_core.persistence import CORPUS_MUTATION_LOCK_KEY, CORPUS_SEARCH_READY_FLAG_KEY
+from law_rag_core.persistence import CORPUS_SEARCH_READY_FLAG_KEY
 
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -51,20 +51,18 @@ class _FakeConnection:
         self.explain_plan = explain_plan
         self.temporal_row = temporal_row
         self.readiness_checks = 0
-        self.shared_lock_checks = 0
         self.calls: list[dict] = []
         self.statements: list[str] = []
+        self.executed_sql: list[str] = []
         self.temporal_calls: list[dict] = []
         self.temporal_statements: list[str] = []
         self.execution_order: list[str] = []
 
     async def execute(self, statement, params: dict | None = None):
         sql = str(statement)
+        self.executed_sql.append(sql)
         if "pg_advisory_xact_lock_shared" in sql:
-            assert params == {"lock_key": CORPUS_MUTATION_LOCK_KEY}
-            self.shared_lock_checks += 1
-            self.execution_order.append("shared_lock")
-            return _ScalarResult(None)
+            raise AssertionError("production readers must not take a shared advisory lock")
         if "corpus_search_readiness_check" in sql:
             self.readiness_checks += 1
             self.execution_order.append("readiness")
@@ -360,8 +358,9 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert "WITH exact_eligible_distances AS MATERIALIZED" in connection.statements[0]
     assert "ORDER BY distance,ordinal" in connection.statements[0]
     assert "ORDER BY e.embedding::vector(512)" not in connection.statements[0]
-    assert connection.shared_lock_checks == 1
-    assert connection.execution_order[:3] == ["shared_lock", "temporal_state", "retrieval"]
+    assert connection.readiness_checks == 1
+    assert connection.execution_order[:2] == ["readiness", "retrieval"]
+    assert all("pg_advisory_xact_lock_shared" not in sql for sql in connection.executed_sql)
 
 
 @pytest.mark.asyncio
@@ -580,8 +579,13 @@ async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_vers
     assert "lifecycle_state IN ('active','scheduled')" in provision_connection.statements[0]
     assert "parser_schema_version='3'" in provision_connection.statements[0]
     assert "corpus.search_ready" in provision_connection.statements[0]
-    assert provision_connection.shared_lock_checks == 1
-    assert provision_connection.execution_order == ["shared_lock", "temporal_state", "retrieval"]
+    assert direct_connection.execution_order == ["readiness", "retrieval"]
+    assert provision_connection.execution_order == ["readiness", "retrieval"]
+    assert all(
+        "pg_advisory_xact_lock_shared" not in sql
+        for connection in (direct_connection, provision_connection)
+        for sql in connection.executed_sql
+    )
 
 
 @pytest.mark.asyncio
@@ -595,27 +599,8 @@ async def test_postgres_reports_closed_corpus_before_running_retrieval() -> None
 
     assert connection.readiness_checks == 1
     assert connection.calls == []
-    assert connection.shared_lock_checks == 1
-
-
-@pytest.mark.asyncio
-async def test_postgres_revalidates_date_after_locking_current_corpus_generation() -> None:
-    connection = _FakeConnection(
-        {},
-        temporal_row={
-            "supported_from": date(2026, 8, 1),
-            "eligible_provision_count": 1,
-            "fingerprint_sha256": "a" * 64,
-        },
-    )
-    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
-    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
-
-    with pytest.raises(CorpusSearchUnavailableError, match="corpus_temporal_state_changed"):
-        await repository.search_with_trace("date changed", date(2026, 7, 18), 10)
-
-    assert connection.execution_order == ["shared_lock", "temporal_state"]
-    assert connection.calls == []
+    assert connection.execution_order == ["readiness"]
+    assert all("pg_advisory_xact_lock_shared" not in sql for sql in connection.executed_sql)
 
 
 @pytest.mark.asyncio

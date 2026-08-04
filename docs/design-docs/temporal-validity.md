@@ -61,7 +61,7 @@ runtime snapshot ID는 오늘 유효한 provision의 개수와 검색 콘텐츠 
 
 준비된 범위 밖 `as_of_date`는 API 경계에서 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 이 검사는 quota, 질문 임베딩과 repository 검색보다 먼저 실행한다. `POST /v1/search`, `POST /v1/questions`, `GET /v1/provisions/{id}`에 같은 계약을 적용한다. 날짜를 생략한 요청도 서버 로컬 날짜가 아니라 한국 날짜의 오늘을 사용한다. `/v1/corpus/status`는 계산된 snapshot ID, 양쪽 경계와 준비 상태·사유를 반환한다.
 
-초기 API 검사와 실제 검색 사이에는 인증·quota·질문 임베딩 시간이 있을 수 있다. 그 사이 writer가 완전한 새 corpus 세대로 교체하는 경쟁을 막기 위해 PostgreSQL 검색은 새 `READ COMMITTED` 연결의 첫 문장으로 corpus mutation 공유 advisory transaction lock을 얻는다. 잠금을 얻은 다음 현재 temporal state와 요청일을 다시 검사하고, 요청일이 새 범위를 벗어나면 부분 검색 대신 `503 corpus_unready` 재시도로 닫는다. writer는 같은 키의 배타 잠금을 사용하므로 잠금이 유지되는 실제 검색 동안에는 세대가 바뀌지 않는다.
+초기 API 검사와 실제 검색 사이에는 인증·quota·질문 임베딩 시간이 있을 수 있다. 코퍼스 변경이 있으면 publisher는 `corpus.search_ready=false`를 먼저 커밋하고 65초 동안 기존 요청을 drain한 뒤 변경분을 단일 transaction으로 반영·검증한다. 새 요청과 실제 PostgreSQL 검색 직전 재검사는 advisory lock을 잡거나 기다리지 않고 닫힌 게이트에서 즉시 `503 corpus_unready`를 반환한다. 재검사 직후 게이트가 닫혀도 검색 SQL 자체의 준비 조건이 결과를 차단하고, 빈 결과를 반환하기 전에 게이트를 다시 확인하므로 이를 근거 부족으로 오인하지 않는다. publisher가 성공하면 반영 transaction 끝에서 게이트를 열고, 실패하면 변경분 전체를 rollback한 채 게이트를 닫아 둔다.
 
 2026-08-04 KST 운영 Supabase 읽기 전용 검증에서는 `ready=true`, 동적 범위 `2024-07-01..2026-08-04`, 오늘 유효 provision 3,066개와 content-derived `corpus-sha256:*` ID 반환을 확인했다. 이는 그날의 관측값이며 코드에 하드코딩하는 계약이 아니다.
 
@@ -97,3 +97,4 @@ runtime snapshot ID는 오늘 유효한 provision의 개수와 검색 콘텐츠 
 - 2026-08-03: 법적 생명주기와 Open API 레코드 가용성을 별도 상태로 저장하고 출처 삭제에서 폐지를 추론하지 않음.
 - 2026-08-03: [대체됨] 당시 감사한 corpus의 지원 범위를 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖은 부분 검색 대신 `422 unsupported_corpus_date`로 차단.
 - 2026-08-04: 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 동적 계산한다. 오늘 유효 population의 content identity를 사용하고, 준비 불완전은 `503 corpus_unready`, 준비된 범위 밖은 검색 전 `422 unsupported_corpus_date`로 구분한다. 이 계산만으로 법률별 timeline gap·overlap이 검증됐다고 주장하지 않는다.
+- 2026-08-04: 드문 corpus 갱신을 위해 모든 운영 reader가 공유 lock을 부담하지 않도록 reader lock을 제거한다. publisher가 검색 게이트를 먼저 닫고 65초 drain한 뒤 단일 transaction으로 반영하며, writer와 실험 D의 기존 lock은 유지한다.

@@ -41,7 +41,7 @@
 - 실제 근거 없음과 코퍼스 갱신 중 `503 corpus_unready` 상태의 명확한 분리
 - 준비된 현재 corpus의 동적 지원 범위 밖 기준일을 quota·임베딩·검색 전에 `422 unsupported_corpus_date`로 거부하고 응답에 요청일·지원 시작일·지원 종료일·snapshot ID 포함
 - 전체 검색 게이트가 닫혔거나 오늘 유효한 조문이 없거나 시간 identity를 완성할 수 없으면 검색을 `503 corpus_unready`로 닫고, 상태 API가 nullable 시작일·snapshot ID와 준비 사유를 정확히 표시
-- 초기 날짜 검사 뒤 corpus 세대가 교체될 수 있으므로 PostgreSQL 실제 검색은 공유 transaction lock 안에서 현재 범위를 다시 검사하고, 새 범위에 맞지 않으면 부분 검색 없이 `503 corpus_unready` 재시도로 닫음
+- corpus 변경이 있으면 검색 게이트를 먼저 닫고 기존 요청을 65초 drain한 뒤 단일 transaction으로 반영·검증하며, 새 요청과 실제 PostgreSQL 검색 직전 재검사는 lock 대기 없이 `503 corpus_unready`로 닫음
 - 날짜를 생략한 질문·검색·조문 조회는 서버 배치 지역과 무관하게 UTC+9 한국 날짜의 오늘을 사용
 - 기준일 유효 버전 검색
 - `1조2항`, `제일조 제이항`, `제12조의3 제2항`처럼 입력한 조문 경로를 기준일 유효 원문 경로로 직접 검색
@@ -96,3 +96,4 @@
 - 2026-08-03: 검증되지 않은 중간 코퍼스는 모든 검색에서 fail-closed하며, 빈 결과나 `insufficient_evidence`가 아닌 `503 corpus_unready`와 코퍼스 상태로 표시한다.
 - 2026-08-03: [대체됨] 당시 감사한 corpus의 검색 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 한정하고 범위 밖은 `422 unsupported_corpus_date`로 차단했다. 프런트 선제 차단은 상태 API 기반 후속 TODO이며 서버 검사가 최종 권위다.
 - 2026-08-04: 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산한다. 오늘 유효 population이 준비되지 않으면 `503`, 준비된 범위 밖이면 검색 전에 `422`로 구분하며 프런트는 후속 작업에서 상태 API를 그대로 사용한다.
+- 2026-08-04: corpus 갱신 중에는 검색 게이트를 먼저 닫고 65초 drain하며, 운영 reader는 공유 lock을 기다리지 않고 `503 corpus_unready`로 즉시 닫는다.

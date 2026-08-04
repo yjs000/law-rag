@@ -20,12 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
-from app.domain.corpus_temporal_contract import (
-    UnsupportedCorpusDateError,
-    canonical_corpus_snapshot_id,
-    korea_today,
-    require_supported_corpus_date,
-)
+from app.domain.corpus_temporal_contract import canonical_corpus_snapshot_id
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import LegalDocumentRecord
 from app.domain.errors import CorpusSearchUnavailableError
@@ -242,7 +237,7 @@ class PostgresLegalRepository:
         provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
-            await _lock_and_require_supported_corpus_date(connection, as_of_date)
+            await _require_corpus_search_ready(connection)
             path_rows = []
             if provision_query is not None:
                 path_started = perf_counter()
@@ -535,7 +530,7 @@ class PostgresLegalRepository:
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         async with self.engine.connect() as connection:
-            await _lock_and_require_supported_corpus_date(connection, as_of_date)
+            await _require_corpus_search_ready(connection)
             row = (
                 (
                     await connection.execute(
@@ -962,32 +957,6 @@ async def _require_corpus_search_ready(connection: AsyncConnection) -> None:
     status = await _corpus_search_status(connection)
     if not status.ready:
         raise CorpusSearchUnavailableError(status.reason or "corpus_unready")
-
-
-async def _lock_and_require_supported_corpus_date(
-    connection: AsyncConnection,
-    requested_date: date,
-) -> CorpusTemporalState:
-    """Pin one complete corpus generation and revalidate the requested date.
-
-    The lock must be the first statement on this fresh READ COMMITTED connection.
-    Corpus writers take the exclusive form of the same transaction lock, so the
-    following temporal-state query and retrieval statements cannot straddle two
-    completed corpus generations.
-    """
-
-    await connection.execute(
-        text("SELECT pg_catalog.pg_advisory_xact_lock_shared(:lock_key)"),
-        {"lock_key": CORPUS_MUTATION_LOCK_KEY},
-    )
-    state = await _corpus_temporal_state(connection, korea_today())
-    if not state.ready:
-        raise CorpusSearchUnavailableError(state.reason or "corpus_unready")
-    try:
-        require_supported_corpus_date(requested_date, state)
-    except UnsupportedCorpusDateError as exc:
-        raise CorpusSearchUnavailableError("corpus_temporal_state_changed") from exc
-    return state
 
 
 async def _execute_keyword_search(

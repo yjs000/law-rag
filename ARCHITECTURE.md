@@ -67,7 +67,7 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 
 검색은 먼저 corpus 전체 준비 게이트와 동적으로 계산한 기준일 지원 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 지원 시작일은 오늘 이하인 수집 완료·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값이고, 지원 종료일은 UTC+9 한국 날짜의 오늘이며 양끝을 포함한다. 이는 저장된 버전 전체의 법률별 연속성·중복 여부를 검증한 공통 timeline이라는 뜻이 아니다. 오늘 유효한 provision population의 개수와 검색 콘텐츠 지문으로 `corpus-sha256:*` ID를 계산하며, 달력 날짜·`effective_to`·임베딩 프로필은 content ID 입력에 넣지 않는다. 따라서 시행·개정·폐지 경계와 검색 콘텐츠 변경이 없으면 날짜가 지나도 같은 ID를 유지한다.
 
-전체 검색 준비 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 시간 identity를 완성할 수 없으면 검색 엔드포인트는 HTTP `503`, 코드 `corpus_unready`로 닫힌다. 준비되지 않은 `/v1/corpus/status`에서는 지원 시작일과 snapshot ID가 `null`일 수 있다. 준비된 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 quota·임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. PostgreSQL 실제 검색은 새 연결의 첫 문장으로 corpus mutation 공유 advisory transaction lock을 얻은 뒤 현재 범위를 다시 계산한다. 최초 검사 뒤 corpus 세대가 교체돼 요청일이 새 범위를 벗어나면 검색하지 않고 `503 corpus_unready` 재시도로 닫으며, 같은 잠금이 검색 종료까지 writer와 세대 전환을 막는다. `/v1/corpus/status`는 이때 계산된 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`, 준비 상태와 사유를 노출한다. 요청에서 날짜를 생략하면 API는 서버 시간대가 아니라 한국 날짜의 오늘을 사용한다.
+전체 검색 준비 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 시간 identity를 완성할 수 없으면 검색 엔드포인트는 HTTP `503`, 코드 `corpus_unready`로 닫힌다. 준비되지 않은 `/v1/corpus/status`에서는 지원 시작일과 snapshot ID가 `null`일 수 있다. 준비된 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 quota·임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 코퍼스 변경이 있으면 publisher는 `corpus.search_ready=false`를 먼저 커밋하고 65초 동안 기존 요청을 drain한 뒤 변경분을 단일 transaction으로 반영·검증한다. 이때 새 요청과 실제 PostgreSQL 검색 직전의 재검사는 lock을 기다리지 않고 즉시 `503 corpus_unready`로 닫히며, 검색 SQL 안의 준비 게이트도 점검 전환과 겹친 요청이 부분 결과를 반환하지 않게 한다. 성공한 publisher만 같은 반영 transaction 끝에서 게이트를 다시 열고, 실패하면 변경분을 전부 rollback한 채 게이트를 닫아 둔다. `/v1/corpus/status`는 계산된 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`, 준비 상태와 사유를 노출한다. 요청에서 날짜를 생략하면 API는 서버 시간대가 아니라 한국 날짜의 오늘을 사용한다.
 
 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. 운영 dense와 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색·평가 경로에서 사용하지 않으며 새 인덱스·build·release도 만들지 않는다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
 
@@ -140,13 +140,13 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-07-13 | 실제 로그인은 Google만 지원 | 초기 인증 선택지와 계정 연결 복잡도를 최소화 |
 | 2026-07-13 | 질문 이력 1년 보존, 계정 삭제 시 사용자 관련 데이터 전부 삭제 | 사용자 통제권과 개인정보 최소 보존 원칙 적용 |
 | 2026-07-13 | 웹·API·collector를 같은 클라우드 서버의 독립 프로세스로 배치 | 고정 공인 IP와 초기 운영 단순성을 함께 확보 |
-| 2026-07-14 | 주 1회 수집하고 검증된 문서 변경을 즉시 활성 코퍼스에 반영 | 최신성 지연을 줄이면서 문서 단위 실패 격리와 원자 승격을 유지 |
+| 2026-07-14 | [대체됨] 주 1회 수집하고 검증된 문서 변경을 즉시 활성 코퍼스에 반영 | 당시 문서 단위 반영 계약이며 2026-08-04 점검 모드 원자 반영으로 대체됨 |
 | 2026-07-14 | Open API `delHst`를 법적 폐지가 아닌 출처 레코드 가용성으로 관리 | 삭제 응답에 폐지 여부·삭제 사유가 없으므로 법적 효력 종료를 추론하지 않기 위함 |
 | 2026-07-14 | collector 로컬 설정은 `.env` 후 `.env.local`을 읽고 프로세스 환경변수를 최우선 적용 | 개발 비밀값을 커밋하지 않으면서 실행 시 명시적으로 재사용 |
 | 2026-07-14 | 위 단일 서버 배치를 Vercel Web/FastAPI + Supabase + 고정 공인 IP Windows collector로 대체 | 공개 서버 운영 부담과 Open API 고정 IP 제약을 분리하고 API를 stateless하게 운영 |
 | 2026-07-14 | Preview Web은 Next.js 상대 `/api/*` 동일 출처 프록시 사용 | 가변 Preview origin을 FastAPI CORS wildcard로 허용하지 않고 환경 경계를 유지 |
 | 2026-07-14 | 질문 요청에서 Terra 또는 검색 전용을 명시적으로 선택 | 사용자가 생성 모델 호출 여부를 통제하면서 Terra 단일 모델·안전 폴백 계약을 유지 |
-| 2026-07-15 | collector `sync-current`는 검증된 원문을 content-addressed private Storage에 먼저 보존하고 DB 문서·버전·조문을 트랜잭션 반영 | 원문 계보와 재실행 멱등성을 유지하면서 Vercel API가 같은 Supabase 코퍼스를 읽게 함 |
+| 2026-07-15 | [대체됨] collector `sync-current`는 검증된 원문을 content-addressed private Storage에 먼저 보존하고 DB 문서·버전·조문을 트랜잭션 반영 | 원문 계보 계약은 유지하되 정기 운영 진입점은 2026-08-04 `apply-prepared`로 대체됨 |
 | 2026-07-19 | 생성 기본 후보를 NVIDIA hosted Nemotron 3 Ultra로 변경하고 기존 `terra` wire 값은 호환용으로 유지 | 로컬 PC 공개 없이 Vercel outbound 호출이 가능하며 provider 변경 중 기존 클라이언트 호환을 보존 |
 | 2026-07-23 | 임베딩 provider를 NVIDIA hosted Nemotron 3 Embed 1B로 교체하고 검색 시 모델 ID를 필터링 | 한국어 hosted 실험과 기존 512차원 계약을 유지하면서 OpenAI·NVIDIA 벡터 공간 혼합을 방지 |
 | 2026-08-03 | 실험 D primary dense baseline을 exhaustive exact cosine으로 고정 | 근사화 변수를 현재와 미래의 품질 판정에서 영구 배제하고 근거 찾기 자체의 재현성을 유지 |
@@ -154,3 +154,4 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-08-04 | HNSW를 현재와 미래의 제품·실험 경로에서 영구 제외하고 exhaustive exact cosine을 유지 | 근사 인덱스 도입으로 품질 판정과 운영 복잡도를 다시 늘리지 않기로 한 사용자 결정. 2026-08-03의 “검증 후 재검토” 결정을 대체하며, 기존 물리 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물로만 남김 |
 | 2026-08-03 | [대체됨] 당시 감사한 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 요청을 `422`로 거부 | 당시 9개 open version과 3,066개 조문을 기준으로 한 안전 경계였으나, 2026-08-04 동적 시간 계약으로 대체됨 |
 | 2026-08-04 | 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산하고 오늘 유효 population의 content identity를 상태로 노출 | 날짜 상수를 매일 고치지 않으면서 현재 수집 corpus만 검색하고, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 분리하기 위함. 이 계산은 법률별 timeline 연속성을 검증했다는 주장이 아님 |
+| 2026-08-04 | 일 1회 로컬 bundle을 준비하고 변경이 있을 때만 `gate=false → 65초 drain → DIRECT_URL 단일 반영 transaction → gate=true`로 게시 | 드문 corpus 갱신을 위해 모든 운영 reader에 shared lock이나 고가용성 세대 전환을 추가하지 않고, 짧은 점검 중단으로 비용과 복잡도를 낮춤. writer lock과 실험 D lock은 유지 |
