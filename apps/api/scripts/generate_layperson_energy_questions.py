@@ -1728,6 +1728,10 @@ THEMES = (
 # or could be read as encouraging unsafe electrical work. Keep those corrections
 # explicit and keyed by the stable review ID so they remain auditable.
 CURATED_QUESTION_OVERRIDES = {
+    "lay-energy-0511": (
+        "태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, "
+        "가능한 판매와 계약 방식은 무엇인가요?"
+    ),
     "lay-energy-0112": (
         "제가 가진 땅이 공동 명의이거나 다른 사람이 사용 중이라면 누구의 "
         "동의를 받고 계약에서 무엇을 확인해야 하나요?"
@@ -2463,7 +2467,7 @@ def build_bank() -> dict[str, object]:
         "bank_version": BANK_VERSION,
         "status": "draft_for_human_question_review",
         "purpose": "broad Korean layperson energy question bank",
-        "relationship_to_labelled_v3": ("supplemental_candidate_bank_not_a_replacement"),
+        "legacy_synthetic_dataset_status": "retired_not_reused",
         "question_count": len(cases),
         "question_set_sha256": question_set_sha256,
         "question_scope_set_sha256": approval_scope_set_sha256,

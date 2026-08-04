@@ -2,8 +2,8 @@
 
 > 생성 명령: `uv run --directory apps/api python -m scripts.generate_layperson_energy_questions`
 > bank version: `experiment-d-lay-energy-query-bank-v1-draft`
-> question set SHA-256: `58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32`
-> question scope set SHA-256: `f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7`
+> question set SHA-256: `523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a`
+> question scope set SHA-256: `a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845`
 > 상태: 질문 검토 초안 — 정답·qrels 없음, 검색 실험 실행 안 함
 
 ## 읽기 전에
@@ -48,7 +48,7 @@
 | 법조문 번호·법률식 문구 | 0 |
 | 길이 오류 | 0 |
 | 형식 오류 | 0 |
-| 전수 읽기 후 수동 교정 문항 | 162 |
+| 전수 읽기 후 수동 교정 문항 | 163 |
 
 ## 전체 질문
 
@@ -615,7 +615,7 @@
 
 | ID | 질문 | 연구 주제 |
 |---|---|---|
-| lay-energy-0511 | 태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 가능한 판매와 계약 방식은 어떻게 다른가요? | `electricity_sales_entry` |
+| lay-energy-0511 | 태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 가능한 판매와 계약 방식은 무엇인가요? | `electricity_sales_entry` |
 | lay-energy-0512 | 태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 누구와 계약하고 어느 기관의 절차를 거쳐야 하나요? | `electricity_sales_entry` |
 | lay-energy-0513 | 태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 거래를 시작하기 전에 어떤 등록과 확인이 필요한가요? | `electricity_sales_entry` |
 | lay-energy-0514 | 태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 발전량을 측정하고 거래하려면 어떤 계량 준비가 필요한가요? | `electricity_sales_entry` |

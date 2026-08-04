@@ -1,6 +1,6 @@
 # 실험 D 1,000문항 평가 설계
 
-상태: 일반 사용자 질문 승인·gold 주석·검색 측정 전
+상태: 질문 문구·범위 승인 완료 · gold 주석·검색 측정 전
 최종 갱신: 2026-08-04
 
 ## 목적
@@ -72,5 +72,6 @@ primary 모집단은 held-out test의 `fully_answerable` 문항이다. 같은 sc
 - 2026-08-03: 질문 승인과 gold 주석·adjudication을 분리하고 approved-gold-only runner를 채택했다.
 - 2026-08-03: primary 검색을 exhaustive exact cosine으로 고정하고 HNSW 상태·게이트·결과를 제외했다.
 - 2026-08-03: 질문 approval manifest와 gold adjudication manifest를 분리했다.
+- 2026-08-04: 일반 사용자 질문 1,000개의 문구·범위 승인을 완료했다. 이는 gold 주석·adjudication이나 검색 실행 승인이 아니다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·생성·검토 경로를 삭제하고 재사용하지 않기로 결정했다.
 - 2026-08-04: 평가에 연결된 ID가 현재 parser corpus에 없으면 다른 검사보다 먼저 `non_current_parser_provision_ids`로 실패하도록 고정했다.

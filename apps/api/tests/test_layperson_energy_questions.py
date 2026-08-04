@@ -83,7 +83,7 @@ LEGAL_TEMPLATE_PATTERN = re.compile(
     r"전기사업법|전기안전관리법|분산에너지\s+활성화\s+특별법"
     r")"
 )
-EXPECTED_QUESTION_SET_SHA256 = "58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32"
+EXPECTED_QUESTION_SET_SHA256 = "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a"
 
 
 @pytest.fixture(scope="module")
@@ -103,6 +103,8 @@ def test_bank_has_exactly_one_thousand_questions_with_expected_distributions(
     assert isinstance(questions, list)
     assert bank["question_count"] == 1000
     assert len(questions) == 1000
+    assert bank["legacy_synthetic_dataset_status"] == "retired_not_reused"
+    assert "relationship_to_labelled_v3" not in bank
     assert bank["generation_method"] == {
         "scenario_count": 200,
         "query_variants_per_scenario": 5,

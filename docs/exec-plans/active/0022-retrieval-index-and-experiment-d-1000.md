@@ -118,7 +118,7 @@
 - [x] 일반 사용자 질문 1,000개를 세 구간으로 전수 읽고 상황 불일치·중복 의도·위험 작업 표현을 교정한다.
 - [x] 대표 15문항과 고위험 35문항을 모은 질문 승인 검토표와 전체 질문 해시 검증기를 만든다.
 - [x] 승인 manifest가 있을 때만 만들 수 있는 50문항 질문 전용 pilot 작업표 생성기와 엄격한 non-gold 계약을 만든다.
-- [ ] 사용자가 일반 사용자 질문 문구와 범위를 승인한다. 승인 전에는 실제 approval manifest와 pilot 작업표를 만들지 않는다.
+- [x] 사용자가 일반 사용자 질문 문구와 범위를 승인하고 실제 question approval manifest를 만든다. pilot 작업표와 gold 주석은 별도 후속 단계로 남긴다.
 - [ ] 사용자가 일반 사용자 질문을 승인한 뒤 별도 gold 파일에 answerability·필수 답변 요소·qrels·기준 답변을 독립 주석한다.
 - [ ] 승인·주석·adjudication을 마친 실제 1,000문항만 runner로 실행하고 결과를 기록한다.
 - [ ] 1,000문항 gold와 근거 찾기 전수 검증 완료 후 HNSW 설계안을 별도로 제시하고 사용자 승인을 받는다.
@@ -168,7 +168,7 @@
 - 2026-08-03: evidence closure 변경 후 API 279개 통과(2개 skip), collector 37개, core 4개, Ruff와 문서 121개 검사가 통과했다. 실제 데이터셋 검색·순위·점수 측정은 실행하지 않았다.
 - 2026-08-03: 공공기관 FAQ·절차 안내 15개에서 질문 주제만 조사해 일반 사용자형 합성 질문 1,000개를 별도 생성했다. 정규화 중복·근접 중복·법조문형 표현·길이·형식 오류는 각각 0개이며, 정답·qrels·기대 문서는 포함하지 않았다. 이 질문은행을 검색기에 입력하는 실험은 실행하지 않았다.
 - 2026-08-03: 초기 200개 상황×공통 후속문 조합을 전체 읽기 감사한 결과 의미 충돌과 부정확한 사용자 유형·단계·scope 가설을 발견했다. 상황별 호환 질문 묶음으로 세분화하고 문항별 자동 메타데이터를 제거했으며, 출처는 주제 수준의 영감 자료임을 명시했다.
-- 2026-08-03: 1,000문항을 1–350, 351–700, 701–1000 세 구간으로 다시 전수 읽어 상황과 공통 문구가 어긋난 문항, 독립 질문에서 선행 문맥이 빠진 문항, 일반인이 전기설비를 직접 조작하도록 읽힐 수 있는 문항을 교정했다. 최종 생성기는 전수 읽기 교정 162건을 ID별로 고정하며, 질문 세트 SHA-256은 `58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32`이다.
+- 2026-08-03: 1,000문항을 1–350, 351–700, 701–1000 세 구간으로 다시 전수 읽어 상황과 공통 문구가 어긋난 문항, 독립 질문에서 선행 문맥이 빠진 문항, 일반인이 전기설비를 직접 조작하도록 읽힐 수 있는 문항을 교정했다. 2026-08-04 `lay-energy-0511` 사용자 수정을 더해 최종 생성기는 전수 읽기 교정 163건을 ID별로 고정하며, 질문 세트 SHA-256은 `523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a`이다.
 - 2026-08-03: 일반 사용자 gold는 질문 승인 뒤에만 작성한다. answerability를 full·partial·clarification·unanswerable로 구분하고, 넓은 질문은 필수 답변 요소별 qrels와 facet coverage를 평가하도록 계약을 보강했다.
 - 2026-08-03: 질문 문구 SHA와 별도로 scenario family·intent·technology·질문 변형까지 포함한 scope SHA를 도입했다. 승인 후 split에 영향을 주는 범위 메타데이터를 다시 계산해 바꾸는 것을 preflight가 거부한다.
 - 2026-08-03: 문항별 판정 pool은 외부 경로만 선언하지 않고 모든 후보 ID와 후보 집합 SHA를 gold 안에 직접 고정한다. 모든 후보는 positive qrel 또는 distractor로 전수 분류하며 실제 searchable provision 전체와 대조한다.
@@ -191,6 +191,7 @@
 - 2026-08-03: runner 동작은 합성 fixture로만 검증했다. 사용자 승인, 독립 gold 주석과 adjudication이 끝나지 않았으므로 실제 일반 사용자 1,000문항의 NVIDIA 임베딩·검색·지표 실행은 하지 않았다.
 - 2026-08-03: 후속 결정으로 runner의 HNSW identity·valid/ready 상태와 plan 비교 필드를 제거했다. 기존 물리 인덱스와 과거 plan 감사값은 역사적 사실로만 보존하며 현재 품질 결과로 사용하지 않는다.
 - 2026-08-03: 운영 DB 읽기 전용 감사에서 9개 open version, 3,066개 provision, 가장 늦은 `effective_from=2026-06-03`, snapshot through `2026-08-03`을 확인해 현재 지원 범위를 코드·API에 고정했다.
+- 2026-08-04: 질문 승인 검토에서 고위험 35문항을 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 확정했다. `lay-energy-0511` 문구를 수정한 새 질문·범위 해시로 1,000문항 question approval manifest를 생성했으며 gold 주석·임베딩·검색은 실행하지 않았다.
 - 2026-08-03: retrieval 계보 재감사에서 독립 검색기의 설정·build·release와 평가 실행을 같은 corpus 세대에 묶을 DB 계약이 없음을 확인했다. Additive migration `0011`로 8개 catalog 테이블과 평가 계보 열을 추가해 운영 Supabase에 적용했다. 적용 후 `0011 (head)`, 조문·현재 벡터 각 3,066개, 누락·stale·비단위 벡터 0, profile·corpus gate 활성, `hybrid_search` 없음이 유지됐다. 질문 데이터셋, NVIDIA 질문 임베딩, BM25/RRF와 새 HNSW 작업은 실행하지 않았다.
 
 ## 잔여 검토
@@ -206,6 +207,6 @@
 - DB는 모델 이름만이 아니라 query/passage 유형, 원본·저장 차원, 축약·정규화, 본문 템플릿 버전을 프로필로 추적한다.
 - 운영 parser v3 corpus 9문서·3,066개 조문에 현재 NVIDIA 512차원 passage 벡터가 준비됐고, 모델 독립 corpus gate와 profile gate가 모두 활성화됐다. 기존 partial HNSW 인덱스는 물리적으로 남아 있지만 현재 품질 평가와 HNSW 승인 판단에 사용하지 않는 보류 자산이다.
 - 과거 parser 기반 synthetic 검토 초안과 qrels는 삭제했으며 다시 평가 입력으로 사용하지 않는다.
-- 실험 D 실제 검색 실행과 Recall/HitRate/Precision/MRR@10/nDCG/facet 결과 산출은 사용자 질문 승인, 독립 gold 주석·adjudication, question approval·gold adjudication manifest와 initial/locked preflight가 모두 끝난 뒤에만 진행한다.
-- 일반 사용자 질문은행은 아직 gold가 아니므로 자체로 Recall/HitRate/Precision/MRR@10/nDCG를 산출할 수 없다. 사용자 승인 뒤 독립 근거 주석을 완료한 문항만 현실적 자연어 평가셋으로 사용한다.
+- 실험 D 실제 검색 실행과 Recall/HitRate/Precision/MRR@10/nDCG/facet 결과 산출은 독립 gold 주석·adjudication, gold adjudication manifest와 initial/locked preflight가 모두 끝난 뒤에만 진행한다. 질문 문구·범위 승인은 완료했다.
+- 일반 사용자 질문은행은 질문 승인을 마쳤지만 아직 gold가 아니므로 자체로 Recall/HitRate/Precision/MRR@10/nDCG를 산출할 수 없다. 독립 근거 주석을 완료한 문항만 현실적 자연어 평가셋으로 사용한다.
 - 미래 BM25는 독립 retriever로 측정한 뒤 동일 qrels에서 dense-only보다 개선되는 경우에만 별도 실험으로 채택한다.

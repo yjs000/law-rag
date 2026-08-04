@@ -36,8 +36,8 @@ QUESTION_STATUS = "not_annotated"
 QUESTION_COUNT = 1000
 SCENARIO_FAMILY_COUNT = 200
 QUESTIONS_PER_FAMILY = 5
-QUESTION_SET_SHA256 = "58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32"
-QUESTION_SCOPE_SET_SHA256 = "f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7"
+QUESTION_SET_SHA256 = "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a"
+QUESTION_SCOPE_SET_SHA256 = "a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845"
 CATALOG_TITLE_SET_SHA256 = "c45f415a53f2390157f2c896c099ef57451fc046b2099f0bf94bee81d74cf006"
 CATALOG_TITLES = (
     "전기사업법",
@@ -236,6 +236,49 @@ RISK_GROUPS = (
     ),
 )
 
+REVIEW_DECISIONS = {
+    "lay-energy-0001": "keep",
+    "lay-energy-0002": "keep",
+    "lay-energy-0084": "clarification_required",
+    "lay-energy-0101": "clarification_required",
+    "lay-energy-0111": "clarification_required",
+    "lay-energy-0116": "clarification_required",
+    "lay-energy-0171": "clarification_required",
+    "lay-energy-0201": "clarification_required",
+    "lay-energy-0251": "clarification_required",
+    "lay-energy-0291": "unanswerable",
+    "lay-energy-0351": "unanswerable",
+    "lay-energy-0381": "unanswerable",
+    "lay-energy-0441": "clarification_required",
+    "lay-energy-0550": "unanswerable",
+    "lay-energy-0605": "unanswerable",
+    "lay-energy-0641": "unanswerable",
+    "lay-energy-0646": "clarification_required",
+    "lay-energy-0671": "unanswerable",
+    "lay-energy-0726": "unanswerable",
+    "lay-energy-0731": "unanswerable",
+    "lay-energy-0741": "clarification_required",
+    "lay-energy-0756": "unanswerable",
+    "lay-energy-0766": "unanswerable",
+    "lay-energy-0796": "unanswerable",
+    "lay-energy-0800": "unanswerable",
+    "lay-energy-0826": "unanswerable",
+    "lay-energy-0836": "unanswerable",
+    "lay-energy-0846": "clarification_required",
+    "lay-energy-0881": "unanswerable",
+    "lay-energy-0911": "unanswerable",
+    "lay-energy-0921": "unanswerable",
+    "lay-energy-0926": "unanswerable",
+    "lay-energy-0956": "unanswerable",
+    "lay-energy-0961": "clarification_required",
+    "lay-energy-0996": "unanswerable",
+}
+REVIEW_DECISION_LABELS = {
+    "keep": "유지",
+    "clarification_required": "clarification_required 대조군",
+    "unanswerable": "unanswerable 대조군",
+}
+
 
 class ApprovalReviewError(ValueError):
     """Raised when the fixed review cannot safely be rendered."""
@@ -385,6 +428,10 @@ def validated_questions(bank: Mapping[str, object]) -> list[Mapping[str, object]
         raise ApprovalReviewError("risk review must contain 35 unique question IDs")
     if len(REPRESENTATIVE_IDS) != 15 or len(set(REPRESENTATIVE_IDS)) != 15:
         raise ApprovalReviewError("representative review must contain 15 unique question IDs")
+    if set(REVIEW_DECISIONS) != set(risk_ids):
+        raise ApprovalReviewError("every risk-review question must have exactly one decision")
+    if set(REVIEW_DECISIONS.values()) - set(REVIEW_DECISION_LABELS):
+        raise ApprovalReviewError("risk-review decision contains an unsupported value")
     return questions
 
 
@@ -414,14 +461,12 @@ def _risk_table(
         "| ID | 질문 | 검토가 필요한 이유 | 사용자 결정 |",
         "|---|---|---|---|",
     ]
-    choice = (
-        "유지 / 수정 / 제외 / clarification_required / partially_answerable / unanswerable 대조군"
-    )
     for question_id, reason in entries:
         question = by_id[question_id]
+        decision = REVIEW_DECISION_LABELS[REVIEW_DECISIONS[question_id]]
         lines.append(
             f"| `{_cell(question_id)}` | {_cell(question['question'])} | "
-            f"{_cell(reason)} | {_cell(choice)} |"
+            f"{_cell(reason)} | **{_cell(decision)}** |"
         )
     return lines
 
@@ -469,8 +514,11 @@ def render_approval_review(bank: Mapping[str, object]) -> str:
         ),
         "",
         (
-            "하나라도 수정하거나 제외하면 현재 두 SHA-256을 승인하지 말고 질문은행 "
-            "새 버전·해시와 이 검토표를 다시 생성한다."
+            "이번 검토에서는 질문 문구가 넓거나 여러 요소를 요구한다는 이유만 있으면 유지했다. "
+            "결론에 필요한 사용자 사실이 빠져 확정할 수 없으면 `clarification_required`, "
+            "실시간·개인·시장·계약·사업 자료 또는 현재 corpus 밖 근거가 핵심이면 "
+            "`unanswerable` 검토 의도로 분류했다. 단어 포함 여부가 아니라 검토 사유의 의미로 "
+            "판정했다."
         ),
         "",
         "## 구조 확인",
@@ -504,9 +552,13 @@ def render_approval_review(bank: Mapping[str, object]) -> str:
             "## 고위험 질문 35개",
             "",
             (
-                "아래 분류는 삭제 결론이나 gold 정답이 아니다. 현재 문구를 그대로 승인하기 전에 "
-                "사람이 읽어야 할 이유를 고정한 검토 목록이다."
+                "아래 결정은 질문을 삭제하지 않고 대조군으로 유지하기 위한 검토 의도이며 gold "
+                "정답이 아니다. 최종 answerability는 독립 근거 검토에서 다시 확정한다."
             ),
+            "",
+            "- 유지: 2개",
+            "- `clarification_required` 대조군: 12개",
+            "- `unanswerable` 대조군: 21개",
         ]
     )
     for title, key, entries in RISK_GROUPS:
@@ -522,14 +574,13 @@ def render_approval_review(bank: Mapping[str, object]) -> str:
     lines.extend(
         [
             "",
-            "## 승인 전 최종 확인",
+            "## 승인 확인",
             "",
-            "- [ ] 대표 15문항을 모두 읽었다.",
-            "- [ ] 고위험 35문항 각각에 유지·수정·제외 또는 대조군 의도를 정했다.",
-            "- [ ] 범위 밖 질문을 의도적인 안전성 대조군으로 둘 비율을 확인했다.",
-            "- [ ] `최신`·`올해`·`현재` 질문의 기준일 또는 동적 데이터 취급을 정했다.",
-            "- [ ] 수정·제외가 있으면 현재 해시를 승인하지 않고 새 버전을 만들기로 했다.",
-            "- [ ] 수정이 없다면 전체 1,000문항 읽기본과 두 SHA-256이 같은지 확인했다.",
+            "- [x] `lay-energy-0511` 문구를 사용자 지정 문구로 수정했다.",
+            "- [x] 질문이 넓거나 여러 요소를 요구한다는 이유만 있는 문항은 유지했다.",
+            "- [x] 사용자 사실이 부족한 문항은 `clarification_required` 검토 의도로 정했다.",
+            "- [x] 실시간 데이터나 법 이외 자료가 핵심인 문항은 `unanswerable` 검토 의도로 정했다.",
+            "- [x] 전체 1,000문항과 새 질문·범위 SHA-256을 승인 대상으로 확인했다.",
             "",
             "## 고정 식별자",
             "",

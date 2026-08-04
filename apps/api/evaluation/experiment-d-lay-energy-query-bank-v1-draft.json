@@ -3,16 +3,16 @@
   "bank_version": "experiment-d-lay-energy-query-bank-v1-draft",
   "status": "draft_for_human_question_review",
   "purpose": "broad Korean layperson energy question bank",
-  "relationship_to_labelled_v3": "supplemental_candidate_bank_not_a_replacement",
+  "legacy_synthetic_dataset_status": "retired_not_reused",
   "question_count": 1000,
-  "question_set_sha256": "58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32",
-  "question_scope_set_sha256": "f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7",
+  "question_set_sha256": "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a",
+  "question_scope_set_sha256": "a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845",
   "generation_method": {
     "scenario_count": 200,
     "query_variants_per_scenario": 5,
     "scenario_prompt_pairing": "manually_curated_compatible_groups",
     "wording": "newly_synthesized_not_verbatim_source_copy",
-    "human_read_through_override_count": 162
+    "human_read_through_override_count": 163
   },
   "annotation_contract": {
     "answers_included": false,
@@ -1666,7 +1666,7 @@
     "forbidden_legal_citation_count": 0,
     "invalid_length_count": 0,
     "malformed_question_count": 0,
-    "curated_override_count": 162
+    "curated_override_count": 163
   },
   "questions": [
     {
@@ -8301,14 +8301,14 @@
     },
     {
       "id": "lay-energy-0511",
-      "question": "태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 가능한 판매와 계약 방식은 어떻게 다른가요?",
+      "question": "태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 가능한 판매와 계약 방식은 무엇인가요?",
       "intent": "수익·SMP·REC·정산",
       "technology": "renewable_market",
       "question_style": "sale_options",
       "scenario_family_id": "electricity_sales_entry-01",
       "intent_seed_id": "electricity_sales_entry-01-01",
       "evaluation_annotation_status": "not_annotated",
-      "question_sha256": "ea0df77843011fc7d2a5720f4a379f5721ae8a3aa06c848307518572bc6e6717",
+      "question_sha256": "5584851b09b5a20589e0d3a0a47107f77e349d3c8468fb6d4cf66fe1f309c7fc",
       "source_origin": "source_inspired_synthetic",
       "research_theme_key": "electricity_sales_entry"
     },

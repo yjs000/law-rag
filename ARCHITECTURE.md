@@ -81,7 +81,7 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 
 ## 실험 D 검색 평가 게이트
 
-정답이 없는 일반 사용자 질문은행은 질문 문구·범위 검토용 중간 산출물이다. 실제 검색 지표는 사용자가 질문을 승인한 뒤 공식 원문을 독립 검토해 qrels, reference contexts와 reference response를 붙이고 `approved_gold`로 확정한 자료에서만 계산한다. 질문 승인은 질문 문구·범위만 고정하며, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 다시 봉인한다. 시간 순서는 모든 문항에서 `질문 승인 < 독립 annotation review < gold adjudication`이어야 한다. 현재 일반 사용자 질문은행 1,000개에 대한 실제 검색 평가는 아직 실행하지 않았다.
+정답이 없는 일반 사용자 질문은행은 질문 문구·범위 검토용 중간 산출물이다. 실제 검색 지표는 사용자가 질문을 승인한 뒤 공식 원문을 독립 검토해 qrels, reference contexts와 reference response를 붙이고 `approved_gold`로 확정한 자료에서만 계산한다. 질문 승인은 질문 문구·범위만 고정하며, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 다시 봉인한다. 시간 순서는 모든 문항에서 `질문 승인 < 독립 annotation review < gold adjudication`이어야 한다. 2026-08-04 일반 사용자 질문 1,000개의 문구·범위 승인은 완료했지만 독립 gold 주석과 실제 검색 평가는 아직 실행하지 않았다.
 
 승인된 gold runner는 다음 순서를 강제한다.
 

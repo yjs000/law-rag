@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from scripts.render_experiment_d_layperson_approval_review import (
     QUESTION_SCOPE_SET_SHA256,
     QUESTION_SET_SHA256,
     REPRESENTATIVE_IDS,
+    REVIEW_DECISIONS,
     RISK_GROUPS,
     TIME_OR_LIVE_DATA,
     ApprovalReviewError,
@@ -83,6 +85,45 @@ def test_committed_bank_and_review_match_the_fixed_human_review_contract() -> No
         for question_id, reason in entries:
             assert str(questions[question_id]["question"]) in rendered
             assert reason in rendered
+
+
+def test_user_review_decisions_are_complete_and_remain_non_gold_intent() -> None:
+    bank = _bank()
+    questions = {str(question["id"]): question for question in bank["questions"]}
+
+    assert Counter(REVIEW_DECISIONS.values()) == {
+        "keep": 2,
+        "clarification_required": 12,
+        "unanswerable": 21,
+    }
+    assert {
+        question_id
+        for question_id, decision in REVIEW_DECISIONS.items()
+        if decision == "clarification_required"
+    } == {
+        "lay-energy-0084",
+        "lay-energy-0101",
+        "lay-energy-0111",
+        "lay-energy-0116",
+        "lay-energy-0171",
+        "lay-energy-0201",
+        "lay-energy-0251",
+        "lay-energy-0441",
+        "lay-energy-0646",
+        "lay-energy-0741",
+        "lay-energy-0846",
+        "lay-energy-0961",
+    }
+    assert REVIEW_DECISIONS["lay-energy-0001"] == "keep"
+    assert REVIEW_DECISIONS["lay-energy-0002"] == "keep"
+    assert REVIEW_DECISIONS["lay-energy-0291"] == "unanswerable"
+    assert REVIEW_DECISIONS["lay-energy-0351"] == "unanswerable"
+    assert REVIEW_DECISIONS["lay-energy-0996"] == "unanswerable"
+    assert "lay-energy-0556" not in REVIEW_DECISIONS
+    assert all(
+        questions[question_id]["evaluation_annotation_status"] == "not_annotated"
+        for question_id in REVIEW_DECISIONS
+    )
 
 
 def test_render_and_cli_output_are_deterministic(

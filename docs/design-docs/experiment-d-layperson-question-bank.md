@@ -1,6 +1,6 @@
 # 실험 D 일반 사용자 질문은행과 gold 주석 경계
 
-상태: 질문 검토 초안
+상태: 질문 문구·범위 승인 완료 · gold 주석 전
 작성일: 2026-08-03
 
 ## 목적
@@ -41,6 +41,8 @@
 
 승인 검토표는 질문 문구와 범위만 보여 주며 답·qrels·검색 결과를 만들지 않는다. 질문을 하나라도 수정하거나 제외하면 현재 두 질문 해시를 승인하지 않고 질문은행을 새 버전으로 다시 생성한다.
 
+2026-08-04 검토에서는 고위험 35문항을 삭제하지 않았다. 단지 넓거나 여러 요소를 묻는 2문항은 유지하고, 사용자 사실이 부족한 12문항은 `clarification_required`, 실시간·개인·시장·계약·사업 자료 또는 현재 corpus 밖 근거가 핵심인 21문항은 `unanswerable`의 향후 gold 검토 의도로 기록했다. 이 분류는 질문 승인 manifest의 최종 answerability가 아니며 독립 근거 주석에서 다시 확정한다.
+
 질문은 200개 상황과 상황별 5개 질문 변형(`query_variants_per_scenario`)으로 구성한다. 여기서 변형은 질문 말투·관점이며, gold의 필수 답변 요소(`required_answer_facets`)와 다른 개념이다. 처음에는 큰 주제마다 공통 후속문을 붙였지만, 검사 신청·계량기 고장·계약 분쟁처럼 서로 다른 상황에서 의미 충돌이 발견됐다. 이후 상황을 더 작은 호환 묶음으로 나누고, 문항별 사용자 유형·단계·scope 자동 배정을 제거했다. 정적 중복 검사와 별도로 전체 문장 읽기 검토를 수행한다.
 
 ## 왜 질문과 정답을 동시에 자동 생성하지 않는가
@@ -57,14 +59,14 @@
 
 실행 가능한 필드·상태·불변조건은 `apps/api/scripts/experiment_d_gold_contract.py`의 Pydantic 계약이 권위 원본이다. 문서 설명만 통과하고 코드 계약을 통과하지 못한 파일은 gold로 취급하지 않는다.
 
-사용자가 전체 질문 문구와 범위를 명시적으로 승인한 뒤에만 다음 명령으로 질문 승인 manifest를 만든다. 이 명령은 두 전체 해시를 다시 입력받아 1,000개 문항의 개별 문구·범위 해시까지 재계산하며, 기존 승인 파일을 덮어쓰지 않는다. 답·qrels를 만들거나 DB·NVIDIA·평가 runner를 호출하지 않는다. 현재는 사용자 승인이 없으므로 실행하지 않았다.
+사용자가 전체 질문 문구와 범위를 명시적으로 승인한 뒤에만 다음 명령으로 질문 승인 manifest를 만든다. 이 명령은 두 전체 해시를 다시 입력받아 1,000개 문항의 개별 문구·범위 해시까지 재계산하며, 기존 승인 파일을 덮어쓰지 않는다. 답·qrels를 만들거나 DB·NVIDIA·평가 runner를 호출하지 않는다. 2026-08-04 사용자 승인에 따라 이 명령을 실행해 질문 전용 manifest를 생성했다. 이는 gold 승인이나 검색 실행이 아니다.
 
 ```powershell
 uv run --directory apps/api python -m scripts.create_experiment_d_question_approval `
   --approved-by "yjs000" `
   --approved-at "<시간대가 포함된 ISO 8601 승인 시각>" `
-  --confirm-question-set-sha256 "58be922c4bd9db7bce1360565da9b97de703e3b32c956c11e6a79285ee0b6b32" `
-  --confirm-question-scope-set-sha256 "f59da0ccf5210bc0c3da527f04e24c85788c4410ddeb55f21eaf4d96369c9db7"
+  --confirm-question-set-sha256 "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a" `
+  --confirm-question-scope-set-sha256 "a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845"
 ```
 
 명령이 출력하는 `approval_manifest_sha256`은 JSON 공백·들여쓰기에 영향받지 않는 canonical payload 해시이며, 이후 gold의 `source_bank.approval_manifest_sha256`에 사용하는 값이다. `approval_manifest_file_sha256`은 실제 저장 파일 바이트의 무결성을 확인하는 별도 값이다. 두 값을 같은 의미로 사용하지 않는다.
@@ -111,7 +113,7 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 
 질문 승인 직후 1,000개를 한 번에 주석하지 않는다. calibration에서 서로 다른 주제·answerability 경계를 대표하는 10개 scenario family, 즉 50문항을 먼저 이중 주석한다. 이 pilot에서 필수 답변 요소의 크기, 직접 근거와 보조 문맥의 구분, 범위 밖·추가 사실 필요 판정과 reference response 형식을 사람이 확인한 뒤 같은 계약을 나머지 문항에 적용한다. pilot 결과를 최종 검색 성능처럼 발표하거나 test qrels 조정에 사용하지 않는다.
 
-승인 manifest가 생긴 뒤에만 `scripts.create_experiment_d_pilot_worklist`로 10개 family × 5문항의 질문 전용 작업표를 만든다. 이 파일은 `artifact_class=not_gold`, `status=draft_for_annotation`이며 답·qrels·검색 후보를 허용하지 않는다. 승인 manifest의 canonical SHA-256과 정확히 10개의 `--scenario-family-id`를 명시해야 하고 기존 파일은 덮어쓰지 않는다. 현재는 질문이 승인되지 않았으므로 실제 pilot 파일을 생성하지 않았다.
+승인 manifest가 생긴 뒤에만 `scripts.create_experiment_d_pilot_worklist`로 10개 family × 5문항의 질문 전용 작업표를 만든다. 이 파일은 `artifact_class=not_gold`, `status=draft_for_annotation`이며 답·qrels·검색 후보를 허용하지 않는다. 승인 manifest의 canonical SHA-256과 정확히 10개의 `--scenario-family-id`를 명시해야 하고 기존 파일은 덮어쓰지 않는다. 질문 승인은 완료했지만 이번 작업에서는 pilot 파일을 생성하지 않았다.
 
 평가 실행 전에는 `scripts.preflight_experiment_d_gold`가 다음을 읽기 전용으로 확인한다.
 
@@ -198,3 +200,4 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-03: HNSW는 질문-정답 gold와 근거 찾기를 전부 검증한 뒤 별도 설계와 사용자 승인을 거칠 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않되 실험 D 상태·게이트·결과에서 제외한다.
 - 2026-08-03: 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부한다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·검토 경로를 삭제하고 현재 parser corpus에 없는 ID는 다른 검사보다 먼저 즉시 거부한다.
+- 2026-08-04: `lay-energy-0511`을 사용자 지정 문구로 수정하고 새 질문·범위 해시를 생성했다. 고위험 35문항은 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 기록한 뒤 `yjs000` 명의의 질문 문구·범위 전용 approval manifest로 1,000문항을 승인했다. answerability·qrels·기준 응답과 검색 평가는 아직 만들거나 실행하지 않았다.
