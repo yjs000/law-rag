@@ -8,6 +8,10 @@ from pathlib import Path
 from law_rag_core.domain.catalog import MVP_CATALOG
 
 from law_rag_collector.client import LawOpenApiClient
+from law_rag_collector.corpus_preflight import (
+    CorpusPreflightSettings,
+    preflight_current_corpus,
+)
 from law_rag_collector.ports import resolve
 from law_rag_collector.prepared_publisher import publish_prepared_bundle
 from law_rag_collector.repository import MockCorpusRepository
@@ -24,6 +28,7 @@ def _parser() -> argparse.ArgumentParser:
         "command",
         choices=(
             "apply-prepared",
+            "preflight-current",
             "prepare-current",
             "preview-current",
             "sync-current",
@@ -48,7 +53,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--bundle",
         type=Path,
-        help="apply-prepared가 검증·반영할 ready bundle 디렉터리",
+        help=(
+            "apply-prepared가 반영하거나 preflight-current가 선택적으로 검증할 "
+            "ready bundle 디렉터리"
+        ),
     )
     return parser
 
@@ -61,6 +69,44 @@ async def _run(
     embedding_profile_key: str | None = None,
     bundle: Path | None = None,
 ) -> int:
+    if command == "preflight-current":
+        direct_url = CorpusPreflightSettings().direct_url
+        if not direct_url:
+            print(
+                json.dumps(
+                    {"error": "preflight-current에는 DIRECT_URL이 필요합니다"},
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+        try:
+            result = await preflight_current_corpus(
+                direct_url,
+                bundle_path=bundle,
+            )
+        except Exception as exc:
+            detail = str(exc).replace("\r", " ").replace("\n", " ").strip()
+            print(
+                json.dumps(
+                    {
+                        "command": command,
+                        "state": "failed",
+                        "detail": f"{type(exc).__name__}: {detail}"[:300],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
+        print(
+            json.dumps(
+                {"command": command, **result},
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        )
+        return 0
     settings = get_settings()
     repository = (
         SupabaseCurrentCorpusRepository(
