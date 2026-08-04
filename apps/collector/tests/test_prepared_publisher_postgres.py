@@ -134,8 +134,11 @@ async def _isolated_repository():
         await connection.execute(
             text(
                 f'''INSERT INTO "{schema}".runtime_flags(key,value) VALUES
-                ('schema.corpus_search_ready_v1','{{"enabled":true}}'::jsonb),
-                ('corpus.search_ready','{{"ready":true,"reason":"ready"}}'::jsonb)'''
+                ('schema.corpus_search_ready_v1',jsonb_build_object('enabled', true)),
+                ('corpus.search_ready',jsonb_build_object(
+                    'ready', true,
+                    'reason', 'ready'
+                ))'''
             )
         )
     engine = create_async_engine(
