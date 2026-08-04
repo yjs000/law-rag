@@ -9,10 +9,13 @@ from law_rag_core.domain.catalog import MVP_CATALOG
 
 from law_rag_collector.client import LawOpenApiClient
 from law_rag_collector.ports import resolve
+from law_rag_collector.prepared_publisher import publish_prepared_bundle
 from law_rag_collector.repository import MockCorpusRepository
 from law_rag_collector.service import CollectorService
 from law_rag_collector.settings import get_settings
 from law_rag_collector.supabase_repository import SupabaseCurrentCorpusRepository
+
+_CURRENT_EMBEDDING_PROFILE_KEY = "nvidia-nemotron-3-embed-1b-512-v1"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -20,6 +23,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         choices=(
+            "apply-prepared",
             "prepare-current",
             "preview-current",
             "sync-current",
@@ -38,7 +42,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--embedding-profile-key",
+        default=_CURRENT_EMBEDDING_PROFILE_KEY,
         help="prepare-current가 후속 임베딩 단계에 고정할 profile key",
+    )
+    parser.add_argument(
+        "--bundle",
+        type=Path,
+        help="apply-prepared가 검증·반영할 ready bundle 디렉터리",
     )
     return parser
 
@@ -49,6 +59,7 @@ async def _run(
     *,
     output: Path | None = None,
     embedding_profile_key: str | None = None,
+    bundle: Path | None = None,
 ) -> int:
     settings = get_settings()
     repository = (
@@ -72,6 +83,51 @@ async def _run(
         )
         if isinstance(repository, SupabaseCurrentCorpusRepository):
             await repository.close()
+        return 0
+    if command == "apply-prepared":
+        if not isinstance(repository, SupabaseCurrentCorpusRepository):
+            print(
+                json.dumps(
+                    {"error": "apply-prepared는 Supabase corpus에서만 지원합니다"},
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+        if bundle is None:
+            print(
+                json.dumps(
+                    {"error": "apply-prepared에는 --bundle이 필요합니다"},
+                    ensure_ascii=False,
+                )
+            )
+            await repository.close()
+            return 2
+        try:
+            result = await publish_prepared_bundle(repository, bundle)
+        except Exception as exc:
+            detail = str(exc).replace("\r", " ").replace("\n", " ").strip()
+            print(
+                json.dumps(
+                    {
+                        "command": command,
+                        "state": "failed",
+                        "detail": f"{type(exc).__name__}: {detail}"[:300],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
+        finally:
+            await repository.close()
+        print(
+            json.dumps(
+                {"command": command, **result},
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            )
+        )
         return 0
     if command == "sync-history" and isinstance(repository, SupabaseCurrentCorpusRepository):
         print(
@@ -120,8 +176,7 @@ async def _run(
                 json.dumps(
                     {
                         "error": (
-                            "prepare-current에는 --output과 "
-                            "--embedding-profile-key가 필요합니다"
+                            "prepare-current에는 --output이 필요합니다"
                         )
                     },
                     ensure_ascii=False,
@@ -136,6 +191,8 @@ async def _run(
                 ensure_ascii=False,
             )
         )
+        if isinstance(repository, SupabaseCurrentCorpusRepository):
+            await repository.close()
         return 2
     try:
         async with LawOpenApiClient(
@@ -250,6 +307,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.title,
                 output=args.output,
                 embedding_profile_key=args.embedding_profile_key,
+                bundle=args.bundle,
             )
         )
     )

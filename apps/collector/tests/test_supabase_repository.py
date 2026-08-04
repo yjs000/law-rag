@@ -10,7 +10,11 @@ import respx
 from law_rag_core.domain.catalog import SourceKind
 from law_rag_core.domain.entities import LegalDocumentRecord, ProvisionRecord
 from law_rag_core.domain.identifiers import canonical_provision_id
-from law_rag_core.persistence import CORPUS_SEARCH_READY_FLAG_KEY
+from law_rag_core.persistence import (
+    CORPUS_SEARCH_READY_FLAG_KEY,
+    CORPUS_SYNC_RUN_LOCK_KEY,
+    EMBEDDING_BACKFILL_LOCK_KEY,
+)
 
 from law_rag_collector.client import RawResponse
 from law_rag_collector.deletions import DeletionRecord
@@ -435,6 +439,56 @@ async def test_unchanged_sync_preserves_provisions_and_embeddings() -> None:
 
 
 @pytest.mark.asyncio
+async def test_prepared_upsert_batches_more_than_one_hundred_provisions() -> None:
+    document = _document()
+    document.provisions = [
+        ProvisionRecord(
+            id=canonical_provision_id(
+                source_kind=document.source_kind,
+                source_id=document.source_id,
+                mst=document.mst,
+                effective_from=document.effective_from,
+                path=f"제{index + 1}조",
+            ),
+            path=f"제{index + 1}조",
+            heading=None,
+            content=f"본문 {index + 1}",
+            ordinal=index + 1,
+        )
+        for index in range(101)
+    ]
+    raw = RawResponse("{}", "JSON", document.source_url)
+    connection = _FakeConnection(
+        existing_document={"id": _DOCUMENT_ID, "exact_title": document.title},
+        title_owners=[],
+        existing_versions=[_version_row(document, raw)],
+        existing_provisions=[],
+        persisted_provisions=[_provision_row(item) for item in document.provisions],
+    )
+
+    changed = await _repository(connection).upsert(
+        document,
+        raw,
+        effective_to=None,
+        batch_size=100,
+    )
+
+    collision_batches = [
+        params["provision_ids"]
+        for sql, params in connection.calls
+        if "SELECT id,version_id FROM provisions" in sql
+    ]
+    write_batches = [
+        params
+        for sql, params in connection.calls
+        if "INSERT INTO provisions(" in sql
+    ]
+    assert changed is True
+    assert [len(batch) for batch in collision_batches] == [100, 1]
+    assert [len(batch) for batch in write_batches] == [100, 1]
+
+
+@pytest.mark.asyncio
 async def test_preview_reports_the_diff_without_storage_or_database_writes() -> None:
     document = _document()
     raw = RawResponse("{}", "JSON", document.source_url)
@@ -708,6 +762,79 @@ async def test_sync_run_lock_rejects_a_concurrent_collector() -> None:
     calls = repository.engine.connection.calls  # type: ignore[attr-defined]
     assert len(calls) == 1
     assert repository.engine.connection.commits == 1  # type: ignore[attr-defined]
+
+
+class _PreparedRunLockConnection:
+    def __init__(self, *, rejected_key: int | None = None) -> None:
+        self.rejected_key = rejected_key
+        self.calls: list[tuple[str, object]] = []
+        self.commits = 0
+
+    async def execute(self, statement, params=None):
+        sql = str(statement)
+        lock_key = params["lock_key"]
+        self.calls.append((sql, lock_key))
+        acquired = not ("pg_try_advisory_lock" in sql and lock_key == self.rejected_key)
+        return _FakeResult(scalar=acquired)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+class _PreparedRunLockEngine:
+    def __init__(self, connection: _PreparedRunLockConnection) -> None:
+        self.connection = connection
+
+    def connect(self):
+        return _TransactionContext(self.connection)  # type: ignore[arg-type]
+
+
+def _prepared_lock_repository(
+    connection: _PreparedRunLockConnection,
+) -> SupabaseCurrentCorpusRepository:
+    return SupabaseCurrentCorpusRepository(
+        database_url="postgresql://unused",
+        supabase_url="https://unused.test",
+        supabase_secret_key="unused",
+        bucket="law-raw",
+        engine=_PreparedRunLockEngine(connection),  # type: ignore[arg-type]
+        storage=_FakeStorage(),  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+async def test_prepared_publish_session_locks_and_unlocks_in_fixed_order() -> None:
+    connection = _PreparedRunLockConnection()
+    repository = _prepared_lock_repository(connection)
+
+    async with repository.prepared_publish_session() as leased:
+        assert leased is connection
+        assert connection.calls == [
+            ("SELECT pg_try_advisory_lock(:lock_key)", EMBEDDING_BACKFILL_LOCK_KEY),
+            ("SELECT pg_try_advisory_lock(:lock_key)", CORPUS_SYNC_RUN_LOCK_KEY),
+        ]
+
+    assert connection.calls[-2:] == [
+        ("SELECT pg_advisory_unlock(:lock_key)", CORPUS_SYNC_RUN_LOCK_KEY),
+        ("SELECT pg_advisory_unlock(:lock_key)", EMBEDDING_BACKFILL_LOCK_KEY),
+    ]
+    assert connection.commits == 4
+
+
+@pytest.mark.asyncio
+async def test_prepared_publish_session_releases_first_lock_when_second_is_busy() -> None:
+    connection = _PreparedRunLockConnection(rejected_key=CORPUS_SYNC_RUN_LOCK_KEY)
+    repository = _prepared_lock_repository(connection)
+
+    with pytest.raises(RuntimeError, match="다른 corpus writer"):
+        async with repository.prepared_publish_session():
+            raise AssertionError("unreachable")
+
+    assert connection.calls[-1] == (
+        "SELECT pg_advisory_unlock(:lock_key)",
+        EMBEDDING_BACKFILL_LOCK_KEY,
+    )
+    assert connection.commits == 3
 
 
 @pytest.mark.asyncio

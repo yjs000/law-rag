@@ -8,10 +8,12 @@ part of the content identity.
 
 from __future__ import annotations
 
-import hashlib
-import json
-from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
+
+from law_rag_core.corpus_update_bundle import (
+    canonical_corpus_population_fingerprint,
+    canonical_corpus_snapshot_id,
+)
 
 from app.domain.schemas import CorpusTemporalState
 
@@ -22,74 +24,6 @@ def korea_today() -> date:
     """Return the product's legal-current date, independent of server timezone."""
 
     return datetime.now(SEOUL_TIME_ZONE).date()
-
-
-def canonical_corpus_population_fingerprint(
-    rows: Sequence[Sequence[object]],
-) -> str:
-    """Hash provision identity rows with the PostgreSQL JSONB array encoding."""
-
-    if any(len(row) != 11 for row in rows):
-        raise ValueError("corpus population rows must use the 11-field v1 contract")
-    provision_ids = [str(row[3]) for row in rows]
-    if len(set(provision_ids)) != len(provision_ids):
-        raise ValueError("corpus population provision IDs must be unique")
-    ordered = sorted(rows, key=lambda row: str(row[3]))
-    serialized = json.dumps(
-        ordered,
-        ensure_ascii=False,
-        separators=(", ", ": "),
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def canonical_corpus_snapshot_id(
-    *,
-    parser_contract_version: str,
-    retrieval_unit: str,
-    content_populations: Sequence[Mapping[str, object]],
-) -> str:
-    """Hash unique content populations without treating dates as content."""
-
-    if not content_populations:
-        raise ValueError("at least one corpus content population is required")
-    identities: set[tuple[int, str]] = set()
-    for population in content_populations:
-        raw_count = population["eligible_provision_count"]
-        if isinstance(raw_count, bool):
-            raise ValueError("eligible provision count must be a positive integer")
-        count = int(raw_count)
-        fingerprint = str(population["fingerprint_sha256"])
-        if count <= 0:
-            raise ValueError("eligible provision count must be positive")
-        if len(fingerprint) != 64 or any(
-            character not in "0123456789abcdef" for character in fingerprint
-        ):
-            raise ValueError("population fingerprint must be lowercase SHA-256")
-        identities.add((count, fingerprint))
-
-    rows = [
-        {
-            "eligible_provision_count": count,
-            "fingerprint_sha256": fingerprint,
-        }
-        for count, fingerprint in sorted(identities)
-    ]
-    payload = {
-        "contract": "corpus-population-content-v1",
-        "parser_contract_version": parser_contract_version,
-        "retrieval_unit": retrieval_unit,
-        "content_populations": rows,
-    }
-    digest = hashlib.sha256(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    return f"corpus-sha256:{digest}"
 
 
 class UnsupportedCorpusDateError(ValueError):

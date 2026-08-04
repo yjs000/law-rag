@@ -11,14 +11,13 @@ from uuid import UUID
 from law_rag_core.corpus_update_bundle import (
     PreparedDeletionRecord,
     PreparedDocumentRecord,
-    canonical_corpus_population_fingerprint,
-    canonical_corpus_snapshot_id,
+    canonical_corpus_publish_snapshot_id,
     embedding_text_sha256,
     legal_provision_v1_text,
 )
 from law_rag_core.domain.catalog import SourceKind
-from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 from law_rag_core.persistence import (
+    CORPUS_PUBLISH_BASE_SELECT_SQL,
     CORPUS_SEARCH_READY_CAPABILITY_SQL,
     SEARCHABLE_DOCUMENT_VERSION_SQL,
 )
@@ -68,32 +67,25 @@ async def read_searchable_corpus_snapshot(
         if not schema_ready:
             raise RuntimeError("DB migration 0010 이상이 필요합니다")
         rows = (
-            await connection.execute(
-                text(
-                    f"""SELECT '{PARSER_SCHEMA_VERSION}',d.id::text,v.id::text,p.id::text,
-                    d.exact_title,d.source_kind::text,v.effective_from::text,p.path,
-                    p.parent_path,p.heading,encode(digest(p.content,'sha256'),'hex')
-                    FROM provisions p
-                    JOIN document_versions v ON v.id=p.version_id
-                    JOIN legal_documents d ON d.id=v.document_id
-                    WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
-                    ORDER BY p.id"""
+            (
+                await connection.execute(
+                    text(
+                        f"""SELECT {CORPUS_PUBLISH_BASE_SELECT_SQL}
+                        FROM provisions p
+                        JOIN document_versions v ON v.id=p.version_id
+                        JOIN legal_documents d ON d.id=v.document_id
+                        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
+                        ORDER BY p.id"""
+                    )
                 )
             )
-        ).all()
+            .mappings()
+            .all()
+        )
     if not rows:
         raise RuntimeError("현재 검색 가능한 조문이 없습니다")
-    fingerprint = canonical_corpus_population_fingerprint(rows)
-    snapshot_id = canonical_corpus_snapshot_id(
-        parser_contract_version=PARSER_SCHEMA_VERSION,
-        retrieval_unit="provision",
-        content_populations=[
-            {
-                "eligible_provision_count": len(rows),
-                "fingerprint_sha256": fingerprint,
-            }
-        ],
-    )
+    snapshot_id = canonical_corpus_publish_snapshot_id(rows)
+    fingerprint = snapshot_id.removeprefix("corpus-sha256:")
     return SearchableCorpusSnapshot(snapshot_id, len(rows), fingerprint)
 
 

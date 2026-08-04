@@ -56,7 +56,7 @@ class _Connection:
             return _Result(scalar=True)
         if "LEFT JOIN embedding_profiles" in sql:
             return _Result(rows=self.engine.repair_rows)
-        if "SELECT '3'" in sql:
+        if "content_sha256" in sql and "FROM provisions" in sql:
             index = self.engine.population_reads
             self.engine.population_reads += 1
             rows = self.engine.population_versions[
@@ -81,19 +81,35 @@ class _ConnectionContext:
 
 class _Engine:
     def __init__(self, *, population_versions=None, repair_rows=(), deletion_rows=()):
-        base_row = (
-            "3",
-            _DOCUMENT_ID,
-            _VERSION_ID,
-            str(_PROVISION_ID),
-            "전기사업법",
-            "law",
-            "2020-01-01",
-            "제1조",
-            None,
-            "목적",
-            "a" * 64,
-        )
+        base_row = {
+            "document_id": _DOCUMENT_ID,
+            "source_id": "001",
+            "exact_title": "전기사업법",
+            "source_kind": "law",
+            "version_id": _VERSION_ID,
+            "mst": "1000",
+            "promulgation_number": "1",
+            "promulgated_on": date(2020, 1, 1),
+            "effective_from": date(2020, 1, 1),
+            "effective_to": None,
+            "ministry": "산업통상자원부",
+            "source_url": "https://example.test/law",
+            "raw_format": "JSON",
+            "raw_sha256": _RAW_SHA,
+            "raw_storage_path": f"law/1000-{_RAW_SHA}.json",
+            "parser_schema_version": "3",
+            "fallback_reason": None,
+            "lifecycle_state": "active",
+            "source_record_state": "available",
+            "source_deleted_on": None,
+            "has_supplementary_provisions": False,
+            "provision_id": str(_PROVISION_ID),
+            "path": "제1조",
+            "parent_path": None,
+            "heading": "목적",
+            "content_sha256": "a" * 64,
+            "ordinal": 0,
+        }
         self.population_versions = population_versions or [[base_row]]
         self.repair_rows = list(repair_rows)
         self.deletion_rows = list(deletion_rows)
@@ -220,7 +236,7 @@ async def test_prepare_current_only_reads_db_and_writes_local_bundle(tmp_path: P
 @pytest.mark.asyncio
 async def test_prepare_current_rejects_a_changed_base_snapshot(tmp_path: Path) -> None:
     first = _Engine().population_versions[0][0]
-    changed = (*first[:-1], "b" * 64)
+    changed = {**first, "effective_to": date(2026, 8, 4)}
     engine = _Engine(population_versions=[[first], [changed]])
     document = _document()
     service = CollectorService(

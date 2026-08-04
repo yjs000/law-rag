@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import Literal
+
+from law_rag_core.corpus_update_bundle import (
+    embedding_text_sha256 as _embedding_text_sha256,
+)
+from law_rag_core.corpus_update_bundle import (
+    legal_provision_v1_text,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,12 +45,13 @@ def legal_provision_embedding_text(
     *, document_title: str, path: str, heading: str | None, content: str
 ) -> str:
     """Build the versioned passage text used for provision embeddings."""
-    return "\n".join(
-        part.strip()
-        for part in (document_title, path, heading or "", content)
-        if part and part.strip()
+    return legal_provision_v1_text(
+        document_title=document_title,
+        path=path,
+        heading=heading,
+        content=content,
     )
 
 
 def embedding_text_sha256(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return _embedding_text_sha256(text)

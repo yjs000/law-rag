@@ -11,6 +11,7 @@ from law_rag_core.corpus_update_bundle import (
     PreparedEmbeddingRecord,
     PreparedRawRecord,
     canonical_corpus_population_fingerprint,
+    canonical_corpus_publish_snapshot_id,
     canonical_corpus_snapshot_id,
     finalize_corpus_update_bundle,
     load_corpus_update_bundle,
@@ -197,6 +198,53 @@ def test_snapshot_helpers_are_order_independent_and_date_free() -> None:
 
     assert snapshot.startswith("corpus-sha256:")
     assert len(snapshot) == len("corpus-sha256:") + 64
+
+
+def _publish_base_row(*, provision_id: str, effective_to: date | None = None) -> dict:
+    return {
+        "document_id": "document",
+        "source_id": "001",
+        "exact_title": "전기사업법",
+        "source_kind": "law",
+        "version_id": "version",
+        "mst": "1000",
+        "promulgation_number": "1",
+        "promulgated_on": date(2020, 1, 1),
+        "effective_from": date(2020, 2, 1),
+        "effective_to": effective_to,
+        "ministry": "산업통상자원부",
+        "source_url": "https://example.test/law",
+        "raw_format": "JSON",
+        "raw_sha256": _RAW_SHA,
+        "raw_storage_path": f"law/1000-{_RAW_SHA}.json",
+        "parser_schema_version": "3",
+        "fallback_reason": None,
+        "lifecycle_state": "active",
+        "source_record_state": "available",
+        "source_deleted_on": None,
+        "has_supplementary_provisions": False,
+        "provision_id": provision_id,
+        "path": "제1조",
+        "parent_path": None,
+        "heading": "목적",
+        "content_sha256": "c" * 64,
+        "ordinal": 0,
+    }
+
+
+def test_publish_snapshot_is_order_independent_but_detects_metadata_changes() -> None:
+    first = _publish_base_row(provision_id="a-provision")
+    second = _publish_base_row(provision_id="b-provision")
+
+    snapshot = canonical_corpus_publish_snapshot_id([first, second])
+
+    assert snapshot == canonical_corpus_publish_snapshot_id([second, first])
+    assert snapshot != canonical_corpus_publish_snapshot_id(
+        [first, {**second, "effective_to": date(2026, 8, 4)}]
+    )
+    assert snapshot != canonical_corpus_publish_snapshot_id(
+        [first, {**second, "raw_sha256": "d" * 64}]
+    )
 
 
 def test_paths_and_embedding_shapes_are_rejected_before_manifest_publish(tmp_path: Path) -> None:

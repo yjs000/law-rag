@@ -19,9 +19,10 @@ CORPUS_SYNC_RUN_LOCK_KEY: Final[int] = 5_737_565_776_311_091_202
 # vectors for the same profile while one of them is promoting the profile.
 EMBEDDING_BACKFILL_LOCK_KEY: Final[int] = 5_737_565_776_311_091_203
 
-# Runtime readers use a model-independent corpus gate.  A corpus writer sets
-# it false in the same transaction as the first visible change; vector/index
-# promotion sets it true only after the complete corpus is verified.
+# Runtime readers use a model-independent corpus gate.  The prepared publisher
+# commits it false before the drain window and starts visible corpus changes
+# only afterwards.  It returns true in the same transaction that verifies the
+# complete corpus.
 CORPUS_SEARCH_READY_CAPABILITY_KEY: Final[str] = "schema.corpus_search_ready_v1"
 CORPUS_SEARCH_READY_FLAG_KEY: Final[str] = "corpus.search_ready"
 CORPUS_SEARCH_READY_CAPABILITY_SQL: Final[str] = f"""EXISTS(
@@ -49,9 +50,22 @@ NULLIF(btrim(d.exact_title),''),NULLIF(btrim(p.path),''),
 NULLIF(btrim(COALESCE(p.heading,'')),''),NULLIF(btrim(p.content),'')),
 'sha256'),'hex')"""
 
+# Publication compares every stored field that the corpus writer can mutate.
+# This is intentionally broader than the runtime content snapshot: dates and
+# source metadata are preconditions for safely applying an older local bundle.
+CORPUS_PUBLISH_BASE_SELECT_SQL: Final[str] = """d.id::text document_id,
+d.source_id,d.exact_title,d.source_kind::text source_kind,
+v.id::text version_id,v.mst,v.promulgation_number,v.promulgated_on,
+v.effective_from,v.effective_to,v.ministry,v.source_url,v.raw_format,
+v.raw_sha256,v.raw_storage_path,v.parser_schema_version,v.fallback_reason,
+v.lifecycle_state,v.source_record_state,v.source_deleted_on,
+v.has_supplementary_provisions,p.id::text provision_id,p.path,p.parent_path,
+p.heading,encode(digest(p.content,'sha256'),'hex') content_sha256,p.ordinal"""
+
 
 __all__ = [
     "CORPUS_MUTATION_LOCK_KEY",
+    "CORPUS_PUBLISH_BASE_SELECT_SQL",
     "CORPUS_SEARCH_READY_CAPABILITY_KEY",
     "CORPUS_SEARCH_READY_CAPABILITY_SQL",
     "CORPUS_SEARCH_READY_FLAG_KEY",

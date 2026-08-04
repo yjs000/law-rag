@@ -26,6 +26,38 @@ _EMBEDDINGS_FILE = "embeddings.jsonl"
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 BundleState = Literal["unchanged", "needs_embeddings", "ready_to_publish"]
 
+_PUBLISH_BASE_FIELDS = frozenset(
+    {
+        "document_id",
+        "source_id",
+        "exact_title",
+        "source_kind",
+        "version_id",
+        "mst",
+        "promulgation_number",
+        "promulgated_on",
+        "effective_from",
+        "effective_to",
+        "ministry",
+        "source_url",
+        "raw_format",
+        "raw_sha256",
+        "raw_storage_path",
+        "parser_schema_version",
+        "fallback_reason",
+        "lifecycle_state",
+        "source_record_state",
+        "source_deleted_on",
+        "has_supplementary_provisions",
+        "provision_id",
+        "path",
+        "parent_path",
+        "heading",
+        "content_sha256",
+        "ordinal",
+    }
+)
+
 
 class _Record(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
@@ -330,6 +362,29 @@ def canonical_corpus_snapshot_id(
     }
     digest = _sha256_bytes(_canonical_json(payload).encode("utf-8"))
     return f"corpus-sha256:{digest}"
+
+
+def canonical_corpus_publish_snapshot_id(
+    rows: Sequence[Mapping[str, object]],
+) -> str:
+    """Hash every mutation-relevant field used as a prepared publish precondition."""
+
+    if not rows:
+        raise ValueError("at least one publish base row is required")
+    if any(set(row) != _PUBLISH_BASE_FIELDS for row in rows):
+        raise ValueError("publish base rows do not match the v1 field contract")
+    provision_ids = [str(row["provision_id"]) for row in rows]
+    if len(provision_ids) != len(set(provision_ids)):
+        raise ValueError("publish base provision IDs must be unique")
+    normalized = [
+        {key: _json_scalar(row[key]) for key in sorted(_PUBLISH_BASE_FIELDS)}
+        for row in rows
+    ]
+    payload = {
+        "contract": "corpus-publish-base-v1",
+        "rows": sorted(normalized, key=lambda row: str(row["provision_id"])),
+    }
+    return f"corpus-sha256:{_sha256_bytes(_canonical_json(payload).encode('utf-8'))}"
 
 
 def legal_provision_v1_text(
@@ -708,6 +763,7 @@ __all__ = [
     "PreparedProvisionRecord",
     "PreparedRawRecord",
     "canonical_corpus_population_fingerprint",
+    "canonical_corpus_publish_snapshot_id",
     "canonical_corpus_snapshot_id",
     "embedding_text_sha256",
     "finalize_corpus_update_bundle",

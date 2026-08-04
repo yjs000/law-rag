@@ -1,10 +1,19 @@
+import hashlib
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
 import pytest
+from law_rag_core.corpus_update_bundle import (
+    PreparedDocumentRecord,
+    PreparedProvisionRecord,
+    PreparedRawRecord,
+    load_corpus_update_bundle,
+    write_corpus_update_bundle,
+)
+from law_rag_core.domain.catalog import SourceKind
 from openai import APITimeoutError
 from sqlalchemy import text
 
@@ -26,6 +35,7 @@ from scripts.backfill_embeddings import (
     _cache_pending,
     _database_state,
     _embed_with_retry,
+    _generate_bundle_cache,
     _generate_cache,
     _load_cache,
     _pending,
@@ -49,6 +59,54 @@ def _row(*, stored_sha256=None) -> dict:
         "stored_dimensions": 512 if stored_sha256 is not None else None,
         "stored_norm": 1.0 if stored_sha256 is not None else None,
     }
+
+
+def _prepared_bundle(tmp_path, *, provision_id=None):
+    provision_id = provision_id or uuid4()
+    raw_body = "{}"
+    raw_sha256 = hashlib.sha256(raw_body.encode()).hexdigest()
+    raw = PreparedRawRecord(
+        path="raw/law-001.json",
+        sha256=raw_sha256,
+        wire_format="JSON",
+        source_url="https://example.test/law",
+    )
+    document = PreparedDocumentRecord(
+        source_id="001",
+        mst="100",
+        title="전기사업법",
+        source_kind=SourceKind.LAW,
+        effective_from=date(2026, 1, 1),
+        source_url=raw.source_url,
+        raw_format="JSON",
+        raw_sha256=raw_sha256,
+        parser_schema_version="3",
+        raw=raw,
+        provisions=[
+            PreparedProvisionRecord(
+                id=provision_id,
+                path="제7조/항①",
+                heading="사업의 허가",
+                content="전기사업을 하려는 자는 허가를 받아야 한다.",
+                ordinal=1,
+            )
+        ],
+        changed=True,
+    )
+    root = tmp_path / "bundle"
+    return write_corpus_update_bundle(
+        root,
+        update_id="update-1",
+        documents=[document],
+        deletions=[],
+        raw_contents={raw.path: raw_body},
+        base_snapshot_id=f"corpus-sha256:{'0' * 64}",
+        parser_version="3",
+        embedding_profile_key=NVIDIA_NEMOTRON_512_PROFILE.key,
+        required_embedding_ids=[provision_id],
+        deletion_window=(date(2026, 8, 3), date(2026, 8, 4)),
+        created_at=datetime(2026, 8, 4, tzinfo=UTC),
+    )
 
 
 def test_pending_uses_full_versioned_passage_hash() -> None:
@@ -330,6 +388,31 @@ def test_cache_reuses_same_profile_vector_when_only_provision_id_changed() -> No
     assert vectors == [vector]
 
 
+def test_bundle_passages_overlay_title_across_historical_versions(tmp_path) -> None:
+    bundle = _prepared_bundle(tmp_path)
+    historical_id = uuid4()
+    passages = backfill_module._bundle_passages(
+        bundle,
+        [
+            {
+                "provision_id": historical_id,
+                "document_title": "옛 전기사업법 명칭",
+                "source_kind": "law",
+                "source_id": "001",
+                "mst": "99",
+                "effective_from": date(2020, 1, 1),
+                "path": "제1조",
+                "heading": "목적",
+                "content": "이 법은 전기사업에 관한 사항을 정한다.",
+            }
+        ],
+    )
+
+    historical = next(item for item in passages if item.provision_id == historical_id)
+    assert historical.text.startswith("전기사업법\n제1조\n목적")
+    assert "옛 전기사업법 명칭" not in historical.text
+
+
 @pytest.mark.asyncio
 async def test_generate_cache_id_only_migration_needs_no_nvidia_key(monkeypatch, tmp_path) -> None:
     row = _row()
@@ -362,6 +445,192 @@ async def test_generate_cache_id_only_migration_needs_no_nvidia_key(monkeypatch,
     assert result["generated_count"] == 0
     assert result["reused_count"] == 1
     assert result["state"]["complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_bundle_cache_reuses_database_vector_by_source_hash(
+    monkeypatch, tmp_path
+) -> None:
+    bundle = _prepared_bundle(tmp_path)
+    passage = backfill_module._bundle_passages(bundle)[0]
+    vector = [1.0] + [0.0] * 511
+
+    async def database_vectors(_repository):
+        return {
+            str(uuid4()): CachedEmbedding(
+                provision_id=str(uuid4()),
+                source_text_sha256=passage.source_text_sha256,
+                embedding=vector,
+            )
+        }
+
+    async def no_stored_provisions(_repository):
+        return []
+
+    def unexpected_embedder(*_args, **_kwargs):
+        raise AssertionError("NVIDIA embedder must not be created for SHA reuse")
+
+    monkeypatch.setattr(backfill_module, "_database_reusable_embeddings", database_vectors)
+    monkeypatch.setattr(backfill_module, "_source_provisions", no_stored_provisions)
+    monkeypatch.setattr(backfill_module, "_embedder", unexpected_embedder)
+    result = await _generate_bundle_cache(
+        SimpleNamespace(
+            bundle=bundle.root,
+            cache=tmp_path / "cache.jsonl",
+            batch_size=32,
+            max_items=None,
+            max_retries=0,
+            retry_base_seconds=1.0,
+        ),
+        object(),  # type: ignore[arg-type]
+        SimpleNamespace(nvidia_api_key=None),
+    )
+
+    completed = load_corpus_update_bundle(bundle.root, expected_state="ready_to_publish")
+    assert result["generated_count"] == 0
+    assert result["reused_count"] == 1
+    assert completed.embeddings[0].provision_id == passage.provision_id
+    assert completed.embeddings[0].embedding == vector
+
+
+@pytest.mark.asyncio
+async def test_generate_bundle_cache_generates_only_missing_prospective_vector(
+    monkeypatch, tmp_path
+) -> None:
+    bundle = _prepared_bundle(tmp_path)
+    calls: list[list[str]] = []
+
+    async def no_database_vectors(_repository):
+        return {}
+
+    async def no_stored_provisions(_repository):
+        return []
+
+    class Embedder:
+        async def embed(self, texts):
+            calls.append(texts)
+            return [[1.0] + [0.0] * 511 for _ in texts]
+
+    monkeypatch.setattr(backfill_module, "_database_reusable_embeddings", no_database_vectors)
+    monkeypatch.setattr(backfill_module, "_source_provisions", no_stored_provisions)
+    monkeypatch.setattr(backfill_module, "_embedder", lambda *_args, **_kwargs: Embedder())
+    result = await _generate_bundle_cache(
+        SimpleNamespace(
+            bundle=bundle.root,
+            cache=tmp_path / "cache.jsonl",
+            batch_size=32,
+            max_items=None,
+            max_retries=0,
+            retry_base_seconds=1.0,
+        ),
+        object(),  # type: ignore[arg-type]
+        SimpleNamespace(nvidia_api_key="test"),
+    )
+
+    completed = load_corpus_update_bundle(bundle.root, expected_state="ready_to_publish")
+    assert result["generated_count"] == 1
+    assert len(calls) == 1
+    assert completed.manifest.counts.embeddings == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_bundle_cache_prefers_new_local_vector_over_same_id_stale_db(
+    monkeypatch, tmp_path
+) -> None:
+    bundle = _prepared_bundle(tmp_path)
+    passage = backfill_module._bundle_passages(bundle)[0]
+    calls: list[list[str]] = []
+
+    async def stale_database_vector(_repository):
+        return {
+            str(passage.provision_id): CachedEmbedding(
+                provision_id=str(passage.provision_id),
+                source_text_sha256="f" * 64,
+                embedding=[0.0, 1.0] + [0.0] * 510,
+            )
+        }
+
+    async def no_stored_provisions(_repository):
+        return []
+
+    class Embedder:
+        async def embed(self, texts):
+            calls.append(texts)
+            return [[1.0] + [0.0] * 511 for _ in texts]
+
+    monkeypatch.setattr(
+        backfill_module,
+        "_database_reusable_embeddings",
+        stale_database_vector,
+    )
+    monkeypatch.setattr(backfill_module, "_source_provisions", no_stored_provisions)
+    monkeypatch.setattr(backfill_module, "_embedder", lambda *_args, **_kwargs: Embedder())
+
+    result = await _generate_bundle_cache(
+        SimpleNamespace(
+            bundle=bundle.root,
+            cache=tmp_path / "cache.jsonl",
+            batch_size=32,
+            max_items=None,
+            max_retries=0,
+            retry_base_seconds=1.0,
+        ),
+        object(),  # type: ignore[arg-type]
+        SimpleNamespace(nvidia_api_key="test"),
+    )
+
+    completed = load_corpus_update_bundle(bundle.root, expected_state="ready_to_publish")
+    assert result["generated_count"] == 1
+    assert len(calls) == 1
+    assert completed.embeddings[0].source_text_sha256 == passage.source_text_sha256
+    assert completed.embeddings[0].embedding == [1.0] + [0.0] * 511
+
+
+@pytest.mark.asyncio
+async def test_generate_bundle_cache_rejects_new_database_coverage_drift_before_nim(
+    monkeypatch, tmp_path
+) -> None:
+    bundle = _prepared_bundle(tmp_path)
+    historical_id = uuid4()
+
+    async def stored_provisions(_repository):
+        return [
+            {
+                "provision_id": historical_id,
+                "document_title": "전기사업법",
+                "source_kind": "law",
+                "source_id": "001",
+                "mst": "99",
+                "effective_from": date(2020, 1, 1),
+                "path": "제1조",
+                "heading": "목적",
+                "content": "이 법은 전기사업에 관한 사항을 정한다.",
+            }
+        ]
+
+    async def no_database_vectors(_repository):
+        return {}
+
+    def unexpected_embedder(*_args, **_kwargs):
+        raise AssertionError("NVIDIA embedder must not run after corpus drift")
+
+    monkeypatch.setattr(backfill_module, "_source_provisions", stored_provisions)
+    monkeypatch.setattr(backfill_module, "_database_reusable_embeddings", no_database_vectors)
+    monkeypatch.setattr(backfill_module, "_embedder", unexpected_embedder)
+
+    with pytest.raises(RuntimeError, match="prepare a new bundle"):
+        await _generate_bundle_cache(
+            SimpleNamespace(
+                bundle=bundle.root,
+                cache=tmp_path / "cache.jsonl",
+                batch_size=32,
+                max_items=None,
+                max_retries=0,
+                retry_base_seconds=1.0,
+            ),
+            object(),  # type: ignore[arg-type]
+            SimpleNamespace(nvidia_api_key="test"),
+        )
 
 
 @pytest.mark.asyncio

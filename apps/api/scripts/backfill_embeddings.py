@@ -16,6 +16,12 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
+from law_rag_core.corpus_update_bundle import (
+    CorpusUpdateBundle,
+    PreparedEmbeddingRecord,
+    finalize_corpus_update_bundle,
+    load_corpus_update_bundle,
+)
 from law_rag_core.persistence import (
     CORPUS_MUTATION_LOCK_KEY,
     CORPUS_SEARCH_READY_CAPABILITY_KEY,
@@ -84,6 +90,11 @@ def _arguments() -> argparse.Namespace:
         "generate-cache", help="NVIDIA passage 벡터를 재개 가능한 로컬 JSONL에 생성"
     )
     generate_cache.add_argument("--cache", type=Path, default=DEFAULT_CACHE_PATH)
+    generate_cache.add_argument(
+        "--bundle",
+        type=Path,
+        help="prepare-current가 만든 prospective corpus bundle",
+    )
     generate_cache.add_argument("--batch-size", type=int, default=32)
     generate_cache.add_argument("--max-items", type=int)
     generate_cache.add_argument("--max-retries", type=int, default=5)
@@ -115,6 +126,7 @@ async def _source_provisions(repository: PostgresLegalRepository) -> list[dict]:
                 await connection.execute(
                     text(
                         f"""SELECT p.id provision_id,d.exact_title document_title,
+                        d.source_kind,d.source_id,v.mst,v.effective_from,
                         p.path,p.heading,p.content
                         FROM provisions p
                         JOIN document_versions v ON v.id=p.version_id
@@ -147,6 +159,107 @@ def _source_passages(rows: list[dict]) -> list[PendingProvision]:
             )
         )
     return passages
+
+
+def _bundle_passages(
+    bundle: CorpusUpdateBundle,
+    stored_rows: list[dict] | None = None,
+) -> list[PendingProvision]:
+    """Build the full temporal corpus after overlaying the prepared current versions."""
+
+    rows_by_id: dict[str, dict] = {}
+    bundle_versions = {
+        (
+            item.source_kind.value,
+            item.source_id,
+            item.mst,
+            item.effective_from,
+        )
+        for item in bundle.documents
+    }
+    titles = {
+        (item.source_kind.value, item.source_id): item.title for item in bundle.documents
+    }
+    deleted_versions = {
+        (item.source_kind.value, item.mst) for item in bundle.deletions if item.changed
+    }
+    for stored in stored_rows or []:
+        source_kind = str(stored["source_kind"])
+        source_id = str(stored["source_id"])
+        mst = str(stored["mst"])
+        effective_from = stored["effective_from"]
+        if (source_kind, mst) in deleted_versions:
+            continue
+        if (source_kind, source_id, mst, effective_from) in bundle_versions:
+            continue
+        row = dict(stored)
+        row["document_title"] = titles.get(
+            (source_kind, source_id), str(stored["document_title"])
+        )
+        rows_by_id[str(stored["provision_id"])] = row
+    for document in bundle.documents:
+        if (document.source_kind.value, document.mst) in deleted_versions:
+            continue
+        for provision in document.provisions:
+            rows_by_id[str(provision.id)] = {
+                "provision_id": provision.id,
+                "document_title": document.title,
+                "path": provision.path,
+                "heading": provision.heading,
+                "content": provision.content,
+            }
+    return _source_passages(
+        [rows_by_id[key] for key in sorted(rows_by_id)]
+    )
+
+
+def _vector_from_database(value: object) -> list[float]:
+    if not isinstance(value, str):
+        raise ValueError("database embedding must use its text representation")
+    stripped = value.strip()
+    if not stripped.startswith("[") or not stripped.endswith("]"):
+        raise ValueError("database embedding text is invalid")
+    try:
+        raw = [float(item) for item in stripped[1:-1].split(",")]
+    except ValueError as exc:
+        raise ValueError("database embedding text is invalid") from exc
+    return _validated_vector(raw)
+
+
+async def _database_reusable_embeddings(
+    repository: PostgresLegalRepository,
+) -> dict[str, CachedEmbedding]:
+    """Read only valid current-profile vectors; no writer lock or DB write is used."""
+
+    async with repository.engine.connect() as connection:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """SELECT provision_id::text provision_id,source_text_sha256,
+                        embedding::text embedding
+                        FROM provision_embeddings
+                        WHERE profile_key=:profile_key AND dimensions=:dimensions
+                          AND abs(vector_norm(embedding)-1.0)<=1e-5
+                        ORDER BY provision_id"""
+                    ),
+                    {
+                        "profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
+                        "dimensions": NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+    return {
+        str(row["provision_id"]): CachedEmbedding(
+            provision_id=str(row["provision_id"]),
+            source_text_sha256=str(row["source_text_sha256"]),
+            embedding=_vector_from_database(row["embedding"]),
+        )
+        for row in rows
+    }
 
 
 async def _provisions(repository: PostgresLegalRepository) -> list[dict]:
@@ -301,6 +414,52 @@ def _reusable_cache_vectors(
         reusable_passages.append(passage)
         reusable_vectors.append(vector)
     return reusable_passages, reusable_vectors
+
+
+def _cache_records_for_passages(
+    passages: list[PendingProvision],
+    database_records: dict[str, CachedEmbedding],
+    local_records: dict[str, CachedEmbedding],
+) -> dict[str, CachedEmbedding]:
+    """Choose a SHA-matching record for bundle assembly, preferring new local output.
+
+    Runtime retrieval never calls this path and reads committed PostgreSQL vectors only.
+    """
+
+    available = {**database_records, **local_records}
+    for passage in passages:
+        provision_id = str(passage.provision_id)
+        candidates = (
+            local_records.get(provision_id),
+            database_records.get(provision_id),
+        )
+        matching = next(
+            (
+                record
+                for record in candidates
+                if record is not None
+                and record.source_text_sha256 == passage.source_text_sha256
+            ),
+            None,
+        )
+        if matching is not None:
+            available[provision_id] = matching
+    return available
+
+
+def _cache_records_for_sha_reuse(
+    database_records: dict[str, CachedEmbedding],
+    local_records: dict[str, CachedEmbedding],
+) -> dict[str, CachedEmbedding]:
+    """Keep both DB and local SHA candidates even when their provision IDs collide."""
+
+    available = dict(database_records)
+    for provision_id, record in local_records.items():
+        key = provision_id
+        if key in available and available[key].source_text_sha256 != record.source_text_sha256:
+            key = f"local:{provision_id}:{record.source_text_sha256}"
+        available[key] = record
+    return available
 
 
 def _cache_batch_values(
@@ -816,6 +975,135 @@ async def _generate_cache(
     }
 
 
+async def _generate_bundle_cache(
+    arguments: argparse.Namespace,
+    repository: PostgresLegalRepository,
+    settings,
+) -> dict[str, object]:
+    """Complete embeddings for a prospective bundle without changing the database."""
+
+    _validate_batch_arguments(arguments)
+    bundle = load_corpus_update_bundle(arguments.bundle)
+    if bundle.manifest.embedding_profile_key != NVIDIA_NEMOTRON_512_PROFILE.key:
+        raise ValueError("bundle embedding profile does not match the runtime profile")
+    if bundle.manifest.state == "unchanged":
+        return {
+            "generated_count": 0,
+            "reused_count": 0,
+            "bundle_state": "unchanged",
+            "ready_to_publish": False,
+        }
+    if bundle.manifest.state == "ready_to_publish":
+        return {
+            "generated_count": 0,
+            "reused_count": 0,
+            "bundle_state": "ready_to_publish",
+            "ready_to_publish": True,
+        }
+
+    prospective = _bundle_passages(bundle, await _source_provisions(repository))
+    database_records = await _database_reusable_embeddings(repository)
+    database_pending, _, _ = _cache_pending(prospective, database_records)
+    required_ids = {
+        str(item) for item in bundle.manifest.changes.required_embedding_ids
+    }
+    database_pending_ids = {str(item.provision_id) for item in database_pending}
+    unexpected_drift_ids = database_pending_ids - required_ids
+    if unexpected_drift_ids:
+        raise RuntimeError(
+            "database embedding coverage changed after preparation; prepare a new bundle"
+        )
+    target = [
+        item
+        for item in prospective
+        if str(item.provision_id) in required_ids
+    ]
+    missing_required_ids = required_ids - {str(item.provision_id) for item in prospective}
+    if missing_required_ids:
+        raise ValueError("bundle required embedding IDs are absent from prospective provisions")
+    local_records, initial_line_count = _read_cache(arguments.cache)
+    reusable_records = _cache_records_for_sha_reuse(database_records, local_records)
+
+    reusable_passages, reusable_vectors = _reusable_cache_vectors(
+        target, reusable_records
+    )
+    if reusable_passages:
+        _append_cache(arguments.cache, reusable_passages, reusable_vectors)
+        print(
+            json.dumps(
+                {"event": "bundle_vectors_reused", "reused": len(reusable_passages)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+    local_records, _ = _read_cache(arguments.cache)
+    available = _cache_records_for_passages(target, database_records, local_records)
+    pending, _, _ = _cache_pending(target, available)
+    selected = pending
+    if arguments.max_items is not None:
+        selected = selected[: arguments.max_items]
+    embedder = _embedder(settings) if selected else None
+    generated = 0
+    for start in range(0, len(selected), arguments.batch_size):
+        batch = selected[start : start + arguments.batch_size]
+        assert embedder is not None
+        vectors = await _embed_with_retry(
+            embedder,
+            [item.text for item in batch],
+            max_retries=arguments.max_retries,
+            retry_base_seconds=arguments.retry_base_seconds,
+        )
+        _append_cache(arguments.cache, batch, vectors)
+        generated += len(batch)
+        print(
+            json.dumps(
+                {
+                    "event": "bundle_cache_batch_committed",
+                    "generated": generated,
+                    "selected_target": len(selected),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+
+    local_records, final_line_count = _read_cache(arguments.cache)
+    available = _cache_records_for_passages(target, database_records, local_records)
+    remaining, _, _ = _cache_pending(target, available)
+    if remaining:
+        return {
+            "generated_count": generated,
+            "reused_count": len(reusable_passages),
+            "initial_cache_line_count": initial_line_count,
+            "cache_line_count": final_line_count,
+            "remaining_count": len(remaining),
+            "bundle_state": "needs_embeddings",
+            "ready_to_publish": False,
+        }
+
+    embedding_records = [
+        PreparedEmbeddingRecord(
+            provision_id=UUID(str(item.provision_id)),
+            embedding_profile_key=NVIDIA_NEMOTRON_512_PROFILE.key,
+            dimensions=NVIDIA_NEMOTRON_512_PROFILE.stored_dimensions,
+            source_text_sha256=item.source_text_sha256,
+            embedding=available[str(item.provision_id)].embedding,
+        )
+        for item in target
+    ]
+    completed = finalize_corpus_update_bundle(arguments.bundle, embedding_records)
+    return {
+        "generated_count": generated,
+        "reused_count": len(reusable_passages),
+        "initial_cache_line_count": initial_line_count,
+        "cache_line_count": final_line_count,
+        "embedding_write_count": len(embedding_records),
+        "bundle_state": completed.manifest.state,
+        "ready_to_publish": True,
+    }
+
+
 async def _load_cache(
     arguments: argparse.Namespace, repository: PostgresLegalRepository
 ) -> dict[str, object]:
@@ -985,12 +1273,14 @@ async def _run(arguments: argparse.Namespace) -> dict[str, object]:
         if arguments.command == "verify":
             return await _verify_dense_search(arguments, repository, settings)
         if arguments.command in {"cache-status", "generate-cache", "load-cache"}:
-            passages = _source_passages(await _source_provisions(repository))
             if arguments.command == "cache-status":
+                passages = _source_passages(await _source_provisions(repository))
                 records, line_count = _read_cache(arguments.cache)
                 return _cache_state(arguments.cache, passages, records, line_count)
             if arguments.command == "generate-cache":
                 with _cache_file_lock(arguments.cache):
+                    if arguments.bundle is not None:
+                        return await _generate_bundle_cache(arguments, repository, settings)
                     return await _generate_cache(arguments, repository, settings)
             with _cache_file_lock(arguments.cache):
                 async with _embedding_backfill_run_lock(repository):

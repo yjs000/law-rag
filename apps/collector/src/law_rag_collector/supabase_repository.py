@@ -14,6 +14,7 @@ from law_rag_core.persistence import (
     CORPUS_SEARCH_READY_CAPABILITY_SQL,
     CORPUS_SEARCH_READY_FLAG_KEY,
     CORPUS_SYNC_RUN_LOCK_KEY,
+    EMBEDDING_BACKFILL_LOCK_KEY,
 )
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -149,12 +150,31 @@ def _ordered_ids(values: Sequence[UUID] | frozenset[UUID]) -> list[UUID]:
     return sorted(values, key=str)
 
 
-async def _mark_corpus_search_unready(connection, *, reason: str) -> None:
+def _batches[T](values: Sequence[T], batch_size: int | None) -> list[Sequence[T]]:
+    if not values:
+        return []
+    if batch_size is None:
+        return [values]
+    if batch_size <= 0:
+        raise ValueError("batch size must be positive")
+    return [values[start : start + batch_size] for start in range(0, len(values), batch_size)]
+
+
+async def _set_corpus_search_ready(
+    connection,
+    *,
+    ready: bool,
+    reason: str,
+    update_id: str | None = None,
+) -> None:
     schema_ready = (
         await connection.execute(text(f"SELECT {CORPUS_SEARCH_READY_CAPABILITY_SQL}"))
     ).scalar_one()
     if not schema_ready:
         raise RuntimeError("DB migration 0010 이상이 필요합니다")
+    value: dict[str, object] = {"ready": ready, "reason": reason}
+    if update_id is not None:
+        value["update_id"] = update_id
     await connection.execute(
         text(
             """INSERT INTO runtime_flags(key,value,updated_at)
@@ -163,9 +183,13 @@ async def _mark_corpus_search_unready(connection, *, reason: str) -> None:
         ),
         {
             "key": CORPUS_SEARCH_READY_FLAG_KEY,
-            "value": json.dumps({"ready": False, "reason": reason}),
+            "value": json.dumps(value),
         },
     )
+
+
+async def _mark_corpus_search_unready(connection, *, reason: str) -> None:
+    await _set_corpus_search_ready(connection, ready=False, reason=reason)
 
 
 def resolve_effective_to(
@@ -338,6 +362,39 @@ class SupabaseCurrentCorpusRepository:
                     {"lock_key": CORPUS_SYNC_RUN_LOCK_KEY},
                 )
                 await connection.commit()
+
+    @asynccontextmanager
+    async def prepared_publish_session(self) -> AsyncIterator[object]:
+        """직렬화된 prepared publish가 사용할 session 연결을 대여한다.
+
+        느린 Open API/NIM 준비 단계에서는 이 lock을 잡지 않는다. 검증된 원문이
+        Storage에 올라간 뒤부터 최종 DB transaction이 끝날 때까지만 기존 writer
+        lock 두 개를 고정 순서로 보유한다.
+        """
+
+        lock_keys = (EMBEDDING_BACKFILL_LOCK_KEY, CORPUS_SYNC_RUN_LOCK_KEY)
+        acquired: list[int] = []
+        async with self.engine.connect() as connection:
+            try:
+                for lock_key in lock_keys:
+                    locked = (
+                        await connection.execute(
+                            text("SELECT pg_try_advisory_lock(:lock_key)"),
+                            {"lock_key": lock_key},
+                        )
+                    ).scalar_one()
+                    await connection.commit()
+                    if not locked:
+                        raise RuntimeError("다른 corpus writer 실행이 진행 중입니다")
+                    acquired.append(lock_key)
+                yield connection
+            finally:
+                for lock_key in reversed(acquired):
+                    await connection.execute(
+                        text("SELECT pg_advisory_unlock(:lock_key)"),
+                        {"lock_key": lock_key},
+                    )
+                    await connection.commit()
 
     async def preview(
         self,
@@ -563,6 +620,7 @@ class SupabaseCurrentCorpusRepository:
         raw: RawResponse,
         *,
         effective_to: date | None,
+        batch_size: int | None = None,
     ) -> bool:
         activation = validate_for_activation(document, raw, today=date.today())
         if document.source_url != raw.source_url:
@@ -776,20 +834,22 @@ class SupabaseCurrentCorpusRepository:
                 )
             )
             incoming_ids = _ordered_ids([item.id for item in document.provisions])
-            id_collisions = (
-                (
-                    await connection.execute(
-                        text(
-                            """SELECT id,version_id FROM provisions
-                            WHERE id=ANY(CAST(:provision_ids AS uuid[]))
-                              AND version_id<>:version_id FOR UPDATE"""
-                        ),
-                        {"provision_ids": incoming_ids, "version_id": version_id},
+            id_collisions: list[Mapping[str, object]] = []
+            for incoming_batch in _batches(incoming_ids, batch_size):
+                id_collisions.extend(
+                    (
+                        await connection.execute(
+                            text(
+                                """SELECT id,version_id FROM provisions
+                                WHERE id=ANY(CAST(:provision_ids AS uuid[]))
+                                  AND version_id<>:version_id FOR UPDATE"""
+                            ),
+                            {"provision_ids": incoming_batch, "version_id": version_id},
+                        )
                     )
+                    .mappings()
+                    .all()
                 )
-                .mappings()
-                .all()
-            )
             if id_collisions:
                 raise ValueError("조문 ID가 다른 법령 버전에 이미 속해 있습니다")
 
@@ -816,73 +876,79 @@ class SupabaseCurrentCorpusRepository:
                     {"document_id": document_id},
                 )
             elif sync_plan.stale_embedding_ids:
-                await connection.execute(
-                    text(
-                        """DELETE FROM provision_embeddings
-                        WHERE provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
-                    ),
-                    {
-                        "provision_ids": _ordered_ids(sync_plan.stale_embedding_ids),
-                    },
-                )
+                for stale_batch in _batches(
+                    _ordered_ids(sync_plan.stale_embedding_ids), batch_size
+                ):
+                    await connection.execute(
+                        text(
+                            """DELETE FROM provision_embeddings
+                            WHERE provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
+                        ),
+                        {"provision_ids": stale_batch},
+                    )
             if sync_plan.stale_derived_ids:
                 stale_derived_ids = _ordered_ids(sync_plan.stale_derived_ids)
-                await connection.execute(
-                    text(
-                        """DELETE FROM legal_relationships
-                        WHERE from_provision_id=ANY(CAST(:provision_ids AS uuid[]))
-                           OR to_provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
-                    ),
-                    {"provision_ids": stale_derived_ids},
-                )
-                await connection.execute(
-                    text(
-                        """DELETE FROM derived_obligations
-                        WHERE provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
-                    ),
-                    {"provision_ids": stale_derived_ids},
-                )
+                for stale_batch in _batches(stale_derived_ids, batch_size):
+                    await connection.execute(
+                        text(
+                            """DELETE FROM legal_relationships
+                            WHERE from_provision_id=ANY(CAST(:provision_ids AS uuid[]))
+                               OR to_provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
+                        ),
+                        {"provision_ids": stale_batch},
+                    )
+                    await connection.execute(
+                        text(
+                            """DELETE FROM derived_obligations
+                            WHERE provision_id=ANY(CAST(:provision_ids AS uuid[]))"""
+                        ),
+                        {"provision_ids": stale_batch},
+                    )
             if sync_plan.removed_ids:
-                await connection.execute(
-                    text(
-                        """DELETE FROM provisions
-                        WHERE id=ANY(CAST(:provision_ids AS uuid[]))
-                          AND version_id=:version_id"""
-                    ),
-                    {
-                        "provision_ids": _ordered_ids(sync_plan.removed_ids),
-                        "version_id": version_id,
-                    },
-                )
+                for removed_batch in _batches(
+                    _ordered_ids(sync_plan.removed_ids), batch_size
+                ):
+                    await connection.execute(
+                        text(
+                            """DELETE FROM provisions
+                            WHERE id=ANY(CAST(:provision_ids AS uuid[]))
+                              AND version_id=:version_id"""
+                        ),
+                        {
+                            "provision_ids": removed_batch,
+                            "version_id": version_id,
+                        },
+                    )
             changed_ids = sync_plan.new_ids | sync_plan.updated_ids
             changed_provisions = [
                 item for item in document.provisions if item.id in changed_ids
             ]
             if changed_provisions:
-                await connection.execute(
-                    text(
-                        """INSERT INTO provisions(
-                        id,version_id,path,parent_path,heading,content,ordinal)
-                        VALUES(:id,:version_id,:path,:parent_path,:heading,:content,:ordinal)
-                        ON CONFLICT(id) DO UPDATE SET
-                        path=excluded.path,parent_path=excluded.parent_path,
-                        heading=excluded.heading,content=excluded.content,
-                        ordinal=excluded.ordinal
-                        WHERE provisions.version_id=excluded.version_id"""
-                    ),
-                    [
-                        {
-                            "id": item.id,
-                            "version_id": version_id,
-                            "path": item.path,
-                            "parent_path": item.parent_path,
-                            "heading": item.heading,
-                            "content": item.content,
-                            "ordinal": item.ordinal,
-                        }
-                        for item in changed_provisions
-                    ],
-                )
+                for provision_batch in _batches(changed_provisions, batch_size):
+                    await connection.execute(
+                        text(
+                            """INSERT INTO provisions(
+                            id,version_id,path,parent_path,heading,content,ordinal)
+                            VALUES(:id,:version_id,:path,:parent_path,:heading,:content,:ordinal)
+                            ON CONFLICT(id) DO UPDATE SET
+                            path=excluded.path,parent_path=excluded.parent_path,
+                            heading=excluded.heading,content=excluded.content,
+                            ordinal=excluded.ordinal
+                            WHERE provisions.version_id=excluded.version_id"""
+                        ),
+                        [
+                            {
+                                "id": item.id,
+                                "version_id": version_id,
+                                "path": item.path,
+                                "parent_path": item.parent_path,
+                                "heading": item.heading,
+                                "content": item.content,
+                                "ordinal": item.ordinal,
+                            }
+                            for item in provision_batch
+                        ],
+                    )
             persisted_provisions = (
                 (
                     await connection.execute(
