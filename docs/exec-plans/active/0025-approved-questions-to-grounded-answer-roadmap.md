@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — 질문 문구·범위 승인 완료, gold 주석 전
+상태: 진행 중 — M0·M1 완료, M2 독립 gold 제작 방법 확정·미착수
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -62,8 +62,8 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 | AI 입력 문맥 | 조문별 최고 leaf 1개, 최대 5개 조문·60,000자 | 계층 복원과 facet 충족을 평가하지 않은 임시값 |
 | NVIDIA 생성 | adapter와 API 연결 코드는 존재 | hosted 답변 smoke·반복성·법률 품질·비용 미측정 |
 | 실험 E | 계획·runner·산출물 없음 | D 문맥 동결 뒤 별도 설계 필요 |
-| corpus publisher | 로컬 구현·단위 검증 완료 | CI PostgreSQL 통합 5건과 실제 점검 게시 증거 미완료 |
-| Git 상태 | publisher 변경을 포함한 로컬 미푸시 커밋이 있음 | 새 publisher 통합 테스트가 원격 CI에서 실행됐다는 증거 없음 |
+| corpus publisher | draft PR CI에서 PostgreSQL 통합 5건 실행, 운영 DB 읽기 전용 preflight 통과 | 실제 변경 bundle 게시·점검 모드·검색 smoke는 미실행 |
+| Git 상태 | `codex/corpus-publisher-preflight`, draft PR #2 | Production `main`에는 병합·push하지 않음 |
 
 질문은행 파일의 `draft_for_human_question_review`와 문항의 `not_annotated`는 승인 실패가 아니다. 질문
 승인은 별도 manifest에 있고, `not_annotated`는 정답 근거 주석이 아직 없다는 뜻이다.
@@ -73,8 +73,8 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 | 순서 | 마일스톤 | 결과물 | 다음 단계 진입 조건 |
 | ---: | --- | --- | --- |
 | M0 | 입력과 상태 감사 | 승인 manifest·active 계획 상태 확인 | 완료 |
-| M1 | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 |
-| M2 | 독립 gold 제작 | 1,000문항 approved gold와 adjudication manifest | gold preflight 전체 통과 |
+| M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 |
+| M2 (방법 확정·미착수) | 독립 gold 제작 | 1,000문항 approved gold와 adjudication manifest | gold preflight 전체 통과 |
 | M3 | 실험 D1 | calibration raw exact dense 검색 기준선 | test를 열지 않고 오류 분석 완료 |
 | M4 | 실험 D2 | AI 입력용 검색 문맥 계약 v1과 D1·D2 held-out 결과 | 문맥 설정 동결 뒤 test 1회 통과 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 |
@@ -148,7 +148,29 @@ gold는 corpus ID·본문·기준일 population에 결박되므로 이 단계를
 `CORPUS_PUBLISH_TEST_DATABASE_URL`은 새 운영 database가 아니다. CI job 종료와 함께 사라지는 빈 테스트
 database이고, 운영 게시에는 기존 `DIRECT_URL`만 사용한다.
 
-## M2 — 독립 gold 제작
+### M1 완료 증거 — 2026-08-04
+
+- draft PR: [#2](https://github.com/yjs000/law-rag/pull/2), Production `main` 병합·push 없음
+- CI: commit `8a71024`, [run 30898366884](https://github.com/yjs000/law-rag/actions/runs/30898366884)
+  - API/core `531 passed`
+  - collector `99 passed`; `test_prepared_publisher_postgres.py` 5건 모두 실행되고 skip 0건
+  - Web lint·typecheck·test·build, Ruff와 문서 검사 통과
+- 운영 `DIRECT_URL` 읽기 전용 preflight 기록 시각: `2026-08-04T18:56:50+09:00`
+  - transaction: `REPEATABLE READ`, `READ ONLY`, statement timeout `15s`, lock timeout `2s`
+  - migration head `0011`, `corpus.search_ready=true`, reason `embedding_profile_verified`
+  - 활성 profile: `nvidia-nemotron-3-embed-1b-512-v1`, NVIDIA 2,048차원 응답의 앞 512차원 사용 후 L2 정규화
+  - 검색 조문 `3,066`, 정상 vector `3,066`; 누락·잘못된 차원·본문 SHA 불일치·비단위 vector 모두 `0`
+  - 게시 기준 snapshot `corpus-sha256:c836fe1cba95ac6a4896047d5bfd6e3a8f314652e33c3694633db124cb5bb85c`
+  - runtime snapshot `corpus-sha256:605b1f53b4fbe3edff19000796e56d906415e7648e7e6ae6119a46f5fc8d9578`
+  - 지원 범위 계산값 `2024-07-01~2026-08-04`, 해당일 eligible 조문 `3,066`
+  - bundle 없음(`present=false`): bundle checksum·새 게시 결과는 검증 대상이 아니었음
+- 이 preflight에서는 DB write, advisory lock, NIM·Open API·Storage 호출, 점검 모드와 검색 smoke를 실행하지
+  않았다. 한 시점의 읽기 전용 검사이므로 완료 직후의 변경까지 막는 보장은 없다.
+- CI publisher 5건은 실제 PostgreSQL에서 바깥 Tx B commit/rollback, gate와 writer lock 해제를 검증한다.
+  내부 단계 적용 함수·Storage·65초 drain은 대체 구현을 사용하므로 실제 각 단계 SQL의 독립 장애 주입까지
+  통과했다고 해석하지 않는다.
+
+## M2 — 독립 gold 제작 — 방법 확정, 구현·주석 미착수
 
 gold는 질문 승인 manifest의 canonical payload SHA-256
 `d41f6a206fec705a2e99b2b9543a6472cd5c5c067fc3a2a530e31a9a08fde869`에 결박한다. 실제 JSON 파일 byte
@@ -163,8 +185,9 @@ SHA-256 `19b1e40704d38a56751cf7a539a39075af18d1e5bbed8e47b1a3b00dabf82f31`과 �
    만들거나 현재 검색 점수를 정답 라벨로 복사하지 않는다.
 4. 전체 corpus를 직접 검토하지 않는 문항은 최소 두 독립 후보 수집 방법을 사용한다. 방법별 exact
    top-k, 설정 SHA와 후보 ID 집합 SHA를 기록하고, 주석자와 검토자에게 retrieval system label을 숨긴다.
-5. 후보 합집합을 빠짐없이 판정해 각 후보를 positive qrel 또는 distractor로 분류하고
-   `all_candidates_judged=true`와 alternative-positive 탐색 완료를 기록한다.
+5. 수집한 후보 합집합을 빠짐없이 판정해 각 후보를 positive qrel 또는 distractor로 분류하고
+   `pool_candidates_judged=true`와 alternative-positive 탐색 수행 여부를 기록한다. 이는 corpus 전체의
+   모든 관련 근거를 찾았다는 보장이 아니라, 사용한 pool의 판정 완료를 뜻한다.
 6. 직접 근거는 국가법령정보 공동활용 Open API에서 수집해 현재 parser가 구조화한 원문·버전·본문
    SHA로 확인한다. FAQ 답변이나 모델 기억을 qrels로 사용하지 않는다.
 7. pilot 50문항의 불일치를 최초 주석자와 다른 판정 담당자가 adjudication하고 다음 경계를 고정한다.
@@ -205,6 +228,15 @@ SHA-256 `19b1e40704d38a56751cf7a539a39075af18d1e5bbed8e47b1a3b00dabf82f31`과 �
 - reference response의 action과 citation은 같은 문항의 answerability·직접 qrel과 일치한다.
 - test qrels는 calibration 조정에 사용하지 않는다.
 - gold preflight가 검색·NIM 호출 전에 통과한다.
+
+### 다음 실행 순서 — 아직 미착수
+
+1. 승인된 1,000문항에서 scenario family 10개 × 5문항의 pilot 작업표를 만든다.
+2. 주석자·독립 검토자·불일치 판정 담당자의 역할과 annotation schema를 고정한다.
+3. 외부 호출이 필요한 후보 pool을 만들기 전에 예상 NIM 호출 수와 비용 상한을 보고한다.
+4. pilot 50문항을 독립 주석·검토·adjudication하고 answerability와 qrel 경계를 고정한다.
+5. calibration을 200문항까지 확장하고 gold preflight를 통과한 뒤 test 800문항을 봉인해 제작한다.
+6. 1,000문항 gold가 승인된 뒤에만 M3 실험 D1을 시작한다.
 
 ## M3 — 실험 D1: raw dense 검색 기준선
 
@@ -446,11 +478,16 @@ go/no-go 조건:
   실제 잔여 작업과 낡은 blocker를 대조했다.
 - 2026-08-04: corpus-first, gold, D1/D2, NVIDIA, E, 운영 마무리 순서의 이 로드맵과 active index를
   문서화했다. 기능 구현·실험·DB·외부 호출은 실행하지 않았다.
+- 2026-08-04: M1을 완료했다. draft PR #2의 CI에서 publisher PostgreSQL 5건을 skip 없이 포함한 전체
+  검증이 통과했고, 운영 `DIRECT_URL`에서는 명시적 읽기 전용 preflight만 실행해 migration·gate·profile·
+  3,066개 vector coverage와 snapshot을 확인했다. 운영 write·게시·실험 D는 실행하지 않았다.
+- 2026-08-04: M2는 독립 주석 방법과 50→200→1,000 checkpoint만 확정했다. 작업표·annotation artifact·
+  qrels·gold 코드는 만들지 않았다.
 
 ## 이번 로드맵 작성에서 하지 않은 일
 
 - gold·pilot·Experiment D/E artifact 생성 또는 실행
 - NVIDIA/Open API/Storage 호출
-- 운영 DB 읽기·쓰기, migration, corpus 게시
-- 기능 코드·workflow·환경변수 변경
-- 배포·push
+- 운영 DB 쓰기, migration, corpus 게시·점검 모드·검색 smoke
+- M2 이후의 기능 코드·workflow·환경변수 변경
+- Production `main` 병합·push·배포

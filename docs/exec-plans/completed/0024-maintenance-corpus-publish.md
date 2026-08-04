@@ -60,9 +60,26 @@ DB에 복사된 뒤에만 사용자 검색에 사용된다.
 - 운영 DB write, 실제 법률 dataset, Open API, NIM, Storage 호출은 실행하지 않았다.
 - 기존 미커밋 `AGENTS.md`는 보존하고 모든 커밋에서 제외했다.
 
+### 후속 M1 검증 — 2026-08-04
+
+- draft PR [#2](https://github.com/yjs000/law-rag/pull/2)의 commit `8a71024`에서
+  [GitHub Actions run 30898366884](https://github.com/yjs000/law-rag/actions/runs/30898366884)가 통과했다.
+- CI 일회성 PostgreSQL 17에서 collector `99 passed`였고 publisher PostgreSQL 통합 5건은 skip 없이
+  실행됐다. API/core는 `531 passed`, Web lint·typecheck·test·build와 문서 검사도 통과했다.
+- 5건은 실제 PostgreSQL에서 바깥 Tx B commit/rollback, gate 상태와 두 writer session lock 해제를
+  검증한다. 내부 단계 적용 함수, Storage, snapshot reader와 65초 drain은 대체 구현이므로 실제 각 단계
+  SQL·Storage 장애를 독립 주입한 결과로 과장하지 않는다.
+- 운영 `DIRECT_URL`에는 `preflight-current`의 `REPEATABLE READ, READ ONLY` 고정 SELECT만 실행했다.
+  migration `0011`, ready gate, 활성 NVIDIA 512차원 profile, 조문·정상 vector `3,066/3,066`, coverage 오류
+  0건과 두 snapshot을 확인했다. bundle은 없어 checksum·새 게시 결과는 검사하지 않았다.
+- 이 후속 검증에서도 운영 DB write, bundle 게시, NIM·Open API·Storage, 점검 모드와 검색 smoke는
+  실행하지 않았다.
+
 ## 커밋 단위
 
 1. `5fa8508` 운영 reader shared lock 제거
 2. `4fed6de` 로컬 준비 bundle과 테스트
 3. `2a6caac` 원자 publisher·embedding cache·workflow와 테스트
 4. 권위 문서·learning·완료 계획
+5. `ea9781b` 운영 DB 읽기 전용 `preflight-current`
+6. `ce4af41`, `8a71024` CI 이식성·PostgreSQL fixture 수정

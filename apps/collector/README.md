@@ -68,6 +68,26 @@ snapshot과 prospective 전체 vector coverage를 다시 확인한다. 충돌·�
 비밀값은 OS·GitHub Actions secret 또는 로컬 `.env.local`에만 둔다. 명령행, Git, 로그에 기록하지 않는다.
 `SUPABASE_SECRET_KEY`는 `sb_secret_` 형식이어야 한다.
 
+## 게시 전 읽기 전용 사전검사
+
+운영 반영 전에는 `DIRECT_URL`만으로 현재 확정 코퍼스를 비파괴 검사할 수 있다.
+
+```powershell
+uv run --project apps/collector law-rag-collector preflight-current
+uv run --project apps/collector law-rag-collector preflight-current `
+  --bundle .data/corpus-updates/<update-id>
+```
+
+`preflight-current`는 `REPEATABLE READ, READ ONLY` transaction에서 statement timeout 15초와 lock timeout
+2초를 설정하고 고정 SELECT만 실행한다. migration head, 검색 gate, 활성 NVIDIA 512차원 profile, 조문별
+vector coverage·본문 SHA·차원·L2 norm, 게시 기준 snapshot과 당일 runtime snapshot을 검사한다. advisory
+lock, DB write, NIM·Open API·Storage 호출은 없다.
+
+`--bundle`은 선택 사항이다. 지정하면 `ready_to_publish` manifest와 파일 checksum, 개수와 기준 DB snapshot
+일치까지 검사한다. bundle을 생략한 성공은 현재 DB 상태만 통과했다는 뜻이며 새 게시 결과나 bundle
+checksum을 검증한 것이 아니다. 이 명령은 한 시점의 검사이므로 실행 직후 변경을 막는 lock 역할도 하지
+않는다.
+
 ## 예약 실행
 
 `.github/workflows/sync-corpus.yml`은 self-hosted Windows runner에서 매일 03:00 KST와 수동 실행을 지원한다.
@@ -103,4 +123,5 @@ DB transaction 전에 업로드된 불변 raw가 고아 객체로 남을 수 있
 uv run --project apps/collector law-rag-collector preview-current
 uv run --project apps/collector law-rag-collector sync-current
 uv run --project apps/collector law-rag-collector status
+uv run --project apps/collector law-rag-collector preflight-current
 ```

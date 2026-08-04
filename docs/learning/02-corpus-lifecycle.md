@@ -255,10 +255,33 @@ active pointer: 현재 선택한 ready release
 과거 HNSW 물리 인덱스도 보존되어 있지만 현재와 미래의 운영·실험 검색에는 사용하지 않는다. 새 HNSW
 설계·인덱스·재구축·튜닝·평가·release도 만들지 않으며, 물리 잔여물 제거는 별도 cleanup 작업이다.
 
+## 게시 전 검사는 왜 읽기 전용이어야 하는가
+
+운영 코퍼스를 바꾸기 전에 알고 싶은 것은 “지금 게시해도 되는가”이지 “검사하면서 상태를 고치는가”가
+아니다. 사전검사가 데이터를 고치면 검사 실패 자체가 운영 상태를 바꾸므로 원인과 결과를 분리하기
+어렵다. 그래서 `preflight-current`는 다음 경계를 갖는다.
+
+```text
+DIRECT_URL session 연결
+→ REPEATABLE READ, READ ONLY transaction
+→ migration·gate·profile·vector coverage·snapshot SELECT
+→ 결과 출력 후 종료
+```
+
+`REPEATABLE READ`는 한 번의 검사 안에서 서로 다른 SELECT가 같은 DB 시점을 보게 한다. `READ ONLY`는 그
+transaction의 write를 PostgreSQL이 거부하게 한다. 짧은 statement·lock timeout은 막힌 검사가 운영 연결을
+오래 점유하지 않게 한다. 이 검사는 advisory lock, NIM, Open API와 Storage를 사용하지 않는다.
+
+성공의 뜻도 좁게 읽어야 한다. bundle 없이 통과했다면 현재 DB의 migration, ready gate, 활성 profile과
+vector coverage가 그 검사 시점에 일치했다는 뜻이다. 새 bundle의 checksum이나 게시·rollback·검색 재개를
+검증한 것이 아니며, lock을 잡지 않으므로 검사 직후 DB가 바뀌는 것까지 막지 않는다. 따라서 운영 증거에는
+실행 시각, publisher snapshot, runtime snapshot과 bundle 유무를 함께 남긴다.
+
 ## 직접 확인
 
 ```powershell
 uv run --project apps/collector law-rag-collector status
+uv run --project apps/collector law-rag-collector preflight-current
 uv run --directory apps/api python -m scripts.backfill_embeddings status
 ```
 
