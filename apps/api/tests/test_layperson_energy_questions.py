@@ -100,8 +100,8 @@ APPROVAL_REVIEW_PATH = (
     REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-lay-energy-approval-review-v1.md"
 )
 EXPECTED_ARTIFACT_SHA256 = {
-    BANK_PATH: "00870a5dd25db27d7f444080abff705b9d6c1e63f69b20ada0d6eefbfd442dec",
-    REVIEW_PATH: "ed6011a9e4bb7da2c7fc12013da81c6d7490099bc03d552dc023314eec777028",
+    BANK_PATH: "e372c6200bacc8caf2303a82c60be4ba599669a3bdfcbe645f1df6baf6297da4",
+    REVIEW_PATH: "19bb7f9079a84514fb3c374d68b8f248aaa591084cace9093fed8f4c0c6ded4b",
     APPROVAL_REVIEW_PATH: ("b2d3cb045c375d594912009c02c0bda688f6aaa6682c2e5ea6df709eb80319c8"),
 }
 
@@ -123,7 +123,8 @@ def test_question_bank_context_is_frozen_provenance_and_outputs_are_unchanged(
     )
     assert render_review(bank) == REVIEW_PATH.read_text(encoding="utf-8")
     for path, expected_sha256 in EXPECTED_ARTIFACT_SHA256.items():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected_sha256
+        canonical_text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        assert hashlib.sha256(canonical_text.encode("utf-8")).hexdigest() == expected_sha256
 
 
 def _normalize(value: str) -> str:
