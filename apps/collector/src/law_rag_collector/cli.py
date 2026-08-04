@@ -3,6 +3,7 @@ import asyncio
 import json
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from law_rag_core.domain.catalog import MVP_CATALOG
 
@@ -18,16 +19,37 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="국가법령정보 Open API 독립 수집기")
     parser.add_argument(
         "command",
-        choices=("preview-current", "sync-current", "sync-history", "status"),
+        choices=(
+            "prepare-current",
+            "preview-current",
+            "sync-current",
+            "sync-history",
+            "status",
+        ),
     )
     parser.add_argument(
         "--title",
         help="본문은 허용 목록의 한 문서만 수집한다. 삭제 목록은 전체 manifest에 적용한다.",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="prepare-current 번들을 기록할 비어 있는 디렉터리",
+    )
+    parser.add_argument(
+        "--embedding-profile-key",
+        help="prepare-current가 후속 임베딩 단계에 고정할 profile key",
+    )
     return parser
 
 
-async def _run(command: str, title: str | None = None) -> int:
+async def _run(
+    command: str,
+    title: str | None = None,
+    *,
+    output: Path | None = None,
+    embedding_profile_key: str | None = None,
+) -> int:
     settings = get_settings()
     repository = (
         SupabaseCurrentCorpusRepository(
@@ -75,6 +97,38 @@ async def _run(command: str, title: str | None = None) -> int:
             )
         )
         return 2
+    if command == "prepare-current":
+        if not isinstance(repository, SupabaseCurrentCorpusRepository):
+            print(
+                json.dumps(
+                    {"error": "prepare-current는 Supabase corpus에서만 지원합니다"},
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+        if title is not None:
+            print(
+                json.dumps(
+                    {"error": "prepare-current는 전체 고정 catalog만 준비합니다"},
+                    ensure_ascii=False,
+                )
+            )
+            await repository.close()
+            return 2
+        if output is None or not embedding_profile_key:
+            print(
+                json.dumps(
+                    {
+                        "error": (
+                            "prepare-current에는 --output과 "
+                            "--embedding-profile-key가 필요합니다"
+                        )
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            await repository.close()
+            return 2
     if not settings.law_open_api_oc:
         print(
             json.dumps(
@@ -99,6 +153,40 @@ async def _run(command: str, title: str | None = None) -> int:
                     )
                 )
                 return 2
+            if command == "prepare-current":
+                try:
+                    bundle = await service.prepare_current(
+                        output=output,
+                        embedding_profile_key=embedding_profile_key,
+                        entries=entries,
+                    )
+                except Exception as exc:
+                    print(
+                        json.dumps(
+                            {
+                                "command": command,
+                                "state": "failed",
+                                "detail": f"{type(exc).__name__}: {exc}"[:300],
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                    )
+                    return 1
+                print(
+                    json.dumps(
+                        {
+                            "command": command,
+                            "state": bundle.manifest.state,
+                            "output": str(bundle.root),
+                            "base_snapshot_id": bundle.manifest.base_snapshot_id,
+                            "counts": bundle.manifest.counts.model_dump(),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                return 0
             if command == "preview-current":
                 async with repository.sync_run_lock():
                     previews = await service.preview_current(entries)
@@ -155,4 +243,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     args = _parser().parse_args(argv)
-    raise SystemExit(asyncio.run(_run(args.command, args.title)))
+    raise SystemExit(
+        asyncio.run(
+            _run(
+                args.command,
+                args.title,
+                output=args.output,
+                embedding_profile_key=args.embedding_profile_key,
+            )
+        )
+    )

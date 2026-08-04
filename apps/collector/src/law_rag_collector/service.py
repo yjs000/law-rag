@@ -1,12 +1,28 @@
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import cast
 
+from law_rag_core.corpus_update_bundle import (
+    CorpusUpdateBundle,
+    PreparedDocumentRecord,
+    PreparedRawRecord,
+    write_corpus_update_bundle,
+)
 from law_rag_core.domain.catalog import MVP_CATALOG, CatalogEntry
 from law_rag_core.domain.schemas import IngestionResult
 
 from law_rag_collector.client import LawOpenApiClient, SearchRecord
 from law_rag_collector.history import HistoryVersion, effective_periods
 from law_rag_collector.ports import CollectorRepository, resolve
+from law_rag_collector.prepared_update import (
+    PreparedUpdateRepository,
+    preview_has_corpus_changes,
+    preview_source_deletions,
+    read_current_embedding_sources,
+    read_searchable_corpus_snapshot,
+    required_embedding_ids_for_prospective_corpus,
+)
 
 
 class CollectorService:
@@ -64,6 +80,98 @@ class CollectorService:
                     }
                 )
         return results
+
+    async def prepare_current(
+        self,
+        *,
+        output: Path,
+        embedding_profile_key: str,
+        entries: Sequence[CatalogEntry] = MVP_CATALOG,
+    ) -> CorpusUpdateBundle:
+        """Fetch and validate a complete read-only hand-off for maintenance publish."""
+
+        if not embedding_profile_key.strip():
+            raise ValueError("embedding profile key is required")
+        if not hasattr(self.repository, "engine"):
+            raise RuntimeError("prepare-current requires the Supabase read-only preview repository")
+        repository = cast(PreparedUpdateRepository, self.repository)
+        today = self._today()
+        base_before = await read_searchable_corpus_snapshot(repository)
+        embedding_sources_before = await read_current_embedding_sources(
+            repository,
+            embedding_profile_key=embedding_profile_key,
+        )
+        documents: list[PreparedDocumentRecord] = []
+        raw_contents: dict[str, str] = {}
+        for entry in entries:
+            search_item = await self._exact_search(entry)
+            parsed = await self.client.document(
+                expected_title=entry.title,
+                source_kind=entry.source_kind,
+                source_id=search_item.source_id,
+                mst=search_item.mst,
+                historical=False,
+            )
+            preview = await resolve(
+                self.repository.preview(parsed.value, parsed.raw, effective_to=None)
+            )
+            raw_path = _prepared_raw_path(parsed.value, parsed.raw.wire_format)
+            raw_record = PreparedRawRecord(
+                path=raw_path,
+                sha256=parsed.value.raw_sha256,
+                wire_format=parsed.raw.wire_format,
+                source_url=parsed.raw.source_url,
+                fallback_reason=parsed.raw.fallback_reason,
+            )
+            documents.append(
+                PreparedDocumentRecord.from_domain(
+                    parsed.value,
+                    effective_to=_optional_date(preview.get("effective_to")),
+                    raw=raw_record,
+                    changed=preview_has_corpus_changes(preview),
+                    preview=preview,
+                )
+            )
+            raw_contents[raw_path] = parsed.raw.body
+
+        deletion_from, deletion_to = await resolve(
+            self.repository.deletion_window(today=today)
+        )
+        deletion_records = []
+        for kind in (1, 2):
+            response = await self.client.deleted_records(
+                kind=kind,
+                from_date=deletion_from,
+                to_date=deletion_to,
+            )
+            deletion_records.extend(response.value)
+        deletions = await preview_source_deletions(repository, deletion_records)
+        base_after = await read_searchable_corpus_snapshot(repository)
+        embedding_sources_after = await read_current_embedding_sources(
+            repository,
+            embedding_profile_key=embedding_profile_key,
+        )
+        if base_before != base_after or embedding_sources_before != embedding_sources_after:
+            raise RuntimeError("준비 중 기준 코퍼스가 변경되었습니다. 다시 준비하세요")
+        required_embedding_ids = required_embedding_ids_for_prospective_corpus(
+            documents,
+            deletions,
+            embedding_sources_before,
+        )
+
+        return write_corpus_update_bundle(
+            output,
+            update_id=output.name,
+            documents=documents,
+            deletions=deletions,
+            raw_contents=raw_contents,
+            base_snapshot_id=base_before.snapshot_id,
+            parser_version=documents[0].parser_schema_version,
+            embedding_profile_key=embedding_profile_key,
+            required_embedding_ids=required_embedding_ids,
+            deletion_window=(deletion_from, deletion_to),
+            created_at=datetime.now(UTC),
+        )
 
     async def sync_history(
         self, entries: Sequence[CatalogEntry] = MVP_CATALOG
@@ -247,3 +355,17 @@ def _date(value: str) -> date | None:
 def _safe_detail(exc: Exception) -> str:
     message = str(exc).replace("\r", " ").replace("\n", " ").strip()
     return f"{type(exc).__name__}: {message}"[:300]
+
+
+def _prepared_raw_path(document, wire_format: str) -> str:
+    effective = document.effective_from.isoformat() if document.effective_from else "unknown"
+    return (
+        f"raw/{document.source_kind.value}/{document.source_id}/"
+        f"{document.mst}-{effective}-{document.raw_sha256}.{wire_format.casefold()}"
+    )
+
+
+def _optional_date(value: object) -> date | None:
+    if value is None or isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
