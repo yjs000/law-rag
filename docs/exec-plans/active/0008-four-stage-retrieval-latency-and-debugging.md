@@ -112,7 +112,7 @@ Production에서 실패했던 질문과 성공/경계 사례 8개를 v1 평가�
 - 원본 질문, 요청 시각, 계정 내부 ID 또는 비식별 평가 ID
 - API 배포 commit, 검색 계약/정규화/앵커 사전 버전
 - 코퍼스 기준시점과 문서·버전·조문 수
-- parser/chunk schema, PGroonga/pgvector index, 임베딩 모델·차원 버전
+- parser/chunk schema, PGroonga 색인, pgvector extension·벡터 저장 계약, 임베딩 모델·차원 버전
 - 요청 모드, AI 활성 상태, LLM 모델과 생성 결과/실패 사유
 
 ### 2. Retrieve 검증

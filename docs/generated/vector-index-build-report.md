@@ -6,11 +6,11 @@
 
 대상: Supabase 운영 corpus, NVIDIA Nemotron 512차원 dense-only 프로필
 
-> **현재 결정:** 이 문서는 이미 수행된 migration·벡터 적재·물리 인덱스 감사의 역사적 실행 기록이다. 당시 만들어진 HNSW 인덱스는 삭제하지 않지만 실험 D와 근거 찾기 품질 검증의 입력·게이트·결과로 사용하지 않는다. `hnsw_ready`도 이제 backfill 승격 조건이 아니라 물리 상태 진단값이다. 질문-정답 gold 1,000문항과 근거 찾기를 모두 검증한 뒤 별도 HNSW 설계를 제시하고 사용자가 명시적으로 승인하기 전에는 추가 HNSW 실행·튜닝·비교를 하지 않는다.
+> **현재 결정:** 이 문서는 이미 수행된 migration·벡터 적재·물리 인덱스 감사의 역사적 실행 기록이다. 당시 만들어진 HNSW 인덱스는 실험 D와 운영 검색의 입력·게이트·결과로 사용하지 않는다. `hnsw_ready`도 cleanup 전까지 남는 레거시 물리 상태 진단값일 뿐이다. HNSW는 현재와 미래의 제품·실험 경로에서 제외하므로 기존 인덱스를 사용·재구축·튜닝·평가·release 연결하지 않고 새 인덱스도 만들지 않는다.
 
 ## 실행 명령
 
-HNSW 스키마와 검색 준비 게이트는 Alembic migration으로 설치한다. 인덱스 SQL만 수동으로 따로 실행하지 않는다.
+아래 절차는 2026-08-03에 수행한 역사적 실행 기록이다. 기존 migration `0008`에는 HNSW 생성 SQL이 남아 있지만 새 운영 지침으로 재사용하지 않는다. 신규 환경에서 이 레거시 migration이 만든 인덱스까지 제거하려면 적용된 migration을 고치지 않고 별도 additive cleanup migration을 사용해야 한다.
 
 ```powershell
 uv run --directory apps/api alembic upgrade head
@@ -29,7 +29,7 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
   --limit 3
 ```
 
-`alembic upgrade head`가 migration `0008`의 `provision_embeddings_nemotron_512_hnsw` partial HNSW 인덱스와 이후 schema를 설치한다. `load-cache`는 벡터를 넣은 뒤 coverage, 원문 SHA-256, 512차원, L2 norm과 DB 임베딩 프로필 계약을 검사하고 전부 통과할 때만 embedding profile과 `corpus.search_ready`를 같은 transaction에서 활성화한다. HNSW valid·ready 상태는 `status`와 `verify`에 표시되는 물리 상태 진단값이며 승격 조건이 아니다.
+기존 migration 계보를 처음부터 적용하면 `0008`의 `provision_embeddings_nemotron_512_hnsw` partial HNSW 인덱스가 만들어진다. 이는 현재 선택된 검색 방식이 아니라 제거 migration 전까지 남는 레거시 효과다. `load-cache`는 벡터를 넣은 뒤 coverage, 원문 SHA-256, 512차원, L2 norm과 DB 임베딩 프로필 계약을 검사하고 전부 통과할 때만 embedding profile과 `corpus.search_ready`를 같은 transaction에서 활성화한다. HNSW valid·ready 상태는 `status`와 `verify`에 표시되는 레거시 물리 상태 진단값이며 승격 조건이나 도입 신호가 아니다.
 
 ## 실제 결과
 

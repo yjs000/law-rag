@@ -40,7 +40,7 @@
 - 사용자 기존 실험 B 결과 수정
 - 취소된 v2 12문항 전체 검토본 재생성 또는 수정
 - 일반 사용자 질문 승인 전 gold 정답·qrels 자동 추론이나 검색 품질 실행
-- 질문-정답 gold와 근거 찾기 전수 검증 전 HNSW 설계·튜닝·평가·비교 또는 새 인덱스 작업
+- HNSW 설계·생성·재구축·튜닝·평가·비교·release 연결 또는 새 HNSW 인덱스 작업
 - 기준일 범위의 프런트 차단 구현. 상태 API를 사용하는 후속 TODO로만 남김
 
 ## 설계 원칙
@@ -51,7 +51,7 @@
 4. 질문 임베딩과 passage 임베딩은 같은 모델/차원 공간이되 입력 유형은 각각 `query`/`passage`로 구분한다.
 5. 평가셋 정답은 corpus의 `document_id`, `version_id`, `provision_id`, `path`, 원문 근거로 추적 가능해야 한다.
 6. 정답 없는 1,000문항 질문은행은 질문 범위·말투 검토용 임시 산출물이다. 사용자 승인과 독립 qrels·reference response 주석을 마친 `approved_gold`만 고정 평가 자료이며, 모호한 문항은 별도 검토 큐로 분리한다.
-7. 실험 D는 exhaustive exact cosine으로 질문-정답과 근거 찾기 자체를 먼저 검증한다. HNSW는 이 평가의 상태·게이트·결과에 넣지 않는다.
+7. 실험 D와 운영 검색은 exhaustive exact cosine을 유지한다. HNSW는 현재와 미래의 상태·게이트·결과·검색 release에 넣지 않는다.
 8. 현재 corpus는 9개 문서·3,066개 조문이 모두 갖춰진 `2026-06-03..2026-08-03` 양끝 포함 기준일만 검색한다.
 
 ## 완료 조건
@@ -83,7 +83,7 @@
 ### 2026-08-03 retrieval 계보 재감사
 
 - [x] 담당: 주 에이전트 — BM25를 구현하지 않고도 corpus snapshot, retriever profile, index build, retrieval configuration/release를 독립적으로 추적할 수 있는 additive migration `0011`과 계약 테스트를 추가한다.
-- [x] 담당: `retrieval_catalog_docs` — 확정 스키마와 현재 exact dense/HNSW 보류 경계를 설계·생성·학습 문서에 반영하고, 과거 실행 보고서의 HNSW 승격 조건 설명을 바로잡는다.
+- [x] 담당: `retrieval_catalog_docs` — 확정 스키마와 exact dense/HNSW 제외 경계를 설계·생성·학습 문서에 반영하고, 과거 실행 보고서의 HNSW 승격 조건 설명을 바로잡는다.
 - [x] 담당: 주 에이전트 — 전체 diff와 기존 사용자 변경 비혼입을 검토하고 로컬 검증 후 운영 DB에 migration만 적용한다. 데이터셋 검색, NVIDIA 질문 임베딩, BM25/RRF, 새 HNSW 작업은 실행하지 않는다.
 - [ ] 담당: 사용자 → 주 에이전트 — 1,000문항 질문 문구와 범위를 승인한다. 승인 전에는 approval manifest, pilot, gold/qrels, 실제 실험 D를 생성하거나 실행하지 않는다.
 
@@ -93,7 +93,7 @@
 - [x] DB 마이그레이션·도메인 타입·repository·테스트를 구현한다.
 - [x] 반복 가능한 임베딩 backfill·상태 확인 CLI와 테스트를 구현한다.
 - [x] 운영 DB와 분리된 재개 가능 로컬 벡터 체크포인트 생성·검증·적재 경로를 구현한다.
-- [x] 운영 DB를 마이그레이션하고 벡터를 실제 생성한다. 함께 생성된 물리 HNSW 인덱스는 삭제하지 않되 현재 품질 평가에서 사용하지 않는 보류 자산으로 분류한다.
+- [x] 운영 DB를 마이그레이션하고 벡터를 실제 생성한다. 함께 생성된 물리 HNSW 인덱스는 현재·향후 검색과 품질 평가에 사용하지 않는 역사적 잔여물로 분류한다.
 - [x] 과거 parser 기반 synthetic 1,000문항 생성기·검증기·초안·검토 큐를 제거하고 일반 사용자 gold 경로만 유지한다.
 - [x] 전체 회귀 검증, 실제 건수 감사, 문서화와 기능별 커밋을 완료한다.
 - [x] 과거 synthetic 생성 규칙과 그 산출물을 제거한다.
@@ -121,7 +121,7 @@
 - [x] 사용자가 일반 사용자 질문 문구와 범위를 승인하고 실제 question approval manifest를 만든다. pilot 작업표와 gold 주석은 별도 후속 단계로 남긴다.
 - [ ] 사용자가 일반 사용자 질문을 승인한 뒤 별도 gold 파일에 answerability·필수 답변 요소·qrels·기준 답변을 독립 주석한다.
 - [ ] 승인·주석·adjudication을 마친 실제 1,000문항만 runner로 실행하고 결과를 기록한다.
-- [ ] 1,000문항 gold와 근거 찾기 전수 검증 완료 후 HNSW 설계안을 별도로 제시하고 사용자 승인을 받는다.
+- [x] HNSW 후속 설계·승인 TODO를 폐기한다. gold와 근거 찾기 검증 완료 뒤에도 HNSW를 제안하거나 도입하지 않는다.
 
 ## 검증과 롤백
 
@@ -138,7 +138,8 @@
 - 2026-08-03: 사용자 요청에 따라 마이그레이션과 임베딩 backfill은 설계·테스트 완료 후 실제 운영 DB에 실행한다.
 - 2026-08-03: 일반 사용자형 1,000문항은 질문 후보 은행으로 분리한다. 정답 없는 상태가 더 좋은 평가라는 뜻이 아니며, 질문 승인 후 별도 gold 주석 없이는 Recall을 계산하지 않는다.
 - 2026-08-03: 실험 D primary dense baseline은 문항 기준일의 전체 유효 population을 비교하는 exhaustive exact cosine으로 고정한다.
-- 2026-08-03: HNSW는 1,000문항 gold와 근거 찾기를 모두 검증한 뒤 별도 설계를 제시하고 사용자가 명시적으로 승인할 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않지만 현재 runner의 상태·게이트·결과에 사용하지 않는다.
+- 2026-08-03: 당시 HNSW를 1,000문항 gold와 근거 찾기 검증 이후로 보류했다. 이 결정은 2026-08-04 영구 제외 결정으로 대체됐으며 기존 물리 인덱스는 runner의 상태·게이트·결과에 사용하지 않는다.
+- 2026-08-04: HNSW는 현재와 미래의 운영·실험 경로에서 영구 제외한다. 새 설계·인덱스·build·configuration·release·튜닝·평가를 만들지 않고 기존 인덱스도 사용하거나 재구축하지 않는다.
 - 2026-08-03: 현재 corpus 지원 기준일은 `2026-06-03..2026-08-03` 양끝 포함이다. 범위 밖은 부분 corpus 검색 대신 backend에서 차단하고, 프런트 차단은 후속 TODO로 둔다.
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·생성·검토 경로와 API parser 호환 래퍼를 삭제하고 core parser v3 하나만 사용한다.
@@ -148,7 +149,7 @@
 
 - 2026-08-03: DB에는 현재 호출되지 않는 4인자·5인자 `hybrid_search` 함수 계보와 RRF 설명이 남아 있고, `provision_embeddings`가 모델 정보와 벡터 변환 계약을 한 행에 혼합함을 확인했다.
 - 2026-08-03: 전체 조문 임베딩을 반복 가능하게 채우는 운영 CLI가 없음을 확인했다.
-- 2026-08-03: pgvector 공식 권고에 따라 차원 가변 열과 현재 프로필 전용 512차원 partial expression HNSW 인덱스를 구현했다.
+- 2026-08-03: 당시 pgvector 공식 권고에 따라 차원 가변 열과 현재 프로필 전용 512차원 partial expression HNSW 인덱스를 구현했다. 이는 2026-08-04 영구 제외 결정 이전의 역사적 구현이며 재사용하거나 재생성하지 않는다.
 - 2026-08-03: NVIDIA의 retrieval/answer 분리, BEIR qrels, LlamaIndex labelled RAG 구조를 결합한 법률 평가 계약을 확정했다.
 - 2026-08-03: 실제 Supabase 3,066개 조문을 읽어 2,569개 유효 근거를 기준으로 1,000문항을 생성했다. calibration 200/test 800, positive 850/negative 150, 수동 검토 12개다.
 - 2026-08-03: API 테스트 268개(2개 skip), Ruff, 문서 검사 117개를 통과했다.
@@ -156,7 +157,7 @@
 - 2026-08-03: 승인 대기 중에도 NIM 벡터 생성을 진행할 수 있도록 `.data/embeddings/` JSONL 체크포인트를 추가했다. 원문은 저장하지 않으며 중단 후 해시 기준으로 재개할 수 있다.
 - 2026-08-03: NVIDIA NIM passage 벡터를 로컬 체크포인트에 3,066/3,066개 생성했다. 512차원, L2 norm, 현재 본문 해시를 전부 검증했으며 누락·stale은 0개다. 완성 후 재실행 결과 API 생성은 0건이었다. 파일은 33,696,689바이트이고 SHA-256은 `0D828204D71A389534B6B20F1A3392FFEA5AFA18C4625CE97E410E28E36F89EE`다. 운영 Supabase는 계속 0004/벡터 0건 상태로 보존했다.
 - 2026-08-03: 체크포인트 변경 후 API 271개 통과(2개 skip), core 4개, collector 37개, Ruff, 문서 검사 118개를 통과했다.
-- 2026-08-03: 사용자 승인 후 운영 Supabase를 `0004→0008`로 마이그레이션했다. 최종 상태는 조문 3,066개, 현재 프로필 벡터 3,066개, 누락·stale·비단위 벡터 각 0개, HNSW ready, hybrid 함수 없음이다.
+- 2026-08-03: 사용자 승인 후 운영 Supabase를 `0004→0008`로 마이그레이션했다. 당시 최종 상태는 조문 3,066개, 현재 프로필 벡터 3,066개, 누락·stale·비단위 벡터 각 0개, HNSW ready, hybrid 함수 없음이었다. `HNSW ready`는 당시 물리 상태 기록일 뿐 현재나 미래의 검색 준비·도입 신호가 아니다.
 - 2026-08-03: 실제 query 임베딩 검색에서 `query_dimensions=512`, `retrieval_strategy=dense_only`를 확인했다. “태양광 발전 설비는 법에서 어떻게 정의하나요?”의 1위는 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 `제2조/호3.`이고 cosine 점수는 `0.590565657053332`였다.
 - 2026-08-03: 최종 회귀 검증은 API 275개 통과(2개 skip), core 4개, collector 37개, Ruff, 문서 검사 118개를 통과했다. 실험 D 전용 검증 2개도 통과했다.
 - 2026-08-03: 실험 D 전용 검증은 JSON 구조, 1,000개 개수, 분할·범주 비율, qrels의 참조 무결성만 검사했다. 1,000개 질문을 실제 검색기에 입력하는 검색 품질 실험은 실행하지 않았다.
@@ -178,16 +179,16 @@
 - 2026-08-03: 운영 DB에서 과거 평가 ID가 현재 corpus와 맞지 않음을 확인했으며 해당 평가 산출물은 2026-08-04에 제거했다.
 - 2026-08-03: Vercel CLI 58.1의 backend framework rewrite 동작 변경으로 catch-all rewrite가 `/health`와 `/v1/*`를 `/app/main.py`로 바꾸어 404를 내는 것을 빌드·런타임 로그로 확인했다. rewrite를 제거하고 `app.main:app` entrypoint를 명시한 `f44f045`를 배포해 운영 별칭의 health와 OpenAPI route를 복구했다.
 - 2026-08-03: 운영 Supabase를 `0010 (head)`로 올리고 capability=true, corpus gate=false와 API `503 corpus_unready`를 확인한 뒤 parser v3로 9개 문서·3,066개 조문을 다시 동기화했다. 수집은 JSON 9/9, fallback·실패 0이고 재미리보기 변경도 0이다.
-- 2026-08-03: parser v3 체크포인트에서 2,956개 벡터를 동일 passage SHA로 재사용하고 110개만 NVIDIA NIM에서 새로 생성했다. 3,066개를 DB에 적재한 뒤 누락·stale·비단위 벡터 0, HNSW ready, profile active, corpus search ready를 확인했다. 체크포인트는 67,393,498 bytes, SHA-256 `3E335D908B00EA87F88648358A8CCB3DB2823A79562B781E6CBFC54350F9673F`다.
+- 2026-08-03: parser v3 체크포인트에서 2,956개 벡터를 동일 passage SHA로 재사용하고 110개만 NVIDIA NIM에서 새로 생성했다. 3,066개를 DB에 적재한 뒤 누락·stale·비단위 벡터 0, 당시의 HNSW ready, profile active, corpus search ready를 확인했다. `HNSW ready`는 현재 또는 미래에 재사용하지 않는 역사적 물리 상태다. 체크포인트는 67,393,498 bytes, SHA-256 `3E335D908B00EA87F88648358A8CCB3DB2823A79562B781E6CBFC54350F9673F`다.
 - 2026-08-03: 실험 D 데이터셋을 실행하지 않고 운영 smoke query 1개만 확인했다. 512차원 dense-only 결과 1위는 신재생에너지법 `제2조/호3.`이고 cosine은 `0.590565657053332`였다.
 - 2026-08-03: `scripts.evaluate_experiment_d_gold` runner를 구현했다. clean critical code provenance와 초기 preflight·retrieval 상태 검증 뒤에만 질문을 임베딩하고, corpus mutation 공유 transaction lock 안에서 locked preflight·exact query plan capture와 모든 raw provision 검색을 수행한다.
 - 2026-08-03: runner는 질문마다 11개를 조회해 raw cosine 내림차순·provision ID tie-break·중복·유한값을 확인하고 10/11 동점이면 실패한다. 결과에는 corpus·vector·query plan·critical code 지문, 실제 순위와 지표를 담고 전체 성공 후에만 새 run 파일을 원자 게시한다.
 - 2026-08-03: metric core는 fully answerable에서 grade 2 qrels의 Recall·HitRate·Direct Precision, grade 1+2 Precision, MRR@10, grade 2/1 nDCG@1/3/5/10, supported facet recall과 전체 facet 충족률을 계산한다. primary는 scenario-family macro와 family bootstrap 95% 신뢰구간이며 partial·clarification·unanswerable은 core 평균과 분리한다.
 - 2026-08-03: 질문 approval manifest와 gold adjudication manifest를 분리했다. adjudication manifest는 전체 gold dataset과 문항별 완성 payload의 canonical SHA-256을 봉인하며, preflight는 모든 문항에서 질문 승인·독립 review·최종 adjudication의 엄격한 시간 순서를 확인한다.
 - 2026-08-03: annotation pool은 방법별 설정 SHA-256·exact top-k·후보 ID 집합 SHA-256을 기록한다. 방법별 후보의 합집합은 판정 pool과 같아야 하고 full-corpus 검토는 각 문항 기준일의 전체 유효 검색 population과 같아야 한다.
-- 2026-08-03: 초기 구현에서는 `REPEATABLE READ, READ ONLY` 상태 점검과 공유 advisory lock을 얻는 `READ COMMITTED, READ ONLY` 검색 구간을 분리하고 HNSW plan 여부도 검사했다. 후속 보류 결정으로 HNSW 검사 필드는 제거했으며 transaction·잠금·exact plan 기록은 유지한다.
+- 2026-08-03: 초기 구현에서는 `REPEATABLE READ, READ ONLY` 상태 점검과 공유 advisory lock을 얻는 `READ COMMITTED, READ ONLY` 검색 구간을 분리하고 HNSW plan 여부도 검사했다. 후속 HNSW 제외 결정으로 검사 필드는 제거했으며 transaction·잠금·exact plan 기록은 유지한다.
 - 2026-08-03: 운영 읽기 전용 plan 감사에서 물리 HNSW는 valid·ready였지만 현재 3,066개 production 형태 query는 exact sort를 선택했다. HNSW 후보 CTE는 현재 기준일에는 빨랐지만 과거 기준일 유효 행을 0/3/7개만 반환한 사례가 있어 primary 품질 기준선으로 채택하지 않았다.
-- 2026-08-03: 초기 구현의 성공 payload에는 HNSW 물리 identity·valid/ready 상태도 포함했으나 후속 보류 결정으로 제거했다. 현재 payload는 실제 embedding batch 크기, PostgreSQL·pgvector 버전, transaction·planner 설정, clean Git commit과 핵심 파일 SHA-256을 기록한다. primary metric은 held-out test fully-answerable이고 calibration·combined는 diagnostic-only다.
+- 2026-08-03: 초기 구현의 성공 payload에는 HNSW 물리 identity·valid/ready 상태도 포함했으나 후속 HNSW 제외 결정으로 제거했다. 현재 payload는 실제 embedding batch 크기, PostgreSQL·pgvector 버전, transaction·planner 설정, clean Git commit과 핵심 파일 SHA-256을 기록한다. primary metric은 held-out test fully-answerable이고 calibration·combined는 diagnostic-only다.
 - 2026-08-03: runner 동작은 합성 fixture로만 검증했다. 사용자 승인, 독립 gold 주석과 adjudication이 끝나지 않았으므로 실제 일반 사용자 1,000문항의 NVIDIA 임베딩·검색·지표 실행은 하지 않았다.
 - 2026-08-03: 후속 결정으로 runner의 HNSW identity·valid/ready 상태와 plan 비교 필드를 제거했다. 기존 물리 인덱스와 과거 plan 감사값은 역사적 사실로만 보존하며 현재 품질 결과로 사용하지 않는다.
 - 2026-08-03: 운영 DB 읽기 전용 감사에서 9개 open version, 3,066개 provision, 가장 늦은 `effective_from=2026-06-03`, snapshot through `2026-08-03`을 확인해 현재 지원 범위를 코드·API에 고정했다.
@@ -198,14 +199,14 @@
 
 - NVIDIA API는 32개 사전 배치와 전체 재개 실행으로 확인했으며 실패 없이 3,066개를 생성했다.
 - 일반 사용자 질문 승인 뒤 blind candidate pool의 모든 후보를 qrel 또는 distractor로 판정하고, 작성자와 다른 검토자가 answerability·필수 요소·reference response를 adjudication해야 한다.
-- 1,000문항 gold와 근거 찾기 전수 검증이 끝난 뒤에만 HNSW 설계안을 작성하고 사용자 승인을 요청한다. 승인 전에는 관련 실행·비교를 하지 않는다.
+- HNSW 설계안 작성·승인 요청·실행·비교는 후속 작업으로 남기지 않는다. 기존 물리 인덱스 제거가 필요하면 별도 additive cleanup migration으로만 다룬다.
 - 프런트는 후속 작업에서 `/v1/corpus/status`의 지원 범위를 읽어 날짜 선택·제출을 막는다.
 
 ## 현재까지 결과
 
 - 현재 검색 경로는 dense-only이며 BM25·hybrid·RRF·reranker는 도입하지 않았다.
 - DB는 모델 이름만이 아니라 query/passage 유형, 원본·저장 차원, 축약·정규화, 본문 템플릿 버전을 프로필로 추적한다.
-- 운영 parser v3 corpus 9문서·3,066개 조문에 현재 NVIDIA 512차원 passage 벡터가 준비됐고, 모델 독립 corpus gate와 profile gate가 모두 활성화됐다. 기존 partial HNSW 인덱스는 물리적으로 남아 있지만 현재 품질 평가와 HNSW 승인 판단에 사용하지 않는 보류 자산이다.
+- 운영 parser v3 corpus 9문서·3,066개 조문에 현재 NVIDIA 512차원 passage 벡터가 준비됐고, 모델 독립 corpus gate와 profile gate가 모두 활성화됐다. 기존 partial HNSW 인덱스는 물리적으로 남아 있지만 현재·향후 검색, 품질 평가와 release 판단에 사용하지 않는 역사적 잔여물이다.
 - 과거 parser 기반 synthetic 검토 초안과 qrels는 삭제했으며 다시 평가 입력으로 사용하지 않는다.
 - 실험 D 실제 검색 실행과 Recall/HitRate/Precision/MRR@10/nDCG/facet 결과 산출은 독립 gold 주석·adjudication, gold adjudication manifest와 initial/locked preflight가 모두 끝난 뒤에만 진행한다. 질문 문구·범위 승인은 완료했다.
 - 일반 사용자 질문은행은 질문 승인을 마쳤지만 아직 gold가 아니므로 자체로 Recall/HitRate/Precision/MRR@10/nDCG를 산출할 수 없다. 독립 근거 주석을 완료한 문항만 현실적 자연어 평가셋으로 사용한다.

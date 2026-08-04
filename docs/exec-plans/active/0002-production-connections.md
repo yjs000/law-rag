@@ -100,7 +100,7 @@
 - [ ] 현재 선택한 생성 provider의 실제 구조화 출력에 결정적 인용 게이트 적용
 - [ ] quota·권한·모델 오류의 검색 전용 폴백과 영속 상태 검증
 - [ ] 사람 검토 평가셋으로 의미 게이트 오탐·미탐 측정
-- [ ] 실제 서비스 연결과 1,000문항 gold·근거 찾기 전수 검증을 먼저 완료한다. 그 뒤 별도 HNSW 설계안을 사용자에게 제시해 승인을 받은 경우에만 같은 한국어 법령 조문·질의·모델·검색 설정으로 차원·근사 검색 지표·지연시간·DB/인덱스 크기·인용 게이트 통과율 비교를 설계한다.
+- [x] HNSW는 현재와 미래의 운영·실험 검색 경로에서 제외한다. gold·근거 찾기 검증 결과와 관계없이 HNSW 설계·생성·재구축·튜닝·평가·release 연결을 진행하지 않고 exhaustive exact cosine을 유지한다.
   - 참고: [검색·원문 계보·답변 검증 기초](../../learning/07-retrieval-storage-and-grounding-foundations.md), [OpenAI embedding model 발표](https://openai.com/index/new-embedding-models-and-api-updates/), [Matryoshka Representation Learning](https://arxiv.org/abs/2205.13147), [pgvector 공식 문서](https://github.com/pgvector/pgvector)
 
 ### Vercel Web/FastAPI 배포와 운영

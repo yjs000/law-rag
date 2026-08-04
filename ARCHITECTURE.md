@@ -65,7 +65,7 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 - `derived_obligations`: 행위자·조건·의무 유형과 검증 상태
 - `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태와 dataset·code·corpus·retrieval release 계보
 
-검색은 먼저 corpus 전체 준비 게이트와 현재 corpus가 실제로 지원하는 기준일 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 현재 snapshot `mvp-current-corpus-2026-08-03`은 9개 open version과 3,066개 조문이 공통으로 갖춰진 `2026-06-03`부터 `2026-08-03`까지를 양끝 포함해 지원한다. 이 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`로 같은 계약을 노출한다. 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. HNSW 보류 기간에는 운영 dense와 실험 D 모두 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
+검색은 먼저 corpus 전체 준비 게이트와 현재 corpus가 실제로 지원하는 기준일 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 현재 snapshot `mvp-current-corpus-2026-08-03`은 9개 open version과 3,066개 조문이 공통으로 갖춰진 `2026-06-03`부터 `2026-08-03`까지를 양끝 포함해 지원한다. 이 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`로 같은 계약을 노출한다. 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. 운영 dense와 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색·평가 경로에서 사용하지 않으며 새 인덱스·build·release도 만들지 않는다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
 
 의미 검색은 질의와 저장 벡터의 profile key가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다. production 응답은 같은 조의 하위 조각을 조 단위로 묶을 수 있지만, 실험 D의 검색 평가는 qrels와 같은 raw `provision_id` 단위를 사용하고 direct-path, keyword fallback, 조 단위 grouping을 우회한다.
 
@@ -145,6 +145,7 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-07-15 | collector `sync-current`는 검증된 원문을 content-addressed private Storage에 먼저 보존하고 DB 문서·버전·조문을 트랜잭션 반영 | 원문 계보와 재실행 멱등성을 유지하면서 Vercel API가 같은 Supabase 코퍼스를 읽게 함 |
 | 2026-07-19 | 생성 기본 후보를 NVIDIA hosted Nemotron 3 Ultra로 변경하고 기존 `terra` wire 값은 호환용으로 유지 | 로컬 PC 공개 없이 Vercel outbound 호출이 가능하며 provider 변경 중 기존 클라이언트 호환을 보존 |
 | 2026-07-23 | 임베딩 provider를 NVIDIA hosted Nemotron 3 Embed 1B로 교체하고 검색 시 모델 ID를 필터링 | 한국어 hosted 실험과 기존 512차원 계약을 유지하면서 OpenAI·NVIDIA 벡터 공간 혼합을 방지 |
-| 2026-08-03 | 실험 D primary dense baseline을 exhaustive exact cosine으로 고정 | 질문-정답 gold와 근거 찾기 자체를 다른 검색 근사화 효과와 섞지 않고 먼저 검증 |
-| 2026-08-03 | HNSW 설계·평가를 gold 1,000문항과 근거 찾기 전수 검증 이후의 별도 승인 단계로 보류 | 지금 HNSW를 함께 검증하면 근거 찾기와 근사 인덱스 중 무엇을 측정했는지 구분할 수 없음. 이미 만들어진 물리 인덱스는 삭제하지 않지만 현재 품질 평가 입력·게이트로 사용하지 않음 |
+| 2026-08-03 | 실험 D primary dense baseline을 exhaustive exact cosine으로 고정 | 근사화 변수를 현재와 미래의 품질 판정에서 영구 배제하고 근거 찾기 자체의 재현성을 유지 |
+| 2026-08-03 | [대체됨] HNSW 설계·평가를 gold 1,000문항과 근거 찾기 전수 검증 이후의 별도 승인 단계로 보류 | 당시에는 근거 찾기와 근사 인덱스 중 무엇을 측정했는지 구분하기 위해 보류했으나, 2026-08-04 영구 제외 결정으로 대체됨 |
+| 2026-08-04 | HNSW를 현재와 미래의 제품·실험 경로에서 영구 제외하고 exhaustive exact cosine을 유지 | 근사 인덱스 도입으로 품질 판정과 운영 복잡도를 다시 늘리지 않기로 한 사용자 결정. 2026-08-03의 “검증 후 재검토” 결정을 대체하며, 기존 물리 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물로만 남김 |
 | 2026-08-03 | 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 요청을 `422`로 거부 | 9개 법령의 현행 open version과 3,066개 조문이 모두 갖춰진 구간만 검색해 희소한 과거 corpus를 근거 부족으로 오인하지 않음 |

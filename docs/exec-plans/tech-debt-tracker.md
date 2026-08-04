@@ -27,6 +27,7 @@
 | TD-019 | P0 | AI 개인정보 | NVIDIA hosted 전송의 보존·학습·국외 이전·Trial 약관이 미검증 | 정책 검토와 개인정보처리방침 반영 전 공개 AI 비활성 | 사용자 |
 | TD-020 | P1 | 임베딩 검색 | hybrid SQL이 embedding model·dimensions·version을 필터하지 않아 혼합 가능 | 벡터 값 유지, 함수 인자·필터 migration 및 혼합 회귀 테스트 | 미지정 |
 | TD-021 | P2 | 취소 UX | 취소 API 실패도 즉시 중지 완료처럼 표시될 수 있음 | 접수·확정·이미 완료·503 재시도 상태 UI 테스트 | 미지정 |
+| TD-022 | P2 | 벡터 저장 | HNSW는 영구 제외했지만 적용된 migration `0008`, 기존 물리 인덱스와 `hnsw_ready` 레거시 진단이 남아 있음 | 별도 additive cleanup migration으로 기존·신규 환경의 HNSW 인덱스와 전용 진단을 제거하고 exhaustive exact cosine 회귀 검증 통과 | 미지정 |
 
 ## 종료된 항목
 

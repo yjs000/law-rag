@@ -5,7 +5,7 @@
 
 ## 결론
 
-현재 주 검색 경로는 exhaustive exact dense다. dense 후보가 0개일 때만 PGroonga keyword fallback을 별도로 실행하며, 두 점수를 합치지 않는다. 두 경로는 현재 같은 repository의 내부 실행 단계이므로 독립적인 public retriever 계약이라고 부르지 않는다. DB는 `hybrid_search`와 RRF 함수를 제공하지 않는다. 향후 BM25는 독립 repository 계약과 profile로 추가하고, RRF·reranker는 고정 평가셋에서 이득을 증명한 뒤 별도 버전의 실험 계층에 추가한다. HNSW 보류 기간에는 운영 dense 검색과 실험 D 모두 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine만 사용한다. HNSW 설계·평가·비교는 승인 gold와 근거 찾기 검증이 끝난 뒤 별도 사용자 승인을 받기 전까지 보류한다.
+현재 주 검색 경로는 exhaustive exact dense다. dense 후보가 0개일 때만 PGroonga keyword fallback을 별도로 실행하며, 두 점수를 합치지 않는다. 두 경로는 현재 같은 repository의 내부 실행 단계이므로 독립적인 public retriever 계약이라고 부르지 않는다. DB는 `hybrid_search`와 RRF 함수를 제공하지 않는다. 향후 BM25는 독립 repository 계약과 profile로 추가하고, RRF·reranker는 고정 평가셋에서 이득을 증명한 뒤 별도 버전의 실험 계층에 추가한다. 운영 dense 검색과 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine만 사용한다. HNSW는 검토 대기 항목이 아니라 현재와 미래의 제품·실험 경로에서 제외된 방식이며, 새 인덱스·build·configuration·release를 설계하거나 만들지 않는다.
 
 Migration `0011`은 이 동작을 바꾸지 않고 corpus·검색기·물리 build·configuration·release·평가 실행의 계보를 분리해 기록할 수 있는 additive catalog만 추가한다. catalog 행의 존재나 capability marker는 검색 방식의 구현·승인·활성화를 뜻하지 않으며, 현재 runtime은 이 catalog를 읽어 검색기를 선택하지 않는다.
 
@@ -162,9 +162,11 @@ collector는 `pg_advisory_xact_lock(CORPUS_MUTATION_LOCK_KEY)` 아래에서 변�
 
 벡터 batch upsert도 같은 lock을 잡은 뒤 모든 조문 ID와 현재 `legal-provision-v1` 해시를 검사한다. 하나라도 없어졌거나 해시가 달라졌으면 INSERT 전에 전체 batch를 실패시킨다. 이로써 임베딩 생성 중 원문이 바뀌어도 예전 벡터에 새 해시를 붙일 수 없다.
 
-## 차원 가변 저장과 보류된 물리 인덱스
+## 차원 가변 저장과 역사적 물리 인덱스
 
 pgvector는 `vector` 타입으로 서로 다른 차원을 한 열에 저장할 수 있지만, 인덱스는 같은 차원의 행에만 만들어야 한다. migration `0008`은 당시 설계에 따라 현재 프로필용 expression + partial HNSW 인덱스를 설치했다.
+
+> **역사 기록 전용 — 실행·재생성 금지:** 아래 SQL은 이미 적용된 migration의 내용을 설명하기 위한 기록이다. 현재 또는 미래 환경에서 실행하거나 HNSW 인덱스를 다시 만들기 위한 지침으로 사용하지 않는다.
 
 ```sql
 CREATE INDEX provision_embeddings_nemotron_512_hnsw
@@ -173,13 +175,13 @@ USING hnsw ((embedding::vector(512)) vector_cosine_ops)
 WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1';
 ```
 
-현재 dense 쿼리는 같은 프로필과 차원 표현을 사용하되 거리 계산 CTE 안에 KNN `ORDER BY/LIMIT`를 두지 않아 물리 인덱스를 검색 경로로 사용하지 않는다. 위 SQL과 운영 DB의 물리 인덱스는 이미 만들어진 역사적 사실이므로 삭제하지 않는다. 다만 존재·valid·ready 여부를 현재 실험 D나 근거 찾기 품질의 통과 조건으로 사용하지 않으며, 새 인덱스·파라미터·실행 방식은 설계하지 않는다. 다른 차원 모델의 인덱스를 포함한 후속 HNSW 설계는 1,000문항 gold와 근거 찾기를 전부 검증한 뒤 별도 제안과 명시적 승인을 거친다. [pgvector 공식 저장소](https://github.com/pgvector/pgvector)
+현재 dense 쿼리는 같은 프로필과 차원 표현을 사용하되 거리 계산 CTE 안에 KNN `ORDER BY/LIMIT`를 두지 않아 물리 인덱스를 검색 경로로 사용하지 않는다. 위 SQL과 운영 DB의 물리 인덱스는 이미 만들어진 역사적 사실이므로 이번 문서 작업에서 삭제하지 않는다. 존재·valid·ready 여부를 운영 준비나 품질 통과 조건으로 사용하지 않고, 기존 인덱스를 사용·재구축·튜닝·평가·release 연결하지 않으며 새 HNSW 인덱스도 만들지 않는다. 기존 인덱스 제거는 별도 additive cleanup migration으로만 수행할 후속 운영 작업이다. [pgvector 공식 저장소](https://github.com/pgvector/pgvector)
 
 ### 물리 인덱스 존재와 현재 평가 계약은 다르다
 
 기존 HNSW가 valid·ready였다는 기록은 특정 시점에 물리 구조가 설치됐다는 뜻일 뿐, 근거를 잘 찾는다는 증거가 아니다. PostgreSQL planner도 현재 3,066개 corpus와 법률·버전·기준일 join 조건에서는 전체 유효 행을 계산한 뒤 exact sort하는 계획을 선택했다.
 
-실험 D는 문항별 기준일에 유효한 전체 population을 빠짐없이 비교하는 `MATERIALIZED` exhaustive exact cosine으로 고정한다. runner의 검색 상태·결과에는 HNSW identity, valid·ready 상태나 exact 대비 비교값을 넣지 않는다. 질문-정답과 직접 근거가 확정되기 전에 근사 인덱스를 함께 측정하면 “근거 찾기”와 “인덱스 근사화” 중 무엇이 실패했는지 분리할 수 없기 때문이다.
+실험 D는 문항별 기준일에 유효한 전체 population을 빠짐없이 비교하는 `MATERIALIZED` exhaustive exact cosine으로 고정한다. runner의 검색 상태·결과에는 HNSW identity, valid·ready 상태나 exact 대비 비교값을 넣지 않는다. exact 방식은 검색 대상 전체를 비교해 근사화 실패를 품질 원인에서 제거하며, HNSW 영구 제외 결정에 따라 gold 완성 뒤에도 이 비교 계약을 바꾸지 않는다.
 
 ## 현재 corpus의 기준일 지원 범위
 
@@ -251,7 +253,7 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 3. 모든 벡터의 L2 norm이 허용 오차 안에서 1인가
 4. DB 프로필 계약이 런타임의 provider·모델·입력 유형·축약·정규화·템플릿 버전과 같은가
 
-`status`와 `verify`의 `hnsw_ready`는 기존 물리 구조가 남아 있는지 보여 주는 진단값일 뿐 프로필 승격·exact 검색의 조건이 아니다. 기존 인덱스는 삭제하지 않으며, gold와 근거 검증 이후 승인받을 HNSW 설계에서 유지·재구축·제거를 함께 결정한다. 위 승격 검사 중 하나라도 실패하면 프로필은 inactive, `corpus.search_ready`는 false로 남는다. `verify`도 capability와 두 준비 게이트가 모두 열리지 않으면 dense 검색을 실행하지 않는다.
+`status`와 `verify`의 `hnsw_ready`는 기존 물리 구조가 남아 있는지 보여 주는 레거시 진단값일 뿐 프로필 승격·exact 검색의 조건이 아니다. 이 값을 HNSW 도입 가능성이나 준비 상태로 해석하지 않는다. 기존 인덱스와 진단값의 제거는 별도 cleanup migration 대상이며, 제거 전에도 검색·평가·승격 경로에서는 계속 무시한다. 위 승격 검사 중 하나라도 실패하면 프로필은 inactive, `corpus.search_ready`는 false로 남는다. `verify`도 capability와 두 준비 게이트가 모두 열리지 않으면 dense 검색을 실행하지 않는다.
 
 마이그레이션 `0009`는 기존 프로필을 먼저 비활성화한다. `0010`은 capability marker와 false인 전체 검색 준비 게이트를 같은 migration transaction에 설치한다. 파서 v3 재수집과 전체 벡터 검증이 끝나기 전에는 direct·keyword·dense 어느 경로도 중간 corpus를 노출하지 않는다.
 
@@ -267,7 +269,8 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: 코퍼스 변경과 벡터 적재를 공용 advisory lock으로 직렬화하고, 전체 coverage·해시·norm 검증 뒤에만 dense 프로필을 활성화하도록 했다.
 - 2026-08-03: 모델 독립 `corpus.search_ready` 게이트로 direct·keyword까지 같은 corpus 세대 전환에 묶었다.
 - 2026-08-03: migration capability marker로 flag 행을 임의 생성한 구버전 DB와 0010 적용 DB를 구분하고, 준비 중 상태를 HTTP 503으로 명시했다.
-- 2026-08-03: 위 HNSW 설치 사실은 보존하되, 실험 D와 근거 찾기 품질 검증에서는 HNSW 상태·결과를 사용하지 않는다. 1,000문항 gold와 근거 찾기를 전부 검증한 뒤 별도 설계 승인 전에는 HNSW 작업을 진행하지 않는다.
+- 2026-08-03: [대체됨] 당시에는 위 HNSW 설치 사실을 보존하되 실험 D와 근거 찾기 품질 검증에서 HNSW 상태·결과를 제외하고, 전수 검증 뒤 별도 설계 승인을 검토하기로 했다. 이 결정은 2026-08-04 영구 제외 결정으로 대체됐다.
 - 2026-08-03: `hnsw_ready`를 backfill 승격과 exact 검색의 조건에서 제거하고 물리 상태 진단값으로만 남겼다.
 - 2026-08-03: 현재 corpus의 완전한 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고, 범위 밖 요청은 검색 전에 `422 unsupported_corpus_date`로 차단한다.
 - 2026-08-03: corpus snapshot, 독립 retrieval profile/build, configuration/member, release/build와 ready-only active pointer를 additive catalog로 분리했다. 평가 실행은 동일 release snapshot을 복합 외래키로 추적할 수 있게 했지만, catalog writer·runtime 선택·BM25·RRF·새 HNSW는 구현하지 않았다.
+- 2026-08-04: HNSW 보류를 철회하고 현재와 미래의 제품·실험 검색 경로에서 영구 제외했다. 기존 물리 인덱스와 `hnsw_ready`는 cleanup 전까지 남는 역사적 잔여물일 뿐 사용·재구축·튜닝·평가·release 연결하지 않으며, 새 HNSW 인덱스나 build도 만들지 않는다.

@@ -197,7 +197,8 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-03: core 검색 지표는 Recall과 HitRate를 분리하고, grade 2 직접 qrels 기반 MRR@10, graded nDCG와 facet coverage를 held-out test fully-answerable 모집단에서 macro 평균한다. calibration과 combined 값은 진단용이다.
 - 2026-08-03: runner와 fixture 검증은 구현했지만 사용자가 질문을 승인하지 않았으므로 실제 일반 사용자 1,000문항 검색은 실행하지 않는다.
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
-- 2026-08-03: HNSW는 질문-정답 gold와 근거 찾기를 전부 검증한 뒤 별도 설계와 사용자 승인을 거칠 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않되 실험 D 상태·게이트·결과에서 제외한다.
+- 2026-08-03: 당시에는 HNSW를 질문-정답 gold와 근거 찾기 검증 이후로 보류했다. 이 결정은 2026-08-04 영구 제외 결정으로 대체됐다.
 - 2026-08-03: 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부한다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·검토 경로를 삭제하고 현재 parser corpus에 없는 ID는 다른 검사보다 먼저 즉시 거부한다.
 - 2026-08-04: `lay-energy-0511`을 사용자 지정 문구로 수정하고 새 질문·범위 해시를 생성했다. 고위험 35문항은 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 기록한 뒤 `yjs000` 명의의 질문 문구·범위 전용 approval manifest로 1,000문항을 승인했다. answerability·qrels·기준 응답과 검색 평가는 아직 만들거나 실행하지 않았다.
+- 2026-08-04: HNSW는 현재와 미래의 실험 D·운영 검색 경로에 도입하지 않는다. 기존 물리 인덱스는 역사적 잔여물로만 남고 runner의 입력·게이트·결과에 계속 포함하지 않는다.

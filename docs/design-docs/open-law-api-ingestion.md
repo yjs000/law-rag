@@ -101,7 +101,7 @@ Supabase `sync-current`는 session advisory run lock을 Open API 조회 전부�
 - 프로필·차원·query/passage 입력 유형·축약·정규화 계약이 같다.
 - 벡터 L2 norm이 허용 오차 안에서 1이다.
 
-기존 물리 HNSW의 `hnsw_ready`는 상태 진단값으로만 남아 있으며 profile·corpus 게이트 승격 조건이 아니다. 운영·실험 dense 쿼리는 exhaustive exact cosine을 사용한다. gold와 근거 찾기 검증 후 별도 HNSW 설계를 승인할 때 물리 인덱스의 유지·재구축·제거 여부를 함께 결정한다.
+기존 물리 HNSW의 `hnsw_ready`는 cleanup 전까지 남는 레거시 진단값이며 profile·corpus 게이트 승격 조건이 아니다. 운영·실험 dense 쿼리는 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색 경로에 도입하지 않으므로 기존 인덱스를 사용·재구축·튜닝·평가하지 않고 새 인덱스도 만들지 않는다. 물리 인덱스와 진단값 제거는 별도 additive cleanup migration의 후속 운영 작업이다.
 
 어느 단계에서든 실패하면 profile은 inactive, `corpus.search_ready`는 false로 남는다. direct path와 keyword 검색도 전체 준비 게이트, parser v3, 출처 가용성, 법적 상태와 효력 기간 조건을 적용한다.
 

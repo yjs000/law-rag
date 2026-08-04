@@ -33,13 +33,13 @@
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 
-`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재한다. 다만 현재 운영·실험 dense SQL은 exhaustive exact cosine을 사용하며, 이 인덱스의 후속 설계·평가는 1,000문항 gold와 근거 찾기 검증 뒤 별도 승인 전까지 보류한다.
+`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재하지만 운영·실험 dense SQL은 exhaustive exact cosine을 사용한다. 이 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물이며 새 HNSW 인덱스나 build도 만들지 않는다. 물리 제거는 별도 additive cleanup migration 대상이다.
 
 `0009`부터 `document_versions`의 자연키는 `(document_id, mst, effective_from)`이고 `effective_from`은 필수다. `effective_to`는 `NULL`이거나 `effective_from`보다 뒤여야 한다. `document_versions_one_open_per_document` partial unique index는 `effective_to IS NULL`인 open version을 문서마다 하나로 제한한다. 동일 시행일의 복수 MST는 수집기의 연혁 검증에서 거부하므로 exclusion constraint는 두지 않는다.
 
 법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
 
-`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 물리 HNSW의 `hnsw_ready`는 현재 진단값이며 승격 조건이 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
+`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 물리 HNSW의 `hnsw_ready`는 cleanup 전까지 남는 레거시 진단값이며 승격 조건이나 도입 후보가 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
 
 `0011`은 현재 검색 쿼리를 바꾸지 않는 additive retrieval catalog다. `corpus_snapshots`의 지원 날짜 양끝과 count, 각 profile/configuration의 JSON object·SHA-256, build와 release의 허용 상태값과 상태별 완료 조건을 DB 제약으로 검사한다. `ready` 또는 `superseded` build는 `indexed_count=expected_count`이고 산출물 fingerprint가 있어야 하며, 실패 build만 `error_code`를 가진다. release build는 다음 세 관계를 복합 외래키로 동시에 만족해야 한다.
 
