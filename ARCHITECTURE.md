@@ -73,6 +73,10 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 
 의미 검색은 질의와 저장 벡터의 profile key가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다. production 응답은 같은 조의 하위 조각을 조 단위로 묶을 수 있지만, 실험 D의 검색 평가는 qrels와 같은 raw `provision_id` 단위를 사용하고 direct-path, keyword fallback, 조 단위 grouping을 우회한다.
 
+운영 웹/API의 확정 벡터 원본은 PostgreSQL `provision_embeddings`뿐이다. 로컬 bundle과
+`embeddings.jsonl`은 점검 반영 전 준비·운반 계층이며 runtime 검색 fallback이 아니다. 새 로컬 벡터는
+transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤에만 사용자 검색에 노출된다.
+
 ## 답변 안전 게이트
 
 1. 질문의 기준일이 현재 corpus 지원 범위 안인지와 사업 단계를 검증한다.
@@ -155,3 +159,4 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-08-03 | [대체됨] 당시 감사한 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 요청을 `422`로 거부 | 당시 9개 open version과 3,066개 조문을 기준으로 한 안전 경계였으나, 2026-08-04 동적 시간 계약으로 대체됨 |
 | 2026-08-04 | 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산하고 오늘 유효 population의 content identity를 상태로 노출 | 날짜 상수를 매일 고치지 않으면서 현재 수집 corpus만 검색하고, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 분리하기 위함. 이 계산은 법률별 timeline 연속성을 검증했다는 주장이 아님 |
 | 2026-08-04 | 일 1회 로컬 bundle을 준비하고 변경이 있을 때만 `gate=false → 65초 drain → DIRECT_URL 단일 반영 transaction → gate=true`로 게시 | 드문 corpus 갱신을 위해 모든 운영 reader에 shared lock이나 고가용성 세대 전환을 추가하지 않고, 짧은 점검 중단으로 비용과 복잡도를 낮춤. writer lock과 실험 D lock은 유지 |
+| 2026-08-04 | 로컬 벡터는 준비·운반에만 사용하고 웹/API 검색은 DB에 검증·commit된 활성 벡터만 사용 | 미확정 파일과 사용자 검색 경계를 분리하고, 점검 transaction이 성공한 시점에만 새 벡터로 전환 |

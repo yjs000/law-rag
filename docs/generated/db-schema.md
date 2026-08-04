@@ -1,6 +1,6 @@
 # 데이터베이스 스키마
 
-> 기준 시점: 2026-08-03
+> 기준 시점: 2026-08-04
 > 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0011_retrieval_catalog.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
@@ -39,7 +39,7 @@
 
 법적 상태 `lifecycle_state`는 `active`, `scheduled`, `abolished`만 허용한다. 출처 상태 `source_record_state`는 `available`, `deleted`만 허용하며 `source_deleted_on`은 공식 삭제 목록의 날짜를 보존한다. `has_supplementary_provisions`는 원문에 부칙 구조가 있었는지를 기록한다. 기존 행은 각각 `active`, `available`, `false`로 이관하지만 새 행을 위한 DB 기본값은 두지 않는다. 쓰기 경로가 세 값을 명시하지 않으면 `NOT NULL` 제약으로 실패한다. 출처 삭제는 법적 폐지나 효력 종료일을 뜻하지 않는다.
 
-`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. collector는 검색 가시성 변경과 같은 transaction에서 false로 만들고, 벡터 backfill은 전체 coverage·원문 SHA·차원·L2 norm 검증과 같은 transaction에서 embedding profile과 이 값을 함께 활성화한다. 물리 HNSW의 `hnsw_ready`는 cleanup 전까지 남는 레거시 진단값이며 승격 조건이나 도입 후보가 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
+`0010`은 `runtime_flags['schema.corpus_search_ready_v1']` capability marker와 `runtime_flags['corpus.search_ready']=false`를 같은 migration transaction에 설치한다. 모든 운영 retrieval은 capability의 `enabled=true`와 모델 독립 게이트의 `ready=true`를 모두 요구한다. 정기 publisher는 준비 bundle과 기준 snapshot을 먼저 검사한 뒤 별도 transaction A에서 이 값을 false로 commit하고 65초 drain한다. transaction B는 corpus·벡터 변경과 전체 coverage·원문 SHA·차원·L2 norm 검증을 하나로 묶고 성공한 마지막에만 embedding profile과 gate를 함께 활성화한다. 실패하면 B 전체가 rollback되고 gate는 false로 남는다. 물리 HNSW의 `hnsw_ready`는 cleanup 전까지 남는 레거시 진단값이며 승격 조건이나 도입 후보가 아니다. 준비되지 않은 상태는 빈 검색 결과가 아니라 `503 corpus_unready`이며 상태 API에서 별도로 확인한다.
 
 `0011`은 현재 검색 쿼리를 바꾸지 않는 additive retrieval catalog다. `corpus_snapshots`의 지원 날짜 양끝과 count, 각 profile/configuration의 JSON object·SHA-256, build와 release의 허용 상태값과 상태별 완료 조건을 DB 제약으로 검사한다. `ready` 또는 `superseded` build는 `indexed_count=expected_count`이고 산출물 fingerprint가 있어야 하며, 실패 build만 `error_code`를 가진다. release build는 다음 세 관계를 복합 외래키로 동시에 만족해야 한다.
 

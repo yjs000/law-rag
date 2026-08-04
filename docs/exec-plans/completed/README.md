@@ -8,3 +8,4 @@
 - [0018: 실험 C 로컬 벡터 검색](0018-experiment-c-local-vector-search.md)
 - [0019: 실험 C 검색 관측성과 고정 평가](0019-experiment-c-retrieval-observability.md)
 - [0020: 실험 D 검색 문맥 구성](0020-experiment-d-search-context.md)
+- [0024: 점검 모드 기반 코퍼스 원자 반영](0024-maintenance-corpus-publish.md)

@@ -1,7 +1,7 @@
 # 국가법령정보 Open API 수집 계약
 
 상태: 현행 구현과 미활성 계약을 구분해 기록
-최종 확인: 2026-08-03
+최종 확인: 2026-08-04
 
 ## 범위
 
@@ -13,15 +13,23 @@ JSON을 우선 요청하지만 채택 기준은 파싱 성공이 아니라 도�
 
 ## 현재 Supabase 수집 순서
 
-현재 운영 가능한 명령은 `preview-current`, `sync-current`, `status`다. Supabase의 `sync-history`는 전체 과거 버전 수집이 아직 비활성이라 명시적으로 종료 코드 2를 반환한다. 공식 삭제 목록 동기화는 이 명령과 분리되어 `sync-current`의 끝에서 실행된다.
+정기 운영 경로는 `prepare-current → generate-cache --bundle → apply-prepared`다. 기존
+`preview-current`, `sync-current`, `status`, `load-cache`, `run`은 호환성과 수동 진단을 위해 바로
+삭제하지 않지만 예약 workflow에서는 사용하지 않는다. Supabase의 `sync-history`는 전체 과거 버전 수집이
+아직 비활성이라 명시적으로 종료 코드 2를 반환한다. 공식 삭제 목록도 `prepare-current`가 같은 로컬
+bundle에 포함한다.
 
 1. 법령은 `lawSearch.do?target=eflaw&search=1&nw=3`, 행정규칙은 `target=admrul&search=1&nw=1`로 현재 목록을 찾는다.
 2. 허용 목록의 현재 정확 명칭과 일치하는 결과가 정확히 한 건인지 검사한다.
 3. 법령은 `lawService.do?target=eflaw&ID`, 행정규칙은 `target=admrul&ID`로 본문을 조회한다.
 4. JSON 우선·XML 폴백 파서가 조·항·호·목과 부모 경로를 정규화한다.
 5. 활성화 검증기가 parser schema, UUID, 원문 SHA-256, 시행일, 조문 계층과 실제 본문을 검사한다.
-6. 검증된 원문은 SHA-256이 포함된 불변 Storage 경로에 보존하고, 문서·버전·조문은 문서 하나의 DB 트랜잭션으로 반영한다.
-7. 임베딩 입력이나 검색 가능 상태가 바뀌면 같은 트랜잭션에서 embedding profile을 비활성화한다. 임베딩 생성과 활성화는 collector 안에서 하지 않고 별도 backfill로 수행한다.
+6. `prepare-current`는 DB를 읽기만 하며 원문·정규화 문서·삭제 목록과 기준 snapshot을 로컬 bundle에
+   기록한다. 이 단계에서는 Storage와 DB를 쓰거나 advisory lock을 잡지 않는다.
+7. `generate-cache --bundle`은 기존 정상 벡터를 ID·본문 SHA로 재사용하고 새 본문만 NVIDIA NIM으로
+   임베딩해 bundle을 완성한다.
+8. `apply-prepared`만 원문을 불변 Storage 경로에 업로드하고 점검 게이트를 닫은 뒤, 문서·버전·조문·삭제·
+   벡터와 최종 검증을 하나의 DB transaction으로 반영한다.
 
 같은 `(document_id, mst, effective_from)`과 같은 원문을 다시 수집하면 멱등적으로 `unchanged`가 된다. 새 시행 버전이 들어오면 이전 open version의 `effective_to`를 새 버전의 `effective_from`으로 닫는다.
 
@@ -82,20 +90,35 @@ effective_from <= as_of_date < effective_to
 3. `display=100` 페이지를 끝까지 읽고 `(source_kind, MST, 삭제일)` 중복을 제거한다.
 4. 두 종류의 조회가 모두 성공한 뒤에만 허용 corpus의 MST와 대조한다.
 5. 일치 버전은 `source_record_state=deleted`, `source_deleted_on=가장 이른 삭제일`만 변경한다. `lifecycle_state`와 `effective_to`는 변경하지 않는다.
-6. 한 `(source_kind, MST)`의 상태 변경은 mutation lock이 있는 개별 transaction으로 반영한다. 실제 변경이 있으면 같은 transaction에서 `corpus.search_ready=false`와 active embedding profile 비활성화를 반영한다.
-7. 모든 레코드 처리가 성공한 뒤에만 `runtime_flags['collector.deletion_sync']` 체크포인트를 전진시킨다. 더 오래된 동시 실행이 최신 체크포인트를 뒤로 덮어쓰지 못하게 단조 증가 조건을 적용한다.
+6. 대상 삭제는 준비 bundle의 `deletions.json`에 먼저 고정한다. 이 단계는 DB를 변경하지 않는다.
+7. `apply-prepared`의 단일 반영 transaction이 삭제 상태와 다른 corpus 변경을 함께 적용한다.
+8. 모든 변경과 전체 검증이 성공한 같은 transaction에서만
+   `runtime_flags['collector.deletion_sync']` 체크포인트를 전진시킨다. 더 오래된 실행이 최신 체크포인트를
+   뒤로 덮어쓰지 못하게 단조 증가 조건을 적용한다.
 
-출처 삭제 원문은 감사용으로 보존하지만 `source_record_state='available'` 검색 조건에서 제외한다. 이 계약은 파일 mock과 Supabase repository에 구현되어 있고, 운영 경로에서는 collector run lock을 보유한 `sync-current`가 현재 문서 동기화 뒤 실행한다. Supabase `sync-history`가 종료 코드 2인 이유는 삭제 목록 때문이 아니라 전체 과거 본문 수집이 아직 비활성화됐기 때문이다.
-
-삭제 상태 전체와 체크포인트가 하나의 거대한 transaction인 것은 아니다. 중간 실패 전에 반영된 source 삭제는 남을 수 있지만 체크포인트는 전진하지 않는다. 다음 실행이 하루 overlap 구간을 다시 읽고, 가장 이른 삭제일을 보존하는 멱등 update를 반복해 수렴한다. 따라서 보장하는 것은 “부분 성공을 되돌림”이 아니라 “부분 성공을 완료로 표시하지 않고 안전하게 재실행”하는 것이다.
+출처 삭제 원문은 감사용으로 보존하지만 `source_record_state='available'` 검색 조건에서 제외한다. 정기 운영
+경로에서는 삭제 상태와 체크포인트가 corpus 반영 transaction 하나에 포함되므로 중간 실패가 부분 삭제를
+남기지 않는다. 다음 실행은 기존 overlap 규칙과 가장 이른 삭제일 보존 규칙을 그대로 사용한다. Supabase
+`sync-history`가 종료 코드 2인 이유는 삭제 목록 때문이 아니라 전체 과거 본문 수집이 아직 비활성화됐기
+때문이다.
 
 ## 수집 잠금과 벡터 활성화 경계
 
-Supabase `sync-current`는 session advisory run lock을 Open API 조회 전부터 마지막 문서 처리까지 보유한다. 이 잠금은 두 collector 실행의 중복과, 수집 중 embedding profile 승격을 막는다. 전체 9개 문서를 하나의 DB 트랜잭션으로 만드는 잠금은 아니다.
+로컬 준비와 NVIDIA 호출은 DB lock 없이 실행한다. bundle이 완전하고 실제 변경이 있을 때만
+`apply-prepared`가 기존 session writer lock을 `EMBEDDING_BACKFILL → CORPUS_SYNC_RUN` 순서로 얻는다.
+동시 writer가 있거나 준비 당시 기준 snapshot과 현재 DB가 다르면 검색 게이트를 닫지 않고 종료한다.
+이 게시 전용 snapshot은 runtime이 노출하는 날짜 독립 content snapshot과 다르다. stale bundle 방지가
+목적이므로 `effective_to`, lifecycle·source 상태, raw SHA와 조문 ordinal 등 writer가 변경할 수 있는 저장
+필드를 함께 해시한다.
 
-각 문서 upsert는 별도의 transaction advisory mutation lock 안에서 수행된다. 원문·버전·조문·파생 데이터 무효화와 profile 비활성화는 문서 단위로 함께 commit되거나 rollback된다. 다른 조문 버전의 UUID를 가로채지 않으며, 제거할 조문은 새 ID 삽입 전에 정리한다.
+반영은 두 개의 짧은 경계로 나뉜다.
 
-벡터 backfill은 별도 session lock으로 중복 실행을 막는다. DB batch마다 mutation lock 아래 현재 `legal-provision-v1` SHA를 다시 검사한다. 마지막 승격은 collector run lock, mutation lock 순서로 잡고 다음 조건이 모두 맞을 때만 `active=true`로 바꾼다.
+1. transaction A가 mutation lock 아래 기준 snapshot을 다시 확인하고
+   `corpus.search_ready=false`, `reason=corpus_publish`, `update_id`를 commit한다.
+2. 새 검색은 즉시 `503 corpus_unready`로 막힌다. 기존 Vercel 요청의 최대 실행시간 60초보다 5초 긴
+   65초를 기다린 뒤에만 DB 변경을 시작한다.
+3. transaction B가 mutation lock 아래 문서·버전·조문·삭제·벡터를 100행 단위 statement로 처리하되
+   commit은 한 번만 한다. 다음 전체 검증을 통과한 마지막에 profile과 gate를 함께 활성화한다.
 
 - 검색 가능한 parser v3 조문 전체에 현재 SHA의 벡터가 있다.
 - 프로필·차원·query/passage 입력 유형·축약·정규화 계약이 같다.
@@ -103,9 +126,15 @@ Supabase `sync-current`는 session advisory run lock을 Open API 조회 전부�
 
 기존 물리 HNSW의 `hnsw_ready`는 cleanup 전까지 남는 레거시 진단값이며 profile·corpus 게이트 승격 조건이 아니다. 운영·실험 dense 쿼리는 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색 경로에 도입하지 않으므로 기존 인덱스를 사용·재구축·튜닝·평가하지 않고 새 인덱스도 만들지 않는다. 물리 인덱스와 진단값 제거는 별도 additive cleanup migration의 후속 운영 작업이다.
 
-어느 단계에서든 실패하면 profile은 inactive, `corpus.search_ready`는 false로 남는다. direct path와 keyword 검색도 전체 준비 게이트, parser v3, 출처 가용성, 법적 상태와 효력 기간 조건을 적용한다.
+transaction B가 어느 단계에서든 실패하면 B 전체가 rollback되고 transaction A의
+`corpus.search_ready=false`는 남는다. 원인을 수정해 bundle을 다시 준비·반영할 때까지 direct path,
+keyword, dense, 단건 조문 조회는 모두 닫힌다. 자동 rollback 서비스나 구·신세대 generation table은
+추가하지 않는다. 이는 짧은 점검 중단을 허용해 구현·운영 비용을 낮춘 선택이다.
 
-run lock 자체는 reader snapshot이 아니며 각 문서는 별도 transaction으로 commit된다. 대신 첫 검색 가시성 변경과 같은 transaction에서 `corpus.search_ready=false`가 되므로 multi-document sync의 중간 상태는 direct·keyword·dense 모두에서 보이지 않는다. 마지막 전체 검증 transaction이 embedding profile과 전체 준비 게이트를 함께 활성화한다. 이 방식은 갱신 중 잠시 검색을 닫는 fail-closed 전환이며, 무중단으로 구세대와 신세대를 동시에 유지해야 할 때만 별도 generation pointer가 필요하다.
+운영 reader는 corpus mutation shared advisory lock을 잡지 않는다. 새 요청은 DB 준비 게이트를 다시
+검사하고, 게이트가 열린 상태에서만 검색 SQL을 실행한다. 65초 drain이 gate를 닫기 전에 시작된 요청을
+종료시키므로 반영 transaction과 운영 검색을 lock으로 맞물리게 하지 않는다. writer 중복 실행 lock,
+mutation lock, history-retention lock과 재현 가능한 고정 평가를 위한 실험 D shared lock은 유지한다.
 
 ## 로컬 cache의 SHA 재사용
 
@@ -113,19 +142,21 @@ run lock 자체는 reader snapshot이 아니며 각 문서는 별도 transaction
 
 본문 입력이 한 글자라도 달라 SHA가 달라지므로 재사용하지 않는다. DB 적재 직전에는 cache 행의 ID와 SHA를 현재 corpus와 다시 대조하며, stale이면 batch 전체를 rollback한다. cache append는 batch마다 flush와 `fsync`를 하고, 중단된 마지막 JSONL 행은 다음 append 전에 복구한다.
 
-## 안전한 rollout 순서
+## 정기 운영 순서
 
-1. 운영 DB 백업과 session-mode `DIRECT_URL`을 확인하고 collector 실행을 정지한다.
-2. gate-aware API를 먼저 배포하고 production이 새 revision으로 완전히 전환됐는지 확인한다. marker가 아직 없으므로 이 구간 검색은 `503 corpus_unready`다.
-3. migration 0009와 0010을 적용한다. 기존 버전에 명시적 상태를 채우고 embedding profile과 전체 검색 준비 게이트를 닫으며, 0010 capability marker를 설치한다.
-4. `preview-current`로 v3 ID, 변경 버전 필드, 새·변경·삭제 조문과 임베딩 재검증 범위를 읽기 전용 확인한다.
-5. run lock 아래 `sync-current`를 실행한다. 중간 실패 시 dense profile이나 runtime flag를 수동 활성화하지 않는다.
-6. `generate-cache`로 현재 parser v3 corpus의 cache를 완성한다. 같은 SHA 벡터는 재사용한다.
-7. `DIRECT_URL`로 `load-cache`를 실행해 DB의 missing/stale 행만 적재하고 profile과 corpus 게이트를 자동 승격한다.
-8. capability·coverage·SHA·norm 확인 뒤 `status`와 exhaustive exact query `verify`를 확인한다. `hnsw_ready`는 승격 조건이 아닌 진단값으로만 읽는다.
-9. 삭제 목록은 `sync-current`에 포함되어 있으므로 별도 `sync-history` 없이 실행된다. 전체 과거 본문 수집이 구현·검증되기 전까지 `sync-history`는 활성화하지 않는다.
+1. 일 1회 03:00 KST 또는 수동 `sync-corpus` workflow가 `prepare-current --output <bundle>`을 실행한다.
+2. 변경이 없고 DB vector coverage가 정상이면 NIM·Storage·점검 모드·DB 쓰기 없이 종료한다.
+3. 변경이 있으면 `generate-cache --bundle <bundle>`이 동일 ID·SHA 또는 동일 SHA 벡터를 재사용하고 새
+   본문만 임베딩한다.
+4. `apply-prepared --bundle <bundle>`이 checksum과 기준 snapshot을 검증하고 원문을 불변 Storage 경로에
+   업로드한 뒤 writer lock을 얻는다.
+5. transaction A로 gate를 닫고 65초 drain한 뒤 transaction B 한 번으로 변경·검증·profile 활성화·gate
+   재개를 commit한다.
+6. 실패하면 gate를 임의로 열지 않는다. 원인을 수정하고 새 bundle을 준비해 같은 절차를 다시 실행한다.
 
-구버전 API가 남아 있는 동안 collector를 재개하지 않는다. 구버전 reader는 `corpus.search_ready`를 검사하지 않으므로 migration만 먼저 적용해서는 부분 corpus 노출을 막을 수 없다.
+외부 Open API·NIM·Storage 호출과 65초 대기는 transaction B 밖에서만 실행한다. `DIRECT_URL`은 transaction
+pooler가 아니라 session 연결이어야 한다. 구버전 API가 남아 있는 동안에는 collector를 재개하지 않는다.
+구버전 reader는 `corpus.search_ready`를 검사하지 않아 부분 corpus를 볼 수 있기 때문이다.
 
 ## 결정 기록
 
@@ -136,3 +167,6 @@ run lock 자체는 reader snapshot이 아니며 각 문서는 별도 transaction
 - 2026-08-03: parser schema v3 UUID에 시행일을 포함하고 JSON/XML 식별자를 통일했다.
 - 2026-08-03: collector run lock과 문서 mutation lock을 분리하고, 완전한 벡터 검증 뒤에만 profile을 fail-closed 방식으로 활성화하도록 했다.
 - 2026-08-03: Supabase 삭제 목록 동기화는 `sync-current`에 포함하고, 전체 과거 본문 동기화와 역사적 법령명 보존은 구현 전까지 명시적 제한으로 유지한다.
+- 2026-08-04: 정기 운영을 로컬 bundle 준비와 점검 모드 반영으로 분리했다. 변경이 있을 때만 gate를 닫고
+  65초 drain한 뒤 `DIRECT_URL` 단일 transaction으로 corpus와 벡터를 반영한다. 운영 reader shared lock과
+  고가용성 generation 전환은 비용 대비 필요성이 없어 사용하지 않는다.

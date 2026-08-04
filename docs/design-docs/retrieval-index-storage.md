@@ -139,9 +139,13 @@ DB는 SHA-256 형식, JSON object 형식, 날짜 순서, 음수가 아닌 count,
 
 ## 부분 corpus와 낡은 벡터 노출 방지
 
-`runtime_flags['corpus.search_ready']`는 모델과 무관한 전체 검색 준비 게이트다. runtime은 migration 0010만 설치하는 `schema.corpus_search_ready_v1.enabled=true` capability marker와 `corpus.search_ready=true`를 모두 요구한다. direct path, keyword fallback, dense, 단일 조문 조회는 두 조건을 만족할 때만 결과를 읽는다. collector가 검색 결과를 바꿀 데이터를 commit할 때 같은 transaction에서 준비 값을 `false`로 만들고, 전체 corpus와 벡터·인덱스 검증이 성공한 마지막 transaction에서만 다시 `true`로 만든다. 따라서 여러 법령이 차례로 commit되어도 중간 세대는 어느 retrieval 경로에서도 노출되지 않는다.
+`runtime_flags['corpus.search_ready']`는 모델과 무관한 전체 검색 준비 게이트다. runtime은 migration 0010만 설치하는 `schema.corpus_search_ready_v1.enabled=true` capability marker와 `corpus.search_ready=true`를 모두 요구한다. direct path, keyword fallback, dense, 단일 조문 조회는 두 조건을 만족할 때만 결과를 읽는다. 준비 bundle과 기준 snapshot 검사가 끝난 뒤 별도 transaction A가 준비 값을 `false`로 commit하고, 65초 drain 뒤 transaction B가 전체 corpus와 벡터 검증까지 성공한 마지막에만 다시 `true`로 만든다. 따라서 transaction B의 중간 상태는 어느 retrieval 경로에서도 노출되지 않는다.
 
 게이트가 없거나 닫혀 있으면 runtime은 빈 검색 결과나 `insufficient_evidence`로 가장하지 않고 HTTP `503`과 안정 코드 `corpus_unready`를 반환한다. `/v1/corpus/status`는 `corpus_search_ready`와 닫힌 사유를 별도로 노출한다. 실제 질문에 맞는 근거가 없는 상태와 운영 갱신 중인 상태를 이 경계로 구분한다.
+
+운영 웹/API의 벡터 검색 원본은 PostgreSQL `provision_embeddings`뿐이다. API runtime은 `.data`의 bundle,
+`embeddings.jsonl` 또는 로컬 cache를 읽거나 DB 검색 실패 시 그 파일로 fallback하지 않는다. 로컬 벡터는
+점검 반영을 위한 운반물이며 transaction B에서 DB에 복사되고 전체 검증과 commit이 끝난 뒤에만 검색된다.
 
 `embedding_profiles.active`는 단순 설정값이 아니라 검색 준비 게이트다. dense SQL은 다음 조건을 모두 만족하는 행만 읽는다.
 
@@ -154,13 +158,21 @@ DB는 SHA-256 형식, JSON object 형식, 날짜 순서, 음수가 아닌 count,
 
 조문 직접 조회와 keyword fallback에도 전체 corpus 준비 게이트와 같은 버전 상태 조건을 적용한다. 출처에서 삭제되어 재검증할 수 없는 레코드는 검색 근거로 노출하지 않는다. 폐지 법령은 공식 종료일이 확인된 버전에 한해 폐지 전 기준일 검색을 허용하고, 종료일을 확인할 수 없는 폐지 레코드는 안전하게 격리한다.
 
-collector와 벡터 writer는 `law_rag_core.persistence.CORPUS_MUTATION_LOCK_KEY`라는 같은 PostgreSQL transaction advisory lock을 사용한다. collector가 임베딩 입력에 영향을 주는 코퍼스를 바꾸기 전에는 같은 트랜잭션에서 활성 임베딩 프로필을 모두 `active=false`로 바꿔야 한다. API의 `PostgresLegalRepository.upsert_document`는 운영 writer가 아니므로 항상 실패하며, 검증된 collector만 법령 코퍼스를 쓸 수 있다.
+`prepare-current`와 bundle 임베딩은 DB lock 없이 로컬에서 끝낸다. 실제 반영기만 session writer lock을
+`EMBEDDING_BACKFILL_LOCK_KEY → CORPUS_SYNC_RUN_LOCK_KEY` 순서로 얻어 collector와 backfill 중복 실행을
+막는다. 준비 당시 기준 snapshot이 현재 DB와 다르거나 lock을 얻지 못하면 gate를 건드리지 않고 실패한다.
 
-여러 법령을 한 번에 갱신하는 collector CLI는 `CORPUS_SYNC_RUN_LOCK_KEY`를 전체 실행 동안 유지한다. 프로필 승격은 이 실행 잠금을 먼저, `CORPUS_MUTATION_LOCK_KEY`를 다음으로 획득한다. 따라서 9개 법령 중 일부만 파서 v3로 바뀐 중간 상태에서 profile을 다시 활성화할 수 없다. 벡터 batch 쓰기는 각 batch의 현재 SHA를 다시 확인하므로 수집과 겹치면 안전하게 실패하거나 최종 승격 검사에서 거부된다.
+반영 transaction A와 B는 각각 `CORPUS_MUTATION_LOCK_KEY`를 얻는다. A는 기준 snapshot을 마지막으로
+재확인하고 `corpus.search_ready=false`, `reason=corpus_publish`, `update_id`를 commit한다. 65초 drain 뒤
+B는 문서·버전·조문·삭제·벡터를 100행씩 처리하되 transaction 전체를 한 번만 commit한다. 각 벡터의 현재
+`legal-provision-v1` SHA를 다시 확인하고 전체 coverage·512차원·L2 norm·parser/profile·시간 범위를 검증한
+뒤 profile과 gate를 마지막에 활성화한다. 하나라도 실패하면 B 전체가 rollback되고 A의 닫힌 gate는 남는다.
 
-collector는 `pg_advisory_xact_lock(CORPUS_MUTATION_LOCK_KEY)` 아래에서 변경 여부를 계산하고, `corpus.search_ready=false`, 필요한 경우의 `embedding_profiles.active=false`, 코퍼스 변경을 같은 transaction에서 commit한다. SQL문의 내부 실행 순서와 무관하게 reader는 변경 전 상태 또는 변경된 corpus와 닫힌 게이트만 볼 수 있다. 활성 프로필이 없는 환경에서도 전체 corpus 게이트가 닫히므로 안전한 상태다.
-
-벡터 batch upsert도 같은 lock을 잡은 뒤 모든 조문 ID와 현재 `legal-provision-v1` 해시를 검사한다. 하나라도 없어졌거나 해시가 달라졌으면 INSERT 전에 전체 batch를 실패시킨다. 이로써 임베딩 생성 중 원문이 바뀌어도 예전 벡터에 새 해시를 붙일 수 없다.
+운영 검색 reader는 shared advisory lock을 사용하지 않는다. API 경계에서 날짜와 준비 상태를 먼저 검사하고,
+실제 repository 검색 직전 준비 상태를 다시 검사하며, 검색 SQL 자체도 같은 gate를 요구한다. gate를 닫은 뒤
+기존 요청 최대 실행시간보다 긴 65초를 기다려 writer와 reader의 겹침을 제거한다. 이 단순한 점검 모드는
+구·신세대 테이블과 active generation pointer를 추가하지 않는다. 실험 D의 재현성 lock, writer lock과
+history-retention lock은 별도 목적이므로 유지한다.
 
 ## 차원 가변 저장과 역사적 물리 인덱스
 
@@ -239,17 +251,20 @@ DB 상태 확인(0010 적용 후):
 uv run --directory apps/api python -m scripts.backfill_embeddings status
 ```
 
-운영 DB를 바꾸지 않고 벡터를 로컬 체크포인트에 생성:
+운영 DB를 바꾸지 않고 준비 bundle과 벡터를 로컬에 생성:
 
 ```powershell
-uv run --directory apps/api python -m scripts.backfill_embeddings generate-cache --batch-size 32
-uv run --directory apps/api python -m scripts.backfill_embeddings cache-status
+uv run --project apps/collector law-rag-collector prepare-current `
+  --output .data/corpus-updates/current
+uv run --directory apps/api python -m scripts.backfill_embeddings generate-cache `
+  --bundle .data/corpus-updates/current --batch-size 32
 ```
 
-0010 적용 후 완성된 체크포인트를 DB에 적재:
+완성된 bundle을 점검 모드에서 원자 반영:
 
 ```powershell
-uv run --directory apps/api python -m scripts.backfill_embeddings load-cache --batch-size 100
+uv run --project apps/collector law-rag-collector apply-prepared `
+  --bundle .data/corpus-updates/current
 ```
 
 실제 query 임베딩과 dense-only 검색 확인:
@@ -259,11 +274,19 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
   --query "태양광 발전 설비는 법에서 어떻게 정의하나요?" --limit 3
 ```
 
-체크포인트는 `.data/embeddings/`의 Git 제외 JSONL이다. 원문은 넣지 않고 조각 ID, 프로필, 본문 입력 SHA-256, 512차원 L2 정규화 벡터만 저장한다. 배치마다 flush와 `fsync`를 수행하므로 중단 후 같은 `generate-cache` 명령을 실행하면 해시가 같은 벡터를 재사용한다. 파서 스키마 변경으로 조각 ID만 달라지고 프로필과 본문 SHA-256이 같아도 기존 벡터를 재사용하고, 새 ID의 별도 체크포인트 레코드를 남긴다. 본문이 바뀐 조각은 같은 파일 끝에 새 레코드를 추가하며 마지막 유효 레코드가 현재값이다.
+bundle은 `.data/corpus-updates/<update-id>/` 아래 `manifest.json`, `documents.jsonl`, `deletions.json`,
+`raw/`, `embeddings.jsonl`로 저장하며 Git에서 제외한다. manifest의 게시 전용 기준 snapshot에는 조문 검색
+내용뿐 아니라 `effective_to`, lifecycle·source 상태, raw SHA 등 writer가 바꿀 수 있는 저장 필드가 들어간다.
+이는 날짜를 제외하는 runtime content snapshot과 목적이 다른 stale bundle 방지 조건이다. parser·embedding
+profile, 변경 개수와 파일별 SHA-256도 넣고 다른 파일이 완성된 마지막에 생성한다. 원문 raw는 bundle 안에 있지만
+embedding JSONL에는 조각 ID, profile, 본문 입력 SHA-256, 512차원 L2 정규화 벡터만 저장한다. 동일 ID·SHA와
+동일 profile·SHA 벡터를 재사용하고 새로 생기거나 본문이 바뀐 조각만 NIM으로 보낸다.
 
-`load-cache`는 체크포인트가 현재 검색 가능 corpus 전체와 일치하지 않거나 DB가 migration 0010 capability marker·전체 검색 준비 게이트·임베딩 스키마와 필수 프로필을 갖추지 않으면 적재를 거부한다. 단순히 같은 이름의 runtime flag 행이 존재하는지만으로 0010 적용을 추정하지 않는다. DB에 이미 현재 해시의 벡터가 있는 조문은 다시 쓰지 않고 누락되었거나 낡은 행만 적재한다. 기존 `run`은 NVIDIA 생성과 DB upsert를 한 번에 수행하는 운영 경로로 유지하지만, 마이그레이션과 외부 API 호출을 분리해야 할 때는 체크포인트 경로를 사용한다.
-
-`run`과 `load-cache`는 첫 DB batch 전에 프로필을 비활성화한다. 현재 backfill은 모든 batch가 끝나면 같은 corpus mutation lock 안에서 다음을 한 번에 검사하고, 전부 통과할 때만 `active=true`로 승격한다.
+`apply-prepared`는 bundle checksum, cache 완전성, 기준 snapshot, migration 0010 capability marker와 필수
+프로필 계약을 gate 변경 전에 검사한다. 원문 Storage 업로드도 gate 변경 전에 끝내며 transaction B 안에서는
+외부 API·NIM·Storage 호출이나 대기를 하지 않는다. 기존 `sync-current`, `load-cache`, `run` 코드는 바로
+삭제하지 않지만 정기 workflow의 운영 진입점은 `apply-prepared` 하나다. transaction B의 마지막 검사는
+다음을 모두 확인하고 전부 통과할 때만 `active=true`와 `corpus.search_ready=true`를 함께 쓴다.
 
 1. 검색 가능한 모든 조문에 현재 원문 해시의 벡터가 있는가
 2. 저장 차원이 프로필과 일치하는가
@@ -292,3 +315,6 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: corpus snapshot, 독립 retrieval profile/build, configuration/member, release/build와 ready-only active pointer를 additive catalog로 분리했다. 평가 실행은 동일 release snapshot을 복합 외래키로 추적할 수 있게 했지만, catalog writer·runtime 선택·BM25·RRF·새 HNSW는 구현하지 않았다.
 - 2026-08-04: HNSW 보류를 철회하고 현재와 미래의 제품·실험 검색 경로에서 영구 제외했다. 기존 물리 인덱스와 `hnsw_ready`는 cleanup 전까지 남는 역사적 잔여물일 뿐 사용·재구축·튜닝·평가·release 연결하지 않으며, 새 HNSW 인덱스나 build도 만들지 않는다.
 - 2026-08-04: runtime 지원 범위와 오늘 content snapshot을 수집·현재 parser·검색 가능 population에서 동적으로 계산한다. catalog의 저장된 snapshot metadata나 embedding profile을 runtime content identity로 사용하지 않으며, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 구분한다.
+- 2026-08-04: 운영 갱신을 로컬 bundle 준비와 점검 모드 원자 반영으로 분리했다. 운영 reader shared lock을
+  제거하고 `gate=false → 65초 drain → 단일 반영 transaction → gate=true`를 사용한다. writer lock과
+  실험 D shared lock은 유지하며 generation pointer는 추가하지 않는다.

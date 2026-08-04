@@ -1,61 +1,106 @@
 # Law RAG Collector
 
-웹/API 프로세스와 분리되어 같은 서버의 OS 스케줄러가 실행하는 수집 전용 프로젝트다. 법률 데이터는 국가법령정보 공동활용 Open API만 사용하며 JSON을 먼저 검증하고 스키마가 맞지 않을 때만 XML로 폴백한다.
+웹/API와 분리된 국가법령정보 공동활용 Open API 수집기다. JSON을 먼저 도메인 스키마까지 검증하고,
+스키마가 맞지 않을 때만 같은 요청을 XML로 폴백한다. HTML·PDF·다른 법률 출처는 사용하지 않는다.
 
-## 실행
+## 정기 운영 경로
 
-저장소 루트에서 환경변수 `LAW_OPEN_API_OC`를 주입한 뒤 실행한다. 비밀값을 명령행 인자로 넘기거나 저장소에 기록하지 않는다.
+저장소 루트에서 다음 세 명령을 같은 bundle 경로로 순서대로 실행한다.
 
 ```powershell
-uv sync --project apps/collector
+uv sync --all-packages
+uv run --project apps/collector law-rag-collector prepare-current `
+  --output .data/corpus-updates/20260804T030000Z
+uv run --directory apps/api python -m scripts.backfill_embeddings generate-cache `
+  --bundle .data/corpus-updates/20260804T030000Z
+uv run --project apps/collector law-rag-collector apply-prepared `
+  --bundle .data/corpus-updates/20260804T030000Z
+```
+
+`prepare-current`는 전체 고정 catalog와 공식 삭제 목록을 수집하고 기존 파서가 만든 조·항·호·목
+`ProvisionRecord`를 그대로 사용한다. 검색 가능한 과거·현재·시행예정 버전 전체의 snapshot과 현재
+PostgreSQL vector coverage를 읽기 전용으로 비교한다. 이 단계에서는 advisory lock, DB write와 Storage
+upload를 하지 않는다. 준비 중 기준 corpus나 vector 상태가 바뀌면 manifest를 게시하지 않고 실패한다.
+
+bundle은 다음 파일을 가진다.
+
+```text
+.data/corpus-updates/<update-id>/
+├─ manifest.json
+├─ documents.jsonl
+├─ deletions.json
+├─ raw/
+└─ embeddings.jsonl  # generate-cache가 마지막에 추가
+```
+
+manifest에는 전체 검색 가능 corpus의 게시 전용 `base_snapshot_id`, parser·embedding profile, 문서·삭제·
+필요 vector 변경 목록과 개수, 각 파일 SHA-256과 bundle SHA-256이 있다. 게시 전용 snapshot은 조문 본문뿐
+아니라 `effective_to`, lifecycle·source 상태, raw SHA처럼 writer가 바꿀 수 있는 저장 필드도 포함한다.
+다른 파일을 먼저 원자 기록하고 manifest를 마지막에 교체하므로 파일 누락·부분 기록·변조는 loader가
+거부한다.
+
+문서·삭제 변화가 없고 vector coverage도 정상이면 상태는 `unchanged`다. 이 경우 뒤 명령도 NIM·Storage·
+writer lock·DB write 없이 종료한다. 변화가 있으면 상태는 `needs_embeddings`이고, `generate-cache --bundle`이
+동일 ID·본문 SHA 또는 동일 본문 SHA의 기존 512차원 벡터를 재사용한다. 새 본문만 NVIDIA NIM에 보내며
+완성된 `embeddings.jsonl`과 manifest 상태 `ready_to_publish`를 게시한다.
+
+`apply-prepared`는 checksum과 고정 parser/NVIDIA profile을 검사하고 변경 raw를 SHA 기반 불변 Storage
+경로에 올린다. 이어 기존 writer lock을 `EMBEDDING_BACKFILL → CORPUS_SYNC_RUN` 순서로 얻고 기준
+snapshot과 prospective 전체 vector coverage를 다시 확인한다. 충돌·불일치·불완전 cache는 검색 gate를
+닫기 전에 실패한다.
+
+변경이 있으면 transaction A에서 `corpus.search_ready=false`를 commit하고 65초 drain한다. transaction B는
+문서·버전·조문·삭제·벡터를 최대 100행씩 처리하되 전체를 한 번만 commit한다. 전체 parser·시간 범위·
+본문 SHA·512차원·L2 norm·coverage를 검증한 마지막에만 profile과 gate를 함께 활성화한다. B가 실패하면
+전체 DB 변경은 rollback되고 A의 gate=false는 남는다.
+
+로컬 `embeddings.jsonl`은 점검 반영 전의 운반 파일일 뿐 검색 저장소가 아니다. 운영 웹/API는 이 파일이나
+로컬 cache를 열지 않고 활성 profile의 PostgreSQL `provision_embeddings`만 검색한다. 기존 DB 벡터는 gate를
+닫기 전까지 계속 서비스되고, 새 로컬 벡터는 transaction B가 DB에 복사·검증·commit한 뒤에만 검색된다.
+
+## 환경변수
+
+- `LAW_OPEN_API_OC`: `prepare-current`의 국가법령정보 API 인증값
+- `DIRECT_URL`: PostgreSQL session 연결 URL; transaction pooler URL을 사용하지 않음
+- `SUPABASE_URL`, `SUPABASE_SECRET_KEY`: private raw Storage 접근
+- `NVIDIA_API_KEY`: `generate-cache`가 실제 새 본문을 임베딩할 때만 사용
+
+비밀값은 OS·GitHub Actions secret 또는 로컬 `.env.local`에만 둔다. 명령행, Git, 로그에 기록하지 않는다.
+`SUPABASE_SECRET_KEY`는 `sb_secret_` 형식이어야 한다.
+
+## 예약 실행
+
+`.github/workflows/sync-corpus.yml`은 self-hosted Windows runner에서 매일 03:00 KST와 수동 실행을 지원한다.
+기존 `legal-corpus-sync` concurrency group이 workflow 중복을 막고 다음 순서를 고정한다.
+
+1. `prepare-current --output <run 전용 bundle>`
+2. `generate-cache --bundle <같은 bundle>`
+3. `apply-prepared --bundle <같은 bundle>`
+
+Open API에 등록한 고정 공인 출구 IP를 사용하는 runner에서만 실행한다. 외부 API·NIM·Storage 호출과 65초
+대기는 transaction B 밖에서 실행된다.
+
+## 실패 복구
+
+1. 준비·NIM·Storage·writer lock·기준 snapshot 실패는 gate 변경 전이므로 기존 검색이 계속된다.
+2. gate를 닫은 뒤 실패하면 Tx B는 전부 rollback되고 `reason=corpus_publish`인 gate=false가 남는다.
+3. update ID와 실패 단계만 확인하고 원문 전문이나 비밀값을 로그에 남기지 않는다.
+4. 원인을 수정한 뒤 새 bundle을 준비하거나 아직 유효한 ready bundle을 다시 적용한다. gate=false에서도
+   복구 bundle 준비와 적용이 가능하다.
+5. gate나 profile을 수동 활성화하지 않는다. 전체 검증에 성공한 publisher만 검색을 연다.
+
+DB transaction 전에 업로드된 불변 raw가 고아 객체로 남을 수 있으나 즉시 삭제하지 않는다.
+
+## 기존 명령
+
+`preview-current`, `sync-current`, `sync-history`, `status`와 embedding의 기존 `run`, `load-cache`는 호환성과
+진단을 위해 당장 삭제하지 않는다. 정기 workflow에서는 사용하지 않으며 운영 반영 진입점은
+`apply-prepared` 하나다. Supabase 전체 과거 본문 수집은 아직 활성화하지 않아 Supabase에서
+`sync-history`는 종료 코드 2를 반환한다. 공식 삭제 목록은 prepared bundle과 레거시 `sync-current`에
+포함된다.
+
+```powershell
+uv run --project apps/collector law-rag-collector preview-current
 uv run --project apps/collector law-rag-collector sync-current
-uv run --project apps/collector law-rag-collector sync-history
 uv run --project apps/collector law-rag-collector status
 ```
-
-한 문서의 계약만 점검할 때는 허용 목록의 정확 명칭을 지정한다.
-
-```powershell
-uv run --project apps/collector law-rag-collector sync-history --title "전기사업법"
-```
-
-`DIRECT_URL` 또는 `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 모두 있으면 `sync-current`는 Supabase 어댑터를 사용한다. 원문은 SHA-256 기반 불변 경로로 private `law-raw` bucket에 보존하고 문서·버전·조문은 PostgreSQL 트랜잭션으로 반영한다. 설정이 없으면 `.collector-state/` 파일 목업을 사용한다.
-
-Supabase의 연혁·삭제 격리 스키마는 아직 활성화하지 않았다. Supabase 설정이 있는 상태에서 `sync-history`는 명시적으로 종료 코드 2를 반환한다. 삭제된 출처 레코드가 검색에 섞일 수 있는 불완전한 구현보다 현재 버전만 안전하게 제공한다.
-
-수집한 버전은 정확 명칭·안정 ID·MST·시행일·고유 조문 경로·원문 SHA-256 검증을 모두 통과한 직후 활성 manifest에 반영한다. 시행예정 버전은 `scheduled`, 법적 폐지는 `abolished`로 보존한다. Open API의 삭제 표식은 법적 상태와 분리해 `source_record_state=deleted`로 기록한다. 선택 필드인 소관부처가 없어도 수집할 수 있지만 시행일 같은 버전 필드가 없으면 승격하지 않는다.
-
-`sync-history`는 본문 연혁 수집 뒤 공식 삭제 데이터 목록 `lawSearch.do?target=delHst`를 `knd=1` 법령과 `knd=2` 행정규칙으로 각각 조회한다. 최초 실행은 오늘을 포함한 최근 8일, 이후에는 마지막 **삭제 동기화 성공일 하루 전**부터 오늘까지 겹쳐 조회한다. `display=100` 페이지를 끝까지 읽으며 JSON을 우선 검증하고 스키마가 맞지 않을 때만 같은 페이지를 XML로 폴백한다.
-
-두 종류의 삭제 목록 조회가 모두 성공해야 일련번호와 manifest의 MST가 같은 허용 코퍼스 버전을 한 번에 반영한다. 해당 버전은 `source_record_state=deleted`, `source_deleted_on=삭제일자`가 되며 법적 효력 상태와 `effective_to`는 바꾸지 않는다. 원문은 보존하지만 출처에서 다시 확인할 수 없는 레코드는 답변 검색에서 격리한다. 어느 한 조회나 manifest 교체라도 실패하면 삭제 상태와 성공 체크포인트를 전혀 바꾸지 않고 실행 실패로 기록한다. 따라서 다음 주기나 수동 재실행이 같은 기간을 안전하게 다시 조회한다.
-
-로컬 실행 시 설정은 `.env`를 먼저 읽고 `.env.local`로 덮어쓴다. OS·클라우드가 직접 주입한 환경변수는 두 파일보다 우선한다. 비밀값이 있는 `.env.local`은 Git에 커밋하지 않는다.
-
-파일 목업의 원문은 SHA-256이 포함된 불변 경로에 먼저 원자적으로 기록하고, manifest는 같은 디렉터리의 임시 파일을 `fsync`한 다음 원자 교체한다. Supabase에서도 같은 content-addressed 경로를 덮어쓰지 않고 DB upsert 전 Storage에 보존한다. 검증이나 DB 트랜잭션이 실패하면 해당 문서의 DB 변경은 반영되지 않는다. 같은 버전과 SHA-256을 다시 수집하면 `unchanged`로 처리한다.
-
-## Windows 작업 스케줄러
-
-먼저 수동 실행으로 API 등록 IP와 환경변수를 검증한다.
-
-```powershell
-./apps/collector/ops/Invoke-Collector.ps1 -Command sync-history
-```
-
-검증 후 운영자가 명시적으로 등록·해제한다. 이 저장소의 설치나 테스트는 작업을 자동 등록하지 않는다.
-
-```powershell
-./apps/collector/ops/Register-CollectorTask.ps1
-./apps/collector/ops/Unregister-CollectorTask.ps1
-```
-
-기본 일정은 매주 일요일 03:17이며 중복 실행을 차단한다. 향후 같은 서버를 클라우드로 옮길 때 법제처에 해당 서버의 고정 공인 출구 IP를 등록하고 OS 비밀 저장소에 `LAW_OPEN_API_OC`를 주입해야 한다.
-
-## 주간 운영과 실패 복구
-
-1. 매주 일요일 예약된 `sync-history`가 실행된다.
-2. 각 버전은 독립 검증되고 성공 즉시 활성 manifest에 원자 승격된다.
-3. 종료 후 `law-rag-collector status`에서 `last_run.failed`, `deletion_sync.completed_on`, 대상별 버전 수를 확인한다.
-4. 실패가 있으면 비밀이나 원문 전문을 로그에 출력하지 말고 실패 유형과 API 상태만 확인한다.
-5. 원인을 수정한 뒤 같은 명령을 재실행한다. 이미 반영된 SHA는 중복 생성되지 않는다.
-
-삭제 목록 실패 시 `deletion_sync.completed_on`은 전진하지 않는다. manifest 교체 실패 시 임시 파일은 정리되고 직전 manifest가 유지되므로 수동으로 이전 파일을 복사할 필요가 없다. 장애 확인 중에는 `.collector-state/raw`의 고아 SHA 객체를 삭제하지 않는다. 활성 manifest에 연결되지 않은 객체의 정리는 향후 별도 보존 정책과 검사 도구를 도입한 뒤 수행한다.

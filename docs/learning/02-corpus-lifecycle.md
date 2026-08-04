@@ -112,9 +112,9 @@ parser·검색 가능 버전의 `effective_from` 가운데 전역 최솟값이�
 범위 밖 날짜는 일부 법령만 검색하지 않고 quota·임베딩·검색 전에 `422 unsupported_corpus_date`로
 거부한다. 전체 검색 준비 게이트가 닫혔거나 오늘 유효한 조문이 0개이거나 시작일·content fingerprint를
 완성할 수 없으면 `503 corpus_unready`다. 준비되지 않은 상태 API에서는 시작일과 snapshot ID가 `null`일
-수 있다. 날짜를 생략한 요청은 서버 지역과 관계없이 한국 날짜의 오늘을 사용한다. 초기 검사 뒤 corpus가
-교체될 수도 있으므로 PostgreSQL 실제 검색은 공유 transaction lock을 먼저 얻고 현재 범위를 다시
-검사한다. 새 범위에서 요청일을 지원하지 않으면 부분 결과를 만들지 않고 `503 corpus_unready`로
+수 있다. 날짜를 생략한 요청은 서버 지역과 관계없이 한국 날짜의 오늘을 사용한다. 운영 검색은 API
+경계에서 이 상태를 먼저 검사하고 실제 repository 검색 직전에 준비 상태를 다시 검사한다. 검색 SQL도
+준비 gate를 요구한다. 코퍼스 반영 중에는 gate가 닫혀 있으므로 부분 결과 대신 `503 corpus_unready`로
 재시도하게 한다.
 
 runtime은 오늘 유효한 provision population의 count와 content fingerprint로 현재 snapshot ID를 만든다.
@@ -165,10 +165,30 @@ SHA-256은 암호화가 아니라 바이트 지문이다. 같은 바이트는 �
 manifest가 바뀐 원문을 가리키지 않는다. 참조되지 않은 객체는 남을 수 있으므로 별도 보존 정책 없이
 즉시 삭제하지 않는다.
 
-문서 하나의 DB 반영은 transaction으로 묶는다. 문서·버전·조문 upsert, 제거된 조문의 파생 데이터
-무효화와 검색 준비 게이트 변경 중 하나라도 실패하면 전부 rollback한다. 하지만 여러 법령을 처리하는
-collector 전체 실행은 하나의 거대한 transaction이 아니다. 성공한 문서는 commit하고, 전체 세대가
-완성될 때까지 검색을 닫아 부분 코퍼스 노출을 막는다.
+정기 갱신은 바로 DB에 쓰지 않는다. 스케줄러가 전체 허용 법률과 삭제 목록을 수집·파싱하고, 현재 DB와
+비교한 결과를 먼저 로컬 bundle로 만든다.
+
+```text
+.data/corpus-updates/<update-id>/
+├─ manifest.json      # 기준 snapshot, 계약 버전, 개수, 파일 SHA-256
+├─ documents.jsonl    # 정규화한 문서·버전·ProvisionRecord
+├─ deletions.json     # 출처 삭제 반영 목록
+├─ raw/               # 공식 API 원문 바이트
+└─ embeddings.jsonl   # 재사용했거나 새로 만든 512차원 벡터
+```
+
+manifest를 마지막에 만들기 때문에 중간에 멈춘 폴더를 완성 bundle로 오인하지 않는다. 준비 중에는 DB를
+읽기만 하고 advisory lock, Storage write, DB write를 하지 않는다. 원문·삭제·벡터 변화가 없고 coverage도
+정상이면 NIM 호출과 점검 중단 없이 그대로 끝난다.
+
+여기서 게시 전용 기준 snapshot과 사용자가 보는 runtime content snapshot은 목적이 다르다. 게시 전용
+snapshot은 오래된 bundle이 최신 DB를 덮어쓰지 못하게 `effective_to`, 법적·출처 상태, raw SHA와 조문
+ordinal까지 writer 변경 조건을 넓게 묶는다. runtime content snapshot은 같은 검색 본문 집합을 식별하므로
+날짜 자체를 넣지 않는다.
+
+로컬 `embeddings.jsonl`은 새 벡터를 DB까지 옮기는 준비물이다. 웹/API는 이 파일을 검색하지 않고 DB의
+활성 `provision_embeddings`만 읽는다. 기존 DB 벡터로 서비스하다가 gate를 닫고, transaction B에서 새
+벡터를 DB에 넣고 검증·commit한 뒤에만 새 벡터가 사용자 검색에 사용된다.
 
 ## 왜 검색 준비 게이트가 두 개인가
 
@@ -178,16 +198,18 @@ collector 전체 실행은 하나의 거대한 transaction이 아니다. 성공�
 - `corpus.search_ready`: direct path, keyword, dense, 단건 조문 조회를 모두 막는 모델 독립 상위 게이트
 - `embedding_profiles.active`: 특정 임베딩 변환 계약의 전체 벡터가 준비됐다는 하위 게이트
 
-검색 결과를 바꾸는 원문 변경을 commit하는 transaction은 `corpus.search_ready=false`도 함께 쓴다.
-임베딩 입력이나 검색 자격이 바뀌면 해당 profile도 inactive로 만든다. 이후 현재 조문 전체에 맞는
-벡터·입력 SHA·차원·norm을 검증한 마지막 승격 transaction에서 두 상태를 함께 연다.
+변경이 있을 때 반영기는 먼저 작은 transaction A에서 `corpus.search_ready=false`를 commit한다. 새 검색은
+즉시 닫히지만 이미 시작한 요청이 남을 수 있어 65초 기다린다. 그 뒤 transaction B 하나에서 모든 corpus
+변경과 벡터를 적용하고 전체 coverage·입력 SHA·차원·norm을 검증한다. 마지막에 두 상태를 함께 열고 한
+번만 commit한다.
 
 ```text
-검증된 세대
-→ 원문 변경 commit + corpus gate 닫기
-→ 조문·벡터 batch 갱신
+로컬에서 원문·조문·벡터 bundle 완성
+→ transaction A: corpus gate 닫기
+→ 65초 drain
+→ transaction B: 조문·삭제·벡터 갱신
 → 전체 coverage·SHA·profile·norm 검사
-→ profile 활성 + corpus gate 열기
+→ profile 활성 + corpus gate 열기 + commit 1회
 ```
 
 게이트가 닫힌 상태는 근거 부족이 아니다. 오늘 유효한 조문이 0개이거나 시작일·content identity를
@@ -197,17 +219,23 @@ collector 전체 실행은 하나의 거대한 transaction이 아니다. 성공�
 
 ## 잠금은 원자성과 역할이 다르다
 
-PostgreSQL advisory lock은 애플리케이션 작업끼리 순서를 맞춘다.
+PostgreSQL advisory lock은 writer끼리 순서를 맞춘다.
 
 | 잠금 | 범위 | 목적 |
 |---|---|---|
-| corpus sync run lock | session | collector 두 개가 동시에 실행되지 않게 함 |
-| corpus mutation lock | transaction | 원문 변경과 벡터 batch 쓰기가 겹치지 않게 함 |
-| embedding backfill lock | session | 같은 profile을 두 프로세스가 채우지 않게 함 |
+| embedding backfill lock | session | embedding writer가 겹치지 않게 함 |
+| corpus sync run lock | session | corpus writer가 겹치지 않게 함 |
+| corpus mutation lock | transaction | gate·corpus·vector 변경 순서를 보호함 |
 
-lock은 상호 배제이고 transaction은 원자성이다. run lock을 잡았다고 여러 문서 commit이 하나로
-rollback되는 것은 아니다. 반대로 한 문서 transaction이 원자적이어도 다른 backfill과 동시에 실행하면
-세대가 섞일 수 있으므로 공용 mutation lock이 필요하다.
+lock은 상호 배제이고 transaction은 원자성이다. writer lock은 다른 writer가 끼어드는 일을 막지만 실패한
+DB 변경을 되돌리지는 않는다. transaction B가 문서·삭제·벡터 전체를 하나로 묶기 때문에 중간 실패 시 B
+전체가 rollback된다. 다만 transaction A에서 이미 닫은 gate는 남는다. 자동으로 옛 상태를 복구해 검색을
+여는 기능은 추가하지 않고 원인을 고친 뒤 bundle을 다시 준비·반영한다.
+
+운영 reader에는 shared advisory lock을 쓰지 않는다. gate를 닫고 최대 요청시간보다 긴 65초를 기다리는
+점검 모드가 reader와 writer의 겹침을 피한다. 이 방식은 잠깐 서비스를 닫는 대신 구·신세대 테이블이나
+active generation pointer를 만들지 않아 가벼운 프로젝트에 더 싸고 단순하다. 반면 실험 D는 한 평가 실행
+내내 같은 corpus를 증명해야 하므로 그 평가 경로의 shared lock은 유지한다.
 
 ## 계보와 세대 이름
 
