@@ -31,6 +31,7 @@
 - [29 근거 우선 RAG 검색의 전체 개념](29-evidence-first-rag-retrieval-concepts.md)
 - [31 RAG 평가 지표: 검색, 문맥, 답변과 근거 부족 판정](31-rag-evaluation-metrics.md)
 - [32 NVIDIA RAG 평가를 한 질문으로 이해하기](32-nvidia-rag-evaluation-reading-guide.md)
+- [33 현재 parser ID를 가장 싸게 차단하는 방법](33-current-parser-id-fail-fast.md)
 
 ## 모델 실행, 폴백과 취소
 

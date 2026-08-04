@@ -3,6 +3,7 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
+from law_rag_core.parsers.law_json import parse_legal_document
 
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -11,7 +12,6 @@ from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import ProvisionRecord
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.search_queries import prepare_search_query
-from app.parsers.law_json import parse_legal_document
 
 
 class _MappingsResult:

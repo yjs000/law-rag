@@ -28,6 +28,7 @@ from app.domain.embedding_profiles import (
     legal_provision_embedding_text,
 )
 from app.settings import get_settings
+from scripts.experiment_d_corpus import SourceProvision, load_provisions
 from scripts.experiment_d_gold_contract import (
     ExperimentDGoldAdjudicationManifest,
     ExperimentDGoldDataset,
@@ -40,10 +41,6 @@ from scripts.experiment_d_question_identity import (
     question_scope_set_sha256,
     question_scope_sha256,
 )
-from scripts.generate_experiment_d_dataset import (
-    SourceProvision,
-    _load_provisions,
-)
 
 APPROVED_GOLD_STATUS = "approved_gold"
 DEFAULT_SOURCE_BANK = (
@@ -55,6 +52,57 @@ DEFAULT_APPROVAL_MANIFEST = (
 DEFAULT_ADJUDICATION_MANIFEST = (
     Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-gold-adjudication-v1.json"
 )
+
+
+class NonCurrentParserIdError(ValueError):
+    """Raised before gold validation when an ID is absent from the current parser corpus."""
+
+    def __init__(self, provision_ids: Sequence[str]) -> None:
+        unique_ids = tuple(sorted(set(provision_ids)))
+        self.parser_contract_version = PARSER_SCHEMA_VERSION
+        self.count = len(unique_ids)
+        self.sample = unique_ids[:10]
+        super().__init__(
+            "non_current_parser_provision_ids: "
+            f"expected_parser={PARSER_SCHEMA_VERSION}, count={self.count}, "
+            f"sample={','.join(self.sample)}"
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "code": "non_current_parser_provision_ids",
+            "expected_parser_contract_version": self.parser_contract_version,
+            "count": self.count,
+            "sample": list(self.sample),
+        }
+
+
+def _linked_provision_ids(value: object) -> set[str]:
+    linked: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if key == "provision_id" and isinstance(nested, str) and nested:
+                linked.add(nested)
+            elif key.endswith("_provision_ids") and isinstance(nested, list):
+                linked.update(item for item in nested if isinstance(item, str) and item)
+            else:
+                linked.update(_linked_provision_ids(nested))
+    elif isinstance(value, list):
+        for nested in value:
+            linked.update(_linked_provision_ids(nested))
+    return linked
+
+
+def require_current_parser_ids(
+    dataset: Mapping[str, object],
+    provisions: Sequence[SourceProvision],
+) -> None:
+    """Fail immediately if any evaluation link is not in the current parser corpus."""
+
+    current_ids = {provision.provision_id for provision in provisions}
+    non_current_ids = _linked_provision_ids(dataset) - current_ids
+    if non_current_ids:
+        raise NonCurrentParserIdError(tuple(non_current_ids))
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +415,7 @@ def audit_gold_dataset(
     corpus_search_ready: bool = True,
     corpus_search_ready_reason: str | None = None,
 ) -> GoldPreflightReport:
+    require_current_parser_ids(dataset, provisions)
     reasons: set[str] = set()
     if not corpus_search_ready:
         reasons.add("corpus_search_unready")
@@ -713,7 +762,7 @@ async def _run(arguments: argparse.Namespace) -> GoldPreflightReport:
     repository = PostgresLegalRepository(settings.database_url)
     try:
         corpus_status = await repository.corpus_search_status()
-        provisions = await _load_provisions(repository)
+        provisions = await load_provisions(repository)
     finally:
         await repository.engine.dispose()
     return audit_gold_dataset(
@@ -730,7 +779,11 @@ async def _run(arguments: argparse.Namespace) -> GoldPreflightReport:
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    report = asyncio.run(_run(_arguments()))
+    try:
+        report = asyncio.run(_run(_arguments()))
+    except NonCurrentParserIdError as error:
+        print(json.dumps(error.to_dict(), ensure_ascii=False, indent=2), file=sys.stderr)
+        raise SystemExit(2) from error
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     if not report.ready:
         raise SystemExit(2)

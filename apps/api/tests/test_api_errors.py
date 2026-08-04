@@ -1,10 +1,10 @@
 import pytest
+from law_rag_core.parsers.law_json import LawJsonParseError
+from law_rag_core.parsers.law_json import parse_search_results as parse_json
+from law_rag_core.parsers.law_xml import LawXmlParseError
+from law_rag_core.parsers.law_xml import parse_search_results as parse_xml
 
 from app.domain.catalog import SourceKind
-from app.parsers.law_json import LawJsonParseError
-from app.parsers.law_json import parse_search_results as parse_json
-from app.parsers.law_xml import LawXmlParseError
-from app.parsers.law_xml import parse_search_results as parse_xml
 
 
 @pytest.mark.parametrize(

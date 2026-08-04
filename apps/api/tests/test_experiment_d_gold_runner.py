@@ -393,6 +393,50 @@ async def test_initial_preflight_rejection_creates_no_embedder_lock_search_or_ou
 
 
 @pytest.mark.asyncio
+async def test_non_current_parser_id_fails_before_embedder_lock_search_or_output(
+    gold_bundle: GoldFixtureBundle,
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    backend = FakeBackend(gold_bundle.snapshot, events=events)
+    publisher = PublisherSpy(events)
+    stale_raw = copy.deepcopy(gold_bundle.artifacts.dataset_raw)
+    stale_raw["cases"][0]["qrels"][0]["provision_id"] = "old-parser-id"
+    artifacts = replace(gold_bundle.artifacts, dataset_raw=stale_raw)
+    factory_calls = 0
+
+    def factory() -> FakeEmbedder:
+        nonlocal factory_calls
+        factory_calls += 1
+        return FakeEmbedder(events)
+
+    with pytest.raises(GoldRunError) as raised:
+        await run_and_publish_approved_gold(
+            artifacts,
+            backend,
+            factory,
+            tmp_path,
+            run_id_factory=lambda: "experiment-d-test-old-parser-reject",
+            clock=_fixed_clock(),
+            publisher=publisher,
+            code_provenance=TEST_CODE_PROVENANCE,
+        )
+
+    assert raised.value.code == "initial_non_current_parser_ids"
+    assert raised.value.details == {
+        "code": "non_current_parser_provision_ids",
+        "expected_parser_contract_version": "3",
+        "count": 1,
+        "sample": ["old-parser-id"],
+    }
+    assert factory_calls == 0
+    assert backend.lock_count == 0
+    assert backend.search_count == 0
+    assert publisher.calls == 0
+    assert events == ["initial_snapshot"]
+
+
+@pytest.mark.asyncio
 async def test_invalid_embedding_stops_before_lock_search_and_output(
     gold_bundle: GoldFixtureBundle,
     tmp_path: Path,

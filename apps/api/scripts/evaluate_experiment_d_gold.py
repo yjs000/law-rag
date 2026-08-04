@@ -39,18 +39,19 @@ from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.schemas import CorpusSearchStatus, SearchHit
 from app.settings import Settings, get_settings
+from scripts.experiment_d_corpus import (
+    SourceProvision,
+    load_provisions_from_connection,
+)
 from scripts.experiment_d_gold_contract import (
     ExperimentDGoldAdjudicationManifest,
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
 )
 from scripts.experiment_d_metrics import evaluate_dense_retrieval, metric_cases_from_gold
-from scripts.generate_experiment_d_dataset import (
-    SourceProvision,
-    _load_provisions_from_connection,
-)
 from scripts.preflight_experiment_d_gold import (
     GoldPreflightReport,
+    NonCurrentParserIdError,
     audit_gold_dataset,
     gold_adjudication_manifest_errors,
 )
@@ -64,7 +65,7 @@ CRITICAL_CODE_PATHS = (
     Path("apps/api/scripts/experiment_d_metrics.py"),
     Path("apps/api/scripts/experiment_d_gold_contract.py"),
     Path("apps/api/scripts/preflight_experiment_d_gold.py"),
-    Path("apps/api/scripts/generate_experiment_d_dataset.py"),
+    Path("apps/api/scripts/experiment_d_corpus.py"),
     Path("apps/api/scripts/experiment_d_question_identity.py"),
     Path("apps/api/app/adapters/postgres_repository.py"),
     Path("apps/api/app/adapters/nvidia_nim_embedder.py"),
@@ -464,7 +465,7 @@ async def _snapshot_on_connection(
     connection: AsyncConnection,
 ) -> CorpusSnapshot:
     status = await repository.corpus_search_status_on_connection(connection)
-    provisions = await _load_provisions_from_connection(connection)
+    provisions = await load_provisions_from_connection(connection)
     retrieval_state = await _load_retrieval_state(connection)
     return CorpusSnapshot(
         status=status,
@@ -574,15 +575,21 @@ def _audit_or_raise(
     artifacts: GoldRunArtifacts,
     snapshot: CorpusSnapshot,
 ) -> GoldPreflightReport:
-    report = audit_gold_dataset(
-        artifacts.dataset_raw,
-        snapshot.provisions,
-        artifacts.source_bank_raw,
-        artifacts.approval_manifest_raw,
-        artifacts.adjudication_manifest_raw,
-        corpus_search_ready=snapshot.status.ready,
-        corpus_search_ready_reason=snapshot.status.reason,
-    )
+    try:
+        report = audit_gold_dataset(
+            artifacts.dataset_raw,
+            snapshot.provisions,
+            artifacts.source_bank_raw,
+            artifacts.approval_manifest_raw,
+            artifacts.adjudication_manifest_raw,
+            corpus_search_ready=snapshot.status.ready,
+            corpus_search_ready_reason=snapshot.status.reason,
+        )
+    except NonCurrentParserIdError as error:
+        raise GoldRunError(
+            f"{stage}_non_current_parser_ids",
+            details=error.to_dict(),
+        ) from error
     if not report.ready:
         raise GoldRunError(
             f"{stage}_preflight_rejected",

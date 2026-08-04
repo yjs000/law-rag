@@ -333,6 +333,5 @@ def test_review_contains_every_question_and_disclaims_search_and_gold_answers(
         assert review.count(f"| {case['id']} |") == 1
 
 
-def test_outputs_cannot_overwrite_the_cancelled_v2_review() -> None:
+def test_output_uses_the_current_question_bank_review_path() -> None:
     assert DEFAULT_REVIEW.name == "experiment-d-lay-energy-query-bank-v1.md"
-    assert DEFAULT_REVIEW.name != "experiment-d-1000-review.md"

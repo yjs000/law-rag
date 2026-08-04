@@ -212,7 +212,7 @@ def _dataset() -> dict[str, object]:
             "facet_recall_denominator": "supported_required_facets",
             "corpus_coverage_denominator": "all_required_facets",
             "unjudged_policy": "nonrelevant_in_frozen_pool_benchmark",
-            "suite_aggregation": "never_average_with_synthetic_control_suite",
+            "suite_aggregation": "single_approved_gold_suite_only",
             "retrieved_duplicate_policy": "fail_run",
             "score_order": "raw_cosine_similarity_desc_then_provision_id_asc",
             "boundary_tie_policy": "fail_on_equal_score_at_10_and_11",

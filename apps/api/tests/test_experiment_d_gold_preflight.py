@@ -6,10 +6,13 @@ import json
 from dataclasses import replace
 from datetime import date
 
+import pytest
+
 from app.domain.embedding_profiles import (
     embedding_text_sha256,
     legal_provision_embedding_text,
 )
+from scripts.experiment_d_corpus import SourceProvision
 from scripts.experiment_d_gold_contract import (
     canonical_gold_case_payload_sha256,
     canonical_gold_dataset_sha256,
@@ -18,9 +21,9 @@ from scripts.experiment_d_question_identity import (
     question_scope_set_sha256,
     question_scope_sha256,
 )
-from scripts.generate_experiment_d_dataset import SourceProvision
 from scripts.preflight_experiment_d_gold import (
     APPROVED_GOLD_STATUS,
+    NonCurrentParserIdError,
     audit_gold_dataset,
     corpus_fingerprint_sha256,
     question_set_sha256,
@@ -365,9 +368,6 @@ def test_flat_body_qrel_and_judged_candidate_are_searchable_ready_path() -> None
         content="이 단락은 별도의 일반 본문을 담는다.",
         ordinal=2,
     )
-    assert qrel_source.article_path is None
-    assert judged_only_source.article_path is None
-
     first_case = dataset["cases"][0]
     qrel = first_case["qrels"][0]
     qrel.update(
@@ -546,16 +546,17 @@ def test_scope_change_after_approval_is_detected() -> None:
     assert "gold_source_bank_question_scope_mismatch" in report.reasons
 
 
-def test_parser_id_change_marks_qrel_missing_and_corpus_changed() -> None:
+def test_non_current_parser_id_fails_before_the_rest_of_gold_validation() -> None:
     old_source = _source("old-id")
     current_source = _source("parser-v3-id")
 
-    report = _audit(_approved_dataset(old_source), [current_source])
+    with pytest.raises(NonCurrentParserIdError) as captured:
+        _audit(_approved_dataset(old_source), [current_source])
 
-    assert report.ready is False
-    assert report.missing_qrel_count == 1
-    assert "qrel_source_missing" in report.reasons
-    assert "corpus_fingerprint_mismatch" in report.reasons
+    assert captured.value.parser_contract_version == "3"
+    assert captured.value.count == 1
+    assert captured.value.sample == ("old-id",)
+    assert str(captured.value).startswith("non_current_parser_provision_ids:")
 
 
 def test_same_id_with_changed_text_marks_qrel_stale() -> None:

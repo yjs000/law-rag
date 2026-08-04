@@ -2,10 +2,10 @@ import json
 from datetime import date
 
 import pytest
+from law_rag_core.parsers.law_json import parse_legal_document
 
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.domain.catalog import SourceKind
-from app.parsers.law_json import parse_legal_document
 
 
 def _document(title: str, source_id: str, articles: list[tuple[str, str]]):

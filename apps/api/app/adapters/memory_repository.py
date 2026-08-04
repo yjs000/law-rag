@@ -4,6 +4,9 @@ from pathlib import Path
 from time import perf_counter
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from law_rag_core.parsers.law_json import parse_legal_document as parse_json_document
+from law_rag_core.parsers.law_xml import parse_legal_document as parse_xml_document
+
 from app.domain.catalog import MVP_CATALOG
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_references
@@ -17,8 +20,6 @@ from app.domain.search_queries import (
     normalize_text,
     prepare_search_query,
 )
-from app.parsers.law_json import parse_legal_document as parse_json_document
-from app.parsers.law_xml import parse_legal_document as parse_xml_document
 
 
 class MemoryLegalRepository:

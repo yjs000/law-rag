@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from law_rag_core.parsers.law_json import parse_legal_document
 
 import app.main as main_module
 from app.adapters.memory_repository import MemoryLegalRepository
@@ -11,7 +12,6 @@ from app.application.answering import search_only_answer
 from app.domain.catalog import SourceKind
 from app.domain.provision_queries import parse_provision_reference, parse_provision_references
 from app.domain.schemas import QuestionRequest
-from app.parsers.law_json import parse_legal_document
 
 
 def _document(title: str, source_id: str, effective_date: str = "20200101"):

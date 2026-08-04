@@ -29,7 +29,7 @@
 - 공식 NVIDIA·LlamaIndex 등 1차 자료의 RAG 평가 방식을 비교
 - 실험 D 일반 사용자 질문은행 1,000개를 승인한 뒤 독립 answerability·qrels·reference contexts·reference response·분할·검토 상태를 가진 approved gold로 승격
 - 자동 검증과 사람이 직접 볼 모호한 문항 목록 생성
-- 기존 v3와 분리된 일반 사용자형 에너지 질문 후보 1,000개 생성·검토
+- 일반 사용자형 에너지 질문 후보 1,000개 생성·검토
 
 ## 비범위
 
@@ -73,6 +73,7 @@
 - primary 지표는 held-out test의 fully-answerable 문항만 사용하고 calibration 및 calibration+test 결합값은 diagnostic-only로 분리한다.
 - primary 집계는 같은 상황의 5개 표현 변형을 먼저 묶는 scenario-family macro이며, family 단위 결정적 bootstrap 2,000회로 95% 신뢰구간을 계산한다.
 - 성공 run만 retrieval plan·상태·입력·embedding batch 크기·PostgreSQL/pgvector 버전·transaction/planner 설정·clean code provenance와 실제 순위를 포함한 새 JSON으로 원자 기록하고 실패 시 부분 결과나 기존 run 덮어쓰기가 없다.
+- 평가에 연결된 모든 provision ID는 다른 gold 검사보다 먼저 현재 parser corpus ID 집합과 대조하며, 하나라도 없으면 `non_current_parser_provision_ids`로 즉시 실패한다.
 - `/v1/questions`, `/v1/search`, `/v1/provisions/{id}`가 지원 범위 밖 기준일을 임베딩·repository 호출 전에 `422 unsupported_corpus_date`로 거부하고 `/v1/corpus/status`가 snapshot ID와 양쪽 경계를 노출한다.
 - 자동 통과 문항과 사람 검토 필요 문항이 분리된다.
 - API·collector·core 테스트, Ruff, 문서 검사가 통과한다.
@@ -93,11 +94,11 @@
 - [x] 반복 가능한 임베딩 backfill·상태 확인 CLI와 테스트를 구현한다.
 - [x] 운영 DB와 분리된 재개 가능 로컬 벡터 체크포인트 생성·검증·적재 경로를 구현한다.
 - [x] 운영 DB를 마이그레이션하고 벡터를 실제 생성한다. 함께 생성된 물리 HNSW 인덱스는 삭제하지 않되 현재 품질 평가에서 사용하지 않는 보류 자산으로 분류한다.
-- [x] 과거 v3 synthetic 1,000문항 생성기·검증기·초안·검토 큐를 구현한다. 이 초안의 stale qrels는 현재 gold로 사용하지 않는다.
+- [x] 과거 parser 기반 synthetic 1,000문항 생성기·검증기·초안·검토 큐를 제거하고 일반 사용자 gold 경로만 유지한다.
 - [x] 전체 회귀 검증, 실제 건수 감사, 문서화와 기능별 커밋을 완료한다.
-- [x] v2 정적 감사에서 발견된 구조 표지 7개, 삭제 조문 32개, 근접 복사 의미 질문 116개를 v3 생성 규칙에서 제외·수정한다.
+- [x] 과거 synthetic 생성 규칙과 그 산출물을 제거한다.
 - [x] 현재 파서로 운영 corpus를 재수집하고 변경된 조문의 벡터를 다시 생성한다.
-- [ ] 기존 v3를 synthetic control로 계속 사용할 경우에만 사용자 확인 뒤 qrels를 현재 parser v3 ID와 직접 근거로 다시 확정한다.
+- [x] synthetic control 재사용을 폐기하고 현재 parser corpus에 없는 모든 평가 연결 ID를 즉시 오류로 차단한다.
 - [x] 미승인 draft 또는 현재 corpus와 맞지 않는 qrels를 탐지하는 독립 읽기 전용 gold preflight를 추가한다.
 - [x] approved-gold-only 평가 runner에서 초기 preflight와 corpus 공유 transaction lock 안의 locked preflight를 강제하고 마지막 검색까지 같은 corpus를 유지한다.
 - [x] raw provision top 11 경계 검사, Recall/HitRate/Precision/MRR@10/nDCG/facet metric core, query plan·retrieval state·critical code 지문과 원자적 결과 게시를 구현하고 합성 fixture로 검증한다.
@@ -135,11 +136,13 @@
 - 2026-08-03: 현재 검색 알고리즘은 dense-only로 유지하며 BM25·RRF는 평가셋 확장 후 비교한다.
 - 2026-08-03: 미래 검색 결합 가능성은 `hybrid_search` 같은 DB 내 고정 RRF 함수가 아니라 독립 retriever 결과와 버전이 있는 평가 계층으로 확보한다.
 - 2026-08-03: 사용자 요청에 따라 마이그레이션과 임베딩 backfill은 설계·테스트 완료 후 실제 운영 DB에 실행한다.
-- 2026-08-03: 일반 사용자형 1,000문항은 기존 v3 정답셋을 교체하지 않는 질문 후보 은행으로 분리한다. 정답 없는 상태가 더 좋은 평가라는 뜻이 아니며, 질문 승인 후 별도 gold 주석 없이는 Recall을 계산하지 않는다.
+- 2026-08-03: 일반 사용자형 1,000문항은 질문 후보 은행으로 분리한다. 정답 없는 상태가 더 좋은 평가라는 뜻이 아니며, 질문 승인 후 별도 gold 주석 없이는 Recall을 계산하지 않는다.
 - 2026-08-03: 실험 D primary dense baseline은 문항 기준일의 전체 유효 population을 비교하는 exhaustive exact cosine으로 고정한다.
 - 2026-08-03: HNSW는 1,000문항 gold와 근거 찾기를 모두 검증한 뒤 별도 설계를 제시하고 사용자가 명시적으로 승인할 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않지만 현재 runner의 상태·게이트·결과에 사용하지 않는다.
 - 2026-08-03: 현재 corpus 지원 기준일은 `2026-06-03..2026-08-03` 양끝 포함이다. 범위 밖은 부분 corpus 검색 대신 backend에서 차단하고, 프런트 차단은 후속 TODO로 둔다.
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
+- 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·생성·검토 경로와 API parser 호환 래퍼를 삭제하고 core parser v3 하나만 사용한다.
+- 2026-08-04: 평가 JSON의 모든 `provision_id`와 `*_provision_ids`는 현재 searchable corpus ID 집합과 한 번 대조하며, 하나라도 없으면 다른 gold 검사보다 먼저 `non_current_parser_provision_ids`로 실패한다.
 
 ## 진행 기록
 
@@ -170,9 +173,9 @@
 - 2026-08-03: 질문 문구 SHA와 별도로 scenario family·intent·technology·질문 변형까지 포함한 scope SHA를 도입했다. 승인 후 split에 영향을 주는 범위 메타데이터를 다시 계산해 바꾸는 것을 preflight가 거부한다.
 - 2026-08-03: 문항별 판정 pool은 외부 경로만 선언하지 않고 모든 후보 ID와 후보 집합 SHA를 gold 안에 직접 고정한다. 모든 후보는 positive qrel 또는 distractor로 전수 분류하며 실제 searchable provision 전체와 대조한다.
 - 2026-08-03: Recall·HitRate·MRR@10·nDCG 모집단은 fully answerable로 한정하고 partial·clarification·unanswerable은 별도 지표로 보고한다. 검증하지 않는 stratified/seed 주장은 제거하고 200/800 family 배정 자체를 동결한다.
-- 2026-08-03: 후보 질문은행의 법령명 목록 해시를 실제 parser corpus fingerprint와 분리했다. 기존 v3의 고유 qrel ID 1,624개는 parser v3 corpus에서 1,624개 모두 누락되어 있어 stale이며 재사용하지 않는다.
+- 2026-08-03: 후보 질문은행의 법령명 목록 해시를 실제 parser corpus fingerprint와 분리했다.
 - 2026-08-03: `scripts.preflight_experiment_d_gold`가 승인 상태, 질문 문구·범위 해시, corpus fingerprint, qrel ID·원문 SHA·메타데이터를 읽기 전용으로 검증하도록 추가했다. 독립 CLI는 임베딩과 검색을 실행하지 않으며, 실제 runner는 같은 검사를 초기 단계와 corpus 공유 잠금 안에서 다시 수행하도록 연결했다.
-- 2026-08-03: 운영 DB에 읽기 전용 preflight를 실제 실행했다. 검색·임베딩 호출 없이 `ready=false`, qrel 2,787개·고유 ID 1,624개·현재 corpus 누락 1,624개, searchable provision 3,066개를 확인해 `docs/generated/experiment-d-gold-preflight-report.md`에 기록했다.
+- 2026-08-03: 운영 DB에서 과거 평가 ID가 현재 corpus와 맞지 않음을 확인했으며 해당 평가 산출물은 2026-08-04에 제거했다.
 - 2026-08-03: Vercel CLI 58.1의 backend framework rewrite 동작 변경으로 catch-all rewrite가 `/health`와 `/v1/*`를 `/app/main.py`로 바꾸어 404를 내는 것을 빌드·런타임 로그로 확인했다. rewrite를 제거하고 `app.main:app` entrypoint를 명시한 `f44f045`를 배포해 운영 별칭의 health와 OpenAPI route를 복구했다.
 - 2026-08-03: 운영 Supabase를 `0010 (head)`로 올리고 capability=true, corpus gate=false와 API `503 corpus_unready`를 확인한 뒤 parser v3로 9개 문서·3,066개 조문을 다시 동기화했다. 수집은 JSON 9/9, fallback·실패 0이고 재미리보기 변경도 0이다.
 - 2026-08-03: parser v3 체크포인트에서 2,956개 벡터를 동일 passage SHA로 재사용하고 110개만 NVIDIA NIM에서 새로 생성했다. 3,066개를 DB에 적재한 뒤 누락·stale·비단위 벡터 0, HNSW ready, profile active, corpus search ready를 확인했다. 체크포인트는 67,393,498 bytes, SHA-256 `3E335D908B00EA87F88648358A8CCB3DB2823A79562B781E6CBFC54350F9673F`다.
@@ -194,7 +197,6 @@
 
 - NVIDIA API는 32개 사전 배치와 전체 재개 실행으로 확인했으며 실패 없이 3,066개를 생성했다.
 - 일반 사용자 질문 승인 뒤 blind candidate pool의 모든 후보를 qrel 또는 distractor로 판정하고, 작성자와 다른 검토자가 answerability·필수 요소·reference response를 adjudication해야 한다.
-- v3 자동 생성 초안에서 분리한 10개 문항의 의미 적합성은 사용자가 직접 읽고 승인할 수 있다. 이는 초안 생성을 막는 조건은 아니지만 검색 평가 실행과 gold 승격 전에 확인할 검토 큐다.
 - 1,000문항 gold와 근거 찾기 전수 검증이 끝난 뒤에만 HNSW 설계안을 작성하고 사용자 승인을 요청한다. 승인 전에는 관련 실행·비교를 하지 않는다.
 - 프런트는 후속 작업에서 `/v1/corpus/status`의 지원 범위를 읽어 날짜 선택·제출을 막는다.
 
@@ -203,7 +205,7 @@
 - 현재 검색 경로는 dense-only이며 BM25·hybrid·RRF·reranker는 도입하지 않았다.
 - DB는 모델 이름만이 아니라 query/passage 유형, 원본·저장 차원, 축약·정규화, 본문 템플릿 버전을 프로필로 추적한다.
 - 운영 parser v3 corpus 9문서·3,066개 조문에 현재 NVIDIA 512차원 passage 벡터가 준비됐고, 모델 독립 corpus gate와 profile gate가 모두 활성화됐다. 기존 partial HNSW 인덱스는 물리적으로 남아 있지만 현재 품질 평가와 HNSW 승인 판단에 사용하지 않는 보류 자산이다.
-- 실험 D v3 검토 초안은 1,000문항, calibration 200/test 800, answerable 850/unanswerable 150, 수동 검토 10개로 생성됐지만 qrels는 parser v3 이전 ID라 현재 gold가 아니다. 질문 구성과 현재 corpus 기준 재주석은 사용자 확인 대기다.
+- 과거 parser 기반 synthetic 검토 초안과 qrels는 삭제했으며 다시 평가 입력으로 사용하지 않는다.
 - 실험 D 실제 검색 실행과 Recall/HitRate/Precision/MRR@10/nDCG/facet 결과 산출은 사용자 질문 승인, 독립 gold 주석·adjudication, question approval·gold adjudication manifest와 initial/locked preflight가 모두 끝난 뒤에만 진행한다.
 - 일반 사용자 질문은행은 아직 gold가 아니므로 자체로 Recall/HitRate/Precision/MRR@10/nDCG를 산출할 수 없다. 사용자 승인 뒤 독립 근거 주석을 완료한 문항만 현실적 자연어 평가셋으로 사용한다.
 - 미래 BM25는 독립 retriever로 측정한 뒤 동일 qrels에서 dense-only보다 개선되는 경우에만 별도 실험으로 채택한다.

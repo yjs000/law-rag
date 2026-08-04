@@ -5,9 +5,7 @@
 
 ## 목적
 
-기존 실험 D v3는 운영 corpus의 원문 근거를 먼저 고르고 질문을 역으로 만들어 정답 라벨과 qrels를 정적으로 생성한 검토 전 초안이다. 검색 결과에서 정답을 추론하지 않는 장점이 있지만, 아직 사용자 질문 검토와 corpus 재동기화를 거친 승인 gold는 아니다. 또한 법률명·조문 경로를 아는 질문이 많아 일반 사용자의 표현 분포를 충분히 대표하지 못한다.
-
-별도의 일반 사용자 질문은행은 “태양광 사업을 시작하려면 무엇을 준비해야 하나요?”처럼 상황과 목적부터 말하는 질문을 수집한다. 이 은행은 기존 v3를 교체하지 않으며, 취소된 v2 전체 검토본과도 관계없는 새 산출물이다.
+일반 사용자 질문은행은 “태양광 사업을 시작하려면 무엇을 준비해야 하나요?”처럼 상황과 목적부터 말하는 질문을 수집한다. 과거 parser 기반 synthetic dataset과 qrels는 삭제했으며 이 질문은행만 승인 gold로 승격할 수 있다.
 
 ## 현재 산출물의 역할
 
@@ -124,6 +122,7 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 - gold의 snapshot ID와 모든 문항 기준일이 현재 hardcoded corpus 지원 범위 `2026-06-03..2026-08-03` 안인지 확인
 - 모든 qrel의 provision ID, document/version ID, path와 본문 SHA-256의 일치
 - qrel·distractor·pool 후보가 문항 기준일에 유효한 searchable provision인지 확인하고, 전체 corpus 검토 방법은 해당 기준일의 전체 유효 population과 정확히 일치
+- 모든 `provision_id`와 `*_provision_ids`를 현재 parser corpus ID 집합과 먼저 대조하고 하나라도 없으면 `non_current_parser_provision_ids`로 즉시 실패
 - answerability와 qrels 유무의 일관성
 
 독립 preflight는 빠른 읽기 전용 점검용이며 검사 뒤 DB 잠금을 해제한다. 실제 평가에는 `scripts.evaluate_experiment_d_gold` runner를 사용한다. runner는 critical code가 clean commit과 일치하는지 확인하고 초기 `REPEATABLE READ, READ ONLY` transaction에서 preflight와 검색 상태 검증을 통과해야만 질문을 임베딩한다. 그 다음 별도 `READ COMMITTED, READ ONLY` transaction에서 첫 snapshot-taking statement로 corpus mutation 공유 advisory lock을 얻고, 잠금 안에서 preflight와 검색 상태를 다시 검증한 뒤 마지막 raw provision 검색까지 잠금을 유지한다. 프로젝트의 corpus writer는 같은 key의 배타 lock을 사용하므로 이 구간의 corpus 변경을 막는다. 독립 preflight만 통과했다고 실제 run이 같은 잠금 상태를 봤다고 주장하지 않는다.
@@ -161,13 +160,12 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - `all_required_facets_covered@k`는 fully answerable 문항에서 모든 필수 요소의 relevance 2 근거가 후보 안에 있을 때만 1이다.
 - partial·clarification·unanswerable은 retrieval Recall 평균과 섞지 않고, 부분 근거 회수율·추가 질문 정확도·답변 보류 정확도·무관 근거 false-positive를 별도로 보고한다.
 - 같은 상황의 다섯 표현 변형이 독립 표본인 것처럼 과대 계산되지 않도록, test fully-answerable 문항은 먼저 scenario family 안에서 평균한 뒤 family별 동일 가중치로 다시 평균한다. 대표값은 `nDCG@10`, 완전성 gate는 `Recall@10`, 상위 문맥 순도 진단은 `Precision@5`이며 family 단위 bootstrap 95% 구간을 함께 기록한다. 기존 질문별 macro 값은 호환용 진단값으로 남긴다.
-- 일반인 gold와 기존 synthetic control suite의 점수는 한 평균으로 합치지 않는다.
+- 승인된 일반 사용자 gold 하나만 평가 모집단으로 사용한다.
 
-## 평가에서 두 자료의 관계
+## 평가 자료의 관계
 
 | 자료 | 강점 | 사용하는 평가 |
 |---|---|---|
-| 기존 실험 D v3 | 원문 기반 정답 라벨과 qrels를 정적으로 생성했지만 parser v3 이전 ID를 가진 합성 초안 | 현재 corpus로 재주석·독립 검토·승인한 뒤에만 별도 synthetic control로 사용 |
 | 일반 사용자 질문 후보군 | 자연어 범위와 사용자 상황이 넓음 | 질문 품질·범위 검토만 가능; 검색 품질 평가는 불가 |
 | 향후 일반 사용자 gold | 자연스러운 질문과 독립 검증 근거를 함께 보유 | 현실적 Recall·Precision·MRR·nDCG와 답변 평가 |
 
@@ -184,13 +182,13 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 
 ## 결정 기록
 
-- 2026-08-03: 일반 사용자 질문은행은 기존 v3 정답셋을 대체하지 않는 별도 초안으로 만든다.
+- 2026-08-03: 일반 사용자 질문은행을 질문 승인 전 별도 초안으로 만든다.
 - 2026-08-03: `not_annotated` 상태는 최종 평가 방식이 아니라 질문 승인 전 중간 단계로 한정한다.
 - 2026-08-03: 일반 사용자 1,000개 산출물의 최종 목표는 unlabelled 질문 목록이 아니라 독립 qrels·기준 문맥·기준 응답을 갖춘 approved gold이며, 질문 후보군은 문구·범위를 먼저 승인하기 위한 준비물이다.
 - 2026-08-03: Recall 계산에는 답변 문장보다 먼저 독립적으로 검증한 qrels가 필요하며, 생성 답변 평가는 reference response까지 주석한 뒤 수행한다.
 - 2026-08-03: 넓은 질문의 answerability는 boolean으로 축약하지 않고 full·partial·clarification·unanswerable로 나누며, qrels를 필수 답변 요소와 연결한다.
 - 2026-08-03: 질문은행·질문·corpus 해시를 gold에 고정해 질문 또는 근거 변경을 감지한다.
-- 2026-08-03: 법령명 목록 해시와 parser corpus fingerprint를 분리한다. 기존 v3 qrels는 parser v3 전환 뒤 고유 ID 1,624개가 모두 현재 corpus에 없어 평가 입력으로 사용할 수 없다.
+- 2026-08-03: 법령명 목록 해시와 parser corpus fingerprint를 분리한다.
 - 2026-08-03: 미승인 draft, 질문 변경, corpus 변경, qrel ID·본문 변경을 검색 전에 차단하는 읽기 전용 preflight를 도입한다.
 - 2026-08-03: 질문 승인 manifest는 문구·범위만 승인하고, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 봉인한다. 질문 승인, 문항 review, gold adjudication의 시간 순서를 엄격히 검증한다.
 - 2026-08-03: 승인 gold runner는 초기 `REPEATABLE READ, READ ONLY` preflight 뒤에만 질문을 임베딩하고, 별도 `READ COMMITTED, READ ONLY` corpus 공유 잠금 transaction에서 preflight와 검색 상태를 다시 검증한 뒤 raw provision top 11 검색을 끝낼 때까지 잠금 상태를 유지한다.
@@ -199,3 +197,4 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
 - 2026-08-03: HNSW는 질문-정답 gold와 근거 찾기를 전부 검증한 뒤 별도 설계와 사용자 승인을 거칠 때까지 보류한다. 기존 물리 인덱스는 삭제하지 않되 실험 D 상태·게이트·결과에서 제외한다.
 - 2026-08-03: 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부한다.
+- 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·검토 경로를 삭제하고 현재 parser corpus에 없는 ID는 다른 검사보다 먼저 즉시 거부한다.
