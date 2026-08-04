@@ -101,7 +101,7 @@ schema version, 청크 수, 제거한 UI 줄 수와 `chunks[]`를 가진다. 각
 - 기계 판독용 실행 결과:
   `.data/experiments/chunking/<입력파일명>.chunks.json` — 기존 `.gitignore`에 의해 Git 제외
 - 학습 기록:
-  `docs/learning/22-existing-parser-chunking-experiment.md` 및 `docs/learning/index.md`
+  `docs/learning/02-corpus-lifecycle.md` 및 `docs/learning/index.md`
 
 Markdown 보고서와 JSON은 성공 결과에 한해 임시 파일에서 원자적으로 교체한다. 따라서 로컬에서
 명령을 실행하면 별도 복사 단계 없이 보고서가 바로 생긴다. DB와 외부 스토리지에는 저장하지
@@ -213,8 +213,8 @@ JSON 파서를 import해 호출한다. 회귀가 있으면 실험 디렉터리�
 - 제공 텍스트는 현재 JSON 파서 schema version 2에서 제7조~제12조 6개 조문 청크가 됐다.
 - 로컬 실행은 터미널 전체 출력, Git 추적 Markdown 보고서와 Git 제외 JSON sidecar를 함께 만든다.
 - 입력 어댑터, CLI와 테스트는 `experiments/chunking/`에 격리되며 운영 파서·API·DB를 바꾸지 않았다.
-- 대표 결과는 `docs/generated/experiment-a-chunking.md`, 학습 기록은
-  `docs/learning/22-existing-parser-chunking-experiment.md`에 남겼다.
+- 대표 결과는 `docs/generated/experiment-a-chunking.md`, 현재 학습 기록은
+  `docs/learning/02-corpus-lifecycle.md`에 통합했다.
 
 ## 미결정과 차단 요소
 

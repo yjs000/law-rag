@@ -48,7 +48,7 @@ BM25·hybrid·RRF·별도 reranker·고정 similarity cutoff는 현재 파이프
 
 초기 수치(`top-k`, 청크 크기, 임계값)는 상수가 아닌 평가 결과로 정한다.
 
-운영 실패를 입력·파싱·질의 변환·코퍼스·검색·의미 검색·생성·결과 단계로 분리한 실제 디버깅 과정과 4단계 검색 개선 결과는 [RAG 검색 시스템 디버깅과 로직 개선](../learning/20-rag-retrieval-debugging-and-improvement.md)에 기록한다.
+운영 실패를 입력·파싱·질의 변환·코퍼스·검색·의미 검색·생성·결과 단계로 분리하는 현재 학습 설명은 [근거 우선 검색과 답변](../learning/03-evidence-first-retrieval.md)에 기록한다. 과거 실행 수치는 완료 계획과 생성 문서를 따른다.
 
 ## 답변 계약
 

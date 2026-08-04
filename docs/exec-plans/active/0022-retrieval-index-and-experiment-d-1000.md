@@ -15,7 +15,7 @@
 - `docs/generated/experiment-b-embedding-results.md`
 - `docs/generated/experiment-b-embedding-runs.json`
 - `docs/learning/index.md`
-- `docs/learning/28-llamaindex-retrieval-postprocessing-and-future-context-pipeline.md`
+- `docs/learning/03-evidence-first-retrieval.md`에 통합된 검색 후처리·근거 문맥 설명
 
 ## 범위
 

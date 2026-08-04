@@ -101,7 +101,7 @@
 - [ ] quota·권한·모델 오류의 검색 전용 폴백과 영속 상태 검증
 - [ ] 사람 검토 평가셋으로 의미 게이트 오탐·미탐 측정
 - [x] HNSW는 현재와 미래의 운영·실험 검색 경로에서 제외한다. gold·근거 찾기 검증 결과와 관계없이 HNSW 설계·생성·재구축·튜닝·평가·release 연결을 진행하지 않고 exhaustive exact cosine을 유지한다.
-  - 참고: [검색·원문 계보·답변 검증 기초](../../learning/07-retrieval-storage-and-grounding-foundations.md), [OpenAI embedding model 발표](https://openai.com/index/new-embedding-models-and-api-updates/), [Matryoshka Representation Learning](https://arxiv.org/abs/2205.13147), [pgvector 공식 문서](https://github.com/pgvector/pgvector)
+  - 참고: [법령 코퍼스의 생애주기](../../learning/02-corpus-lifecycle.md), [근거 우선 검색과 답변](../../learning/03-evidence-first-retrieval.md), [OpenAI embedding model 발표](https://openai.com/index/new-embedding-models-and-api-updates/), [Matryoshka Representation Learning](https://arxiv.org/abs/2205.13147), [pgvector 공식 문서](https://github.com/pgvector/pgvector)
 
 ### Vercel Web/FastAPI 배포와 운영
 
