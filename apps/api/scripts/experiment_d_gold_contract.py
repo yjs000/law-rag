@@ -13,13 +13,14 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
-    field_validator,
     model_validator,
 )
 
-from app.domain.corpus_temporal_contract import require_supported_corpus_date
-
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+CorpusSnapshotId = Annotated[
+    str,
+    StringConstraints(pattern=r"^corpus-sha256:[0-9a-f]{64}$"),
+]
 NonBlankStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Answerability = Literal[
     "fully_answerable",
@@ -89,20 +90,77 @@ class ExperimentDQuestionApprovalManifest(StrictModel):
         return self
 
 
-class GoldCorpusSnapshot(StrictModel):
-    snapshot_id: Literal["mvp-current-corpus-2026-08-03"]
-    parser_contract_version: Literal["3"]
+def canonical_gold_corpus_snapshot_id(
+    *,
+    parser_contract_version: str,
+    retrieval_unit: str,
+    as_of_populations: Sequence[Mapping[str, object]],
+) -> str:
+    """Hash unique content populations; evaluation dates are sealed separately."""
+
+    rows = [
+        {
+            "eligible_provision_count": count,
+            "fingerprint_sha256": fingerprint,
+        }
+        for count, fingerprint in sorted(
+            {
+                (
+                    int(population["eligible_provision_count"]),
+                    str(population["fingerprint_sha256"]),
+                )
+                for population in as_of_populations
+            }
+        )
+    ]
+    payload = {
+        "contract": "corpus-population-content-v1",
+        "parser_contract_version": parser_contract_version,
+        "retrieval_unit": retrieval_unit,
+        "content_populations": rows,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"corpus-sha256:{digest}"
+
+
+class GoldAsOfPopulation(StrictModel):
     as_of_date: date
-    retrieval_unit: Literal["provision"]
-    searchable_provision_count: int = Field(gt=0)
+    eligible_provision_count: int = Field(gt=0)
     fingerprint_sha256: Sha256
+
+
+class GoldCorpusSnapshot(StrictModel):
+    snapshot_id: CorpusSnapshotId
+    parser_contract_version: Literal["3"]
+    retrieval_unit: Literal["provision"]
+    as_of_populations: list[GoldAsOfPopulation] = Field(min_length=1)
     passage_template_version: Literal["legal-provision-v1"]
     embedding_profile_key: Literal["nvidia-nemotron-3-embed-1b-512-v1"]
 
-    @field_validator("as_of_date")
-    @classmethod
-    def snapshot_date_is_supported_by_current_corpus(cls, value: date) -> date:
-        return require_supported_corpus_date(value)
+    @model_validator(mode="after")
+    def snapshot_identity_matches_populations(self) -> GoldCorpusSnapshot:
+        dates = [population.as_of_date for population in self.as_of_populations]
+        if len(set(dates)) != len(dates):
+            raise ValueError("corpus snapshot contains duplicate as-of dates")
+        if dates != sorted(dates):
+            raise ValueError("corpus snapshot as-of populations must be date-sorted")
+        expected = canonical_gold_corpus_snapshot_id(
+            parser_contract_version=self.parser_contract_version,
+            retrieval_unit=self.retrieval_unit,
+            as_of_populations=[
+                population.model_dump(mode="json") for population in self.as_of_populations
+            ],
+        )
+        if self.snapshot_id != expected:
+            raise ValueError("corpus snapshot ID does not match its as-of populations")
+        return self
 
 
 class GoldSplitManifest(StrictModel):
@@ -413,11 +471,6 @@ class ExperimentDGoldCase(StrictModel):
     control_pair_id: str | None = None
     control_pair_expectation: ControlPairExpectation | None = None
 
-    @field_validator("as_of_date")
-    @classmethod
-    def case_date_is_supported_by_current_corpus(cls, value: date) -> date:
-        return require_supported_corpus_date(value)
-
     @model_validator(mode="after")
     def validate_evidence_contract(self) -> ExperimentDGoldCase:
         if (self.control_pair_id is None) != (self.control_pair_expectation is None):
@@ -561,6 +614,16 @@ class ExperimentDGoldDataset(StrictModel):
         if self.source_bank.question_count != len(self.cases):
             raise ValueError("source bank count and gold case count differ")
 
+        population_by_date = {
+            population.as_of_date: population
+            for population in self.corpus_snapshot.as_of_populations
+        }
+        case_dates = {case.as_of_date for case in self.cases}
+        if set(population_by_date) != case_dates:
+            raise ValueError(
+                "corpus snapshot dates must exactly match the gold case as-of dates"
+            )
+
         protocol_by_id = {
             method.method_id: method for method in self.annotation_protocol.pool_methods
         }
@@ -580,7 +643,7 @@ class ExperimentDGoldDataset(StrictModel):
                 if pool.top_k is not None:
                     expected_candidate_count = min(
                         pool.top_k,
-                        self.corpus_snapshot.searchable_provision_count,
+                        population_by_date[case.as_of_date].eligible_provision_count,
                     )
                     if len(pool.candidate_provision_ids) != expected_candidate_count:
                         raise ValueError(

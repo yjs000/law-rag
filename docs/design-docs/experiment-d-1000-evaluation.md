@@ -14,7 +14,7 @@
 - 질문은행: `evaluation/experiment-d-lay-energy-query-bank-v1-draft.json`
 - 승인 gold: `evaluation/experiment-d-lay-energy-gold-v1.json`
 - 질문 승인 manifest와 gold adjudication manifest
-- 현재 parser v3 searchable corpus와 현재 NVIDIA passage 벡터
+- 현재 parser v3 searchable corpus와 현재 NVIDIA passage 벡터. corpus 내용 식별과 임베딩 프로필은 서로 다른 계약으로 검증한다.
 - 실행 가능한 계약: `scripts.experiment_d_gold_contract`
 
 과거 parser로 생성한 dataset·qrels·검토 산출물은 삭제했으며 재주석하거나 대조군으로 재사용하지 않는다.
@@ -41,7 +41,39 @@ evaluation에 연결된 provision ID 집합 - 현재 searchable provision ID 집
 - `unanswerable`은 qrels가 비어 있고 근거 부족 사유를 가져야 한다.
 - 모든 qrel·distractor·pool 후보는 문항 기준일에 유효한 searchable provision이어야 한다.
 - 전체 corpus 검토 방법을 선언했다면 해당 기준일의 전체 유효 population과 정확히 일치해야 한다.
-- 현재 지원 기준일 `2026-06-03..2026-08-03` 밖의 문항은 거부한다.
+- gold의 서로 다른 모든 `case.as_of_date`에는 해당 날짜의 유효 provision 수와 콘텐츠 지문이 정확히 하나씩 있어야 하며, 사용하지 않는 날짜의 population을 추가할 수 없다.
+- qrel이 가리키는 실제 corpus 원문은 문항 기준일에 유효해야 한다. 높은 검색 점수나 gold에 기록된 과거 메타데이터만으로 효력을 대신하지 않는다.
+
+## gold의 날짜와 콘텐츠 스냅샷
+
+gold는 저장된 역사 버전 전체를 하나의 전역 해시로 묶지 않는다. 각 문항의 `as_of_date`에 먼저 다음
+반개구간 조건을 적용한 뒤, 그 날짜에 검색 가능한 provision의 수와 콘텐츠 지문을
+`corpus_snapshot.as_of_populations`에 고정한다.
+
+```text
+effective_from <= as_of_date
+그리고
+effective_to IS NULL 또는 as_of_date < effective_to
+```
+
+`snapshot_id`는 날짜 문자열이 아니라 위에서 얻은 고유한 콘텐츠 population identity로 계산한다. 따라서
+2026-08-03과 2026-08-04의 유효 provision ID와 검색 콘텐츠가 같으면 두 날짜의 content snapshot ID도
+같다. 그렇다고 날짜가 사라지는 것은 아니다. 날짜와 날짜별 count·fingerprint 대응은
+`as_of_populations`에 남고, 전체 gold dataset과 adjudication manifest의 canonical SHA-256이 이를 다시
+봉인한다. 날짜만 바꿔도 dataset·adjudication 해시는 달라진다.
+
+아직 시행되지 않은 미래 버전이 저장되거나, 그 수집 때문에 기존 버전의 `effective_to`가 `NULL`에서
+미래 날짜로 닫혀도 과거 기준일의 유효 ID와 검색 콘텐츠가 같으면 과거 snapshot을 무효화하지 않는다.
+반대로 새 버전의 시행일을 지나 유효 집합이 바뀌거나 provision의 ID·본문·검색 경로 등 콘텐츠 identity가
+바뀌면 해당 날짜의 count 또는 fingerprint와 snapshot ID가 달라져 preflight가 실패한다.
+
+NVIDIA 모델, query/passage 입력 유형, 512차원 축약·정규화와 본문 템플릿은 retrieval contract다. 이 값은
+실행 입력과 결과에 별도로 기록하지만 corpus content snapshot ID 계산에는 넣지 않는다. 같은 원문을 다른
+임베딩 프로필로 평가하는 일은 corpus 변경이 아니라 retrieval 설정 변경이기 때문이다. 물리 HNSW는 이
+retrieval contract에도 포함하지 않는다.
+
+운영 API의 현재 고정 지원 범위를 수집된 법령 timeline에서 계산하는 변경은 다음 단계다. 이 문서의 gold
+콘텐츠 스냅샷 계약은 그 운영 변경을 이미 구현했다고 주장하지 않는다.
 
 ## 실행 경계
 
@@ -76,3 +108,4 @@ primary 모집단은 held-out test의 `fully_answerable` 문항이다. 같은 sc
 - 2026-08-04: 일반 사용자 질문 1,000개의 문구·범위 승인을 완료했다. 이는 gold 주석·adjudication이나 검색 실행 승인이 아니다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·생성·검토 경로를 삭제하고 재사용하지 않기로 결정했다.
 - 2026-08-04: 평가에 연결된 ID가 현재 parser corpus에 없으면 다른 검사보다 먼저 `non_current_parser_provision_ids`로 실패하도록 고정했다.
+- 2026-08-04: gold를 문항별 `as_of_date`의 유효 provision count·content fingerprint에 결박하고, `snapshot_id`에서는 날짜와 임베딩 프로필을 분리했다. 같은 콘텐츠 population은 날짜가 달라도 같은 ID를 가지며 날짜 대응은 dataset·adjudication 해시에 별도로 봉인한다.

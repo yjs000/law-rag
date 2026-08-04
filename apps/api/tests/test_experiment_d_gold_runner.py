@@ -25,7 +25,6 @@ from scripts.evaluate_experiment_d_gold import (
     run_and_publish_approved_gold,
     validate_gold_artifacts,
 )
-from scripts.preflight_experiment_d_gold import corpus_fingerprint_sha256
 from tests import test_experiment_d_gold_contract as gold_fixture
 from tests import test_experiment_d_gold_preflight as preflight_fixture
 
@@ -93,8 +92,7 @@ def gold_bundle() -> GoldFixtureBundle:
     dataset["source_bank"]["approval_manifest_sha256"] = (
         preflight_fixture._approval_manifest_sha256(approval_manifest)
     )
-    dataset["corpus_snapshot"]["searchable_provision_count"] = len(sources)
-    dataset["corpus_snapshot"]["fingerprint_sha256"] = corpus_fingerprint_sha256(sources)
+    preflight_fixture._bind_corpus_snapshot(dataset, sources)
     adjudication_manifest = preflight_fixture._full_adjudication_manifest(dataset)
     artifacts = validate_gold_artifacts(
         dataset,
@@ -671,6 +669,52 @@ async def test_equal_raw_scores_at_rank_10_and_11_fail_closed(
 
 
 @pytest.mark.asyncio
+async def test_future_only_stored_version_keeps_locked_as_of_snapshot_valid(
+    gold_bundle: GoldFixtureBundle,
+    tmp_path: Path,
+) -> None:
+    future = replace(
+        gold_bundle.snapshot.provisions[0],
+        provision_id="future-provision",
+        version_id="future-version",
+        effective_from=date(2026, 9, 1),
+    )
+    locked_snapshot = CorpusSnapshot(
+        status=CorpusSearchStatus(ready=True),
+        provisions=(*gold_bundle.snapshot.provisions, future),
+        retrieval_state=_retrieval_state(
+            len(gold_bundle.snapshot.provisions) + 1,
+            transaction_isolation="read committed",
+        ),
+    )
+    events: list[str] = []
+    backend = FakeBackend(
+        gold_bundle.snapshot,
+        locked_snapshot=locked_snapshot,
+        events=events,
+    )
+
+    published = await run_and_publish_approved_gold(
+        gold_bundle.artifacts,
+        backend,
+        lambda: FakeEmbedder(events),
+        tmp_path,
+        run_id_factory=lambda: "experiment-d-test-future-version",
+        clock=_fixed_clock(),
+        code_provenance=TEST_CODE_PROVENANCE,
+    )
+
+    assert backend.search_count == 1000
+    assert published.payload["retrieval_state"]["vector_count"] == 2001
+    assert published.payload["inputs"]["as_of_population_fingerprints"][0][
+        "eligible_provision_count"
+    ] == 2000
+    assert published.payload["inputs"]["corpus_snapshot_id"] == (
+        gold_bundle.artifacts.dataset.corpus_snapshot.snapshot_id
+    )
+
+
+@pytest.mark.asyncio
 async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     gold_bundle: GoldFixtureBundle,
     tmp_path: Path,
@@ -694,7 +738,7 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     assert backend.plan_count >= 1
     assert publisher.calls == 1
     assert events.index("lock_release") < events.index("publish")
-    assert published.payload["schema_version"] == 3
+    assert published.payload["schema_version"] == 4
     assert published.payload["case_count"] == 1000
     assert published.payload["search_count"] == 1000
     assert published.payload["metrics"]["overall"]["recall_at_10"] == 1.0
@@ -729,6 +773,20 @@ async def test_complete_fixture_searches_all_cases_then_publishes_metrics(
     )
     assert published.payload["inputs"]["retrieval_execution_mode"] == "exact_cosine"
     assert published.payload["inputs"]["query_plans_sha256"]
+    assert published.payload["inputs"]["corpus_snapshot_id"] == (
+        gold_bundle.artifacts.dataset.corpus_snapshot.snapshot_id
+    )
+    assert published.payload["inputs"]["as_of_population_fingerprints"] == [
+        {
+            "as_of_date": "2026-08-03",
+            "eligible_provision_count": 2000,
+            "fingerprint_sha256": (
+                gold_bundle.artifacts.dataset.corpus_snapshot.as_of_populations[
+                    0
+                ].fingerprint_sha256
+            ),
+        }
+    ]
 
 
 class _ScalarResult:

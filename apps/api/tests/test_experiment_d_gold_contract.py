@@ -16,6 +16,7 @@ from scripts.experiment_d_gold_contract import (
     GoldMetricProtocol,
     GoldSplitManifest,
     canonical_gold_case_payload_sha256,
+    canonical_gold_corpus_snapshot_id,
     canonical_gold_dataset_sha256,
 )
 from scripts.experiment_d_question_identity import (
@@ -38,6 +39,31 @@ def _json_sha256(value: object) -> str:
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+
+
+def _corpus_snapshot(
+    populations: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    populations = populations or [
+        {
+            "as_of_date": "2026-08-03",
+            "eligible_provision_count": 3066,
+            "fingerprint_sha256": CONFIG_SHA,
+        }
+    ]
+    snapshot: dict[str, object] = {
+        "parser_contract_version": "3",
+        "retrieval_unit": "provision",
+        "as_of_populations": populations,
+        "passage_template_version": "legal-provision-v1",
+        "embedding_profile_key": "nvidia-nemotron-3-embed-1b-512-v1",
+    }
+    snapshot["snapshot_id"] = canonical_gold_corpus_snapshot_id(
+        parser_contract_version="3",
+        retrieval_unit="provision",
+        as_of_populations=populations,
+    )
+    return snapshot
 
 
 def _case(index: int, split: str | None = None) -> dict[str, object]:
@@ -170,16 +196,7 @@ def _dataset() -> dict[str, object]:
             "approval_manifest_artifact": ("experiment-d-lay-energy-question-approval-v1.json"),
             "approval_manifest_sha256": CONFIG_SHA,
         },
-        "corpus_snapshot": {
-            "snapshot_id": "mvp-current-corpus-2026-08-03",
-            "parser_contract_version": "3",
-            "as_of_date": "2026-08-03",
-            "retrieval_unit": "provision",
-            "searchable_provision_count": 3066,
-            "fingerprint_sha256": CONFIG_SHA,
-            "passage_template_version": "legal-provision-v1",
-            "embedding_profile_key": "nvidia-nemotron-3-embed-1b-512-v1",
-        },
+        "corpus_snapshot": _corpus_snapshot(),
         "split_manifest": {
             "algorithm": "frozen-scenario-family-assignment-v1",
             "group_field": "scenario_family_id",
@@ -323,8 +340,8 @@ def test_valid_gold_case_enforces_direct_evidence_and_frozen_context() -> None:
     assert "pool_manifest_artifact" not in case.judgment_coverage.model_dump()
 
 
-@pytest.mark.parametrize("as_of_date", ["2026-06-03", "2026-08-03"])
-def test_gold_case_accepts_current_corpus_date_boundaries(as_of_date: str) -> None:
+@pytest.mark.parametrize("as_of_date", ["2026-01-01", "2030-08-04"])
+def test_gold_case_date_is_not_coupled_to_the_current_runtime_window(as_of_date: str) -> None:
     case = _case(1)
     case["as_of_date"] = as_of_date
 
@@ -333,30 +350,86 @@ def test_gold_case_accepts_current_corpus_date_boundaries(as_of_date: str) -> No
     assert validated.as_of_date.isoformat() == as_of_date
 
 
-@pytest.mark.parametrize("as_of_date", ["2026-06-02", "2026-08-04"])
-def test_gold_case_rejects_dates_outside_current_corpus_window(as_of_date: str) -> None:
-    case = _case(1)
-    case["as_of_date"] = as_of_date
-
-    with pytest.raises(ValidationError, match="current corpus supports"):
-        ExperimentDGoldCase.model_validate(case)
-
-
-@pytest.mark.parametrize("as_of_date", ["2026-06-02", "2026-08-04"])
-def test_gold_snapshot_rejects_dates_outside_current_corpus_window(as_of_date: str) -> None:
+def test_gold_snapshot_rejects_identity_not_derived_from_populations() -> None:
     snapshot = _dataset()["corpus_snapshot"]
-    snapshot["as_of_date"] = as_of_date
+    snapshot["snapshot_id"] = f"corpus-sha256:{'0' * 64}"
 
-    with pytest.raises(ValidationError, match="current corpus supports"):
+    with pytest.raises(ValidationError, match="does not match"):
         GoldCorpusSnapshot.model_validate(snapshot)
 
 
-def test_gold_snapshot_rejects_another_snapshot_identity() -> None:
-    snapshot = _dataset()["corpus_snapshot"]
-    snapshot["snapshot_id"] = "another-corpus-snapshot"
+def test_gold_snapshot_rejects_duplicate_or_unsorted_dates() -> None:
+    duplicate = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            },
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            },
+        ]
+    )
+    with pytest.raises(ValidationError, match="duplicate as-of dates"):
+        GoldCorpusSnapshot.model_validate(duplicate)
 
-    with pytest.raises(ValidationError):
-        GoldCorpusSnapshot.model_validate(snapshot)
+    unsorted = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-04",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            },
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            },
+        ]
+    )
+    with pytest.raises(ValidationError, match="date-sorted"):
+        GoldCorpusSnapshot.model_validate(unsorted)
+
+
+def test_content_snapshot_identity_does_not_embed_calendar_date() -> None:
+    first = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            }
+        ]
+    )
+    next_day = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-04",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            }
+        ]
+    )
+
+    assert first["snapshot_id"] == next_day["snapshot_id"]
+
+
+def test_content_snapshot_identity_changes_with_population_content() -> None:
+    first = _corpus_snapshot()
+    changed = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 3066,
+                "fingerprint_sha256": "f" * 64,
+            }
+        ]
+    )
+
+    assert first["snapshot_id"] != changed["snapshot_id"]
 
 
 def test_supported_facet_cannot_use_context_only_qrel() -> None:
@@ -525,6 +598,22 @@ def test_dataset_links_case_pools_to_protocol_method_and_top_k() -> None:
         ExperimentDGoldDataset.model_validate(dataset)
 
 
+def test_dataset_requires_population_for_every_case_date_and_no_extra_date() -> None:
+    dataset = _dataset()
+    dataset["corpus_snapshot"] = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-04",
+                "eligible_provision_count": 3066,
+                "fingerprint_sha256": CONFIG_SHA,
+            }
+        ]
+    )
+
+    with pytest.raises(ValidationError, match="exactly match"):
+        ExperimentDGoldDataset.model_validate(dataset)
+
+
 def test_non_full_pool_requires_exact_min_top_k_candidate_count() -> None:
     dataset = _dataset()
     dataset["annotation_protocol"]["pool_methods"][1]["top_k"] = 3
@@ -537,7 +626,15 @@ def test_non_full_pool_requires_exact_min_top_k_candidate_count() -> None:
 
 def test_non_full_pool_uses_corpus_size_when_it_is_below_top_k() -> None:
     dataset = _dataset()
-    dataset["corpus_snapshot"]["searchable_provision_count"] = 2
+    dataset["corpus_snapshot"] = _corpus_snapshot(
+        [
+            {
+                "as_of_date": "2026-08-03",
+                "eligible_provision_count": 2,
+                "fingerprint_sha256": CONFIG_SHA,
+            }
+        ]
+    )
     dataset["annotation_protocol"]["pool_methods"][1]["top_k"] = 3
     for case in dataset["cases"]:
         case["judgment_coverage"]["pool_method_candidates"][1]["top_k"] = 3

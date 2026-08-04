@@ -74,7 +74,7 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 1. `evaluation_status`: 사람 검토와 승인 완료 전에는 `draft_for_review`, 완료 후에만 `approved_gold`
 2. `source_bank`: 질문은행 버전과 승인된 전체 질문 문구 SHA-256·범위 SHA-256, 외부 승인 manifest SHA-256
 3. `approval_manifest`: 사용자가 승인한 질문 ID·질문 SHA-256·질문 범위 SHA-256과 승인 시각을 질문은행과 별도 파일로 고정
-4. `corpus_snapshot`: hardcoded snapshot ID, parser 계약 버전, 기준일, 실제 provision ID+본문 SHA 기반 corpus fingerprint와 검색 단위
+4. `corpus_snapshot`: parser 계약 버전, 검색 단위, 문항별 기준일에 유효한 provision count·content fingerprint와 여기서 계산한 날짜 독립 content snapshot ID. 임베딩 프로필은 별도 retrieval 계약으로 기록한다.
 5. `question_review_status`: gold에는 `approved` 문항만 포함하고 승인한 질문 SHA-256을 보존
 6. `split`: 같은 scenario family를 나누지 않는 `calibration | test`
 7. `answerability`: `fully_answerable | partially_answerable | clarification_required | unanswerable`
@@ -98,7 +98,19 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 - 질문 문구가 바뀌면 질문은행 버전과 해시를 바꾸고 다시 승인한다.
 - 모든 문항에서 시간 순서는 `질문 approval manifest의 approved_at < annotation_review.reviewed_at < gold adjudication manifest의 approved_at`이어야 한다. 같은 시각도 허용하지 않는다.
 - adjudication 뒤 dataset 또는 문항 payload의 어떤 필드라도 바뀌면 전체 또는 문항 canonical SHA-256이 달라져 실행이 거부된다.
-- 현재 corpus snapshot의 모든 문항 `as_of_date`는 `2026-06-03..2026-08-03` 양끝 포함 범위 안이어야 한다. 범위 밖 질문은 희소한 부분 corpus로 qrels를 만들지 않고 gold 승격 전에 거부한다.
+- gold에 쓰인 모든 문항 `as_of_date`는 `corpus_snapshot.as_of_populations`의 날짜와 정확히 일치해야 한다. 날짜마다 그날 유효한 provision 수와 content fingerprint를 하나만 두며 사용하지 않는 날짜 population을 넣지 않는다.
+- 실제 qrel source는 문항 `as_of_date`에 유효해야 한다. gold에 적어 둔 `effective_to`가 오래됐더라도 현재 source가 그 날짜에 유효하고 ID·본문·필수 메타데이터가 같으면 미래 종료일 추가만으로 과거 qrel을 무효화하지 않는다.
+
+`snapshot_id`는 `2026-08-03` 같은 달력 날짜를 이름에 넣은 ID가 아니다. 각 날짜의 유효 provision을
+선별한 뒤 얻은 고유 count·content fingerprint 집합으로 계산한다. 8월 3일과 8월 4일의 유효 ID와 검색
+콘텐츠가 같다면 같은 content snapshot ID를 사용한다. 두 날짜 자체와 각 fingerprint의 대응은
+`as_of_populations`, gold dataset canonical SHA-256과 adjudication manifest에 따로 남으므로 날짜를 바꾼
+dataset이 같은 승인 자료로 통과하지는 않는다.
+
+미래 시행 버전을 미리 저장하거나 그 버전 때문에 기존 행의 `effective_to`가 미래 날짜로 채워지는 것은
+과거 날짜의 유효 ID·검색 콘텐츠를 바꾸지 않는다. 그러면 과거 fingerprint와 snapshot ID도 유지된다.
+새 시행일을 지나 유효 집합이 달라지거나 ID·본문·검색 경로가 바뀌면 해당 날짜의 fingerprint가 달라진다.
+질문 approval manifest는 계속 질문 문구와 범위만 승인하며 이 corpus·qrel 판단을 포함하지 않는다.
 
 `expected_action`은 위 상태와 일대일로 고정한다.
 
@@ -120,10 +132,10 @@ uv run --directory apps/api python -m scripts.create_experiment_d_question_appro
 - `evaluation_status=approved_gold`
 - 별도 질문 승인 manifest, 질문은행, gold의 질문 ID·문구·범위·SHA-256 일치
 - 별도 gold adjudication manifest의 전체 dataset·1,000개 문항 canonical SHA-256과 승인 시간 순서 일치
-- gold가 고정한 corpus fingerprint와 현재 searchable corpus의 일치
-- gold의 snapshot ID와 모든 문항 기준일이 현재 hardcoded corpus 지원 범위 `2026-06-03..2026-08-03` 안인지 확인
+- gold가 날짜별로 고정한 eligible provision count·content fingerprint와 현재 searchable corpus에서 같은 날짜 조건으로 계산한 값의 일치
+- gold의 content snapshot ID가 날짜별 population identity에서 다시 계산한 값과 일치하고, gold 문항 날짜 집합과 `as_of_populations` 날짜 집합이 정확히 일치하는지 확인
 - 모든 qrel의 provision ID, document/version ID, path와 본문 SHA-256의 일치
-- qrel·distractor·pool 후보가 문항 기준일에 유효한 searchable provision인지 확인하고, 전체 corpus 검토 방법은 해당 기준일의 전체 유효 population과 정확히 일치
+- qrel·distractor·pool 후보의 실제 source가 문항 기준일에 유효한 searchable provision인지 확인하고, 전체 corpus 검토 방법은 해당 기준일의 전체 유효 population과 정확히 일치
 - 모든 `provision_id`와 `*_provision_ids`를 현재 parser corpus ID 집합과 먼저 대조하고 하나라도 없으면 `non_current_parser_provision_ids`로 즉시 실패
 - answerability와 qrels 유무의 일관성
 
@@ -136,7 +148,7 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 검색 결과를 그대로 정답으로 쓰지는 않지만 3,066개 조문 전체를 매번 눈으로 읽는 것도 재현 가능한 방법이 아니다. 따라서 직접 법률 경로 확인과 서로 다른 후보 수집 방법을 합친 pool을 만들고, 후보마다 직접 근거·보조 문맥·무관을 판정한다. 한 검색기의 결과만으로 pool을 만들지 않는다.
 
 - 각 후보 수집 방법, 설정 SHA-256과 정확한 `top_k`를 기록한다. 전체 corpus 직접 검토만 `top_k`를 두지 않는다.
-- 문항별로 방법마다 실제 후보 provision ID와 정렬 집합 SHA-256을 gold 안에 직접 고정한다. 비전체검사 방법의 후보 수는 `min(top_k, corpus_snapshot.searchable_provision_count)`와 정확히 같아야 한다.
+- 문항별로 방법마다 실제 후보 provision ID와 정렬 집합 SHA-256을 gold 안에 직접 고정한다. 비전체검사 방법의 후보 수는 `min(top_k, 그 문항 기준일의 eligible_provision_count)`와 정확히 같아야 한다.
 - 방법별 후보 합집합은 문항별 `judged_candidate_provision_ids`와 정확히 같아야 하며, qrels와 distractor의 합집합도 이 판정 pool과 정확히 같아야 한다.
 - 후보 존재 여부는 생성기의 “정답 근거로 쓰기 좋은 조문” 휴리스틱이 아니라 실제 검색 가능한 provision 전체와 대조한다. 검색기가 반환할 수 있는 장·절 표지나 짧은 행도 distractor로 판정·기록할 수 있어야 한다.
 - `full_corpus_manual_review`를 사용하면 문항마다 그 기준일에 효력이 있는 searchable provision 전체를 빠짐없이 기록해야 한다. 현재 전체 corpus의 단순 ID 목록이나 다른 기준일의 목록으로 대신할 수 없다.
@@ -178,7 +190,7 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 ## 현재 제한
 
 - 현재 corpus는 에너지 법령·기술기준 9종으로 제한돼 있어 토지, 건축, 농지, 세금, 금융, 지원 공고, 소비자 계약 질문 상당수는 범위 밖일 수 있다.
-- 현재 snapshot은 9개 문서·3,066개 조문이 모두 갖춰진 `2026-06-03..2026-08-03` 양끝 포함 기준일만 지원한다. 더 과거·미래 질문을 부분 corpus로 평가하지 않는다.
+- 운영 backend는 아직 9개 문서·3,066개 조문을 감사한 `2026-06-03..2026-08-03` 고정 범위를 사용한다. 수집된 법령 timeline에서 운영 지원 범위를 계산하는 변경과 프런트 차단은 다음 단계이며, 이번 gold content snapshot 변경이 이를 이미 완료했다는 뜻은 아니다.
 - 지원금, 요금, 신청기한처럼 변하는 값은 기준일과 당시 공식 자료 없이는 고정 답으로 만들지 않는다.
 - broad question은 “관련 조문 하나가 포함됐는가”만으로 정답 처리할 수 없다. 필수 답변 요소 전체에 대한 evidence coverage를 별도로 검토해야 한다.
 
@@ -202,3 +214,4 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·검토 경로를 삭제하고 현재 parser corpus에 없는 ID는 다른 검사보다 먼저 즉시 거부한다.
 - 2026-08-04: `lay-energy-0511`을 사용자 지정 문구로 수정하고 새 질문·범위 해시를 생성했다. 고위험 35문항은 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 기록한 뒤 `yjs000` 명의의 질문 문구·범위 전용 approval manifest로 1,000문항을 승인했다. answerability·qrels·기준 응답과 검색 평가는 아직 만들거나 실행하지 않았다.
 - 2026-08-04: HNSW는 현재와 미래의 실험 D·운영 검색 경로에 도입하지 않는다. 기존 물리 인덱스는 역사적 잔여물로만 남고 runner의 입력·게이트·결과에 계속 포함하지 않는다.
+- 2026-08-04: gold의 전역 날짜 snapshot을 문항 기준일별 eligible count·content fingerprint 계약으로 바꿨다. content snapshot ID에서는 날짜와 embedding profile을 제외하고, 날짜 대응은 `as_of_populations`와 dataset·adjudication 해시에 별도로 봉인한다. 이 결정은 질문 문구·범위 전용 approval manifest를 변경하지 않는다.

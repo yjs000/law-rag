@@ -23,10 +23,7 @@ from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 from pydantic import ValidationError
 
 from app.adapters.postgres_repository import PostgresLegalRepository
-from app.domain.embedding_profiles import (
-    embedding_text_sha256,
-    legal_provision_embedding_text,
-)
+from app.domain.embedding_profiles import embedding_text_sha256, legal_provision_embedding_text
 from app.settings import get_settings
 from scripts.experiment_d_corpus import SourceProvision, load_provisions
 from scripts.experiment_d_gold_contract import (
@@ -34,6 +31,7 @@ from scripts.experiment_d_gold_contract import (
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
     canonical_gold_case_payload_sha256,
+    canonical_gold_corpus_snapshot_id,
     canonical_gold_dataset_sha256,
 )
 from scripts.experiment_d_question_identity import (
@@ -106,6 +104,13 @@ def require_current_parser_ids(
 
 
 @dataclass(frozen=True, slots=True)
+class AsOfPopulationFingerprint:
+    as_of_date: str
+    eligible_provision_count: int
+    fingerprint_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class GoldPreflightReport:
     ready: bool
     reasons: tuple[str, ...]
@@ -121,6 +126,7 @@ class GoldPreflightReport:
     metadata_mismatch_count: int
     missing_judged_candidate_count: int
     missing_pool_candidate_count: int
+    qrel_not_effective_as_of_count: int
     distractor_not_effective_as_of_count: int
     pool_candidate_not_effective_as_of_count: int
     full_corpus_pool_mismatch_count: int
@@ -128,6 +134,7 @@ class GoldPreflightReport:
     changed_qrel_sample: tuple[str, ...]
     missing_judged_candidate_sample: tuple[str, ...]
     missing_pool_candidate_sample: tuple[str, ...]
+    qrel_not_effective_as_of_sample: tuple[str, ...]
     distractor_not_effective_as_of_sample: tuple[str, ...]
     pool_candidate_not_effective_as_of_sample: tuple[str, ...]
     full_corpus_pool_mismatch_sample: tuple[str, ...]
@@ -149,12 +156,15 @@ class GoldPreflightReport:
     calculated_question_set_sha256: str | None
     declared_question_scope_set_sha256: str | None
     calculated_question_scope_set_sha256: str | None
-    declared_corpus_fingerprint_sha256: str | None
-    current_corpus_fingerprint_sha256: str
+    declared_corpus_snapshot_id: str | None
+    current_corpus_snapshot_id: str | None
+    declared_as_of_populations: tuple[AsOfPopulationFingerprint, ...]
+    current_as_of_populations: tuple[AsOfPopulationFingerprint, ...]
+    as_of_population_mismatch_count: int
+    as_of_population_mismatch_sample: tuple[str, ...]
     declared_parser_contract_version: str | None
     current_parser_contract_version: str
-    declared_searchable_provision_count: int | None
-    current_searchable_provision_count: int
+    current_stored_searchable_provision_count: int
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -163,7 +173,7 @@ class GoldPreflightReport:
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "실험 D gold의 승인 상태·질문 해시·qrels·corpus 해시를 "
+            "실험 D gold의 승인 상태·질문 해시·qrels·기준일별 corpus 해시를 "
             "검색 실행 전에 읽기 전용으로 검증"
         )
     )
@@ -178,28 +188,31 @@ def _arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def corpus_fingerprint_sha256(provisions: Sequence[SourceProvision]) -> str:
-    searchable = sorted(provisions, key=lambda item: item.provision_id)
+def eligible_population_fingerprint_sha256(
+    provisions: Sequence[SourceProvision],
+) -> str:
+    """Hash content identity for one already-filtered as-of population.
+
+    ``effective_to`` is intentionally excluded.  Closing an existing version
+    when a later version is collected must not change an earlier date's
+    population identity when the eligible IDs and source content are unchanged.
+    """
+
     rows = [
         {
             "parser_schema_version": PARSER_SCHEMA_VERSION,
             "document_id": item.document_id,
             "version_id": item.version_id,
             "provision_id": item.provision_id,
-            "path": item.path,
+            "document_title": item.document_title,
+            "source_kind": item.source_kind,
             "effective_from": item.effective_from.isoformat(),
-            "effective_to": item.effective_to.isoformat() if item.effective_to else None,
+            "path": item.path,
+            "parent_path": item.parent_path,
+            "heading": item.heading,
             "content_sha256": item.content_sha256,
-            "passage_text_sha256": embedding_text_sha256(
-                legal_provision_embedding_text(
-                    document_title=item.document_title,
-                    path=item.path,
-                    heading=item.heading,
-                    content=item.content,
-                )
-            ),
         }
-        for item in searchable
+        for item in sorted(provisions, key=lambda item: item.provision_id)
     ]
     return hashlib.sha256(
         json.dumps(
@@ -209,6 +222,29 @@ def corpus_fingerprint_sha256(provisions: Sequence[SourceProvision]) -> str:
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+
+
+def as_of_population_fingerprints(
+    provisions: Sequence[SourceProvision],
+    as_of_dates: Sequence[date],
+) -> tuple[AsOfPopulationFingerprint, ...]:
+    """Return deterministic fingerprints for each date's searchable population."""
+
+    populations: list[AsOfPopulationFingerprint] = []
+    for as_of_date in sorted(set(as_of_dates)):
+        eligible = [
+            provision
+            for provision in provisions
+            if _is_effective_at(provision, as_of_date)
+        ]
+        populations.append(
+            AsOfPopulationFingerprint(
+                as_of_date=as_of_date.isoformat(),
+                eligible_provision_count=len(eligible),
+                fingerprint_sha256=eligible_population_fingerprint_sha256(eligible),
+            )
+        )
+    return tuple(populations)
 
 
 def question_set_sha256(cases: Sequence[Mapping[str, object]]) -> str | None:
@@ -241,14 +277,45 @@ def _declared_question_set_sha256(dataset: Mapping[str, object]) -> str | None:
     return None
 
 
-def _declared_corpus_fingerprint_sha256(dataset: Mapping[str, object]) -> str | None:
-    for key in ("corpus_snapshot", "corpus"):
-        snapshot = dataset.get(key)
-        if isinstance(snapshot, Mapping):
-            value = snapshot.get("fingerprint_sha256")
-            if isinstance(value, str):
-                return value
-    return None
+def _declared_corpus_snapshot_id(dataset: Mapping[str, object]) -> str | None:
+    snapshot = dataset.get("corpus_snapshot")
+    if not isinstance(snapshot, Mapping):
+        return None
+    value = snapshot.get("snapshot_id")
+    return value if isinstance(value, str) else None
+
+
+def _declared_as_of_populations(
+    dataset: Mapping[str, object],
+) -> tuple[AsOfPopulationFingerprint, ...]:
+    snapshot = dataset.get("corpus_snapshot")
+    raw_populations = (
+        snapshot.get("as_of_populations") if isinstance(snapshot, Mapping) else None
+    )
+    if not isinstance(raw_populations, list):
+        return ()
+    populations: list[AsOfPopulationFingerprint] = []
+    for raw in raw_populations:
+        if not isinstance(raw, Mapping):
+            continue
+        raw_date = raw.get("as_of_date")
+        count = raw.get("eligible_provision_count")
+        fingerprint = raw.get("fingerprint_sha256")
+        if (
+            not isinstance(raw_date, str)
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or not isinstance(fingerprint, str)
+        ):
+            continue
+        populations.append(
+            AsOfPopulationFingerprint(
+                as_of_date=raw_date,
+                eligible_provision_count=count,
+                fingerprint_sha256=fingerprint,
+            )
+        )
+    return tuple(sorted(populations, key=lambda item: item.as_of_date))
 
 
 def _source_bank_binding_errors(
@@ -502,24 +569,53 @@ def audit_gold_dataset(
     elif calculated_scope_hash != declared_scope_hash:
         reasons.add("question_scope_set_hash_mismatch")
 
-    current_corpus_hash = corpus_fingerprint_sha256(provisions)
-    declared_corpus_hash = _declared_corpus_fingerprint_sha256(dataset)
-    if declared_corpus_hash is None:
-        reasons.add("corpus_fingerprint_missing")
-    elif declared_corpus_hash != current_corpus_hash:
-        reasons.add("corpus_fingerprint_mismatch")
-
     snapshot = dataset.get("corpus_snapshot")
     declared_parser_version = (
         snapshot.get("parser_contract_version") if isinstance(snapshot, Mapping) else None
     )
     if declared_parser_version != PARSER_SCHEMA_VERSION:
         reasons.add("parser_contract_version_mismatch")
-    declared_provision_count = (
-        snapshot.get("searchable_provision_count") if isinstance(snapshot, Mapping) else None
-    )
-    if declared_provision_count != len(provisions):
-        reasons.add("searchable_provision_count_mismatch")
+
+    declared_snapshot_id = _declared_corpus_snapshot_id(dataset)
+    declared_populations = _declared_as_of_populations(dataset)
+    current_populations: tuple[AsOfPopulationFingerprint, ...] = ()
+    current_snapshot_id: str | None = None
+    population_mismatches: set[str] = set()
+    if validated_dataset is not None:
+        as_of_dates = [
+            population.as_of_date
+            for population in validated_dataset.corpus_snapshot.as_of_populations
+        ]
+        current_populations = as_of_population_fingerprints(provisions, as_of_dates)
+        declared_by_date = {
+            population.as_of_date: population for population in declared_populations
+        }
+        current_by_date = {
+            population.as_of_date: population for population in current_populations
+        }
+        for as_of_date in sorted(set(declared_by_date) | set(current_by_date)):
+            declared = declared_by_date.get(as_of_date)
+            current = current_by_date.get(as_of_date)
+            if declared is None or current is None:
+                population_mismatches.add(f"{as_of_date}:population_missing")
+                continue
+            if declared.eligible_provision_count != current.eligible_provision_count:
+                population_mismatches.add(f"{as_of_date}:count")
+            if declared.fingerprint_sha256 != current.fingerprint_sha256:
+                population_mismatches.add(f"{as_of_date}:fingerprint")
+        if any(item.endswith(":count") for item in population_mismatches):
+            reasons.add("as_of_population_count_mismatch")
+        if any(item.endswith(":fingerprint") for item in population_mismatches):
+            reasons.add("as_of_population_fingerprint_mismatch")
+        if any(item.endswith(":population_missing") for item in population_mismatches):
+            reasons.add("as_of_population_date_mismatch")
+        current_snapshot_id = canonical_gold_corpus_snapshot_id(
+            parser_contract_version=PARSER_SCHEMA_VERSION,
+            retrieval_unit="provision",
+            as_of_populations=[asdict(population) for population in current_populations],
+        )
+        if declared_snapshot_id != current_snapshot_id:
+            reasons.add("corpus_snapshot_id_mismatch")
 
     # Both qrels and the complete judgment pool must be checked against the
     # full runtime-searchable population.  Dataset-generation evidence
@@ -533,6 +629,7 @@ def audit_gold_dataset(
     metadata_mismatches: set[tuple[str, str]] = set()
     missing_judged_candidate_ids: set[str] = set()
     missing_pool_candidates: set[str] = set()
+    qrels_not_effective_as_of: set[str] = set()
     distractors_not_effective_as_of: set[str] = set()
     pool_candidates_not_effective_as_of: set[str] = set()
     full_corpus_pool_mismatches: set[str] = set()
@@ -569,6 +666,18 @@ def audit_gold_dataset(
                     full_corpus_pool_mismatches.add(f"{validated_case.id}:{pool.method_id}")
 
     for case in cases:
+        case_id = case.get("id")
+        raw_as_of_date = case.get("as_of_date")
+        try:
+            case_as_of_date = (
+                date.fromisoformat(raw_as_of_date)
+                if isinstance(raw_as_of_date, str)
+                else raw_as_of_date
+                if isinstance(raw_as_of_date, date)
+                else None
+            )
+        except ValueError:
+            case_as_of_date = None
         qrels = case.get("qrels")
         if not isinstance(qrels, list):
             reasons.add("invalid_qrels_shape")
@@ -614,6 +723,8 @@ def audit_gold_dataset(
             if source is None:
                 missing_ids.add(provision_id)
                 continue
+            if case_as_of_date is not None and not _is_effective_at(source, case_as_of_date):
+                qrels_not_effective_as_of.add(f"{case_id}:{provision_id}")
             if source_sha != source.content_sha256:
                 changed_ids.add(provision_id)
             passage_sha = qrel.get("passage_text_sha256")
@@ -634,7 +745,6 @@ def audit_gold_dataset(
                 "path": source.path,
                 "heading": source.heading,
                 "effective_from": source.effective_from.isoformat(),
-                "effective_to": (source.effective_to.isoformat() if source.effective_to else None),
             }
             for field, expected_value in expected_metadata.items():
                 declared_value = qrel.get(field)
@@ -653,6 +763,8 @@ def audit_gold_dataset(
         reasons.add("judged_candidate_source_missing")
     if missing_pool_candidates:
         reasons.add("pool_candidate_source_missing")
+    if qrels_not_effective_as_of:
+        reasons.add("qrel_not_effective_as_of")
     if distractors_not_effective_as_of:
         reasons.add("distractor_not_effective_as_of")
     if pool_candidates_not_effective_as_of:
@@ -686,6 +798,7 @@ def audit_gold_dataset(
         metadata_mismatch_count=len(metadata_mismatches),
         missing_judged_candidate_count=len(missing_judged_candidate_ids),
         missing_pool_candidate_count=len(missing_pool_candidates),
+        qrel_not_effective_as_of_count=len(qrels_not_effective_as_of),
         distractor_not_effective_as_of_count=len(distractors_not_effective_as_of),
         pool_candidate_not_effective_as_of_count=len(pool_candidates_not_effective_as_of),
         full_corpus_pool_mismatch_count=len(full_corpus_pool_mismatches),
@@ -693,6 +806,7 @@ def audit_gold_dataset(
         changed_qrel_sample=tuple(sorted(changed_ids)[:10]),
         missing_judged_candidate_sample=tuple(sorted(missing_judged_candidate_ids)[:10]),
         missing_pool_candidate_sample=tuple(sorted(missing_pool_candidates)[:10]),
+        qrel_not_effective_as_of_sample=tuple(sorted(qrels_not_effective_as_of)[:10]),
         distractor_not_effective_as_of_sample=tuple(sorted(distractors_not_effective_as_of)[:10]),
         pool_candidate_not_effective_as_of_sample=tuple(
             sorted(pool_candidates_not_effective_as_of)[:10]
@@ -724,16 +838,17 @@ def audit_gold_dataset(
             declared_scope_hash if isinstance(declared_scope_hash, str) else None
         ),
         calculated_question_scope_set_sha256=calculated_scope_hash,
-        declared_corpus_fingerprint_sha256=declared_corpus_hash,
-        current_corpus_fingerprint_sha256=current_corpus_hash,
+        declared_corpus_snapshot_id=declared_snapshot_id,
+        current_corpus_snapshot_id=current_snapshot_id,
+        declared_as_of_populations=declared_populations,
+        current_as_of_populations=current_populations,
+        as_of_population_mismatch_count=len(population_mismatches),
+        as_of_population_mismatch_sample=tuple(sorted(population_mismatches)[:10]),
         declared_parser_contract_version=(
             str(declared_parser_version) if declared_parser_version is not None else None
         ),
         current_parser_contract_version=PARSER_SCHEMA_VERSION,
-        declared_searchable_provision_count=(
-            declared_provision_count if isinstance(declared_provision_count, int) else None
-        ),
-        current_searchable_provision_count=len(provisions),
+        current_stored_searchable_provision_count=len(provisions),
     )
 
 

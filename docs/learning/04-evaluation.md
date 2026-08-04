@@ -23,7 +23,7 @@
 
 | 요소 | 뜻 | 법률 RAG에서 함께 고정할 것 |
 |---|---|---|
-| corpus | 검색 대상 전체 | snapshot, 문서·버전·조문 ID, 지원 기준일, SHA |
+| corpus | 검색 대상 전체 | 문항 기준일별 eligible count·content fingerprint, 날짜 독립 snapshot ID, 문서·버전·조문 ID |
 | query | 평가 질문 | 질문 ID, 문구, 기준일, scenario family, split |
 | qrels | 질문별 관련성 정답표 | provision ID, 직접 근거 2·보조 문맥 1, 본문 SHA |
 | reference | 기준 문맥과 답변 | 원문 위치, 허용 답변·한계·추가 질문 |
@@ -53,8 +53,40 @@
 gold adjudication은 독립 annotation review 이후여야 하며, 질문 승인·검토·gold 승인 시각도 그 순서를
 지켜야 한다.
 
+질문 승인 범위는 질문 ID·문구와 scenario family·intent·technology·질문 변형 같은 질문 범위
+메타데이터까지다. corpus snapshot, `as_of_date`, qrels, reference response와 검색 결과는 승인하지 않는다.
+그래서 gold의 시간·근거 계약을 바꿔도 승인된 질문 문구와 범위가 같다면 question approval manifest를
+다시 만들지 않는다.
+
 넓은 질문은 `required_answer_facets`로 필수 답변 요소를 나눈다. 예를 들어 허가·검사·계통연계 중
 허가 근거 하나만 찾았다면 HitRate는 성공할 수 있어도 전체 Recall과 facet coverage는 낮아야 한다.
+
+## 날짜와 content snapshot을 따로 고정하는 이유
+
+평가 질문의 기준일은 검색할 법령 버전을 선택한다. gold는 각 `case.as_of_date`에 유효한 provision만
+모은 뒤 그 수와 content fingerprint를 `as_of_populations`에 기록한다. `snapshot_id`는 날짜 문자열이나
+NVIDIA embedding profile이 아니라 고유한 content population identity에서 계산한다.
+
+```text
+8월 3일 eligible ID·검색 콘텐츠 = 8월 4일 eligible ID·검색 콘텐츠
+→ content snapshot ID는 같음
+→ 날짜와 fingerprint 대응은 gold dataset·adjudication SHA에 각각 남음
+```
+
+따라서 날짜 독립 ID는 “언제 질문했는지 무시한다”는 뜻이 아니다. 같은 본문 상태를 여러 달력 날짜 이름으로
+중복 식별하지 않는다는 뜻이다. 문항 날짜를 바꾸면 `as_of_populations` 대응과 dataset·adjudication
+canonical SHA-256이 달라진다.
+
+미래 시행 버전을 미리 저장하거나 기존 버전의 `effective_to`를 그 미래 시행일로 닫아도 과거 기준일의
+유효 ID와 검색 콘텐츠가 같다면 과거 snapshot을 무효화하지 않는다. 새 버전이 실제로 시행되어 유효
+population이 바뀌거나 본문·경로 등 검색 콘텐츠가 바뀌면 fingerprint가 달라져 preflight가 실패한다.
+qrel source도 현재 corpus에서 문항 기준일에 실제로 유효해야 한다. 기록된 qrel ID와 본문 SHA가 맞아도
+그 날짜에 효력이 없으면 정답 근거로 사용할 수 없다.
+
+embedding profile은 별도 retrieval contract다. 같은 corpus라도 모델·query/passage 입력·차원·축약·정규화가
+다르면 검색 실험은 달라지므로 실행 입력과 결과에 기록한다. 그러나 이를 content snapshot ID에 섞으면
+원문은 그대로인데 검색 모델만 바꿔도 corpus가 바뀐 것처럼 보이므로 분리한다. HNSW는 이 프로젝트의
+현재와 미래 retrieval contract에서 제외한다.
 
 ## 검색 지표를 하나의 예로 이해하기
 

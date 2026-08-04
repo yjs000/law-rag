@@ -18,7 +18,7 @@ import subprocess
 import sys
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from math import fsum, isfinite, sqrt
 from pathlib import Path
@@ -70,7 +70,6 @@ CRITICAL_CODE_PATHS = (
     Path("apps/api/app/adapters/postgres_repository.py"),
     Path("apps/api/app/adapters/nvidia_nim_embedder.py"),
     Path("apps/api/app/domain/catalog.py"),
-    Path("apps/api/app/domain/corpus_temporal_contract.py"),
     Path("apps/api/app/domain/embedding_profiles.py"),
     Path("apps/api/app/domain/errors.py"),
     Path("apps/api/app/domain/schemas.py"),
@@ -997,12 +996,19 @@ async def evaluate_approved_gold(
         ks=tuple(artifacts.dataset.metric_protocol.cutoffs),
     )
     retrieval_observation_sha256 = _retrieval_observation_sha256(case_records)
+    corpus_snapshot_id = locked_preflight.current_corpus_snapshot_id
+    if corpus_snapshot_id is None:
+        raise GoldRunError("locked_corpus_snapshot_identity_missing")
+    as_of_population_fingerprints = [
+        asdict(population) for population in locked_preflight.current_as_of_populations
+    ]
     metric_payload = {
         "dataset_sha256": artifacts.dataset_sha256,
         "adjudication_manifest_sha256": artifacts.adjudication_manifest_sha256,
         "question_set_sha256": artifacts.dataset.source_bank.question_set_sha256,
         "question_scope_set_sha256": (artifacts.dataset.source_bank.question_scope_set_sha256),
-        "corpus_fingerprint_sha256": (locked_preflight.current_corpus_fingerprint_sha256),
+        "corpus_snapshot_id": corpus_snapshot_id,
+        "as_of_population_fingerprints": as_of_population_fingerprints,
         "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
         "embedding_batch_size": batch_size,
         "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
@@ -1015,7 +1021,7 @@ async def evaluate_approved_gold(
     }
     completed_at = completed_at_factory()
     payload: dict[str, object] = {
-        "schema_version": 3,
+        "schema_version": 4,
         "experiment": "D",
         "status": "completed",
         "run_id": run_id,
@@ -1030,7 +1036,8 @@ async def evaluate_approved_gold(
             "adjudication_manifest_sha256": artifacts.adjudication_manifest_sha256,
             "question_set_sha256": artifacts.dataset.source_bank.question_set_sha256,
             "question_scope_set_sha256": (artifacts.dataset.source_bank.question_scope_set_sha256),
-            "corpus_fingerprint_sha256": (locked_preflight.current_corpus_fingerprint_sha256),
+            "corpus_snapshot_id": corpus_snapshot_id,
+            "as_of_population_fingerprints": as_of_population_fingerprints,
             "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
             "embedding_batch_size": batch_size,
             "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,

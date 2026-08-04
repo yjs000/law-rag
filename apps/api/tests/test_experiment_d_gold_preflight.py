@@ -15,6 +15,7 @@ from app.domain.embedding_profiles import (
 from scripts.experiment_d_corpus import SourceProvision
 from scripts.experiment_d_gold_contract import (
     canonical_gold_case_payload_sha256,
+    canonical_gold_corpus_snapshot_id,
     canonical_gold_dataset_sha256,
 )
 from scripts.experiment_d_question_identity import (
@@ -24,8 +25,8 @@ from scripts.experiment_d_question_identity import (
 from scripts.preflight_experiment_d_gold import (
     APPROVED_GOLD_STATUS,
     NonCurrentParserIdError,
+    as_of_population_fingerprints,
     audit_gold_dataset,
-    corpus_fingerprint_sha256,
     question_set_sha256,
 )
 from tests import test_experiment_d_gold_contract as gold_fixture
@@ -54,6 +55,41 @@ def _source(
     )
 
 
+def _bind_corpus_snapshot(
+    dataset: dict[str, object],
+    sources: list[SourceProvision],
+) -> None:
+    cases = dataset.get("cases")
+    assert isinstance(cases, list)
+    as_of_dates = sorted(
+        {
+            date.fromisoformat(str(case["as_of_date"]))
+            for case in cases
+            if isinstance(case, dict) and "as_of_date" in case
+        }
+    )
+    populations = [
+        {
+            "as_of_date": population.as_of_date,
+            "eligible_provision_count": population.eligible_provision_count,
+            "fingerprint_sha256": population.fingerprint_sha256,
+        }
+        for population in as_of_population_fingerprints(sources, as_of_dates)
+    ]
+    dataset["corpus_snapshot"] = {
+        "snapshot_id": canonical_gold_corpus_snapshot_id(
+            parser_contract_version="3",
+            retrieval_unit="provision",
+            as_of_populations=populations,
+        ),
+        "parser_contract_version": "3",
+        "retrieval_unit": "provision",
+        "as_of_populations": populations,
+        "passage_template_version": "legal-provision-v1",
+        "embedding_profile_key": "nvidia-nemotron-3-embed-1b-512-v1",
+    }
+
+
 def _approved_dataset(source: SourceProvision) -> dict[str, object]:
     question = "전기사업 관련 법은 어떤 기본 사항을 정하나요?"
     cases: list[dict[str, object]] = [
@@ -66,6 +102,7 @@ def _approved_dataset(source: SourceProvision) -> dict[str, object]:
             "intent": "법 목적 확인",
             "technology": "electricity",
             "question_style": "plain_question",
+            "as_of_date": "2026-08-03",
             "answerability": "fully_answerable",
             "qrels": [
                 {
@@ -85,7 +122,7 @@ def _approved_dataset(source: SourceProvision) -> dict[str, object]:
     frozen_question_hash = question_set_sha256(cases)
     frozen_scope_hash = question_scope_set_sha256(cases)
     assert frozen_scope_hash is not None
-    return {
+    dataset: dict[str, object] = {
         "dataset_version": "experiment-d-lay-energy-gold-v1",
         "evaluation_status": APPROVED_GOLD_STATUS,
         "question_set_sha256": frozen_question_hash,
@@ -98,14 +135,10 @@ def _approved_dataset(source: SourceProvision) -> dict[str, object]:
             "approval_manifest_artifact": "approval-manifest.json",
             "approval_manifest_sha256": "0" * 64,
         },
-        "corpus_snapshot": {
-            "snapshot_id": "mvp-current-corpus-2026-08-03",
-            "parser_contract_version": "3",
-            "searchable_provision_count": 1,
-            "fingerprint_sha256": corpus_fingerprint_sha256([source]),
-        },
         "cases": cases,
     }
+    _bind_corpus_snapshot(dataset, [source])
+    return dataset
 
 
 def _source_bank(dataset: dict[str, object]) -> dict[str, object]:
@@ -280,8 +313,7 @@ def _full_ready_inputs() -> tuple[
     dataset["source_bank"]["approval_manifest_sha256"] = _approval_manifest_sha256(
         approval_manifest
     )
-    dataset["corpus_snapshot"]["searchable_provision_count"] = len(sources)
-    dataset["corpus_snapshot"]["fingerprint_sha256"] = corpus_fingerprint_sha256(sources)
+    _bind_corpus_snapshot(dataset, sources)
     adjudication_manifest = _full_adjudication_manifest(dataset)
     return dataset, sources, source_bank, approval_manifest, adjudication_manifest
 
@@ -309,7 +341,8 @@ def test_matching_one_case_fixture_has_no_binding_or_corpus_errors() -> None:
     assert report.source_bank_binding_valid is True
     assert "qrel_source_missing" not in report.reasons
     assert "qrel_source_changed" not in report.reasons
-    assert "corpus_fingerprint_mismatch" not in report.reasons
+    assert "as_of_population_fingerprint_mismatch" not in report.reasons
+    assert "corpus_snapshot_id_mismatch" not in report.reasons
     assert "gold_contract_invalid" in report.reasons
     assert "approval_manifest_contract_invalid" in report.reasons
     assert report.qrel_count == 1
@@ -332,6 +365,103 @@ def test_full_valid_gold_contract_is_ready_against_matching_corpus() -> None:
     assert report.case_count == 1000
     assert report.missing_judged_candidate_count == 0
     assert report.adjudication_manifest_valid is True
+
+
+def test_future_only_version_does_not_change_an_earlier_population() -> None:
+    dataset, sources, source_bank, approval_manifest, adjudication_manifest = (
+        _full_ready_inputs()
+    )
+    future = replace(
+        sources[0],
+        provision_id="future-provision",
+        version_id="future-version",
+        effective_from=date(2026, 9, 1),
+    )
+
+    report = audit_gold_dataset(
+        dataset,
+        [*sources, future],
+        source_bank,
+        approval_manifest,
+        adjudication_manifest,
+    )
+
+    assert report.ready is True
+    assert report.current_stored_searchable_provision_count == len(sources) + 1
+    assert report.current_as_of_populations[0].eligible_provision_count == len(sources)
+
+
+def test_closing_predecessor_at_future_boundary_keeps_earlier_identity() -> None:
+    dataset, sources, source_bank, approval_manifest, adjudication_manifest = (
+        _full_ready_inputs()
+    )
+    closed = replace(sources[0], effective_to=date(2026, 9, 1))
+    future = replace(
+        sources[0],
+        provision_id="future-provision",
+        version_id="future-version",
+        effective_from=date(2026, 9, 1),
+    )
+    current_sources = [closed, *sources[1:], future]
+
+    report = audit_gold_dataset(
+        dataset,
+        current_sources,
+        source_bank,
+        approval_manifest,
+        adjudication_manifest,
+    )
+
+    assert report.ready is True
+    assert report.current_corpus_snapshot_id == dataset["corpus_snapshot"]["snapshot_id"]
+
+
+def test_eligible_content_change_invalidates_population_fingerprint() -> None:
+    dataset, sources, source_bank, approval_manifest, adjudication_manifest = (
+        _full_ready_inputs()
+    )
+    changed_sources = [
+        replace(source, content="변경된 직접 근거가 아닌 본문")
+        if source.provision_id == "distractor-1"
+        else source
+        for source in sources
+    ]
+
+    report = audit_gold_dataset(
+        dataset,
+        changed_sources,
+        source_bank,
+        approval_manifest,
+        adjudication_manifest,
+    )
+
+    assert report.ready is False
+    assert "as_of_population_fingerprint_mismatch" in report.reasons
+    assert "corpus_snapshot_id_mismatch" in report.reasons
+
+
+def test_qrel_source_must_be_effective_on_the_case_date() -> None:
+    dataset, sources, source_bank, approval_manifest, adjudication_manifest = (
+        _full_ready_inputs()
+    )
+    future_sources = [
+        replace(source, effective_from=date(2026, 9, 1))
+        if source.provision_id == "provision-1"
+        else source
+        for source in sources
+    ]
+
+    report = audit_gold_dataset(
+        dataset,
+        future_sources,
+        source_bank,
+        approval_manifest,
+        adjudication_manifest,
+    )
+
+    assert report.ready is False
+    assert "qrel_not_effective_as_of" in report.reasons
+    assert report.qrel_not_effective_as_of_count == 1
 
 
 def test_flat_body_qrel_and_judged_candidate_are_searchable_ready_path() -> None:
@@ -406,8 +536,7 @@ def test_flat_body_qrel_and_judged_candidate_are_searchable_ready_path() -> None
     dataset["source_bank"]["approval_manifest_sha256"] = _approval_manifest_sha256(
         approval_manifest
     )
-    dataset["corpus_snapshot"]["searchable_provision_count"] = len(sources)
-    dataset["corpus_snapshot"]["fingerprint_sha256"] = corpus_fingerprint_sha256(sources)
+    _bind_corpus_snapshot(dataset, sources)
     adjudication_manifest = _full_adjudication_manifest(dataset)
 
     report = audit_gold_dataset(
@@ -461,8 +590,7 @@ def test_structure_marker_returned_as_distractor_is_present_in_searchable_pool()
         "distractor_provision_ids": [structure.provision_id],
     }
     sources = [source, structure]
-    dataset["corpus_snapshot"]["searchable_provision_count"] = len(sources)
-    dataset["corpus_snapshot"]["fingerprint_sha256"] = corpus_fingerprint_sha256(sources)
+    _bind_corpus_snapshot(dataset, sources)
 
     report = _audit(dataset, sources)
 
@@ -650,7 +778,7 @@ def test_distractor_and_pool_candidates_must_be_effective_at_case_as_of() -> Non
         else source
         for source in sources
     ]
-    dataset["corpus_snapshot"]["fingerprint_sha256"] = corpus_fingerprint_sha256(sources)
+    _bind_corpus_snapshot(dataset, sources)
     adjudication_manifest = _full_adjudication_manifest(dataset)
 
     report = audit_gold_dataset(
