@@ -3,10 +3,17 @@ import json
 import re
 import unicodedata
 from collections import Counter
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 
+from scripts.experiment_d_question_bank_provenance import (
+    QUESTION_BANK_CONTEXT_AS_OF_DATE,
+    QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH,
+)
 from scripts.experiment_d_question_identity import (
     question_scope_set_sha256,
     question_scope_sha256,
@@ -84,11 +91,39 @@ LEGAL_TEMPLATE_PATTERN = re.compile(
     r")"
 )
 EXPECTED_QUESTION_SET_SHA256 = "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a"
+REPOSITORY_ROOT = Path(__file__).parents[3]
+BANK_PATH = (
+    Path(__file__).parents[1] / "evaluation" / "experiment-d-lay-energy-query-bank-v1-draft.json"
+)
+REVIEW_PATH = REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-lay-energy-query-bank-v1.md"
+APPROVAL_REVIEW_PATH = (
+    REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-lay-energy-approval-review-v1.md"
+)
+EXPECTED_ARTIFACT_SHA256 = {
+    BANK_PATH: "00870a5dd25db27d7f444080abff705b9d6c1e63f69b20ada0d6eefbfd442dec",
+    REVIEW_PATH: "ed6011a9e4bb7da2c7fc12013da81c6d7490099bc03d552dc023314eec777028",
+    APPROVAL_REVIEW_PATH: ("b2d3cb045c375d594912009c02c0bda688f6aaa6682c2e5ea6df709eb80319c8"),
+}
 
 
 @pytest.fixture(scope="module")
 def bank() -> dict[str, object]:
     return build_bank()
+
+
+def test_question_bank_context_is_frozen_provenance_and_outputs_are_unchanged(
+    bank: dict[str, object],
+) -> None:
+    assert QUESTION_BANK_CONTEXT_AS_OF_DATE == "2026-08-03"
+    assert QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID == "mvp-current-corpus-2026-08-03"
+    assert QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM.isoformat() == "2026-06-03"
+    assert QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH.isoformat() == "2026-08-03"
+    assert json.dumps(bank, ensure_ascii=False, indent=2) + "\n" == BANK_PATH.read_text(
+        encoding="utf-8"
+    )
+    assert render_review(bank) == REVIEW_PATH.read_text(encoding="utf-8")
+    for path, expected_sha256 in EXPECTED_ARTIFACT_SHA256.items():
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected_sha256
 
 
 def _normalize(value: str) -> str:

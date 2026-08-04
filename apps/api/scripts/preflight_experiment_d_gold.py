@@ -23,6 +23,7 @@ from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 from pydantic import ValidationError
 
 from app.adapters.postgres_repository import PostgresLegalRepository
+from app.domain.corpus_temporal_contract import canonical_corpus_population_fingerprint
 from app.domain.embedding_profiles import embedding_text_sha256, legal_provision_embedding_text
 from app.settings import get_settings
 from scripts.experiment_d_corpus import SourceProvision, load_provisions
@@ -199,29 +200,22 @@ def eligible_population_fingerprint_sha256(
     """
 
     rows = [
-        {
-            "parser_schema_version": PARSER_SCHEMA_VERSION,
-            "document_id": item.document_id,
-            "version_id": item.version_id,
-            "provision_id": item.provision_id,
-            "document_title": item.document_title,
-            "source_kind": item.source_kind,
-            "effective_from": item.effective_from.isoformat(),
-            "path": item.path,
-            "parent_path": item.parent_path,
-            "heading": item.heading,
-            "content_sha256": item.content_sha256,
-        }
-        for item in sorted(provisions, key=lambda item: item.provision_id)
+        [
+            PARSER_SCHEMA_VERSION,
+            item.document_id,
+            item.version_id,
+            item.provision_id,
+            item.document_title,
+            item.source_kind,
+            item.effective_from.isoformat(),
+            item.path,
+            item.parent_path,
+            item.heading,
+            item.content_sha256,
+        ]
+        for item in provisions
     ]
-    return hashlib.sha256(
-        json.dumps(
-            rows,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    return canonical_corpus_population_fingerprint(rows)
 
 
 def as_of_population_fingerprints(
@@ -233,9 +227,7 @@ def as_of_population_fingerprints(
     populations: list[AsOfPopulationFingerprint] = []
     for as_of_date in sorted(set(as_of_dates)):
         eligible = [
-            provision
-            for provision in provisions
-            if _is_effective_at(provision, as_of_date)
+            provision for provision in provisions if _is_effective_at(provision, as_of_date)
         ]
         populations.append(
             AsOfPopulationFingerprint(
@@ -289,9 +281,7 @@ def _declared_as_of_populations(
     dataset: Mapping[str, object],
 ) -> tuple[AsOfPopulationFingerprint, ...]:
     snapshot = dataset.get("corpus_snapshot")
-    raw_populations = (
-        snapshot.get("as_of_populations") if isinstance(snapshot, Mapping) else None
-    )
+    raw_populations = snapshot.get("as_of_populations") if isinstance(snapshot, Mapping) else None
     if not isinstance(raw_populations, list):
         return ()
     populations: list[AsOfPopulationFingerprint] = []
@@ -590,9 +580,7 @@ def audit_gold_dataset(
         declared_by_date = {
             population.as_of_date: population for population in declared_populations
         }
-        current_by_date = {
-            population.as_of_date: population for population in current_populations
-        }
+        current_by_date = {population.as_of_date: population for population in current_populations}
         for as_of_date in sorted(set(declared_by_date) | set(current_by_date)):
             declared = declared_by_date.get(as_of_date)
             current = current_by_date.get(as_of_date)

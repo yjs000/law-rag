@@ -8,6 +8,8 @@ from app import main
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.settings import Settings
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 
 def _vercel_request(ip: str) -> Request:
     return Request(
@@ -50,14 +52,10 @@ async def test_spoofed_forwarded_chain_cannot_rotate_quota_subject(
     monkeypatch.setattr(main, "repository", MemoryLegalRepository())
 
     for spoofed_ip in ("198.51.100.1", "198.51.100.2", "198.51.100.3"):
-        await main._check_quota(
-            _vercel_request(f"{spoofed_ip}, 203.0.113.8"), "ai", 3
-        )
+        await main._check_quota(_vercel_request(f"{spoofed_ip}, 203.0.113.8"), "ai", 3)
 
     with pytest.raises(HTTPException) as exc_info:
-        await main._check_quota(
-            _vercel_request("198.51.100.4, 203.0.113.8"), "ai", 3
-        )
+        await main._check_quota(_vercel_request("198.51.100.4, 203.0.113.8"), "ai", 3)
     assert exc_info.value.status_code == 429
 
 

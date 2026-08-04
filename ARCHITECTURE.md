@@ -1,7 +1,7 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-08-03
+최종 갱신: 2026-08-04
 
 ## 목적
 
@@ -65,7 +65,11 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 - `derived_obligations`: 행위자·조건·의무 유형과 검증 상태
 - `ingestion_runs`, `evaluation_runs`, `runtime_flags`: 운영·평가 상태와 dataset·code·corpus·retrieval release 계보
 
-검색은 먼저 corpus 전체 준비 게이트와 현재 corpus가 실제로 지원하는 기준일 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 현재 snapshot `mvp-current-corpus-2026-08-03`은 9개 open version과 3,066개 조문이 공통으로 갖춰진 `2026-06-03`부터 `2026-08-03`까지를 양끝 포함해 지원한다. 이 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`로 같은 계약을 노출한다. 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. 운영 dense와 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색·평가 경로에서 사용하지 않으며 새 인덱스·build·release도 만들지 않는다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
+검색은 먼저 corpus 전체 준비 게이트와 동적으로 계산한 기준일 지원 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 지원 시작일은 오늘 이하인 수집 완료·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값이고, 지원 종료일은 UTC+9 한국 날짜의 오늘이며 양끝을 포함한다. 이는 저장된 버전 전체의 법률별 연속성·중복 여부를 검증한 공통 timeline이라는 뜻이 아니다. 오늘 유효한 provision population의 개수와 검색 콘텐츠 지문으로 `corpus-sha256:*` ID를 계산하며, 달력 날짜·`effective_to`·임베딩 프로필은 content ID 입력에 넣지 않는다. 따라서 시행·개정·폐지 경계와 검색 콘텐츠 변경이 없으면 날짜가 지나도 같은 ID를 유지한다.
+
+전체 검색 준비 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 시간 identity를 완성할 수 없으면 검색 엔드포인트는 HTTP `503`, 코드 `corpus_unready`로 닫힌다. 준비되지 않은 `/v1/corpus/status`에서는 지원 시작일과 snapshot ID가 `null`일 수 있다. 준비된 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 quota·임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. PostgreSQL 실제 검색은 새 연결의 첫 문장으로 corpus mutation 공유 advisory transaction lock을 얻은 뒤 현재 범위를 다시 계산한다. 최초 검사 뒤 corpus 세대가 교체돼 요청일이 새 범위를 벗어나면 검색하지 않고 `503 corpus_unready` 재시도로 닫으며, 같은 잠금이 검색 종료까지 writer와 세대 전환을 막는다. `/v1/corpus/status`는 이때 계산된 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`, 준비 상태와 사유를 노출한다. 요청에서 날짜를 생략하면 API는 서버 시간대가 아니라 한국 날짜의 오늘을 사용한다.
+
+법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. 운영 dense와 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색·평가 경로에서 사용하지 않으며 새 인덱스·build·release도 만들지 않는다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
 
 의미 검색은 질의와 저장 벡터의 profile key가 같을 때만 실행한다. 현재 임베딩 provider는 NVIDIA hosted NIM의 `nvidia/nemotron-3-embed-1b`이며 native 2048차원의 첫 512개를 L2 재정규화해 저장한다. production 응답은 같은 조의 하위 조각을 조 단위로 묶을 수 있지만, 실험 D의 검색 평가는 qrels와 같은 raw `provision_id` 단위를 사용하고 direct-path, keyword fallback, 조 단위 grouping을 우회한다.
 
@@ -108,7 +112,7 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 
 연혁 본문 경로가 XML/JSON 계약 테스트를 통과하기 전 변경 API는 `supported=false`를 반환한다. HTML로 기능을 가장하지 않는다.
 
-`POST /v1/questions`, `POST /v1/search`, `GET /v1/provisions/{id}`는 현재 corpus 지원 범위 밖 `as_of_date`를 저장소·임베딩 호출 전에 같은 `422 unsupported_corpus_date` 계약으로 차단한다.
+`POST /v1/questions`, `POST /v1/search`, `GET /v1/provisions/{id}`는 현재 corpus가 준비되지 않았으면 `503 corpus_unready`로 닫고, 동적 지원 범위 밖 `as_of_date`는 quota·provider·실제 검색 호출 전에 같은 `422 unsupported_corpus_date` 계약으로 차단한다. 날짜 기본값은 UTC+9 한국 날짜의 오늘이다.
 
 ## 운영 원칙
 
@@ -148,4 +152,5 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-08-03 | 실험 D primary dense baseline을 exhaustive exact cosine으로 고정 | 근사화 변수를 현재와 미래의 품질 판정에서 영구 배제하고 근거 찾기 자체의 재현성을 유지 |
 | 2026-08-03 | [대체됨] HNSW 설계·평가를 gold 1,000문항과 근거 찾기 전수 검증 이후의 별도 승인 단계로 보류 | 당시에는 근거 찾기와 근사 인덱스 중 무엇을 측정했는지 구분하기 위해 보류했으나, 2026-08-04 영구 제외 결정으로 대체됨 |
 | 2026-08-04 | HNSW를 현재와 미래의 제품·실험 경로에서 영구 제외하고 exhaustive exact cosine을 유지 | 근사 인덱스 도입으로 품질 판정과 운영 복잡도를 다시 늘리지 않기로 한 사용자 결정. 2026-08-03의 “검증 후 재검토” 결정을 대체하며, 기존 물리 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물로만 남김 |
-| 2026-08-03 | 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 요청을 `422`로 거부 | 9개 법령의 현행 open version과 3,066개 조문이 모두 갖춰진 구간만 검색해 희소한 과거 corpus를 근거 부족으로 오인하지 않음 |
+| 2026-08-03 | [대체됨] 당시 감사한 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 요청을 `422`로 거부 | 당시 9개 open version과 3,066개 조문을 기준으로 한 안전 경계였으나, 2026-08-04 동적 시간 계약으로 대체됨 |
+| 2026-08-04 | 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산하고 오늘 유효 population의 content identity를 상태로 노출 | 날짜 상수를 매일 고치지 않으면서 현재 수집 corpus만 검색하고, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 분리하기 위함. 이 계산은 법률별 timeline 연속성을 검증했다는 주장이 아님 |

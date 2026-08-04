@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from law_rag_core.parsers.law_json import parse_legal_document
+from law_rag_core.persistence import CORPUS_MUTATION_LOCK_KEY, CORPUS_SEARCH_READY_FLAG_KEY
 
 from app.adapters.memory_repository import MemoryLegalRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -43,18 +44,30 @@ class _FakeConnection:
         *,
         search_ready: bool = True,
         explain_plan: object | None = None,
+        temporal_row: dict[str, object] | None = None,
     ) -> None:
         self.rows_by_query = rows_by_query
         self.search_ready = search_ready
         self.explain_plan = explain_plan
+        self.temporal_row = temporal_row
         self.readiness_checks = 0
+        self.shared_lock_checks = 0
         self.calls: list[dict] = []
         self.statements: list[str] = []
+        self.temporal_calls: list[dict] = []
+        self.temporal_statements: list[str] = []
+        self.execution_order: list[str] = []
 
     async def execute(self, statement, params: dict | None = None):
         sql = str(statement)
+        if "pg_advisory_xact_lock_shared" in sql:
+            assert params == {"lock_key": CORPUS_MUTATION_LOCK_KEY}
+            self.shared_lock_checks += 1
+            self.execution_order.append("shared_lock")
+            return _ScalarResult(None)
         if "corpus_search_readiness_check" in sql:
             self.readiness_checks += 1
+            self.execution_order.append("readiness")
             return _MappingsResult(
                 [
                     {
@@ -63,9 +76,30 @@ class _FakeConnection:
                     }
                 ]
             )
+        if "corpus_temporal_population" in sql:
+            assert isinstance(params, dict)
+            self.readiness_checks += 1
+            self.temporal_calls.append(params)
+            self.temporal_statements.append(sql)
+            self.execution_order.append("temporal_state")
+            population = self.temporal_row or {
+                "supported_from": date(1900, 1, 1),
+                "eligible_provision_count": 1,
+                "fingerprint_sha256": "a" * 64,
+            }
+            return _MappingsResult(
+                [
+                    {
+                        "ready": self.search_ready,
+                        "reason": (None if self.search_ready else "embedding_backfill_started"),
+                        **population,
+                    }
+                ]
+            )
         assert isinstance(params, dict)
         self.calls.append(params)
         self.statements.append(sql)
+        self.execution_order.append("retrieval")
         if sql.startswith("EXPLAIN "):
             return _ScalarResult(self.explain_plan)
         key = "__dense__" if "embedding" in params else params.get("query", "__direct__")
@@ -178,6 +212,54 @@ async def test_memory_natural_search_keeps_one_leaf_per_article() -> None:
 
 
 @pytest.mark.asyncio
+async def test_memory_temporal_state_uses_earliest_collected_date_and_content_identity() -> None:
+    repository = MemoryLegalRepository()
+    document = _document("전기사업법", "temporal", "제1조 전기사업 허가 기준")
+    document.effective_from = date(2020, 1, 1)
+    await repository.upsert_document(document)
+
+    first = await repository.corpus_temporal_state(date(2026, 8, 3))
+    second = await repository.corpus_temporal_state(date(2026, 8, 4))
+
+    assert first.ready is True
+    assert first.supported_as_of_from == date(2020, 1, 1)
+    assert first.supported_as_of_through == date(2026, 8, 3)
+    assert first.eligible_provision_count == 1
+    assert first.corpus_snapshot_id == second.corpus_snapshot_id
+
+
+@pytest.mark.asyncio
+async def test_memory_temporal_state_excludes_old_parser_and_empty_versions() -> None:
+    repository = MemoryLegalRepository()
+    current = _document("전기사업법", "current-parser", "현재 parser 본문")
+    current.effective_from = date(2020, 1, 1)
+    old_parser = _document("전기사업법", "old-parser", "구 parser 본문")
+    old_parser.effective_from = date(1990, 1, 1)
+    old_parser.parser_schema_version = "2"
+    empty = _document("전기사업법", "empty-version", "비워질 본문")
+    empty.effective_from = date(1980, 1, 1)
+    empty.provisions = []
+    await repository.upsert_document(current)
+    await repository.upsert_document(old_parser)
+    await repository.upsert_document(empty)
+
+    state = await repository.corpus_temporal_state(date(2026, 8, 4))
+
+    assert state.ready is True
+    assert state.supported_as_of_from == date(2020, 1, 1)
+    assert state.eligible_provision_count == 1
+
+
+@pytest.mark.asyncio
+async def test_empty_memory_corpus_is_temporally_unready() -> None:
+    state = await MemoryLegalRepository().corpus_temporal_state(date(2026, 8, 4))
+
+    assert state.ready is False
+    assert state.reason == "no_currently_effective_corpus"
+    assert state.corpus_snapshot_id is None
+
+
+@pytest.mark.asyncio
 async def test_minimum_two_candidates_are_gated_by_required_anchor() -> None:
     repository = MemoryLegalRepository()
     await repository.upsert_document(
@@ -278,6 +360,8 @@ async def test_postgres_dense_candidates_do_not_execute_or_fuse_keyword_search()
     assert "WITH exact_eligible_distances AS MATERIALIZED" in connection.statements[0]
     assert "ORDER BY distance,ordinal" in connection.statements[0]
     assert "ORDER BY e.embedding::vector(512)" not in connection.statements[0]
+    assert connection.shared_lock_checks == 1
+    assert connection.execution_order[:3] == ["shared_lock", "temporal_state", "retrieval"]
 
 
 @pytest.mark.asyncio
@@ -496,6 +580,8 @@ async def test_postgres_direct_path_and_provision_reads_exclude_unavailable_vers
     assert "lifecycle_state IN ('active','scheduled')" in provision_connection.statements[0]
     assert "parser_schema_version='3'" in provision_connection.statements[0]
     assert "corpus.search_ready" in provision_connection.statements[0]
+    assert provision_connection.shared_lock_checks == 1
+    assert provision_connection.execution_order == ["shared_lock", "temporal_state", "retrieval"]
 
 
 @pytest.mark.asyncio
@@ -509,6 +595,109 @@ async def test_postgres_reports_closed_corpus_before_running_retrieval() -> None
 
     assert connection.readiness_checks == 1
     assert connection.calls == []
+    assert connection.shared_lock_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_postgres_revalidates_date_after_locking_current_corpus_generation() -> None:
+    connection = _FakeConnection(
+        {},
+        temporal_row={
+            "supported_from": date(2026, 8, 1),
+            "eligible_provision_count": 1,
+            "fingerprint_sha256": "a" * 64,
+        },
+    )
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    with pytest.raises(CorpusSearchUnavailableError, match="corpus_temporal_state_changed"):
+        await repository.search_with_trace("date changed", date(2026, 7, 18), 10)
+
+    assert connection.execution_order == ["shared_lock", "temporal_state"]
+    assert connection.calls == []
+
+
+@pytest.mark.asyncio
+async def test_postgres_temporal_state_uses_collected_minimum_and_requested_today() -> None:
+    supported_through = date(2026, 8, 4)
+    connection = _FakeConnection(
+        {},
+        temporal_row={
+            "supported_from": date(2007, 1, 1),
+            "eligible_provision_count": 3066,
+            "fingerprint_sha256": "a" * 64,
+        },
+    )
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    state = await repository.corpus_temporal_state(supported_through)
+
+    assert state.ready is True
+    assert state.supported_as_of_from == date(2007, 1, 1)
+    assert state.supported_as_of_through == supported_through
+    assert state.eligible_provision_count == 3066
+    assert state.corpus_snapshot_id is not None
+    assert connection.readiness_checks == 1
+    assert connection.temporal_calls == [
+        {
+            "corpus_ready_key": CORPUS_SEARCH_READY_FLAG_KEY,
+            "supported_through": supported_through,
+        }
+    ]
+    assert "MIN(effective_from)" in connection.temporal_statements[0]
+    assert "effective_from<=:supported_through" in connection.temporal_statements[0]
+    assert "effective_to>:supported_through" in connection.temporal_statements[0]
+    assert (
+        "effective_to"
+        not in connection.temporal_statements[0]
+        .split("jsonb_build_array(", 1)[1]
+        .split(") ORDER BY", 1)[0]
+    )
+
+
+@pytest.mark.asyncio
+async def test_postgres_temporal_state_rejects_future_only_or_empty_population() -> None:
+    supported_through = date(2026, 8, 4)
+    connection = _FakeConnection(
+        {},
+        temporal_row={
+            "supported_from": None,
+            "eligible_provision_count": 0,
+            "fingerprint_sha256": "a" * 64,
+        },
+    )
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    state = await repository.corpus_temporal_state(supported_through)
+
+    assert state.ready is False
+    assert state.reason == "no_currently_effective_corpus"
+    assert state.supported_as_of_from is None
+    assert state.corpus_snapshot_id is None
+
+
+@pytest.mark.asyncio
+async def test_postgres_temporal_state_does_not_hash_content_while_gate_is_closed() -> None:
+    connection = _FakeConnection({}, search_ready=False)
+    repository = PostgresLegalRepository.__new__(PostgresLegalRepository)
+    repository.engine = _FakeEngine(connection)  # type: ignore[assignment]
+
+    state = await repository.corpus_temporal_state(date(2026, 8, 4))
+
+    assert state.ready is False
+    assert state.reason == "embedding_backfill_started"
+    assert connection.readiness_checks == 1
+    assert connection.temporal_calls == [
+        {
+            "corpus_ready_key": CORPUS_SEARCH_READY_FLAG_KEY,
+            "supported_through": date(2026, 8, 4),
+        }
+    ]
+    assert len(connection.temporal_statements) == 1
+    assert "(SELECT ready FROM readiness)" in connection.temporal_statements[0]
 
 
 @pytest.mark.asyncio

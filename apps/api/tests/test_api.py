@@ -8,6 +8,8 @@ from app.adapters.memory_repository import MemoryLegalRepository
 from app.domain.errors import CorpusSearchUnavailableError
 from app.main import app
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 
 def test_health_exposes_no_secrets() -> None:
     response = TestClient(app).get("/health")
@@ -145,9 +147,7 @@ def test_provision_returns_corpus_unready_instead_of_not_found(
 
     monkeypatch.setattr(repository, "provision", closed_provision)
     monkeypatch.setattr(main_module, "repository", repository)
-    response = TestClient(app, raise_server_exceptions=False).get(
-        f"/v1/provisions/{uuid4()}"
-    )
+    response = TestClient(app, raise_server_exceptions=False).get(f"/v1/provisions/{uuid4()}")
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "corpus_unready"

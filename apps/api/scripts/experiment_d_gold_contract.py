@@ -16,6 +16,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.domain.corpus_temporal_contract import canonical_corpus_snapshot_id
+
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 CorpusSnapshotId = Annotated[
     str,
@@ -98,36 +100,11 @@ def canonical_gold_corpus_snapshot_id(
 ) -> str:
     """Hash unique content populations; evaluation dates are sealed separately."""
 
-    rows = [
-        {
-            "eligible_provision_count": count,
-            "fingerprint_sha256": fingerprint,
-        }
-        for count, fingerprint in sorted(
-            {
-                (
-                    int(population["eligible_provision_count"]),
-                    str(population["fingerprint_sha256"]),
-                )
-                for population in as_of_populations
-            }
-        )
-    ]
-    payload = {
-        "contract": "corpus-population-content-v1",
-        "parser_contract_version": parser_contract_version,
-        "retrieval_unit": retrieval_unit,
-        "content_populations": rows,
-    }
-    digest = hashlib.sha256(
-        json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    return f"corpus-sha256:{digest}"
+    return canonical_corpus_snapshot_id(
+        parser_contract_version=parser_contract_version,
+        retrieval_unit=retrieval_unit,
+        content_populations=as_of_populations,
+    )
 
 
 class GoldAsOfPopulation(StrictModel):
@@ -620,9 +597,7 @@ class ExperimentDGoldDataset(StrictModel):
         }
         case_dates = {case.as_of_date for case in self.cases}
         if set(population_by_date) != case_dates:
-            raise ValueError(
-                "corpus snapshot dates must exactly match the gold case as-of dates"
-            )
+            raise ValueError("corpus snapshot dates must exactly match the gold case as-of dates")
 
         protocol_by_id = {
             method.method_id: method for method in self.annotation_protocol.pool_methods

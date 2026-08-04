@@ -13,6 +13,8 @@ from app.domain.catalog import SourceKind
 from app.domain.provision_queries import parse_provision_reference, parse_provision_references
 from app.domain.schemas import QuestionRequest
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 
 def _document(title: str, source_id: str, effective_date: str = "20200101"):
     body = json.dumps(

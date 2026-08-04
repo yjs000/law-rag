@@ -316,6 +316,10 @@ async def test_cli_run_passes_all_four_gold_artifact_paths_to_loader(
     assert captured == list(paths.values())
 
 
+def test_gold_code_provenance_includes_shared_corpus_identity_algorithm() -> None:
+    assert Path("apps/api/app/domain/corpus_temporal_contract.py") in runner.CRITICAL_CODE_PATHS
+
+
 @pytest.mark.asyncio
 async def test_invalid_code_provenance_stops_before_backend_or_embedder(
     gold_bundle: GoldFixtureBundle,
@@ -706,9 +710,10 @@ async def test_future_only_stored_version_keeps_locked_as_of_snapshot_valid(
 
     assert backend.search_count == 1000
     assert published.payload["retrieval_state"]["vector_count"] == 2001
-    assert published.payload["inputs"]["as_of_population_fingerprints"][0][
-        "eligible_provision_count"
-    ] == 2000
+    assert (
+        published.payload["inputs"]["as_of_population_fingerprints"][0]["eligible_provision_count"]
+        == 2000
+    )
     assert published.payload["inputs"]["corpus_snapshot_id"] == (
         gold_bundle.artifacts.dataset.corpus_snapshot.snapshot_id
     )

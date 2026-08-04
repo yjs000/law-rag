@@ -9,6 +9,8 @@ from app.domain.catalog import SourceKind
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 
 def _with_trace(search):
     async def traced(*args, **kwargs):
@@ -112,9 +114,7 @@ def test_all_generation_failures_fall_back_without_another_model(
 
 
 @pytest.mark.parametrize("error", [BillingFailure("billing"), QuotaFailure("quota")])
-def test_billing_or_quota_failure_disables_terra_for_later_requests(
-    monkeypatch, error
-) -> None:
+def test_billing_or_quota_failure_disables_terra_for_later_requests(monkeypatch, error) -> None:
     hit = SearchHit(
         provision_id=uuid4(),
         document_id=uuid4(),

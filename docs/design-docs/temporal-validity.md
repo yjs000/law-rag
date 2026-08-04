@@ -16,16 +16,16 @@ effective_to IS NULL 또는 as_of_date < effective_to
 
 ## 법적 효력 구간과 corpus 지원 범위는 다르다
 
-위 날짜 식은 저장된 버전이 특정 날짜에 법적으로 유효한지를 판정한다. 그러나 유효성 식이 참이라고 해서 현재 저장소가 그 날짜의 9개 법령을 모두 갖췄다는 뜻은 아니다. 현행 버전 중심으로 수집한 지금 corpus를 과거 전체 연혁처럼 검색하면 일부 문서만 남은 결과를 “직접 근거 없음”으로 잘못 해석할 수 있다.
+위 날짜 식은 저장된 버전이 특정 날짜에 법적으로 유효한지를 판정한다. 그러나 유효성 식이 참이라고 해서 현재 저장소가 그 날짜의 허용 법령 전체 연혁을 빠짐없이 갖췄다는 뜻은 아니다. 현행 버전 중심으로 수집한 corpus를 과거 전체 연혁처럼 검색하면 일부 문서만 남은 결과를 “직접 근거 없음”으로 잘못 해석할 수 있다.
 
-2026-08-03 운영 DB 읽기 전용 감사에서 다음 상태를 확인했다.
+2026-08-03 운영 DB 읽기 전용 감사에서는 당시 다음 상태를 확인했다.
 
 - 허용 목록 9개 문서마다 open version 1개
 - 검색 가능한 provision 3,066개
 - 9개 open version 중 가장 늦은 `effective_from`: `2026-06-03`
-- 현재 snapshot 검증 기준일: `2026-08-03`
+- 당시 snapshot 검증 기준일: `2026-08-03`
 
-따라서 현재 snapshot ID와 지원 범위를 코드에 명시적으로 고정한다.
+이 관측으로 도입했던 다음 고정 계약은 역사 기록이며 2026-08-04 동적 계약으로 대체됐다.
 
 ```text
 corpus_snapshot_id = mvp-current-corpus-2026-08-03
@@ -35,9 +35,35 @@ supported_as_of_through = 2026-08-03
 2026-06-03 <= as_of_date <= 2026-08-03
 ```
 
-양끝 날짜를 포함한다. 범위 밖 `as_of_date`는 유효 조문을 일부만 검색하지 않고 API 경계에서 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 이 검사는 quota, 질문 임베딩과 repository 호출보다 먼저 실행한다. `POST /v1/search`, `POST /v1/questions`, `GET /v1/provisions/{id}`에 같은 계약을 적용하며 `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`를 반환한다.
+현재 runtime은 요청마다 UTC+9 한국 날짜의 오늘을 기준으로 다음 상태를 읽기 전용으로 계산한다.
 
-이 범위는 법 자체의 효력 범위가 아니라 **현재 수집 snapshot의 검색 보장 범위**다. 과거 연혁을 충분히 수집·검증하거나 새 현행 snapshot으로 교체하면, 실제 공통 coverage를 다시 읽기 전용으로 감사한 뒤 상수·테스트·문서를 함께 갱신한다. 단지 현재 날짜가 지났다는 이유로 `supported_as_of_through`를 자동 연장하지 않는다.
+```text
+supported_as_of_through = korea_today(UTC+9)
+
+collected = 수집된 parser-current searchable version의 provision
+            단, effective_from <= supported_as_of_through
+
+supported_as_of_from = MIN(collected.effective_from)
+
+today_eligible = collected 중
+                 effective_from <= supported_as_of_through
+                 그리고
+                 effective_to IS NULL 또는 supported_as_of_through < effective_to
+
+지원 범위: supported_as_of_from <= as_of_date <= supported_as_of_through
+```
+
+여기서 searchable version은 출처 레코드가 `available`이고 parser schema가 현재 버전이며, lifecycle이 `active`·`scheduled`이거나 공식 `effective_to`가 있는 `abolished` 버전이다. 지원 시작일은 이 집합의 **전역 최솟값**이다. 법률마다 처음 시행된 날을 모두 복원하거나 문서별 timeline의 gap·overlap을 검사해 공통 완전 coverage를 증명하는 계산은 아니다. 따라서 이 범위는 법 자체의 전체 효력 범위가 아니라 **현재 수집·검색 가능 corpus에 적용하는 runtime 안전 경계**다.
+
+runtime snapshot ID는 오늘 유효한 provision의 개수와 검색 콘텐츠 fingerprint로 계산한다. fingerprint는 parser 버전, 문서·버전·조문 ID, 법령명·출처 종류, `effective_from`, 조문 경로·부모 경로·표제와 본문 SHA-256을 정렬해 만든다. 달력 날짜, `effective_to`, embedding profile은 content ID 입력에 넣지 않는다. `effective_to`는 오늘 population에 들어오는지를 결정하지만 그 값 자체로 content ID를 바꾸지 않는다. 따라서 오늘과 내일 사이에 시행·개정·폐지 경계나 검색 콘텐츠 변화가 없으면 같은 ID를 유지한다.
+
+전체 corpus 검색 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 지원 시작일·fingerprint를 완성할 수 없으면 temporal state는 준비되지 않은 상태다. 검색 엔드포인트는 이를 빈 결과나 근거 부족으로 바꾸지 않고 HTTP `503`, 코드 `corpus_unready`로 반환한다. 이때 `/v1/corpus/status`의 `supported_as_of_from`과 `corpus_snapshot_id`는 `null`일 수 있고, `supported_as_of_through`는 한국 날짜의 오늘을 계속 보여 준다.
+
+준비된 범위 밖 `as_of_date`는 API 경계에서 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 이 검사는 quota, 질문 임베딩과 repository 검색보다 먼저 실행한다. `POST /v1/search`, `POST /v1/questions`, `GET /v1/provisions/{id}`에 같은 계약을 적용한다. 날짜를 생략한 요청도 서버 로컬 날짜가 아니라 한국 날짜의 오늘을 사용한다. `/v1/corpus/status`는 계산된 snapshot ID, 양쪽 경계와 준비 상태·사유를 반환한다.
+
+초기 API 검사와 실제 검색 사이에는 인증·quota·질문 임베딩 시간이 있을 수 있다. 그 사이 writer가 완전한 새 corpus 세대로 교체하는 경쟁을 막기 위해 PostgreSQL 검색은 새 `READ COMMITTED` 연결의 첫 문장으로 corpus mutation 공유 advisory transaction lock을 얻는다. 잠금을 얻은 다음 현재 temporal state와 요청일을 다시 검사하고, 요청일이 새 범위를 벗어나면 부분 검색 대신 `503 corpus_unready` 재시도로 닫는다. writer는 같은 키의 배타 잠금을 사용하므로 잠금이 유지되는 실제 검색 동안에는 세대가 바뀌지 않는다.
+
+2026-08-04 KST 운영 Supabase 읽기 전용 검증에서는 `ready=true`, 동적 범위 `2024-07-01..2026-08-04`, 오늘 유효 provision 3,066개와 content-derived `corpus-sha256:*` ID 반환을 확인했다. 이는 그날의 관측값이며 코드에 하드코딩하는 계약이 아니다.
 
 ## 버전 식별자
 
@@ -62,11 +88,12 @@ supported_as_of_through = 2026-08-03
 
 `0009_temporal_document_versions.py`는 기존 행을 `lifecycle_state=active`, `source_record_state=available`, `has_supplementary_provisions=false`로 이관한다. 이 값들을 새 행의 DB 기본값으로 두지는 않는다. 이후 쓰기 경로가 세 상태를 검증하고 명시해야 하므로 누락된 입력은 실패한다. 시행일 누락, 길이가 0 이하인 효력 구간, 문서별 복수 open version이 있으면 값을 추정하거나 일부만 적용하지 않고 마이그레이션을 중단한다.
 
-법적 효력의 경계일, 과거, 현재, 시행예정, 폐지, 출처 삭제 fixture와 corpus coverage의 지원 시작일·종료일·양쪽 범위 밖 fixture를 각각 테스트해야 한다. 현재 운영 수집은 현행 버전을 저장하며 과거 버전 전체 수집은 아직 활성화하지 않았다.
+법적 효력의 경계일, 과거, 현재, 시행예정, 폐지, 출처 삭제 fixture를 테스트한다. runtime 시간 계약은 주입한 한국 날짜를 기준으로 동적 시작일·종료일, 양쪽 범위 밖, 게이트 닫힘, 오늘 eligible 0개, identity 불완전과 날짜가 달라도 같은 population이면 같은 ID인 사례를 검사한다. 현재 계산은 문서별 과거 timeline의 gap·overlap 완전성을 검증하지 않는다.
 
 ## 결정 기록
 
 - 2026-07-13: 모든 사용자 질문에 명시적 기준일을 요구하고 기본값만 오늘로 설정.
 - 2026-08-03: 버전 자연키를 `문서 + MST + 시행일`로 확장하고 시행일·효력 구간·문서별 open version을 DB 불변조건으로 고정.
 - 2026-08-03: 법적 생명주기와 Open API 레코드 가용성을 별도 상태로 저장하고 출처 삭제에서 폐지를 추론하지 않음.
-- 2026-08-03: 현재 corpus의 공통 지원 범위를 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖은 부분 검색 대신 `422 unsupported_corpus_date`로 차단.
+- 2026-08-03: [대체됨] 당시 감사한 corpus의 지원 범위를 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖은 부분 검색 대신 `422 unsupported_corpus_date`로 차단.
+- 2026-08-04: 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 동적 계산한다. 오늘 유효 population의 content identity를 사용하고, 준비 불완전은 `503 corpus_unready`, 준비된 범위 밖은 검색 전 `422 unsupported_corpus_date`로 구분한다. 이 계산만으로 법률별 timeline gap·overlap이 검증됐다고 주장하지 않는다.

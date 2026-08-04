@@ -112,6 +112,11 @@ dataset이 같은 승인 자료로 통과하지는 않는다.
 새 시행일을 지나 유효 집합이 달라지거나 ID·본문·검색 경로가 바뀌면 해당 날짜의 fingerprint가 달라진다.
 질문 approval manifest는 계속 질문 문구와 범위만 승인하며 이 corpus·qrel 판단을 포함하지 않는다.
 
+운영 API의 temporal status는 한국 날짜의 오늘에 유효한 population 하나로 현재 content ID를 계산한다.
+gold는 서로 다른 문항 기준일의 population을 모두 고정하므로 운영 status의 오늘 ID와 같은 계약이 아니다.
+같은 canonical content identity 함수를 재사용하더라도, 운영의 오늘 snapshot으로 gold의 과거 기준일 검증을
+대체하지 않는다.
+
 `expected_action`은 위 상태와 일대일로 고정한다.
 
 | answerability | expected_action | 기준 응답 |
@@ -190,7 +195,8 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 ## 현재 제한
 
 - 현재 corpus는 에너지 법령·기술기준 9종으로 제한돼 있어 토지, 건축, 농지, 세금, 금융, 지원 공고, 소비자 계약 질문 상당수는 범위 밖일 수 있다.
-- 운영 backend는 아직 9개 문서·3,066개 조문을 감사한 `2026-06-03..2026-08-03` 고정 범위를 사용한다. 수집된 법령 timeline에서 운영 지원 범위를 계산하는 변경과 프런트 차단은 다음 단계이며, 이번 gold content snapshot 변경이 이를 이미 완료했다는 뜻은 아니다.
+- 운영 backend의 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값이고, 종료일은 한국 날짜의 오늘이다. 이는 법률별 과거 timeline의 gap·overlap 완전성을 검증했다는 뜻이 아니다. 프런트의 상태 API 기반 날짜 차단은 후속 작업이다.
+- 질문은행의 작성·조사 맥락인 `2026-08-03`은 산출물 provenance로 유지한다. 이 날짜는 운영 지원 종료일을 고정하거나 gold의 모든 문항 기준일을 대신하는 runtime 상수가 아니다.
 - 지원금, 요금, 신청기한처럼 변하는 값은 기준일과 당시 공식 자료 없이는 고정 답으로 만들지 않는다.
 - broad question은 “관련 조문 하나가 포함됐는가”만으로 정답 처리할 수 없다. 필수 답변 요소 전체에 대한 evidence coverage를 별도로 검토해야 한다.
 
@@ -210,8 +216,9 @@ runner는 production의 direct-path, keyword fallback과 조 단위 grouping을 
 - 2026-08-03: runner와 fixture 검증은 구현했지만 사용자가 질문을 승인하지 않았으므로 실제 일반 사용자 1,000문항 검색은 실행하지 않는다.
 - 2026-08-03: 취소된 v2 12문항 전체본은 생성하거나 수정하지 않는다.
 - 2026-08-03: 당시에는 HNSW를 질문-정답 gold와 근거 찾기 검증 이후로 보류했다. 이 결정은 2026-08-04 영구 제외 결정으로 대체됐다.
-- 2026-08-03: 현재 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부한다.
+- 2026-08-03: [대체됨] 당시 감사한 corpus 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고 범위 밖 문항은 임베딩·검색 전에 거부했다.
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·검토 경로를 삭제하고 현재 parser corpus에 없는 ID는 다른 검사보다 먼저 즉시 거부한다.
 - 2026-08-04: `lay-energy-0511`을 사용자 지정 문구로 수정하고 새 질문·범위 해시를 생성했다. 고위험 35문항은 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 기록한 뒤 `yjs000` 명의의 질문 문구·범위 전용 approval manifest로 1,000문항을 승인했다. answerability·qrels·기준 응답과 검색 평가는 아직 만들거나 실행하지 않았다.
 - 2026-08-04: HNSW는 현재와 미래의 실험 D·운영 검색 경로에 도입하지 않는다. 기존 물리 인덱스는 역사적 잔여물로만 남고 runner의 입력·게이트·결과에 계속 포함하지 않는다.
 - 2026-08-04: gold의 전역 날짜 snapshot을 문항 기준일별 eligible count·content fingerprint 계약으로 바꿨다. content snapshot ID에서는 날짜와 embedding profile을 제외하고, 날짜 대응은 `as_of_populations`와 dataset·adjudication 해시에 별도로 봉인한다. 이 결정은 질문 문구·범위 전용 approval manifest를 변경하지 않는다.
+- 2026-08-04: 운영 API 지원 범위는 수집·현재 parser·검색 가능 corpus의 전역 최소 시행일부터 한국 날짜의 오늘까지 동적으로 계산한다. 이는 질문은행의 2026-08-03 provenance와 별개이고, gold는 계속 문항 기준일별 population 계약을 사용한다.

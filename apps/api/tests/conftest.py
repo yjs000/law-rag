@@ -1,4 +1,7 @@
 import os
+from datetime import date
+
+import pytest
 
 # Local .env.local may contain real service credentials. Tests must never inherit
 # them merely because pytest was started from a developer checkout.
@@ -12,3 +15,22 @@ os.environ["NVIDIA_API_KEY"] = ""
 os.environ["AI_MODE"] = "auto"
 os.environ["ANSWER_PROVIDER"] = "openai"
 os.environ["COLLECTOR_STATE_DIR"] = ".data/nonexistent-api-test-state"
+
+
+@pytest.fixture
+def ready_corpus_temporal_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let non-temporal API tests exercise their own downstream concern."""
+
+    import app.main as main_module
+    from app.domain.schemas import CorpusTemporalState
+
+    async def ready_state() -> CorpusTemporalState:
+        return CorpusTemporalState(
+            ready=True,
+            supported_as_of_from=date(1900, 1, 1),
+            supported_as_of_through=date(2099, 12, 31),
+            corpus_snapshot_id=f"corpus-sha256:{'a' * 64}",
+            eligible_provision_count=1,
+        )
+
+    monkeypatch.setattr(main_module, "_load_corpus_temporal_state", ready_state)

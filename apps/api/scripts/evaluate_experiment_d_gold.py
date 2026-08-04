@@ -70,6 +70,7 @@ CRITICAL_CODE_PATHS = (
     Path("apps/api/app/adapters/postgres_repository.py"),
     Path("apps/api/app/adapters/nvidia_nim_embedder.py"),
     Path("apps/api/app/domain/catalog.py"),
+    Path("apps/api/app/domain/corpus_temporal_contract.py"),
     Path("apps/api/app/domain/embedding_profiles.py"),
     Path("apps/api/app/domain/errors.py"),
     Path("apps/api/app/domain/schemas.py"),

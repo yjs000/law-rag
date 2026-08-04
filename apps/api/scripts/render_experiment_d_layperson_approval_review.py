@@ -14,10 +14,10 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from app.domain.corpus_temporal_contract import (
-    CURRENT_CORPUS_SNAPSHOT_ID,
-    CURRENT_CORPUS_SUPPORTED_FROM,
-    CURRENT_CORPUS_SUPPORTED_THROUGH,
+from scripts.experiment_d_question_bank_provenance import (
+    QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH,
 )
 from scripts.experiment_d_question_identity import question_scope_set_sha256
 
@@ -351,9 +351,9 @@ def validated_questions(bank: Mapping[str, object]) -> list[Mapping[str, object]
 
     corpus = _mapping(bank.get("corpus_context"), label="corpus_context")
     expected_temporal_context = {
-        "corpus_snapshot_id": CURRENT_CORPUS_SNAPSHOT_ID,
-        "supported_as_of_from": CURRENT_CORPUS_SUPPORTED_FROM.isoformat(),
-        "supported_as_of_through": CURRENT_CORPUS_SUPPORTED_THROUGH.isoformat(),
+        "corpus_snapshot_id": QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID,
+        "supported_as_of_from": QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM.isoformat(),
+        "supported_as_of_through": (QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH.isoformat()),
     }
     for field, expected in expected_temporal_context.items():
         if corpus.get(field) != expected:
@@ -530,8 +530,8 @@ def render_approval_review(bank: Mapping[str, object]) -> str:
         "- 현재 검토 corpus: 에너지 법령·기술기준 9종",
         (
             "- 현재 corpus 지원 기준일: "
-            f"`{CURRENT_CORPUS_SUPPORTED_FROM.isoformat()}` ~ "
-            f"`{CURRENT_CORPUS_SUPPORTED_THROUGH.isoformat()}` (양끝 포함)"
+            f"`{QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM.isoformat()}` ~ "
+            f"`{QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH.isoformat()}` (양끝 포함)"
         ),
         "",
         "## Intent별 대표 질문 15개",

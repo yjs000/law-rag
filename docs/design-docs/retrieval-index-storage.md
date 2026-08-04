@@ -52,11 +52,11 @@ DB는 `vector_dims(embedding)=dimensions`, 0이 아닌 norm, 프로필과 차원
 
 ```text
 corpus_snapshots
-├─ snapshot_id                  corpus 세대의 안정 ID
-├─ fingerprint_sha256           세대의 고유 SHA-256 지문
+├─ snapshot_id                  catalog에 등록한 corpus 세대의 안정 ID
+├─ fingerprint_sha256           catalog 세대의 고유 SHA-256 지문
 ├─ parser_schema_version        파서 계약 버전
-├─ supported_as_of_from         검색을 보장하는 시작 기준일
-├─ supported_as_of_through      검색을 보장하는 마지막 기준일
+├─ supported_as_of_from         catalog 등록 시 감사한 시작 기준일 메타데이터
+├─ supported_as_of_through      catalog 등록 시 감사한 마지막 기준일 메타데이터
 ├─ document_count               세대의 문서 수
 ├─ provision_count              세대의 검색 조각 수
 └─ created_at
@@ -183,15 +183,32 @@ WHERE profile_key='nvidia-nemotron-3-embed-1b-512-v1';
 
 실험 D는 문항별 기준일에 유효한 전체 population을 빠짐없이 비교하는 `MATERIALIZED` exhaustive exact cosine으로 고정한다. runner의 검색 상태·결과에는 HNSW identity, valid·ready 상태나 exact 대비 비교값을 넣지 않는다. exact 방식은 검색 대상 전체를 비교해 근사화 실패를 품질 원인에서 제거하며, HNSW 영구 제외 결정에 따라 gold 완성 뒤에도 이 비교 계약을 바꾸지 않는다.
 
-## 현재 corpus의 기준일 지원 범위
+## 현재 corpus의 동적 기준일 지원 계약
 
-현재 snapshot `mvp-current-corpus-2026-08-03`에는 9개 문서의 open version과 3,066개 조문이 있다. 이 문서들이 모두 존재하는 공통 지원 범위는 다음과 같이 하드코딩한다.
+현재 runtime은 `corpus_snapshots` catalog의 특정 행이나 날짜가 들어간 포인터로 지원 범위를 고정하지 않는다. UTC+9 한국 날짜의 오늘을 기준으로 현재 repository가 다음 값을 읽기 전용으로 계산한다.
 
 ```text
-2026-06-03 <= as_of_date <= 2026-08-03
+supported_as_of_through = 한국 날짜의 오늘
+supported_as_of_from = 오늘 이하인 수집·현재 parser·검색 가능 버전의
+                       effective_from 전역 최솟값
+
+today_eligible = effective_from <= 오늘
+                 그리고
+                 effective_to IS NULL 또는 오늘 < effective_to
+
+corpus_snapshot_id = SHA-256(
+  parser contract + retrieval unit
+  + today_eligible count + content fingerprint
+)
 ```
 
-두 경계일을 모두 포함한다. 과거 일부 문서만 남는 날짜를 검색해 빈 결과나 `insufficient_evidence`로 오인하지 않는다. `POST /v1/search`, `POST /v1/questions`, `GET /v1/provisions/{id}`는 범위 밖 날짜를 임베딩·repository 호출 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 차단한다. `/v1/corpus/status`는 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`를 노출해 클라이언트가 같은 계약을 표시할 수 있게 한다. 법률 버전의 `effective_from/effective_to` 판정은 이 coverage gate를 통과한 뒤에만 적용한다.
+content fingerprint는 오늘 유효한 provision의 ID·출처·버전·`effective_from`·경로·표제·본문 SHA-256 등 검색 콘텐츠를 정렬해 계산한다. 달력 날짜, `effective_to`, embedding profile은 snapshot ID 입력에 넣지 않는다. 날짜와 `effective_to`는 어느 행이 오늘 population에 포함되는지는 결정하지만, 같은 eligible ID와 검색 콘텐츠를 가진 population을 날짜만 달라졌다는 이유로 새 corpus로 식별하지 않는다. embedding profile은 별도 retrieval contract다.
+
+시작일은 현재 저장된 검색 가능 version의 전역 최솟값일 뿐, 법률마다 과거 버전이 모두 수집됐거나 timeline gap·overlap이 없다는 검증 결과가 아니다. 전체 검색 준비 게이트가 닫혔거나 오늘 eligible provision이 0개이거나 시작일·fingerprint를 완성할 수 없으면 repository는 준비되지 않은 temporal state를 반환한다. 검색 엔드포인트는 이를 HTTP `503`, 코드 `corpus_unready`로 닫으며 상태 API의 시작일과 snapshot ID는 `null`일 수 있다.
+
+두 경계일을 포함한다. 준비된 범위 밖 날짜는 과거 일부 문서만 검색해 빈 결과나 `insufficient_evidence`로 오인하지 않고, quota·임베딩·repository 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 차단한다. `/v1/corpus/status`는 동적으로 계산한 snapshot ID, 양쪽 경계와 준비 상태·사유를 노출한다. 요청 기본 날짜는 한국 날짜의 오늘이다. 법률 버전의 `effective_from/effective_to` 판정은 이 runtime gate를 통과한 뒤 요청 기준일에 다시 적용한다.
+
+2026-08-04 KST 운영 Supabase 읽기 전용 검증에서 관측한 동적 값은 `ready=true`, `supported_as_of_from=2024-07-01`, `supported_as_of_through=2026-08-04`, 오늘 eligible provision 3,066개와 content-derived `corpus-sha256:*` ID다. 이는 runtime에 하드코딩하지 않는 시점별 관측 기록이다.
 
 ## BM25 확장 경계
 
@@ -271,6 +288,7 @@ uv run --directory apps/api python -m scripts.backfill_embeddings verify `
 - 2026-08-03: migration capability marker로 flag 행을 임의 생성한 구버전 DB와 0010 적용 DB를 구분하고, 준비 중 상태를 HTTP 503으로 명시했다.
 - 2026-08-03: [대체됨] 당시에는 위 HNSW 설치 사실을 보존하되 실험 D와 근거 찾기 품질 검증에서 HNSW 상태·결과를 제외하고, 전수 검증 뒤 별도 설계 승인을 검토하기로 했다. 이 결정은 2026-08-04 영구 제외 결정으로 대체됐다.
 - 2026-08-03: `hnsw_ready`를 backfill 승격과 exact 검색의 조건에서 제거하고 물리 상태 진단값으로만 남겼다.
-- 2026-08-03: 현재 corpus의 완전한 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고, 범위 밖 요청은 검색 전에 `422 unsupported_corpus_date`로 차단한다.
+- 2026-08-03: [대체됨] 당시 감사한 corpus의 지원 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 고정하고, 범위 밖 요청은 검색 전에 `422 unsupported_corpus_date`로 차단했다.
 - 2026-08-03: corpus snapshot, 독립 retrieval profile/build, configuration/member, release/build와 ready-only active pointer를 additive catalog로 분리했다. 평가 실행은 동일 release snapshot을 복합 외래키로 추적할 수 있게 했지만, catalog writer·runtime 선택·BM25·RRF·새 HNSW는 구현하지 않았다.
 - 2026-08-04: HNSW 보류를 철회하고 현재와 미래의 제품·실험 검색 경로에서 영구 제외했다. 기존 물리 인덱스와 `hnsw_ready`는 cleanup 전까지 남는 역사적 잔여물일 뿐 사용·재구축·튜닝·평가·release 연결하지 않으며, 새 HNSW 인덱스나 build도 만들지 않는다.
+- 2026-08-04: runtime 지원 범위와 오늘 content snapshot을 수집·현재 parser·검색 가능 population에서 동적으로 계산한다. catalog의 저장된 snapshot metadata나 embedding profile을 runtime content identity로 사용하지 않으며, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 구분한다.

@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 from uuid import UUID, uuid4
@@ -6,6 +6,12 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from law_rag_core.domain.catalog import SourceKind
+
+SEOUL_TIME_ZONE = timezone(timedelta(hours=9), name="Asia/Seoul")
+
+
+def _korea_today() -> date:
+    return datetime.now(SEOUL_TIME_ZONE).date()
 
 
 class ProjectStage(StrEnum):
@@ -64,14 +70,14 @@ class ConversationTurnContext(BaseModel):
 class QuestionRequest(BaseModel):
     client_request_id: UUID = Field(default_factory=uuid4)
     question: Annotated[str, Field(min_length=2, max_length=2000)]
-    as_of_date: date = Field(default_factory=date.today)
+    as_of_date: date = Field(default_factory=_korea_today)
     project_stage: ProjectStage = ProjectStage.PLANNING
     answer_mode: Literal["terra", "search_only"] = "terra"
     business_type: Annotated[str | None, Field(max_length=120)] = None
     facility_type: Annotated[str | None, Field(max_length=120)] = None
     conversation_id: UUID | None = None
-    conversation_context: Annotated[list[ConversationTurnContext], Field(max_length=20)] = (
-        Field(default_factory=list)
+    conversation_context: Annotated[list[ConversationTurnContext], Field(max_length=20)] = Field(
+        default_factory=list
     )
 
     @model_validator(mode="after")
@@ -88,7 +94,7 @@ class QuestionRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: Annotated[str, Field(min_length=1, max_length=500)]
-    as_of_date: date = Field(default_factory=date.today)
+    as_of_date: date = Field(default_factory=_korea_today)
     source_kinds: list[SourceKind] = Field(default_factory=list)
     limit: Annotated[int, Field(ge=1, le=30)] = 10
 
@@ -213,10 +219,37 @@ class CorpusSearchStatus(BaseModel):
     reason: str | None = None
 
 
+class CorpusTemporalState(BaseModel):
+    """Searchable corpus bounds and today's content identity."""
+
+    ready: bool
+    reason: str | None = None
+    supported_as_of_from: date | None = None
+    supported_as_of_through: date
+    corpus_snapshot_id: str | None = None
+    eligible_provision_count: Annotated[int, Field(ge=0)] = 0
+
+    @model_validator(mode="after")
+    def ready_state_has_complete_bounds(self) -> Self:
+        if not self.ready:
+            if self.reason is None:
+                raise ValueError("unready corpus temporal state requires a reason")
+            return self
+        if self.reason is not None:
+            raise ValueError("ready corpus temporal state cannot have an unavailable reason")
+        if self.supported_as_of_from is None or self.corpus_snapshot_id is None:
+            raise ValueError("ready corpus temporal state requires bounds and snapshot identity")
+        if self.supported_as_of_from > self.supported_as_of_through:
+            raise ValueError("corpus temporal bounds are reversed")
+        if self.eligible_provision_count == 0:
+            raise ValueError("ready corpus temporal state requires an eligible population")
+        return self
+
+
 class CorpusStatus(BaseModel):
     last_successful_sync: datetime | None
-    corpus_snapshot_id: str
-    supported_as_of_from: date
+    corpus_snapshot_id: str | None
+    supported_as_of_from: date | None
     supported_as_of_through: date
     corpus_search_ready: bool
     corpus_search_unavailable_reason: str | None = None

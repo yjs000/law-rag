@@ -16,6 +16,8 @@ from app.domain.schemas import (
 )
 from app.domain.search_queries import SearchTrace
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 
 def _with_trace(search):
     async def traced(*args, **kwargs):
@@ -63,9 +65,7 @@ def _draft(*, claim: str, explanation: str, checklist: str, citation: str = "C1"
                 citation_ids=[citation],
             )
         ],
-        checklist=[
-            ChecklistItem(label=checklist, status="required", citation_ids=[citation])
-        ],
+        checklist=[ChecklistItem(label=checklist, status="required", citation_ids=[citation])],
     )
 
 

@@ -27,10 +27,8 @@ from app.application.checklist_exports import render_csv, render_markdown, rende
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.corpus_temporal_contract import (
-    CURRENT_CORPUS_SNAPSHOT_ID,
-    CURRENT_CORPUS_SUPPORTED_FROM,
-    CURRENT_CORPUS_SUPPORTED_THROUGH,
     UnsupportedCorpusDateError,
+    korea_today,
     require_supported_corpus_date,
 )
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
@@ -44,6 +42,7 @@ from app.domain.schemas import (
     ConversationPage,
     ConversationTurnPage,
     CorpusStatus,
+    CorpusTemporalState,
     DocumentChangesResponse,
     MockUser,
     ProvisionResponse,
@@ -179,7 +178,7 @@ async def health() -> dict[str, str]:
 
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
-    _require_supported_as_of_date(payload.as_of_date)
+    await _require_supported_as_of_date(payload.as_of_date)
     await _check_quota(request, "search", settings.search_daily_limit)
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
@@ -197,7 +196,7 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
-    _require_supported_as_of_date(payload.as_of_date)
+    await _require_supported_as_of_date(payload.as_of_date)
     user = await _optional_user(request.headers.get("authorization"))
     owner = _question_owner(request, user)
     task = asyncio.current_task()
@@ -552,8 +551,8 @@ async def export_checklist(
 
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
-    requested_date = as_of_date or date.today()
-    _require_supported_as_of_date(requested_date)
+    requested_date = as_of_date or _current_korea_date()
+    await _require_supported_as_of_date(requested_date)
     try:
         hit = await repository.provision(provision_id, requested_date)
     except CorpusSearchUnavailableError as exc:
@@ -578,9 +577,9 @@ async def changes(document_id: UUID, from_date: date, to_date: date) -> Document
 @app.get("/v1/corpus/status", response_model=CorpusStatus)
 async def corpus_status() -> CorpusStatus:
     items = await repository.corpus_items()
-    search_status = await repository.corpus_search_status()
+    temporal_state = await _load_corpus_temporal_state()
     warnings = []
-    if not search_status.ready:
+    if not temporal_state.ready:
         warnings.append("법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.")
     if any(item.state != "ready" for item in items):
         warnings.append("MVP 허용 목록 일부가 아직 수집되지 않았습니다.")
@@ -590,11 +589,11 @@ async def corpus_status() -> CorpusStatus:
         warnings.append(f"collector 목업 원문 {len(collector_load_errors)}건을 읽지 못했습니다.")
     return CorpusStatus(
         last_successful_sync=await repository.last_sync(),
-        corpus_snapshot_id=CURRENT_CORPUS_SNAPSHOT_ID,
-        supported_as_of_from=CURRENT_CORPUS_SUPPORTED_FROM,
-        supported_as_of_through=CURRENT_CORPUS_SUPPORTED_THROUGH,
-        corpus_search_ready=search_status.ready,
-        corpus_search_unavailable_reason=search_status.reason,
+        corpus_snapshot_id=temporal_state.corpus_snapshot_id,
+        supported_as_of_from=temporal_state.supported_as_of_from,
+        supported_as_of_through=temporal_state.supported_as_of_through,
+        corpus_search_ready=temporal_state.ready,
+        corpus_search_unavailable_reason=temporal_state.reason,
         ai_available=_ai_available(),
         ai_unavailable_reason=_ai_unavailable_reason(),
         items=items,
@@ -612,9 +611,23 @@ def _corpus_unready_http_error() -> HTTPException:
     )
 
 
-def _require_supported_as_of_date(requested_date: date) -> None:
+def _current_korea_date() -> date:
+    return korea_today()
+
+
+async def _load_corpus_temporal_state() -> CorpusTemporalState:
     try:
-        require_supported_corpus_date(requested_date)
+        return await repository.corpus_temporal_state(_current_korea_date())
+    except Exception as exc:
+        raise _corpus_unready_http_error() from exc
+
+
+async def _require_supported_as_of_date(requested_date: date) -> None:
+    state = await _load_corpus_temporal_state()
+    if not state.ready:
+        raise _corpus_unready_http_error()
+    try:
+        require_supported_corpus_date(requested_date, state)
     except UnsupportedCorpusDateError as exc:
         raise HTTPException(
             status_code=422,

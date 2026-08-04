@@ -1,16 +1,28 @@
+import hashlib
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from time import perf_counter
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 from law_rag_core.parsers.law_json import parse_legal_document as parse_json_document
 from law_rag_core.parsers.law_xml import parse_legal_document as parse_xml_document
 
 from app.domain.catalog import MVP_CATALOG
+from app.domain.corpus_temporal_contract import (
+    canonical_corpus_population_fingerprint,
+    canonical_corpus_snapshot_id,
+    korea_today,
+)
 from app.domain.entities import LegalDocumentRecord
 from app.domain.provision_queries import parse_provision_references
-from app.domain.schemas import CorpusItemStatus, CorpusSearchStatus, SearchHit
+from app.domain.schemas import (
+    CorpusItemStatus,
+    CorpusSearchStatus,
+    CorpusTemporalState,
+    SearchHit,
+)
 from app.domain.search_queries import (
     PreparedSearchQuery,
     SearchStageTrace,
@@ -358,7 +370,71 @@ class MemoryLegalRepository:
         ]
 
     async def corpus_search_status(self) -> CorpusSearchStatus:
-        return CorpusSearchStatus(ready=True)
+        state = await self.corpus_temporal_state(korea_today())
+        return CorpusSearchStatus(ready=state.ready, reason=state.reason)
+
+    async def corpus_temporal_state(self, supported_through: date) -> CorpusTemporalState:
+        eligible_rows: list[list[object]] = []
+        searchable_documents = [
+            (key, document)
+            for key, document in self._documents.items()
+            if document.parser_schema_version == PARSER_SCHEMA_VERSION
+            and document.provisions
+            and document.effective_from is not None
+            and document.effective_from <= supported_through
+        ]
+        for key, document in searchable_documents:
+            if document.effective_from is None or document.effective_from > supported_through:
+                continue
+            effective_to = self._effective_to.get(key)
+            if effective_to is not None and effective_to <= supported_through:
+                continue
+            for provision in document.provisions:
+                eligible_rows.append(
+                    [
+                        document.parser_schema_version,
+                        str(self._document_ids[key]),
+                        ":".join(key),
+                        str(provision.id),
+                        document.title,
+                        document.source_kind.value,
+                        document.effective_from.isoformat(),
+                        provision.path,
+                        provision.parent_path,
+                        provision.heading,
+                        hashlib.sha256(provision.content.encode("utf-8")).hexdigest(),
+                    ]
+                )
+        if not eligible_rows:
+            return CorpusTemporalState(
+                ready=False,
+                reason="no_currently_effective_corpus",
+                supported_as_of_through=supported_through,
+            )
+
+        supported_from = min(
+            document.effective_from
+            for _, document in searchable_documents
+            if document.effective_from is not None
+        )
+        fingerprint = canonical_corpus_population_fingerprint(eligible_rows)
+        snapshot_id = canonical_corpus_snapshot_id(
+            parser_contract_version=PARSER_SCHEMA_VERSION,
+            retrieval_unit="provision",
+            content_populations=[
+                {
+                    "eligible_provision_count": len(eligible_rows),
+                    "fingerprint_sha256": fingerprint,
+                }
+            ],
+        )
+        return CorpusTemporalState(
+            ready=True,
+            supported_as_of_from=supported_from,
+            supported_as_of_through=supported_through,
+            corpus_snapshot_id=snapshot_id,
+            eligible_provision_count=len(eligible_rows),
+        )
 
     async def last_sync(self) -> datetime | None:
         return self._last_sync

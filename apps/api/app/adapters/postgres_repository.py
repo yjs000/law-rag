@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import Any
 from uuid import UUID
 
+from law_rag_core.domain.identifiers import PARSER_SCHEMA_VERSION
 from law_rag_core.persistence import (
     CORPUS_MUTATION_LOCK_KEY,
     CORPUS_SEARCH_READY_CAPABILITY_SQL,
@@ -19,11 +20,22 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from sqlalchemy.pool import NullPool
 
 from app.domain.catalog import MVP_CATALOG, SourceKind
+from app.domain.corpus_temporal_contract import (
+    UnsupportedCorpusDateError,
+    canonical_corpus_snapshot_id,
+    korea_today,
+    require_supported_corpus_date,
+)
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.entities import LegalDocumentRecord
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.provision_queries import parse_provision_references
-from app.domain.schemas import CorpusItemStatus, CorpusSearchStatus, SearchHit
+from app.domain.schemas import (
+    CorpusItemStatus,
+    CorpusSearchStatus,
+    CorpusTemporalState,
+    SearchHit,
+)
 from app.domain.search_queries import (
     PreparedSearchQuery,
     SearchStageTrace,
@@ -230,7 +242,7 @@ class PostgresLegalRepository:
         provision_query = parse_provision_references(query)
         prepared = prepare_search_query(query)
         async with self.engine.connect() as connection:
-            await _require_corpus_search_ready(connection)
+            await _lock_and_require_supported_corpus_date(connection, as_of_date)
             path_rows = []
             if provision_query is not None:
                 path_started = perf_counter()
@@ -523,7 +535,7 @@ class PostgresLegalRepository:
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
         async with self.engine.connect() as connection:
-            await _require_corpus_search_ready(connection)
+            await _lock_and_require_supported_corpus_date(connection, as_of_date)
             row = (
                 (
                     await connection.execute(
@@ -570,6 +582,10 @@ class PostgresLegalRepository:
     async def corpus_search_status(self) -> CorpusSearchStatus:
         async with self.engine.connect() as connection:
             return await _corpus_search_status(connection)
+
+    async def corpus_temporal_state(self, supported_through: date) -> CorpusTemporalState:
+        async with self.engine.connect() as connection:
+            return await _corpus_temporal_state(connection, supported_through)
 
     async def corpus_search_status_on_connection(
         self, connection: AsyncConnection
@@ -819,10 +835,159 @@ async def _corpus_search_status(connection: AsyncConnection) -> CorpusSearchStat
     )
 
 
+async def _corpus_temporal_state(
+    connection: AsyncConnection,
+    supported_through: date,
+) -> CorpusTemporalState:
+    row = (
+        (
+            await connection.execute(
+                _corpus_temporal_population_statement(),
+                {
+                    "corpus_ready_key": CORPUS_SEARCH_READY_FLAG_KEY,
+                    "supported_through": supported_through,
+                },
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return CorpusTemporalState(
+            ready=False,
+            reason="status_query_empty",
+            supported_as_of_through=supported_through,
+        )
+    if not bool(row["ready"]):
+        return CorpusTemporalState(
+            ready=False,
+            reason=str(row["reason"] or "corpus_unready"),
+            supported_as_of_through=supported_through,
+        )
+    if int(row["eligible_provision_count"] or 0) == 0:
+        return CorpusTemporalState(
+            ready=False,
+            reason="no_currently_effective_corpus",
+            supported_as_of_through=supported_through,
+        )
+
+    supported_from = row["supported_from"]
+    fingerprint = row["fingerprint_sha256"]
+    if not isinstance(supported_from, date) or not isinstance(fingerprint, str):
+        return CorpusTemporalState(
+            ready=False,
+            reason="corpus_temporal_identity_incomplete",
+            supported_as_of_through=supported_through,
+        )
+    eligible_count = int(row["eligible_provision_count"])
+    snapshot_id = canonical_corpus_snapshot_id(
+        parser_contract_version=PARSER_SCHEMA_VERSION,
+        retrieval_unit="provision",
+        content_populations=[
+            {
+                "eligible_provision_count": eligible_count,
+                "fingerprint_sha256": fingerprint,
+            }
+        ],
+    )
+    return CorpusTemporalState(
+        ready=True,
+        supported_as_of_from=supported_from,
+        supported_as_of_through=supported_through,
+        corpus_snapshot_id=snapshot_id,
+        eligible_provision_count=eligible_count,
+    )
+
+
+def _corpus_temporal_population_statement():
+    """Build the read-only current-population identity query."""
+
+    return text(
+        f"""WITH readiness AS MATERIALIZED (
+        SELECT {CORPUS_SEARCH_READY_SQL} ready,
+        CASE WHEN NOT ({CORPUS_SEARCH_READY_CAPABILITY_SQL})
+          THEN 'schema_capability_missing'
+          ELSE COALESCE(
+            (SELECT value->>'reason' FROM runtime_flags
+             WHERE key=:corpus_ready_key),
+            'runtime_flag_missing'
+          )
+        END reason
+        ), collected AS MATERIALIZED (
+        SELECT p.id provision_id,p.version_id,d.id document_id,
+        d.exact_title document_title,d.source_kind,
+        v.effective_from,v.effective_to,p.path,p.parent_path,p.heading,
+        encode(digest(p.content,'sha256'),'hex') content_sha256
+        FROM provisions p
+        JOIN document_versions v ON v.id=p.version_id
+        JOIN legal_documents d ON d.id=v.document_id
+        WHERE {SEARCHABLE_DOCUMENT_VERSION_SQL}
+          AND (SELECT ready FROM readiness)
+        ), eligible AS MATERIALIZED (
+        SELECT * FROM collected
+        WHERE effective_from<=:supported_through
+          AND (effective_to IS NULL OR effective_to>:supported_through)
+        ), population AS (
+        SELECT
+        (SELECT MIN(effective_from) FROM collected
+         WHERE effective_from<=:supported_through) supported_from,
+        COUNT(*)::bigint eligible_provision_count,
+        encode(digest(
+          COALESCE(jsonb_agg(jsonb_build_array(
+            '{PARSER_SCHEMA_VERSION}',
+            document_id::text,
+            version_id::text,
+            provision_id::text,
+            document_title,
+            source_kind::text,
+            effective_from::text,
+            path,
+            parent_path,
+            heading,
+            content_sha256
+          ) ORDER BY provision_id),'[]'::jsonb)::text,
+          'sha256'
+        ),'hex') fingerprint_sha256
+        FROM eligible
+        )
+        SELECT /* corpus_temporal_population */
+        readiness.ready,readiness.reason,
+        population.supported_from,population.eligible_provision_count,
+        population.fingerprint_sha256
+        FROM readiness CROSS JOIN population"""
+    )
+
+
 async def _require_corpus_search_ready(connection: AsyncConnection) -> None:
     status = await _corpus_search_status(connection)
     if not status.ready:
         raise CorpusSearchUnavailableError(status.reason or "corpus_unready")
+
+
+async def _lock_and_require_supported_corpus_date(
+    connection: AsyncConnection,
+    requested_date: date,
+) -> CorpusTemporalState:
+    """Pin one complete corpus generation and revalidate the requested date.
+
+    The lock must be the first statement on this fresh READ COMMITTED connection.
+    Corpus writers take the exclusive form of the same transaction lock, so the
+    following temporal-state query and retrieval statements cannot straddle two
+    completed corpus generations.
+    """
+
+    await connection.execute(
+        text("SELECT pg_catalog.pg_advisory_xact_lock_shared(:lock_key)"),
+        {"lock_key": CORPUS_MUTATION_LOCK_KEY},
+    )
+    state = await _corpus_temporal_state(connection, korea_today())
+    if not state.ready:
+        raise CorpusSearchUnavailableError(state.reason or "corpus_unready")
+    try:
+        require_supported_corpus_date(requested_date, state)
+    except UnsupportedCorpusDateError as exc:
+        raise CorpusSearchUnavailableError("corpus_temporal_state_changed") from exc
+    return state
 
 
 async def _execute_keyword_search(

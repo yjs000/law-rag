@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+import law_rag_core.domain.schemas as schema_module
 from law_rag_core.domain.schemas import (
     AiFailureCategory,
     AiRuntimeState,
@@ -16,6 +17,7 @@ from law_rag_core.domain.schemas import (
     QuestionHistoryEntry,
     QuestionRequest,
     QuestionResponse,
+    SearchRequest,
 )
 
 
@@ -54,17 +56,27 @@ def test_question_context_rejects_aggregate_input_over_safe_budget() -> None:
         QuestionRequest(
             question="후속 질문",
             conversation_context=[
-                {"question": f"이전 질문 {index}", "answer": "가" * 9_000}
-                for index in range(3)
+                {"question": f"이전 질문 {index}", "answer": "가" * 9_000} for index in range(3)
             ],
         )
 
 
+def test_request_defaults_use_korea_standard_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FrozenDatetime:
+        @classmethod
+        def now(cls, tz):
+            assert tz.utcoffset(None) == timedelta(hours=9)
+            return datetime(2026, 8, 4, 0, 30, tzinfo=tz)
+
+    monkeypatch.setattr(schema_module, "datetime", FrozenDatetime)
+
+    assert QuestionRequest(question="기준일 질문").as_of_date == date(2026, 8, 4)
+    assert SearchRequest(query="기준일 검색").as_of_date == date(2026, 8, 4)
+
+
 def test_mock_user_history_and_checklist_share_canonical_contracts() -> None:
     now = datetime.now(UTC)
-    user = MockUser(
-        id=uuid4(), email="learner@example.test", display_name="학습자", created_at=now
-    )
+    user = MockUser(id=uuid4(), email="learner@example.test", display_name="학습자", created_at=now)
     request = QuestionRequest(question="허가가 필요한가요?", as_of_date=date(2026, 7, 13))
     response = QuestionResponse(
         request_id="request-1",

@@ -95,40 +95,57 @@ effective_from <= as_of_date < effective_to
 원문은 감사와 복구 판단을 위해 보존하되 출처 삭제 상태인 버전은 검색에서 제외한다.
 
 또한 저장된 전체 역사 코퍼스와 한 기준일에 실제 검색되는 집합은 다르다. 기준일 검색 집합은
-`effective_from <= as_of_date < effective_to`를 만족하는 버전의 조문만 포함한다. 운영 지원 범위 밖
-날짜는 일부 법령만 검색하지 않고 검색 전에 `422 unsupported_corpus_date`로 거부한다. 정확한 범위는
-날짜를 이름에 박은 snapshot 문자열이 아니라 `/v1/corpus/status`와 시간 계약에서 확인한다.
+`effective_from <= as_of_date < effective_to`를 만족하는 버전의 조문만 포함한다.
 
-평가 재현성은 질문의 `as_of_date`와 그 날짜에 유효한 조문 집합의 count·content fingerprint를 함께
-고정해야 한다.
+운영 API는 UTC+9 한국 날짜의 오늘을 종료일로 사용한다. 지원 시작일은 오늘 이하인 수집 완료·현재
+parser·검색 가능 버전의 `effective_from` 가운데 전역 최솟값이다. 이 값은 법률별 최초 시행일을 모두
+복원한 결과도, 각 법률 timeline의 gap·overlap을 검사한 결과도 아니다. 현재 저장된 검색 가능 corpus에
+적용하는 안전 경계다.
+
+```text
+지원 시작일 = MIN(검색 가능한 수집 버전.effective_from), 단 effective_from <= 한국 오늘
+지원 종료일 = 한국 오늘
+
+지원 시작일 <= as_of_date <= 지원 종료일
+```
+
+범위 밖 날짜는 일부 법령만 검색하지 않고 quota·임베딩·검색 전에 `422 unsupported_corpus_date`로
+거부한다. 전체 검색 준비 게이트가 닫혔거나 오늘 유효한 조문이 0개이거나 시작일·content fingerprint를
+완성할 수 없으면 `503 corpus_unready`다. 준비되지 않은 상태 API에서는 시작일과 snapshot ID가 `null`일
+수 있다. 날짜를 생략한 요청은 서버 지역과 관계없이 한국 날짜의 오늘을 사용한다. 초기 검사 뒤 corpus가
+교체될 수도 있으므로 PostgreSQL 실제 검색은 공유 transaction lock을 먼저 얻고 현재 범위를 다시
+검사한다. 새 범위에서 요청일을 지원하지 않으면 부분 결과를 만들지 않고 `503 corpus_unready`로
+재시도하게 한다.
+
+runtime은 오늘 유효한 provision population의 count와 content fingerprint로 현재 snapshot ID를 만든다.
+실험 D 평가 재현성은 이 오늘 값과 별도로, 질문의 서로 다른 모든 `as_of_date`와 각 날짜에 유효한 조문
+집합의 count·content fingerprint를 함께 고정한다.
 
 ```text
 저장된 전체 역사 버전
-→ as_of_date 효력 필터
+→ 기준일 효력 필터
 → 그 날짜의 eligible provision population
 → eligible count + content fingerprint
 → 고유 content population으로 snapshot ID 계산
 ```
 
 content snapshot ID에는 달력 날짜를 넣지 않는다. 오늘과 내일 사이에 시행·개정·폐지 경계가 없고 유효
-provision ID와 검색 콘텐츠가 같다면 같은 population이고 같은 ID다. 날짜를 버리는 것은 아니다. 실험 D
-gold는 `as_of_populations`에 날짜와 count·fingerprint 대응을 남기고, gold dataset과 adjudication
-manifest의 canonical SHA-256이 그 대응을 다시 봉인한다. 따라서 같은 content snapshot ID를 쓰더라도
-8월 3일 문항을 8월 4일 문항으로 몰래 바꾸면 gold 해시가 달라진다.
+provision ID와 검색 콘텐츠가 같다면 같은 population이고 같은 ID다. 날짜를 버리는 것은 아니다. runtime
+status는 그날의 동적 경계를 함께 반환하고, 실험 D gold는 `as_of_populations`에 날짜와
+count·fingerprint 대응을 남긴다. gold dataset과 adjudication manifest의 canonical SHA-256도 그 대응을
+다시 봉인하므로 같은 content snapshot ID를 쓰더라도 8월 3일 문항을 8월 4일 문항으로 몰래 바꾸면 gold
+해시가 달라진다.
 
 아직 시행되지 않은 미래 버전은 과거 날짜의 eligible population에 들어오지 않는다. 미래 버전을 수집하며
 기존 버전의 `effective_to`가 `NULL`에서 미래 날짜로 바뀌어도, 그 종료일보다 앞선 기준일의 ID와 검색
-콘텐츠는 그대로다. 날짜별 content fingerprint는 이 `effective_to` 자체를 내용 변경처럼 해시하지 않으므로
-과거 snapshot도 유지된다. 반대로 예정 버전의 시행일을 지나거나 ID·본문·경로 등 검색 콘텐츠가 바뀌면
+콘텐츠는 그대로다. content fingerprint는 `effective_to` 자체를 내용 변경처럼 해시하지 않으므로 과거
+snapshot도 유지된다. 반대로 예정 버전의 시행일을 지나거나 ID·본문·경로 등 검색 콘텐츠가 바뀌면
 eligible population 지문이 바뀐다.
 
 임베딩 모델·query/passage 유형·차원 축약·정규화·본문 템플릿은 retrieval contract다. 어느 벡터 공간에서
 비교했는지를 재현하려면 반드시 따로 기록해야 하지만 원문 content snapshot ID에는 넣지 않는다. 같은
 원문을 다른 임베딩 프로필로 평가한 것은 corpus 변경이 아니라 검색 설정 변경이다. 그래서 “저장된 모든
 버전의 해시”, “특정 날짜의 eligible content fingerprint”, “embedding profile”을 서로 구분한다.
-
-현재 운영 backend의 고정 지원 경계를 수집된 법령 timeline과 현재 날짜에서 계산하도록 바꾸는 작업은
-다음 단계다. 위 content snapshot 계약이 그 운영 동적 범위를 이미 구현했다는 뜻은 아니다.
 
 ## raw Storage와 PostgreSQL을 둘 다 쓰는 이유
 
@@ -173,8 +190,10 @@ collector 전체 실행은 하나의 거대한 transaction이 아니다. 성공�
 → profile 활성 + corpus gate 열기
 ```
 
-게이트가 닫힌 상태는 근거 부족이 아니다. 검색 가능한 코퍼스를 검사하지 못했으므로 API는 빈 결과 대신
-`503 corpus_unready`를 반환한다. `/v1/corpus/status`가 준비 여부와 닫힌 이유를 노출한다.
+게이트가 닫힌 상태는 근거 부족이 아니다. 오늘 유효한 조문이 0개이거나 시작일·content identity를
+완성하지 못한 상태도 마찬가지다. 검색 가능한 코퍼스를 검사하지 못했으므로 API는 빈 결과 대신
+`503 corpus_unready`를 반환한다. `/v1/corpus/status`가 준비 여부와 닫힌 이유를 노출하며, 준비되지 않은
+상태의 지원 시작일과 snapshot ID는 `null`일 수 있다.
 
 ## 잠금은 원자성과 역할이 다르다
 

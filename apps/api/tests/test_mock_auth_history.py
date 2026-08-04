@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
@@ -8,6 +9,8 @@ from app.adapters.mock_identity import MockIdentityRepository, identity_reposito
 from app.application.answering import search_only_answer
 from app.domain.schemas import ProjectStage, QuestionRequest
 from app.main import app
+
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
 
 client = TestClient(app)
 
@@ -45,9 +48,10 @@ def _ask(token: str | None = None, *, conversation_id: str | None = None) -> dic
 def test_anonymous_question_is_not_saved_but_authenticated_question_is() -> None:
     _ask()
     token, _ = _login()
-    assert client.get(
-        "/v1/questions/history", headers={"Authorization": f"Bearer {token}"}
-    ).json() == []
+    assert (
+        client.get("/v1/questions/history", headers={"Authorization": f"Bearer {token}"}).json()
+        == []
+    )
 
     answer = _ask(token)
     history = client.get(
@@ -66,9 +70,7 @@ def test_transient_conversation_context_is_not_duplicated_in_history() -> None:
         json={
             "question": "후속 질문입니다",
             "answer_mode": "search_only",
-            "conversation_context": [
-                {"question": "이전 질문", "answer": "이전 답변과 인용 내용"}
-            ],
+            "conversation_context": [{"question": "이전 질문", "answer": "이전 답변과 인용 내용"}],
         },
     )
 
@@ -85,44 +87,48 @@ def test_history_is_private_and_owner_can_delete_it() -> None:
     history_id = _ask(owner_token)["request_id"]
     stranger_headers = {"Authorization": f"Bearer {stranger_token}"}
 
-    assert client.get(
-        f"/v1/questions/history/{history_id}", headers=stranger_headers
-    ).status_code == 404
-    assert client.delete(
-        f"/v1/questions/history/{history_id}", headers=stranger_headers
-    ).status_code == 404
+    assert (
+        client.get(f"/v1/questions/history/{history_id}", headers=stranger_headers).status_code
+        == 404
+    )
+    assert (
+        client.delete(f"/v1/questions/history/{history_id}", headers=stranger_headers).status_code
+        == 404
+    )
 
     owner_headers = {"Authorization": f"Bearer {owner_token}"}
-    assert client.delete(
-        f"/v1/questions/history/{history_id}", headers=owner_headers
-    ).status_code == 204
-    assert client.get(
-        f"/v1/questions/history/{history_id}", headers=owner_headers
-    ).status_code == 404
+    assert (
+        client.delete(f"/v1/questions/history/{history_id}", headers=owner_headers).status_code
+        == 204
+    )
+    assert (
+        client.get(f"/v1/questions/history/{history_id}", headers=owner_headers).status_code == 404
+    )
 
 
 def test_logout_invalidates_session_and_account_delete_cascades() -> None:
     token, _ = _login()
     history_id = _ask(token)["request_id"]
     headers = {"Authorization": f"Bearer {token}"}
-    assert client.get(
-        f"/v1/questions/history/{history_id}/checklist", headers=headers
-    ).status_code == 200
+    assert (
+        client.get(f"/v1/questions/history/{history_id}/checklist", headers=headers).status_code
+        == 200
+    )
 
     assert client.delete("/v1/account", headers=headers).status_code == 204
     assert client.get("/v1/auth/me", headers=headers).status_code == 401
     new_token, _ = _login()
-    assert client.get(
-        "/v1/questions/history", headers={"Authorization": f"Bearer {new_token}"}
-    ).json() == []
-
-    logout = client.post(
-        "/v1/auth/logout", headers={"Authorization": f"Bearer {new_token}"}
+    assert (
+        client.get("/v1/questions/history", headers={"Authorization": f"Bearer {new_token}"}).json()
+        == []
     )
+
+    logout = client.post("/v1/auth/logout", headers={"Authorization": f"Bearer {new_token}"})
     assert logout.status_code == 204
-    assert client.get(
-        "/v1/auth/me", headers={"Authorization": f"Bearer {new_token}"}
-    ).status_code == 401
+    assert (
+        client.get("/v1/auth/me", headers={"Authorization": f"Bearer {new_token}"}).status_code
+        == 401
+    )
 
 
 def test_history_expires_exactly_one_year_after_creation() -> None:
@@ -137,12 +143,13 @@ def test_history_expires_exactly_one_year_after_creation() -> None:
     response = search_only_answer(request, [])
     entry = repository.save_question(user.id, request, response, now=created_at)
 
-    assert repository.get_history(
-        entry.id, user.id, now=created_at + timedelta(days=365) - timedelta(microseconds=1)
-    ) is not None
-    assert repository.get_history(
-        entry.id, user.id, now=created_at + timedelta(days=365)
-    ) is None
+    assert (
+        repository.get_history(
+            entry.id, user.id, now=created_at + timedelta(days=365) - timedelta(microseconds=1)
+        )
+        is not None
+    )
+    assert repository.get_history(entry.id, user.id, now=created_at + timedelta(days=365)) is None
 
 
 def test_leap_day_history_and_export_metadata_expire_at_next_february_end() -> None:
@@ -161,9 +168,9 @@ def test_leap_day_history_and_export_metadata_expire_at_next_february_end() -> N
 
 def test_unknown_or_missing_session_is_rejected() -> None:
     assert client.get("/v1/auth/me").status_code == 401
-    assert client.get(
-        "/v1/auth/me", headers={"Authorization": f"Bearer {uuid4()}"}
-    ).status_code == 401
+    assert (
+        client.get("/v1/auth/me", headers={"Authorization": f"Bearer {uuid4()}"}).status_code == 401
+    )
 
 
 def test_conversation_summary_and_turn_cursors_do_not_duplicate_items() -> None:
@@ -219,11 +226,14 @@ def test_invalid_or_wrong_cursor_kind_is_rejected() -> None:
     headers = {"Authorization": f"Bearer {token}"}
     page = client.get("/v1/conversations?limit=1", headers=headers).json()
 
-    assert client.get(
-        f"/v1/conversations/{answer['conversation_id']}/turns",
-        params={"cursor": page["next_cursor"]},
-        headers=headers,
-    ).status_code == 400
+    assert (
+        client.get(
+            f"/v1/conversations/{answer['conversation_id']}/turns",
+            params={"cursor": page["next_cursor"]},
+            headers=headers,
+        ).status_code
+        == 400
+    )
 
 
 def test_mock_auth_is_disabled_in_production(monkeypatch) -> None:

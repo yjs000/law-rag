@@ -23,7 +23,7 @@
 
 | 요소 | 뜻 | 법률 RAG에서 함께 고정할 것 |
 |---|---|---|
-| corpus | 검색 대상 전체 | 문항 기준일별 eligible count·content fingerprint, 날짜 독립 snapshot ID, 문서·버전·조문 ID |
+| corpus | 검색 대상 전체 | 문항 기준일별 eligible count·content fingerprint, 고유 population 집합의 날짜 독립 snapshot ID, 문서·버전·조문 ID |
 | query | 평가 질문 | 질문 ID, 문구, 기준일, scenario family, split |
 | qrels | 질문별 관련성 정답표 | provision ID, 직접 근거 2·보조 문맥 1, 본문 SHA |
 | reference | 기준 문맥과 답변 | 원문 위치, 허용 답변·한계·추가 질문 |
@@ -65,7 +65,9 @@ gold adjudication은 독립 annotation review 이후여야 하며, 질문 승인
 
 평가 질문의 기준일은 검색할 법령 버전을 선택한다. gold는 각 `case.as_of_date`에 유효한 provision만
 모은 뒤 그 수와 content fingerprint를 `as_of_populations`에 기록한다. `snapshot_id`는 날짜 문자열이나
-NVIDIA embedding profile이 아니라 고유한 content population identity에서 계산한다.
+NVIDIA embedding profile이 아니라 이 목록에 등장하는 고유한 content population identity 집합에서
+계산한다. 여러 날짜의 population이 다르면 그 여러 identity를 함께 봉인하고, population이 같으면 날짜만
+다른 중복 identity는 하나로 본다.
 
 ```text
 8월 3일 eligible ID·검색 콘텐츠 = 8월 4일 eligible ID·검색 콘텐츠
@@ -82,6 +84,12 @@ canonical SHA-256이 달라진다.
 population이 바뀌거나 본문·경로 등 검색 콘텐츠가 바뀌면 fingerprint가 달라져 preflight가 실패한다.
 qrel source도 현재 corpus에서 문항 기준일에 실제로 유효해야 한다. 기록된 qrel ID와 본문 SHA가 맞아도
 그 날짜에 효력이 없으면 정답 근거로 사용할 수 없다.
+
+운영 API의 snapshot은 이 gold 계약과 용도가 다르다. 운영은 한국 날짜의 오늘에 유효한 population 하나로
+현재 상태 ID를 계산하고, 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 전역 최소
+`effective_from`, 종료일은 한국 날짜의 오늘로 노출한다. gold는 과거를 포함한 문항 기준일별 population을
+따로 검증한다. 운영의 오늘 ID를 과거 gold 대신 쓰거나, gold가 있다는 이유로 운영의 법률별 timeline
+gap·overlap이 모두 검증됐다고 보지 않는다.
 
 embedding profile은 별도 retrieval contract다. 같은 corpus라도 모델·query/passage 입력·차원·축약·정규화가
 다르면 검색 실험은 달라지므로 실행 입력과 결과에 기록한다. 그러나 이를 content snapshot ID에 섞으면
@@ -129,7 +137,7 @@ nDCG@K = 실제 DCG@K / 이상적인 순서의 DCG@K
 
 Context Recall과 Faithfulness 같은 의미 기반 지표는 LLM judge를 쓸 수 있다. judge는 사람처럼 의미를
 읽을 수 있지만 모델·프롬프트·샘플링과 호출 실패에 따라 값이 달라진다. judge 모델과 평가기 version,
-입력 snapshot, 실패·NaN 개수를 기록하고 결정적 ID 기반 지표와 같은 종류의 숫자로 섞지 않는다.
+입력한 문항 기준일별 content population snapshot, 실패·NaN 개수를 기록하고 결정적 ID 기반 지표와 같은 종류의 숫자로 섞지 않는다.
 
 Evidence Recall은 프로덕션의 모든 새 질문마다 실행하는 “정답 확인 단계”가 아니다. Recall은 찾아야 할
 정답 근거의 전체 집합을 분모로 써야 하므로, 독립 qrels가 있는 오프라인 평가에서만 계산할 수 있다.

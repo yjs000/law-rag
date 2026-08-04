@@ -15,10 +15,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.domain.corpus_temporal_contract import (
-    CURRENT_CORPUS_SNAPSHOT_ID,
-    CURRENT_CORPUS_SUPPORTED_FROM,
-    CURRENT_CORPUS_SUPPORTED_THROUGH,
+from scripts.experiment_d_question_bank_provenance import (
+    QUESTION_BANK_CONTEXT_AS_OF_DATE,
+    QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM,
+    QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH,
 )
 from scripts.experiment_d_question_identity import question_scope_set_sha256
 
@@ -29,7 +30,6 @@ DEFAULT_OUTPUT = (
 )
 DEFAULT_REVIEW = REPOSITORY_ROOT / "docs" / "generated" / "experiment-d-lay-energy-query-bank-v1.md"
 BANK_VERSION = "experiment-d-lay-energy-query-bank-v1-draft"
-CHECKED_AT = "2026-08-03"
 CORPUS_CATALOG = (
     "전기사업법",
     "전기사업법 시행령",
@@ -1729,8 +1729,7 @@ THEMES = (
 # explicit and keyed by the stable review ID so they remain auditable.
 CURATED_QUESTION_OVERRIDES = {
     "lay-energy-0511": (
-        "태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, "
-        "가능한 판매와 계약 방식은 무엇인가요?"
+        "태양광으로 만든 전기를 어떤 방식으로 팔지 고민인데, 가능한 판매와 계약 방식은 무엇인가요?"
     ),
     "lay-energy-0112": (
         "제가 가진 땅이 공동 명의이거나 다른 사람이 사용 중이라면 누구의 "
@@ -2485,10 +2484,10 @@ def build_bank() -> dict[str, object]:
             "retrieval_experiment_executed": False,
         },
         "corpus_context": {
-            "as_of_date": CHECKED_AT,
-            "corpus_snapshot_id": CURRENT_CORPUS_SNAPSHOT_ID,
-            "supported_as_of_from": CURRENT_CORPUS_SUPPORTED_FROM.isoformat(),
-            "supported_as_of_through": CURRENT_CORPUS_SUPPORTED_THROUGH.isoformat(),
+            "as_of_date": QUESTION_BANK_CONTEXT_AS_OF_DATE,
+            "corpus_snapshot_id": QUESTION_BANK_CONTEXT_CORPUS_SNAPSHOT_ID,
+            "supported_as_of_from": QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_FROM.isoformat(),
+            "supported_as_of_through": (QUESTION_BANK_CONTEXT_SUPPORTED_AS_OF_THROUGH.isoformat()),
             "catalog_titles": list(CORPUS_CATALOG),
             "catalog_title_set_sha256": CATALOG_TITLE_SET_SHA256,
             "parser_corpus_snapshot_assigned": False,
@@ -2550,7 +2549,7 @@ def build_bank() -> dict[str, object]:
             "preflight_module": "scripts.preflight_experiment_d_gold",
         },
         "research": {
-            "checked_at": CHECKED_AT,
+            "checked_at": QUESTION_BANK_CONTEXT_AS_OF_DATE,
             "method": ("official public FAQ/procedure topics; lay wording newly synthesized"),
             "source_use": "intent_inspiration_only_not_evidence_or_frequency",
             "sources": SOURCES,

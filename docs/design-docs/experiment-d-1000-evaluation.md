@@ -72,8 +72,13 @@ NVIDIA 모델, query/passage 입력 유형, 512차원 축약·정규화와 본�
 임베딩 프로필로 평가하는 일은 corpus 변경이 아니라 retrieval 설정 변경이기 때문이다. 물리 HNSW는 이
 retrieval contract에도 포함하지 않는다.
 
-운영 API의 현재 고정 지원 범위를 수집된 법령 timeline에서 계산하는 변경은 다음 단계다. 이 문서의 gold
-콘텐츠 스냅샷 계약은 그 운영 변경을 이미 구현했다고 주장하지 않는다.
+운영 API는 별도로 한국 날짜의 오늘을 종료일로 하고, 오늘 이하인 수집·현재 parser·검색 가능 버전의
+`effective_from` 전역 최솟값을 시작일로 하는 동적 runtime 범위를 계산한다. 운영 status의 snapshot ID는
+오늘 population 하나를 식별한다. 반면 실험 D gold는 문항에 실제 사용한 서로 다른 모든 기준일의
+population을 `as_of_populations`로 고정하고, 그 고유 population identity 집합을 하나의 gold snapshot ID로
+봉인한다. 두 계약은 같은 content identity 함수를 재사용하지만 용도가 다르며, runtime의 오늘 snapshot을
+과거 평가 문항의 gold population 대신 사용하지 않는다. 어느 쪽도 이 계산만으로 법률별 과거 timeline의
+gap·overlap 완전성이 검증됐다고 주장하지 않는다.
 
 ## 실행 경계
 
@@ -109,3 +114,4 @@ primary 모집단은 held-out test의 `fully_answerable` 문항이다. 같은 sc
 - 2026-08-04: 과거 parser 기반 synthetic dataset·qrels·생성·검토 경로를 삭제하고 재사용하지 않기로 결정했다.
 - 2026-08-04: 평가에 연결된 ID가 현재 parser corpus에 없으면 다른 검사보다 먼저 `non_current_parser_provision_ids`로 실패하도록 고정했다.
 - 2026-08-04: gold를 문항별 `as_of_date`의 유효 provision count·content fingerprint에 결박하고, `snapshot_id`에서는 날짜와 임베딩 프로필을 분리했다. 같은 콘텐츠 population은 날짜가 달라도 같은 ID를 가지며 날짜 대응은 dataset·adjudication 해시에 별도로 봉인한다.
+- 2026-08-04: 운영 API의 한국 날짜 오늘 population identity와 실험 D의 문항 기준일별 population 집합 계약을 분리했다. 같은 canonical content identity 함수를 쓰되 운영 status 값으로 과거 gold를 대신하지 않는다.

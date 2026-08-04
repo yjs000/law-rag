@@ -13,6 +13,8 @@ from app.domain.source_urls import is_allowed_source_url
 from app.main import app
 from app.observability import emit_question_outcome, question_metrics_snapshot
 
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
 client = TestClient(app)
 
 
@@ -62,9 +64,7 @@ def test_search_response_drops_non_allowlisted_source_url(monkeypatch) -> None:
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module.settings, "ai_mode", "off")
 
-    response = client.post(
-        "/v1/search", json={"query": "위조 법령", "as_of_date": "2026-07-14"}
-    )
+    response = client.post("/v1/search", json={"query": "위조 법령", "as_of_date": "2026-07-14"})
     assert response.status_code == 200
     assert response.json() == []
 
@@ -84,9 +84,7 @@ def test_oversized_question_and_search_are_rejected_at_boundary() -> None:
 
 def test_forged_auth_schemes_cannot_bypass_history_authorization() -> None:
     for authorization in ("Basic abc", "Bearer", "bearer forged-token"):
-        response = client.get(
-            "/v1/questions/history", headers={"Authorization": authorization}
-        )
+        response = client.get("/v1/questions/history", headers={"Authorization": authorization})
         assert response.status_code == 401
 
 
