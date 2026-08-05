@@ -1,6 +1,6 @@
 # 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단
 
-상태: 진행 중 — 설계·입력·실행기 구현
+상태: 진행 중 — 설계·입력·검색 runner 완료, 수동 검토 확인 gate 구현 중
 작성일: 2026-08-05
 소유자: 주 에이전트
 
@@ -49,10 +49,10 @@
 
 | 상태 | 담당 | 목적·수정 범위 | 선행 조건 | 완료·검증 |
 |---|---|---|---|---|
-| 진행 중 | 주 에이전트 | 설계·계획·C/D 경계와 권위 문서 갱신 | 없음 | 문서 검사, diff |
-| 대기 | 주 에이전트 | `experiments/d_manual/` 10문항 해시 입력과 검증 계약 | 설계 | 승인 manifest 대조 테스트 |
-| 대기 | 주 에이전트 | `scripts.experiment_d_manual_review` DB·cache·검색·원자 run | 입력 | runner 정상·실패·경계 테스트 |
-| 대기 | 주 에이전트 | 검토 template·사용자 확인 gate·진단 집계 | run schema | 10/10 확인 전후 테스트 |
+| 완료 | 주 에이전트 | 설계·계획·C/D 경계와 권위 문서 갱신 | 없음 | 문서 검사, diff |
+| 완료 | 주 에이전트 | `experiments/d_manual/` 10문항 해시 입력과 검증 계약 | 설계 | 승인 manifest 대조 테스트 |
+| 완료 | 주 에이전트 | `scripts.experiment_d_manual_review` DB·cache·검색·원자 run | 입력 | runner 정상·실패·경계 테스트 |
+| 진행 중 | 주 에이전트 | 검토 template·사용자 확인 gate·진단 집계 | run schema | 10/10 확인 전후 테스트 |
 | 대기 | 주 에이전트 | 학습·운영 안내, 전체 검증과 완료 전 상태 기록 | 위 구현 | Ruff·pytest·문서·diff |
 | 사용자 후속 | 사용자·Codex | 실제 D-10 run, Codex 1차 검토, 사용자 최종 확인 | 구현 완료·credential | 확정 진단 artifact |
 
@@ -89,6 +89,9 @@ uv run python scripts/check_docs.py
 - 2026-08-05: `codex/corpus-publisher-preflight`를 로컬 `main`에 fast-forward 병합했다.
 - 2026-08-05: 기존 C는 로컬 205청크, D-full은 approved-gold-only 계약임을 확인했다.
 - 2026-08-05: 기존 DB snapshot/profile/top11/shared-lock/원자 게시 코드를 재사용할 수 있음을 확인했다.
+- 2026-08-05: `2dc9659`에서 C/D 경계와 D-10 설계·계획을 커밋했다.
+- 2026-08-05: `0f751e3`에서 10개 ID·질문 SHA·범위 SHA 입력과 fail-closed 계약을 커밋했다.
+- 2026-08-05: 실제 DB/NIM 호출 없이 D-10 runner focused 테스트 8개와 Ruff·문서 검사를 통과했다.
 
 ## 미결정과 차단 요소
 

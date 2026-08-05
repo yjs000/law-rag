@@ -14,4 +14,12 @@
 uv run --directory apps/api python -m scripts.experiment_d_manual_review validate-input
 ```
 
-실험 C의 로컬 corpus를 준비하거나 읽지 않는다. 실제 D-10 검색 명령은 runner 구현 문서에 추가한다.
+실제 검색은 사용자가 후속으로 다음 명령을 실행한다. `DIRECT_URL`과 `NVIDIA_API_KEY`가 필요하며 DB write,
+Open API 수집과 passage embedding은 수행하지 않는다.
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_d_manual_review run
+```
+
+성공 stdout은 run ID와 JSON·Markdown 경로, corpus snapshot, profile, query cache hit/miss를 출력한다.
+실험 C의 로컬 corpus를 준비하거나 읽지 않는다.
