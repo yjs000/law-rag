@@ -1,0 +1,73 @@
+{
+  "artifact_class": "not_gold",
+  "experiment": "D-10",
+  "purpose": "manual_retrieval_and_context_diagnostic",
+  "question_approval": {
+    "artifact": "apps/api/evaluation/experiment-d-lay-energy-question-approval-v1.json",
+    "canonical_payload_sha256": "d41f6a206fec705a2e99b2b9543a6472cd5c5c067fc3a2a530e31a9a08fde869",
+    "file_sha256": "19b1e40704d38a56751cf7a539a39075af18d1e5bbed8e47b1a3b00dabf82f31",
+    "manifest_version": "experiment-d-lay-energy-question-approval-v1"
+  },
+  "questions": [
+    {
+      "id": "lay-energy-0201",
+      "question_scope_sha256": "b712423c7e8f85115ad5e441e31a831bcef9813ab56727b45a3cc35c3b5d9fb5",
+      "question_sha256": "890ea3521afc1427d7d3acbafba6a5d47b4f58c3716756134d014004eb0e6422"
+    },
+    {
+      "id": "lay-energy-0251",
+      "question_scope_sha256": "ae0f5571d9feacd23e4d6f56d5b1c8e37a616eedd2fc0b0b17ceb907f22185ca",
+      "question_sha256": "ea12bcf10221441cd2e32583c284367249071baaa9be821b6a1a495d96a103e3"
+    },
+    {
+      "id": "lay-energy-0521",
+      "question_scope_sha256": "a22e09141320637311744a0daf960cb0c4addfbc649b80c874b75152eb88bc68",
+      "question_sha256": "0cb8cad5bf70308bae5220f9d379df142a15c369452606bfd28c73f4acd0413f"
+    },
+    {
+      "id": "lay-energy-0601",
+      "question_scope_sha256": "90ee24fbef69d832de84824538861b5902117af12338a345e92194127c6699b1",
+      "question_sha256": "64eb4d891bfeb57bd36146a35b021e88e10304c4d67581936c72ea459cb29277"
+    },
+    {
+      "id": "lay-energy-0111",
+      "question_scope_sha256": "5e3c268d8d4d2bc803db4a8c1af9a0856fbd7dbf85ed242c96054e74d05df6d2",
+      "question_sha256": "1cfd89af2004c4575bea306e85194f32cdc83e315f650e920e62675c4faa82cc"
+    },
+    {
+      "id": "lay-energy-0346",
+      "question_scope_sha256": "fa24d582348eb3e9253737de8fd5f6dd2e14070e19b88f34640589db542f7371",
+      "question_sha256": "fc488bff97917db58c102172c9a0b7deb814f21afd845ab40206af94805779f1"
+    },
+    {
+      "id": "lay-energy-0561",
+      "question_scope_sha256": "465598681339b112be9d7191f44f466ed97262e5c55c19f0e82f5cf76ce407aa",
+      "question_sha256": "2457444048e733d48b7d1377987bd8caa1b16b566ca59abad22b9f43b48f7d74"
+    },
+    {
+      "id": "lay-energy-0605",
+      "question_scope_sha256": "363d00cdb610bd42844aa09b51a93005b4d856939e5e77e1dc00f9781c3a5186",
+      "question_sha256": "5a58fd7c28cadfa6489db5c55a7b292248ca121b98aa3ad940ac1fbcd1736a48"
+    },
+    {
+      "id": "lay-energy-0836",
+      "question_scope_sha256": "de8d1d45ecf8b46f16e8605ace6964392b83488010ae8cf739906694b68b4f8c",
+      "question_sha256": "c73ca62feff2127f9e4bba54adebf7c2b5cb55ebb263e04624b53044f4af9b47"
+    },
+    {
+      "id": "lay-energy-0943",
+      "question_scope_sha256": "7f12c33099f03c7a4a2f19a9582f8181b93680d871e043cc88ff741976557688",
+      "question_sha256": "2a474d15d48859775429fc0e16bac1393f41afc7c017dd7ee1072ea5bfa228c4"
+    }
+  ],
+  "schema_version": 1,
+  "selection_method": "explicit_mixed_manual_diagnostic_v1",
+  "source_bank": {
+    "artifact": "apps/api/evaluation/experiment-d-lay-energy-query-bank-v1-draft.json",
+    "bank_version": "experiment-d-lay-energy-query-bank-v1-draft",
+    "file_sha256": "00870a5dd25db27d7f444080abff705b9d6c1e63f69b20ada0d6eefbfd442dec",
+    "question_scope_set_sha256": "a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845",
+    "question_set_sha256": "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a"
+  },
+  "status": "frozen_for_manual_retrieval"
+}
