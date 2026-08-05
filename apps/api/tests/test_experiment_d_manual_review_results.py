@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import experiment_d_manual_review_results as results_module
 from scripts.experiment_d_manual_review_results import (
     ManualReviewResultError,
     create_review_template,
@@ -106,6 +107,24 @@ def test_create_review_template_binds_run_and_leaves_all_cases_on_hold(tmp_path:
     assert all(
         case["user_confirmation"]["status"] == "on_hold" for case in payload["cases"]
     )
+
+
+def test_cli_resolves_relative_artifact_paths_from_repository_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result_path = tmp_path / ".data" / "runs" / "d10-test" / "result.json"
+    result_path.parent.mkdir(parents=True)
+    _result(result_path)
+    monkeypatch.setattr(results_module, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path / ".data")
+
+    exit_code = results_module.main(
+        ["create-review", "--result", ".data/runs/d10-test/result.json"]
+    )
+
+    assert exit_code == 0
+    assert (result_path.parent / "manual-review.json").exists()
 
 
 def test_finalize_rejects_any_unconfirmed_review_without_output(tmp_path: Path) -> None:

@@ -76,6 +76,9 @@ uv run --directory apps/api python -m scripts.experiment_d_manual_review_results
   --result .data/experiments/d-manual/runs/<run-id>/result.json
 ```
 
+검토 CLI의 상대경로는 `uv --directory apps/api`가 바꾸는 process working directory가 아니라 저장소 루트를
+기준으로 해석한다. 따라서 위 `.data/...` 경로를 저장소 루트 PowerShell에서 그대로 사용한다.
+
 Codex 1차 판정과 사용자 승인·수정이 10/10 끝난 뒤 `manual-review.json`의 상태를 `confirmed`로 바꾸고
 다음 명령을 실행한다. 하나라도 `on_hold`이거나 판정이 비어 있으면 출력 파일을 만들지 않는다.
 

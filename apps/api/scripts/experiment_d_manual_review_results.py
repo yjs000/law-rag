@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+REPOSITORY_ROOT = Path(__file__).parents[3]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 NonBlankStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Verdict = Literal[
@@ -415,12 +416,21 @@ def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _cli_path(path: Path) -> Path:
+    return path if path.is_absolute() else REPOSITORY_ROOT / path
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _arguments(argv)
     try:
+        result = _cli_path(arguments.result)
         if arguments.command == "create-review":
-            output = arguments.output or arguments.result.parent / "manual-review.json"
-            payload, file_sha256 = create_review_template(arguments.result, output)
+            output = (
+                _cli_path(arguments.output)
+                if arguments.output
+                else result.parent / "manual-review.json"
+            )
+            payload, file_sha256 = create_review_template(result, output)
             print(
                 json.dumps(
                     {
@@ -434,10 +444,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
             return 0
-        output = arguments.output or arguments.result.parent / "confirmed-diagnostics.json"
+        review = _cli_path(arguments.review)
+        output = (
+            _cli_path(arguments.output)
+            if arguments.output
+            else result.parent / "confirmed-diagnostics.json"
+        )
         diagnostics, file_sha256 = finalize_confirmed_review(
-            arguments.result,
-            arguments.review,
+            result,
+            review,
             output,
         )
         print(
