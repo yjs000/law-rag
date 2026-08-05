@@ -90,6 +90,17 @@ uv run --directory apps/api python -m scripts.experiment_d_manual_review_results
 
 생성되는 `confirmed-diagnostics.json`은 D-10 수동 진단이며 정식 Evidence Recall이나 gold가 아니다.
 
+확정된 동일 top 10에 부모 표제·직접성 로컬 재정렬을 별도 적용하려면 다음 명령을 사용한다.
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_d_local_rerank `
+  --result .data/experiments/d-manual/runs/<run-id>/result.json
+```
+
+기본 출력은 원본을 덮어쓰지 않는 `runs/<run-id>/rerank/d10-parent-heading-directness-v1/`이다. DB,
+embedding, 외부 API와 모델 reranker를 호출하지 않는다. 같은 10문항 calibration 결과이므로 운영 채택
+근거가 아니며, 새 top 5에 진입한 과거 6~10위 후보는 별도 판정 전까지 관련 후보로 간주하지 않는다.
+
 ## Codex·AI의 1차 확인사항
 
 Codex는 자동 출력된 실제 원문만 읽고 문항마다 다음 항목을 작성한다. 모델 기억으로 법률 조항이나 정답을

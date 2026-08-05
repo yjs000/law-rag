@@ -215,6 +215,18 @@ CLI의 상대 artifact 경로는 `uv --directory`의 작업 디렉터리 변경�
 검색 준비 완료 corpus와 활성 NVIDIA 512차원 vector를 읽는다. 실행 기록 방식은 참고할 수 있지만 corpus와
 질문·판정 계약이 다르므로 C를 D로 바꾸거나 두 결과 수치를 비교하면 안 된다.
 
+## 같은 top 10을 재정렬할 때 지켜야 할 경계
+
+D-10-R1은 확정된 raw top 10의 후보 집합과 cosine을 유지하고 부모 조문 표제·질문 직접성 개념으로만
+순서를 바꿨다. `lay-energy-0346`의 직접 근거는 8위에서 2위로 이동했고 hit@3·5는 6/10에서 7/10으로
+변했다. 새 passage embedding이나 외부 호출 없이도 후보 pool 안의 직접 근거 배치를 개선할 수 있음을
+보인 calibration 사례다.
+
+그러나 원래 수동 검토는 raw top 5의 무관 후보만 의무 판정했다. 재정렬 뒤 과거 6~10위 후보가 top 5에
+들어오면 그 후보는 자동으로 관련 문서가 아니다. 따라서 `confirmed known irrelevant@5` 감소와 새 미판정
+후보 수를 함께 기록하고, 전체 Precision 개선은 전수 판정이나 독립 qrels 없이는 주장하지 않는다. 같은
+10문항을 보며 만든 규칙의 결과는 held-out test 성능도 아니다.
+
 D-10의 실제 순서는 `입력 검증 → DB/profile preflight → query cache 조회 → cache miss 한 batch embedding
 → shared lock 안의 snapshot 재검증 → raw top 11/동점 검사 → top 10 조문 계층 복원 → run 원자 게시`다.
 그 뒤 run에 결박된 `manual-review.json`을 만들고 Codex 판정과 사용자 확인을 기록한다. `on_hold`가 하나라도

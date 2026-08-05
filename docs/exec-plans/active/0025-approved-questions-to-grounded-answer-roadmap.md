@@ -93,7 +93,10 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 [설계](../../design-docs/experiment-d-10-manual-review.md)를 따른다. 승인 질문 10개를 현재 DB의 오늘
 population에서 exact dense로 한 번 검색하고, 같은 top 10으로 raw 직접 근거 순위와 복원 조문 문맥을
 사람이 함께 판정한다. 정답·qrels를 미리 넣지 않으므로 D-full gold와 Recall 평가가 아니며, 사용자 확인이
-끝날 때까지 진단 집계와 `docs/generated/` 결과 요약을 만들지 않는다.
+끝날 때까지 진단 집계와 `docs/generated/` 결과 요약을 만들지 않는다. 2026-08-05 사용자 10/10 확인을
+마쳤고, 후속 [D-10-R1 로컬 재정렬](../../design-docs/experiment-d-10-local-rerank.md)은 `0346` 직접 근거를
+8위에서 2위로 이동시켰다. 이는 같은 표본 calibration 결과이므로 M2 독립 gold와 M3 held-out gate를
+대체하지 않는다.
 
 ## 담당과 검증 책임
 

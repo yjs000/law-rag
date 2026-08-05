@@ -8,6 +8,5 @@
 - [0015: 질문 이력 보존 정리 작업](0015-history-retention-job.md) — 로컬 함수 계약 완료, Production scheduler 승인 대기
 - [0022: 검색 인덱스 재설계와 실험 D 1,000문항 평가](0022-retrieval-index-and-experiment-d-1000.md) — 질문 승인 완료, gold 주석·실제 검색 평가 대기
 - [0025: 승인 질문에서 근거 기반 AI 답변까지](0025-approved-questions-to-grounded-answer-roadmap.md) — M0·M1 완료, M2 독립 gold 방법 확정·미착수
-- [0027: 실험 D-10-R1 로컬 재정렬](0027-experiment-d-10-local-rerank.md) — 확정 D-10 동일 top 10의 부모 표제·직접성 무호출 비교
 
 Discord thread `1528216345924337805`에서 시작한 작업의 착수 순서와 단일 `Picked Up` 상태는 [Discord 작업 보드](../../ROADMAP.md)에서 관리한다. 다른 환경에는 해당 보드를 적용하지 않는다.
