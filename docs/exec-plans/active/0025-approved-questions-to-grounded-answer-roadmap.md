@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0·M1 완료, M2 독립 gold 제작 방법 확정·미착수
+상태: 진행 중 — M0·M1 완료, 비용 최소 D-10 선행 진단 구현 중, D-full M2 미착수
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -82,8 +82,18 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 | M7 | 운영 잔여 계획 해결 | 0008·0012·0015와 0002 출시 항목 | 각 계획의 운영 증거 완료 |
 | M8 | 설계 확정과 전체 검증 | 버전 고정·go/no-go 보고 | 중대 오류 0, 전체 gate 통과 |
 
-핵심 경로는 `승인 질문 → corpus 확정 → gold → D1 검색 → D2 문맥 → NVIDIA → E → 설계 확정`이다. 0008 검색
+핵심 경로는 `승인 질문 → corpus 확정 → D-10 수동 진단 → 필요한 문맥 수정 결정 → D-full gold → D1 검색
+→ D2 문맥 → NVIDIA → E → 설계 확정`이다. D-10은 D-full을 삭제하거나 gold 없이 정식 지표를 계산하는
+우회로가 아니다. 0008 검색
 성능, 0012 분산 취소와 0015 scheduler는 D의 선행 조건이 아니다.
+
+### M1.5 — D-10 수동 진단
+
+새 [실행 계획 0026](0026-experiment-d-10-manual-review.md)과
+[설계](../../design-docs/experiment-d-10-manual-review.md)를 따른다. 승인 질문 10개를 현재 DB의 오늘
+population에서 exact dense로 한 번 검색하고, 같은 top 10으로 raw 직접 근거 순위와 복원 조문 문맥을
+사람이 함께 판정한다. 정답·qrels를 미리 넣지 않으므로 D-full gold와 Recall 평가가 아니며, 사용자 확인이
+끝날 때까지 진단 집계와 `docs/generated/` 결과 요약을 만들지 않는다.
 
 ## 담당과 검증 책임
 
@@ -170,7 +180,7 @@ database이고, 운영 게시에는 기존 `DIRECT_URL`만 사용한다.
   내부 단계 적용 함수·Storage·65초 drain은 대체 구현을 사용하므로 실제 각 단계 SQL의 독립 장애 주입까지
   통과했다고 해석하지 않는다.
 
-## M2 — 독립 gold 제작 — 방법 확정, 구현·주석 미착수
+## M2 — D-full 독립 gold 제작 — 방법 확정, 구현·주석 미착수
 
 gold는 질문 승인 manifest의 canonical payload SHA-256
 `d41f6a206fec705a2e99b2b9543a6472cd5c5c067fc3a2a530e31a9a08fde869`에 결박한다. 실제 JSON 파일 byte

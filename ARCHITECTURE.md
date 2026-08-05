@@ -89,6 +89,11 @@ transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤�
 
 ## 실험 D 검색 평가 게이트
 
+실험 D는 두 계층을 섞지 않는다. D-10은 승인 질문 10개에 정답을 미리 넣지 않고 현재 DB의 오늘
+population을 한 번 검색해 사람이 직접 근거와 문맥 충분성을 확인하는 진단이다. 사용자 확인 전에는
+Recall·MRR을 계산하지 않는다. D-full은 독립 qrels·reference·adjudication이 완성된 1,000문항만 정식
+지표로 평가한다. 과거 실험 C의 로컬 205청크와 결과는 어느 D 계층의 corpus·기준값으로도 사용하지 않는다.
+
 정답이 없는 일반 사용자 질문은행은 질문 문구·범위 검토용 중간 산출물이다. 실제 검색 지표는 사용자가 질문을 승인한 뒤 공식 원문을 독립 검토해 qrels, reference contexts와 reference response를 붙이고 `approved_gold`로 확정한 자료에서만 계산한다. 질문 승인은 질문 문구·범위만 고정하며, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 다시 봉인한다. 시간 순서는 모든 문항에서 `질문 승인 < 독립 annotation review < gold adjudication`이어야 한다. 2026-08-04 일반 사용자 질문 1,000개의 문구·범위 승인은 완료했지만 독립 gold 주석과 실제 검색 평가는 아직 실행하지 않았다.
 
 승인된 gold runner는 다음 순서를 강제한다.

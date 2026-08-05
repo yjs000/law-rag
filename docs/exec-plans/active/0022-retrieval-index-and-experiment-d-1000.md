@@ -117,7 +117,7 @@
 - [x] pool 방법별 exact top-k·후보 hash·합집합과 문항 기준일별 full-corpus population 불변조건을 실행 계약과 preflight에 추가한다.
 - [x] 전역 날짜 snapshot을 문항 기준일별 eligible count·content fingerprint로 교체하고, content snapshot ID에서 날짜·embedding profile을 분리한다. runner 결과에는 snapshot ID와 날짜별 population 지문을 함께 기록한다.
 - [x] held-out test fully-answerable만 primary로 두고 calibration·combined를 diagnostic-only로 분리한다.
-- [ ] 사용자가 수동 검토 10문항과 실험 D 질문 구성을 확인한다.
+- [ ] 별도 D-10 실행 계획에서 현재 DB 검색 결과 10문항을 Codex가 1차 검토하고 사용자가 최종 확인한다.
 - [ ] 사용자 확인 후에만 1,000문항을 검색기에 입력해 실험 D 지표를 측정한다.
 - [x] 공식기관 공개 FAQ·절차 주제로 일반 사용자형 에너지 질문 후보 1,000개를 별도 생성한다.
 - [x] 일반 사용자 질문은행이 Recall 평가셋이 아니라 질문 검토 중간 산출물임을 설계·출처 문서에 명시한다.
@@ -203,6 +203,7 @@
 - 2026-08-03: 운영 DB 읽기 전용 감사에서 9개 open version, 3,066개 provision, 가장 늦은 `effective_from=2026-06-03`, snapshot through `2026-08-03`을 확인해 당시 지원 범위를 코드·API에 고정했다. 이 고정 계약은 2026-08-04 동적 계약으로 대체됐다.
 - 2026-08-04: KST 운영 Supabase 읽기 전용 검증에서 `ready=true`, 동적 범위 `2024-07-01..2026-08-04`, 오늘 eligible provision 3,066개와 content-derived `corpus-sha256:*` ID 반환을 확인했다. 관측값은 runtime에 하드코딩하지 않는다.
 - 2026-08-04: 질문 승인 검토에서 고위험 35문항을 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 확정했다. `lay-energy-0511` 문구를 수정한 새 질문·범위 해시로 1,000문항 question approval manifest를 생성했으며 gold 주석·임베딩·검색은 실행하지 않았다.
+- 2026-08-05: D-full 1,000문항 자산과 gold 계약을 유지하면서, 정답 없는 10문항을 현재 DB에서 먼저 수동 진단하는 D-10을 별도 계획 0026으로 분리했다. 과거 실험 C 결과는 재평가하거나 비교하지 않는다.
 - 2026-08-03: retrieval 계보 재감사에서 독립 검색기의 설정·build·release와 평가 실행을 같은 corpus 세대에 묶을 DB 계약이 없음을 확인했다. Additive migration `0011`로 8개 catalog 테이블과 평가 계보 열을 추가해 운영 Supabase에 적용했다. 적용 후 `0011 (head)`, 조문·현재 벡터 각 3,066개, 누락·stale·비단위 벡터 0, profile·corpus gate 활성, `hybrid_search` 없음이 유지됐다. 질문 데이터셋, NVIDIA 질문 임베딩, BM25/RRF와 새 HNSW 작업은 실행하지 않았다.
 
 ## 잔여 검토

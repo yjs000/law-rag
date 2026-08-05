@@ -10,9 +10,10 @@
 | [RAG 파이프라인](rag-pipeline.md) | 승인 전 초안 | 수집, 색인, 검색, 답변 검증 |
 | [평가 전략](evaluation-strategy.md) | 승인 전 초안 | 검색과 답변의 오프라인/온라인 평가 |
 | [실험 C 키워드 결합 검색](experiment-c-keyword-retrieval-options.md) | 제안·보류 | dense 기준선 이후 lexical·RRF를 비교할 후속 설계 |
+| [실험 D-10 수동 검색·문맥 진단](experiment-d-10-manual-review.md) | 구현 기준 | 현재 DB corpus의 정답 없는 10문항 수동 진단과 사용자 확인 gate |
 | [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
 | [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
-| [실험 D 1,000문항 평가](experiment-d-1000-evaluation.md) | 질문 승인·gold 주석 전 | BEIR qrels, labelled reference, 경계·대조·비교군과 수동 검토 계약 |
+| [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 질문 승인·gold 주석 전 | D-10과 분리된 BEIR qrels, labelled reference, 경계·대조·비교군 계약 |
 | [실험 D 일반 사용자 질문은행](experiment-d-layperson-question-bank.md) | 질문 승인·gold 주석 전 | 자연어 질문 후보와 독립 gold 주석·평가 승격 경계 |
 | [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
 | [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
