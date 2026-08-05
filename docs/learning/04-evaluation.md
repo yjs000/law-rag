@@ -209,6 +209,13 @@ D-10은 정답 없는 질문 10개를 현재 DB에서 검색하고 raw 후보와
 검색 준비 완료 corpus와 활성 NVIDIA 512차원 vector를 읽는다. 실행 기록 방식은 참고할 수 있지만 corpus와
 질문·판정 계약이 다르므로 C를 D로 바꾸거나 두 결과 수치를 비교하면 안 된다.
 
+D-10의 실제 순서는 `입력 검증 → DB/profile preflight → query cache 조회 → cache miss 한 batch embedding
+→ shared lock 안의 snapshot 재검증 → raw top 11/동점 검사 → top 10 조문 계층 복원 → run 원자 게시`다.
+그 뒤 run에 결박된 `manual-review.json`을 만들고 Codex 판정과 사용자 확인을 기록한다. `on_hold`가 하나라도
+남아 있거나 사용자 수정 override가 불완전하면 `confirmed-diagnostics.json`을 만들지 않는다. query cache는
+질문 SHA·profile·snapshot이 모두 같을 때만 재사용하므로 corpus가 바뀐 재실행을 같은 관측으로 오인하지
+않는다.
+
 ## 직접 확인
 
 외부 credential 없이 gold 계약의 합성 fixture를 검증한다.
