@@ -7,8 +7,10 @@
 1. `git status --short --branch`로 현재 변경과 브랜치를 확인한다.
 2. 이 파일과 `ARCHITECTURE.md`를 읽는다.
 3. 작업과 관련된 `docs/product-specs/` 및 `docs/design-docs/` 문서를 읽는다.
-4. 범위가 크거나 여러 세션에 걸치면 `docs/exec-plans/active/`에 실행 계획을 만든다.
-5. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
+4. 사용자가 이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인하고,
+   착수 계약을 점검한 뒤 같은 번호의 파일을 `active/`로 이동한다.
+5. 범위가 크거나 여러 세션에 걸치면 `docs/exec-plans/active/`에 실행 계획을 만든다.
+6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
 
 ## Discord 전용 오버레이
 
@@ -23,6 +25,7 @@
 - 상세 기술 설계: `docs/design-docs/index.md`
 - 제품 요구사항: `docs/product-specs/index.md`
 - 실행 계획 작성법: `docs/PLANS.md`
+- 사용자가 제안한 미착수 작업: `docs/exec-plans/todo/README.md`
 - UI 원칙: `docs/DESIGN.md`, `docs/FRONTEND.md`
 - 보안과 개인정보: `docs/SECURITY.md`
 - 신뢰성 목표: `docs/RELIABILITY.md`
