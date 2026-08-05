@@ -15,7 +15,12 @@ from scripts.evaluate_experiment_d_gold import (
     RetrievalState,
 )
 from scripts.experiment_d_corpus import SourceProvision
-from scripts.experiment_d_manual_review import ManualRunError, run_manual_retrieval
+from scripts.experiment_d_manual_review import (
+    RUN_ID_PATTERN,
+    ManualRunError,
+    _new_run_id,
+    run_manual_retrieval,
+)
 from scripts.experiment_d_manual_review_contract import load_manual_pilot_artifacts
 
 
@@ -26,6 +31,13 @@ class FakeEmbedder:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(texts)
         return [[1.0, *([0.0] * 511)] for _ in texts]
+
+
+def test_generated_run_id_satisfies_run_id_contract() -> None:
+    run_id = _new_run_id(datetime(2026, 8, 5, 1, 2, 3, 4005, tzinfo=UTC))
+
+    assert run_id.startswith("d10-20260805t010203004005z-")
+    assert RUN_ID_PATTERN.fullmatch(run_id) is not None
 
 
 def _provision(index: int, *, path: str, parent_path: str | None) -> SourceProvision:

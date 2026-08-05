@@ -53,6 +53,7 @@ DEFAULT_OUTPUT_DIR = DEFAULT_DATA_ROOT / "runs"
 DEFAULT_QUERY_CACHE = DEFAULT_DATA_ROOT / "query-vector-cache.json"
 SEARCH_LIMIT_WITH_TIE_SENTINEL = 11
 ARTICLE_PATH_PATTERN = re.compile(r"^(제(?:\d+)조(?:의(?:\d+))?)(?:/|$)")
+RUN_ID_PATTERN = re.compile(r"[a-z0-9_-]+")
 CRITICAL_CODE_PATHS = (
     Path("experiments/d_manual/experiment-d-10-questions.json"),
     Path("apps/api/scripts/experiment_d_manual_review.py"),
@@ -81,6 +82,11 @@ class ManualRunError(RuntimeError):
         super().__init__(code)
         self.code = code
         self.details = dict(details or {})
+
+
+def _new_run_id(started_at: datetime) -> str:
+    timestamp = started_at.strftime("%Y%m%dt%H%M%S%fz")
+    return f"d10-{timestamp}-{uuid4().hex[:12]}"
 
 
 class QueryEmbedder(Protocol):
@@ -781,7 +787,7 @@ async def run_manual_retrieval(
 ) -> PublishedManualRun:
     if len(artifacts.questions) != 10:
         raise ManualRunError("manual_pilot_question_count_mismatch")
-    if not re.fullmatch(r"[a-z0-9_-]+", run_id):
+    if RUN_ID_PATTERN.fullmatch(run_id) is None:
         raise ManualRunError("invalid_run_id")
     validated_code_provenance = _validate_code_provenance(code_provenance)
     initial_snapshot = await backend.snapshot()
@@ -935,7 +941,7 @@ async def _run_command(arguments: argparse.Namespace) -> PublishedManualRun:
         arguments.approval_manifest,
     )
     started_at = datetime.now(UTC)
-    run_id = f"d10-{started_at.strftime('%Y%m%dT%H%M%S%fZ')}-{uuid4().hex[:12]}"
+    run_id = _new_run_id(started_at)
     backend = PostgresExperimentDBackend(settings.direct_url)
     try:
         return await run_manual_retrieval(
