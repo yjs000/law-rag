@@ -53,7 +53,7 @@
 | 완료 | 주 에이전트 | `experiments/d_manual/` 10문항 해시 입력과 검증 계약 | 설계 | 승인 manifest 대조 테스트 |
 | 완료 | 주 에이전트 | `scripts.experiment_d_manual_review` DB·cache·검색·원자 run | 입력 | runner 정상·실패·경계 테스트 |
 | 완료 | 주 에이전트 | 검토 template·사용자 확인 gate·진단 집계 | run schema | 10/10 확인 전후 테스트 |
-| 진행 중 | 주 에이전트 | 학습·운영 안내, 전체 검증과 완료 전 상태 기록 | 위 구현 | Ruff·pytest·문서·diff |
+| 완료 | 주 에이전트 | 학습·운영 안내, 전체 검증과 완료 전 상태 기록 | 위 구현 | Ruff·pytest·문서·diff |
 | 사용자 후속 | 사용자·Codex | 실제 D-10 run, Codex 1차 검토, 사용자 최종 확인 | 구현 완료·credential | 확정 진단 artifact |
 
 ## 구현 순서
@@ -94,6 +94,8 @@ uv run python scripts/check_docs.py
 - 2026-08-05: 실제 DB/NIM 호출 없이 D-10 runner focused 테스트 8개와 Ruff·문서 검사를 통과했다.
 - 2026-08-05: 검토 template과 10/10 사용자 확인 gate, 수동 진단 집계를 구현했다. focused 테스트는
   입력·runner·검토를 합쳐 13개 통과했다.
+- 2026-08-05: 실제 DB/NIM 호출 없이 전체 API `520 passed, 2 skipped`, 전체 API Ruff, 문서 95개 검사와
+  clean Git 상태를 확인했다. 실제 run과 검토가 남아 있으므로 계획은 active에 유지한다.
 
 ## 미결정과 차단 요소
 
