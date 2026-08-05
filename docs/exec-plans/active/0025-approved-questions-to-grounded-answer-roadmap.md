@@ -77,13 +77,14 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 | M2 (방법 확정·미착수) | 독립 gold 제작 | 1,000문항 approved gold와 adjudication manifest | gold preflight 전체 통과 |
 | M3 | 실험 D1 | calibration raw exact dense 검색 기준선 | test를 열지 않고 오류 분석 완료 |
 | M4 | 실험 D2 | AI 입력용 검색 문맥 계약 v1과 D1·D2 held-out 결과 | 문맥 설정 동결 뒤 test 1회 통과 |
+| M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 |
 | M6 | 실험 E | 답변 품질·안전·비용·반복성 결과 | 사전 등록 release gate 통과 |
 | M7 | 운영 잔여 계획 해결 | 0008·0012·0015와 0002 출시 항목 | 각 계획의 운영 증거 완료 |
 | M8 | 설계 확정과 전체 검증 | 버전 고정·go/no-go 보고 | 중대 오류 0, 전체 gate 통과 |
 
 핵심 경로는 `승인 질문 → corpus 확정 → D-10 수동 진단 → 필요한 문맥 수정 결정 → D-full gold → D1 검색
-→ D2 문맥 → NVIDIA → E → 설계 확정`이다. D-10은 D-full을 삭제하거나 gold 없이 정식 지표를 계산하는
+→ D2 문맥 → 검색 전 라우팅 → NVIDIA → E → 설계 확정`이다. D-10은 D-full을 삭제하거나 gold 없이 정식 지표를 계산하는
 우회로가 아니다. 0008 검색
 성능, 0012 분산 취소와 0015 scheduler는 D의 선행 조건이 아니다.
 
@@ -104,7 +105,7 @@ population에서 exact dense로 한 번 검색하고, 같은 top 10으로 raw �
 | --- | --- | --- |
 | M1 | 주 에이전트·CI | publisher PostgreSQL 통합 결과와 운영 preflight diff 검토 |
 | M2 | 분리된 주석자·검토자·판정 담당자 | 주 에이전트 계약 통합, gold preflight |
-| M3~M4 | 검색 평가 담당 에이전트 | held-out 개봉 전 설정·threshold 봉인 감사 |
+| M3~M4.5 | 검색 평가 담당 에이전트 | held-out 개봉 전 설정·threshold·라우팅 비용 gate 봉인 감사 |
 | M5~M6 | NVIDIA 연결·답변 평가 담당 에이전트 | 결정적 validator와 독립 표본 검토 |
 | M7 | 각 active 계획의 DB/API/Web/운영 담당 | 계획별 focused test와 운영 증거 |
 | M8 | 주 에이전트 | 전체 immutable diff, CI, 공개 E2E와 go/no-go |
@@ -320,6 +321,30 @@ D2를 함께 한 번 실행하며, primary는 test `fully_answerable`의 family 
 D2가 끝나면 프런트 날짜 범위 TODO를 `0002` 공개 Web 범위로 명시적으로 이관한 뒤 `0022`를 실제 D1·D2
 결과와 함께 완료 처리한다.
 
+## M4.5 — 후속 개선 TODO: 검색 전 질문 라우팅
+
+상태: 등록 · 미구현. D-10에서 법령 corpus로 직접 답할 질문, 사용자 사실이 필요한 질문, 실시간 정보와
+사용자 문서가 필요한 질문이 섞이면 무관 법령을 AI 문맥으로 보낼 수 있음이 확인됐다. 질문 embedding과
+법령 검색 전에 최소 다음 경로를 판정하는 계약을 별도 구현·평가한다.
+
+- `clarification_required`: 위치·설비용량·자가소비·판매 방식 등 빠진 사용자 사실을 먼저 묻고, 필요한
+  답을 받기 전에는 query embedding과 법령 검색을 시작하지 않는다.
+- `realtime_required`: 올해 예산·현재 가격·고장 상태·복구 예정처럼 기준 시점에 따라 변하는 정보는
+  법령 검색으로 대신하지 않는다. 승인된 공식 최신정보 source가 없으면 근거 부족으로 차단한다.
+- `external_document_required`: 계약서·정산서·공사비 산출서처럼 사용자 또는 운영기관 문서가 필요한
+  질문은 해당 문서를 요청한다. 법령 근거도 필요하면 문서 확보 뒤 법령 검색과 분리된 provenance로 결합한다.
+- 그 밖의 법령 질문만 D1/D2의 동결 검색·문맥 경로로 보낸다.
+
+라우팅은 질문 ID나 D-10 정답을 런타임 규칙으로 넣지 않는다. route, 이유 코드, 필요한 추가 사실·자료,
+embedding/search 실행 여부를 기록하고 D-full의 partial·clarification·unanswerable 모집단에서 오분류와
+불필요 검색률을 별도로 평가한다.
+
+query 보강은 라우팅보다 뒤의 조건부 TODO다. 라우팅 결과가 법령 검색이고 동결 dense·문맥 경로가 여전히
+직접 근거를 충분히 앞에 놓지 못할 때만 원 질문과 보강 문구를 별도 version·SHA로 고정한다. D-10의 같은
+10문항 query embedding을 한 batch로 최대 한 번 다시 만들고, 기존 3,066개 passage vector와 동일
+snapshot/profile을 재사용한다. passage embedding, 새 corpus, realtime/external-document 질문의 억지 법령
+검색은 수행하지 않는다. 기존 D-10/D-10-R1 artifact를 덮어쓰지 않고 별도 비교 run으로 기록한다.
+
 ## M5 — NVIDIA 답변 연결
 
 NVIDIA adapter는 이미 있으므로 새 provider 계층을 만들지 않는다. 다음 최소 변경만 한다.
@@ -477,6 +502,9 @@ go/no-go 조건:
   운영에 필요한 최소 범위만 구현한다.
 - 2026-08-04: E는 50 pilot, 200 calibration, 동결, 800 held-out 1회 순서로 실행하고 별도 LLM judge와
   자동 유료 retry는 초기 범위에서 제외한다.
+- 2026-08-05: D-10 후속 개선으로 검색 전 clarification·realtime·external-document 라우팅을 M4.5 TODO로
+  둔다. query 보강과 D-10 질문 embedding 10개 재실행은 라우팅 뒤 법령 검색 질문이 여전히 부족할 때만
+  한 batch로 허용하며 passage embedding과 원본 artifact 변경은 하지 않는다.
 
 ## 진행 기록
 
@@ -496,6 +524,8 @@ go/no-go 조건:
   3,066개 vector coverage와 snapshot을 확인했다. 운영 write·게시·실험 D는 실행하지 않았다.
 - 2026-08-04: M2는 독립 주석 방법과 50→200→1,000 checkpoint만 확정했다. 작업표·annotation artifact·
   qrels·gold 코드는 만들지 않았다.
+- 2026-08-05: D-10과 D-10-R1 결과를 근거로 검색 전 질문 라우팅과 조건부 query 보강을 후속 TODO로
+  등록했다. 코드, embedding, DB·외부 source 호출은 실행하지 않았다.
 
 ## 이번 로드맵 작성에서 하지 않은 일
 
