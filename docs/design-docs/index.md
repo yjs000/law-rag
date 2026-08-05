@@ -10,7 +10,8 @@
 | [RAG 파이프라인](rag-pipeline.md) | 승인 전 초안 | 수집, 색인, 검색, 답변 검증 |
 | [평가 전략](evaluation-strategy.md) | 승인 전 초안 | 검색과 답변의 오프라인/온라인 평가 |
 | [실험 C 키워드 결합 검색](experiment-c-keyword-retrieval-options.md) | 제안·보류 | dense 기준선 이후 lexical·RRF를 비교할 후속 설계 |
-| [실험 D-10 수동 검색·문맥 진단](experiment-d-10-manual-review.md) | 구현 기준 | 현재 DB corpus의 정답 없는 10문항 수동 진단과 사용자 확인 gate |
+| [실험 D-10 수동 검색·문맥 진단](experiment-d-10-manual-review.md) | 완료 | 현재 DB corpus의 정답 없는 10문항 수동 진단과 사용자 확인 gate |
+| [실험 D-10-R1 로컬 재정렬](experiment-d-10-local-rerank.md) | 구현 중 | 동일 top 10의 부모 표제·직접성 무호출 재정렬 진단 |
 | [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
 | [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
 | [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 질문 승인·gold 주석 전 | D-10과 분리된 BEIR qrels, labelled reference, 경계·대조·비교군 계약 |
