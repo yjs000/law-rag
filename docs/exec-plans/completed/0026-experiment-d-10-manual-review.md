@@ -1,6 +1,6 @@
 # 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단
 
-상태: 구현 완료 · 실제 D-10 실행과 Codex/사용자 검토 대기
+상태: 완료 · 실제 D-10 실행과 Codex/사용자 10/10 검토 확정
 작성일: 2026-08-05
 소유자: 주 에이전트
 
@@ -54,7 +54,7 @@
 | 완료 | 주 에이전트 | `scripts.experiment_d_manual_review` DB·cache·검색·원자 run | 입력 | runner 정상·실패·경계 테스트 |
 | 완료 | 주 에이전트 | 검토 template·사용자 확인 gate·진단 집계 | run schema | 10/10 확인 전후 테스트 |
 | 완료 | 주 에이전트 | 학습·운영 안내, 전체 검증과 완료 전 상태 기록 | 위 구현 | Ruff·pytest·문서·diff |
-| 사용자 후속 | 사용자·Codex | 실제 D-10 run, Codex 1차 검토, 사용자 최종 확인 | 구현 완료·credential | 확정 진단 artifact |
+| 완료 | 사용자·Codex | 실제 D-10 run, Codex 1차 검토, 사용자 최종 확인 | 구현 완료·credential | 확정 진단 artifact |
 
 ## 구현 순서
 
@@ -96,9 +96,14 @@ uv run python scripts/check_docs.py
   입력·runner·검토를 합쳐 13개 통과했다.
 - 2026-08-05: 실제 DB/NIM 호출 없이 전체 API `520 passed, 2 skipped`, 전체 API Ruff, 문서 95개 검사와
   clean Git 상태를 확인했다. 실제 run과 검토가 남아 있으므로 계획은 active에 유지한다.
+- 2026-08-05: 실제 run `d10-20260805t065001773007z-442bef4a327b`이 corpus snapshot
+  `corpus-sha256:605b1f53b4fbe3edff19000796e56d906415e7648e7e6ae6119a46f5fc8d9578`에서 성공했다.
+- 2026-08-05: Codex 1차 검토 10건을 사용자가 모두 승인했다. 확정 수동 hit@1/3/5/10은
+  `0.6/0.6/0.6/0.7`, top 5 무관 후보는 28개, 문맥 충분/부족/차단은 `1/6/3`이다.
+- 2026-08-05: 확정 요약을 `docs/generated/experiment-d-10-manual-diagnostic.md`에 기록했다. 직접 근거가
+  8위였던 `lay-energy-0346`과 top 5 잡음을 별도 무호출 로컬 재정렬 진단에서 비교하기로 결정했다.
 
 ## 미결정과 차단 요소
 
 - 구현에는 차단 요소가 없다.
-- 실제 실행에는 운영 DB read credential과 NVIDIA API key가 필요하며 사용자가 후속으로 실행한다.
-- 사용자 확인 전에는 확정 진단값과 운영 반영 결정을 만들 수 없다.
+- 차단 요소가 없다. 후속 재정렬은 저장된 artifact만 읽는 별도 실행 계획에서 다룬다.

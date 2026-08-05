@@ -89,7 +89,7 @@ AI 입력 문맥을 확정하고 NVIDIA 답변을 실험 E로 평가한다. E가
 
 ### M1.5 — D-10 수동 진단
 
-새 [실행 계획 0026](0026-experiment-d-10-manual-review.md)과
+완료된 [실행 계획 0026](../completed/0026-experiment-d-10-manual-review.md)과
 [설계](../../design-docs/experiment-d-10-manual-review.md)를 따른다. 승인 질문 10개를 현재 DB의 오늘
 population에서 exact dense로 한 번 검색하고, 같은 top 10으로 raw 직접 근거 순위와 복원 조문 문맥을
 사람이 함께 판정한다. 정답·qrels를 미리 넣지 않으므로 D-full gold와 Recall 평가가 아니며, 사용자 확인이
