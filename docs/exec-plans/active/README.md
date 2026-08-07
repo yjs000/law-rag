@@ -8,6 +8,6 @@
 - [0015: 질문 이력 보존 정리 작업](0015-history-retention-job.md) — 로컬 함수 계약 완료, Production scheduler 승인 대기
 - [0022: 검색 인덱스 재설계와 실험 D 평가](0022-retrieval-index-and-experiment-d-1000.md) — 검색 인프라·D-10 완료, D-full Gold는 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)로 보류
 - [0025: 승인 질문에서 근거 기반 AI 답변까지](0025-approved-questions-to-grounded-answer-roadmap.md) — M2 10문항 동결·preflight 완료, M3-10 전, M4.5는 [예정 작업 0028](../todo/0028-pre-retrieval-question-routing.md)에 등록
-- [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md) — 10문항×3,066 후보 annotation·사용자 검토 workflow 진행 중
+- [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md) — 30,660개 draft 생성 완료, 10문항 사용자 adjudication 대기
 
 Discord thread `1528216345924337805`에서 시작한 작업의 착수 순서와 단일 `Picked Up` 상태는 [Discord 작업 보드](../../ROADMAP.md)에서 관리한다. 다른 환경에는 해당 보드를 적용하지 않는다.

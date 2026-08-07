@@ -11,6 +11,7 @@ from scripts.experiment_d_10_gold_review import (
     AnnotationProposal,
     D10GoldReviewError,
     ProposedCase,
+    UserAdjudication,
     load_workflow_contract,
     preflight_contract,
 )
@@ -87,7 +88,48 @@ def test_annotation_proposal_requires_ten_distinct_cases() -> None:
             artifact_class="assistant_annotation_proposal_not_gold",
             status="pending_user_review",
             annotator_id="codex-draft-v1",
-            annotation_method="canonical_full_corpus_review_without_retrieval_labels",
+            annotation_method="canonical_full_corpus_proposal_without_retrieval_labels",
             independence_limitation="assistant has prior project context",
             cases=[],
         )
+
+
+def _confirmed_user_review() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "experiment": "D-10-GOLD-V1",
+        "artifact_class": "user_adjudication_input",
+        "status": "confirmed",
+        "annotator_id": "codex-draft",
+        "reviewer_id": "user-reviewer",
+        "reviewed_at": "2026-08-07T13:00:00+09:00",
+        "annotation_draft_sha256": "a" * 64,
+        "judgments_jsonl_sha256": "b" * 64,
+        "cases": [
+            {
+                "case_id": f"case-{index}",
+                "decision": "approved",
+                "positive_qrels_confirmed": True,
+                "bulk_negative_confirmed": True,
+                "facets_and_reference_confirmed": True,
+                "comment": "",
+            }
+            for index in range(10)
+        ],
+    }
+
+
+def test_confirmed_user_review_requires_independent_reviewer() -> None:
+    payload = _confirmed_user_review()
+    payload["reviewer_id"] = payload["annotator_id"]
+
+    with pytest.raises(ValidationError, match="reviewer must differ"):
+        UserAdjudication.model_validate(payload)
+
+
+def test_confirmed_user_review_accepts_ten_approved_cases() -> None:
+    review = UserAdjudication.model_validate(_confirmed_user_review())
+
+    assert review.status == "confirmed"
+    assert len(review.cases) == 10
+    assert all(case.bulk_negative_confirmed for case in review.cases)

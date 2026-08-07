@@ -149,6 +149,15 @@ D-10의 10문항은 사용자가 직접 근거와 문맥 판정을 확인했으�
 검색을 하지 않고 이 계약과 저장 raw/R1 순위로 소표본 분석만 수행한다. 1,000문항 질문은행은 삭제하지
 않되 일반화나 운영 회귀가 필요할 때 현재 corpus를 다시 검사하고 필요한 Gold를 작성한다.
 
+전 후보 qrel을 만든다는 것은 positive provision만 추가하는 일이 아니다. D-10 전수 workflow는 각 질문에
+현재 3,066개 provision을 모두 배치하고 positive를 제외한 나머지도 relevance 0으로 명시해 총 30,660개
+판정을 만든다. 그래야 검색 결과에 없던 provision을 미판정인데 무관한 것으로 간주하는 오류를 피할 수 있다.
+
+다만 자동 또는 assistant 일괄 relevance-0은 그 자체로 adjudicated negative가 아니다. 사용자는 positive
+원문뿐 아니라 음성 판정의 범위·검색 방법·누락 가능성을 문항별로 승인해야 한다. 수정이 있으면 기존 draft를
+직접 고치지 않고 annotation proposal revision을 새로 만들고 전체 judgment SHA를 다시 봉인한다. 이처럼
+`complete candidate coverage`와 `independent human confidence`는 별개의 품질 축이다.
+
 검색 점수가 높아도 직접 근거가 아닐 수 있다. “전기사업 허가권자는 누구인가?”에 대해 허가라는 단어가
 있는 다른 의무 조문은 주제가 비슷하지만 질문의 주체를 답하지 못할 수 있다. similarity cutoff 하나를
 법률적 `insufficient_evidence` 판정으로 쓰지 않는 이유다.

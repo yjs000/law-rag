@@ -1,6 +1,6 @@
 # 0030: D-10 전수 qrel과 사용자 adjudication
 
-상태: `진행 중 · 계약 확정`
+상태: `진행 중 · draft 생성 완료 · 사용자 adjudication 대기`
 
 착수일: 2026-08-07
 
@@ -75,22 +75,22 @@ corpus identity만 기록한다.
 
 - [x] 1,000문항 보류와 D-10 전용 범위를 분리한다.
 - [x] 사용자 승인 전 상태를 `pending_user_review`로 고정한다.
-- [ ] 질문·snapshot·profile·corpus count·출력 경로를 추적 contract로 봉인한다.
+- [x] 질문·snapshot·profile·corpus count·출력 경로를 추적 contract로 봉인한다.
 
 ### M1 — corpus와 judgment 작업표
 
-- [ ] 읽기 전용 transaction에서 현재 parser의 provision을 canonical 순서로 export한다.
-- [ ] D-10 frozen snapshot/count/fingerprint와 일치하지 않으면 아무 산출물도 게시하지 않는다.
-- [ ] 질문마다 정확히 3,066개 candidate를 만들고 검색 점수·rank 필드가 없음을 검사한다.
-- [ ] 총 30,660개 judgment의 ID 집합과 SHA-256을 기록한다.
+- [x] 읽기 전용 transaction에서 현재 parser의 provision을 canonical 순서로 export한다.
+- [x] D-10 frozen snapshot/count/fingerprint와 일치하지 않으면 아무 산출물도 게시하지 않는다.
+- [x] 질문마다 정확히 3,066개 candidate를 만들고 검색 점수·rank 필드가 없음을 검사한다.
+- [x] 총 30,660개 judgment의 ID 집합과 SHA-256을 기록한다.
 
 ### M2 — annotation 초안
 
-- [ ] relevance 0/1/2, facet, 판정 이유를 모든 candidate에 기록한다.
-- [ ] positive와 경계 후보의 원문·메타데이터를 사용자 검토표에 표시한다.
-- [ ] relevance-0 일괄 판정은 규칙·범위·예외와 개수를 표시하고 사용자 승인 대상으로 둔다.
-- [ ] answerability·필수 답변 요소·reference context·reference response 초안을 작성한다.
-- [ ] 기존 D-10 판정과 다른 항목을 자동으로 충돌 목록에 넣는다.
+- [x] relevance 0/1/2, facet, 판정 이유를 모든 candidate에 기록한다.
+- [x] positive와 경계 후보의 원문·메타데이터를 사용자 검토표에 표시한다.
+- [x] relevance-0 일괄 판정은 규칙·범위·예외와 개수를 표시하고 사용자 승인 대상으로 둔다.
+- [x] answerability·필수 답변 요소·reference context·reference response 초안을 작성한다.
+- [x] 기존 D-10 판정과 다른 핵심 항목을 사용자 검토 문서에 표시한다.
 
 ### M3 — 사용자 review와 adjudication
 
@@ -153,3 +153,7 @@ uv run python scripts/check_docs.py
 - 2026-08-07: clean `main`, origin/main 대비 32커밋 앞선 상태에서 착수했다. 기존 미커밋 변경은 없었다.
 - 2026-08-07: 기존 D-full schema·preflight·runner와 D-10 frozen artifact를 감사했다. D-full은 정확히
   1,000문항·200 family split을 요구하므로 변경하지 않고 D-10 전용 workflow를 추가하기로 했다.
+- 2026-08-07: `d10-gold-20260807t040448957688z`를 읽기 전용 DB에서 생성했다. snapshot과 3,066개
+  fingerprint가 동결값과 일치했고 score·rank·모델 호출 없이 30,660개 judgment를 기록했다.
+- 2026-08-07: relevance 2 35개, relevance 1 3개, relevance 0 30,622개와 answerability·facet·reference
+  초안을 생성했다. 10문항 모두 사용자 adjudication 대기이며 seal은 실행하지 않았다.

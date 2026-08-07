@@ -54,6 +54,10 @@ M3에서는 저장된 동일 raw top 10과 R1을 비교하며 새 embedding·DB 
 [D-10 M2/M3 설계](docs/design-docs/experiment-d-10-m3-calibration.md)에 허용 지표, 사용자 확인사항과
 Codex 확인사항을 정리한다.
 
+D-10을 전수 qrel calibration Gold로 만드는 별도 workflow는 10문항×3,066개 판정을 생성했고 현재 사용자
+adjudication 대기 상태다. 승인 전에는 Gold 지표를 계산하지 않는다. 검토 항목과 seal 방법은
+[D-10 Gold adjudication 설계](docs/design-docs/experiment-d-10-gold-adjudication.md)를 따른다.
+
 ## 문서 시작점
 
 - [작업 계약](AGENTS.md)

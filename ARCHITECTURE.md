@@ -99,6 +99,11 @@ preflight는 이를 로컬에서 검증하며 DB·NVIDIA를 호출하지 않는�
 direct-evidence hit@1/3/5/10, 첫 근거 순위와 reciprocal rank@10, 알려진 무관 top 5와 문맥 판정 수다.
 과거 실험 C의 로컬 205청크와 결과는 기준값으로 사용하지 않는다.
 
+2026-08-07 D-10 전용 Gold 후보 workflow가 같은 snapshot의 10문항×3,066개 전수 relevance 판정과 qrel·
+reference 초안을 생성했다. 현재 상태는 `pending_user_review`이며, positive와 일괄 relevance-0 판정을
+사용자가 모두 adjudication하기 전에는 위 비Gold 제한을 유지한다. 승인 뒤에도 이미 조정에 사용한 10문항의
+calibration Gold이므로 held-out·일반화·일반 release gate로 사용하지 않는다.
+
 승인된 일반 사용자 질문 1,000개와 D-full Gold schema·runner는 삭제하지 않는다. 10문항 밖 일반화나
 운영 회귀가 실제로 필요할 때만 질문을 현재 corpus에서 다시 검사하고 독립 qrels·reference·adjudication을
 작성한다. 그때만 다음 보존된 D-full runner 계약을 활성화한다.

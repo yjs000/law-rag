@@ -1,0 +1,687 @@
+{
+  "annotation_method": "canonical_full_corpus_proposal_without_retrieval_labels",
+  "annotator_id": "codex-d10-gold-draft-v1",
+  "artifact_class": "assistant_annotation_proposal_not_gold",
+  "cases": [
+    {
+      "annotation_notes": "발전사업 허가, 관련 인허가 의제, 사업용·자가용 설비 공사 인가·신고를 구분했다. 실제 부지·용량·전압·판매방식에 따른 최종 목록은 외부 개별법과 사용자 사실이 필요하다.",
+      "answerability": "partially_answerable",
+      "case_id": "lay-energy-0201",
+      "expected_action": "partial_answer_with_limits",
+      "facets": [
+        {
+          "claim": "전기사업을 하려면 종류와 규모에 따라 발전사업 허가가 필요하다.",
+          "facet_id": "business_permit",
+          "status": "supported",
+          "status_reason": "전기사업법 제7조제1항이 허가 원칙을 직접 규정한다."
+        },
+        {
+          "claim": "3천킬로와트 이하 발전사업 허가 신청은 시도지사에게 제출한다.",
+          "facet_id": "permit_authority_by_capacity",
+          "status": "supported",
+          "status_reason": "전기사업법 시행규칙 제4조제1항이 신청기관 기준을 직접 규정한다."
+        },
+        {
+          "claim": "사업용전기설비 공사는 공사 종류에 따라 인가 또는 사전 신고 대상이 된다.",
+          "facet_id": "business_facility_construction",
+          "status": "supported",
+          "status_reason": "전기사업법 제61조제1항부터 제3항이 인가·변경신고·사전신고를 구분한다."
+        },
+        {
+          "claim": "자가용전기설비 공사도 공사 종류에 따라 인가 또는 사전 신고 대상이 된다.",
+          "facet_id": "private_facility_construction",
+          "status": "supported",
+          "status_reason": "전기안전관리법 제8조제1항과 제2항이 자가용설비 공사를 구분한다."
+        },
+        {
+          "claim": "태양광 발전사업 허가 과정에서 협의된 개별 인허가는 받은 것으로 의제될 수 있다.",
+          "facet_id": "deemed_permits",
+          "status": "supported",
+          "status_reason": "전기사업법 제7조의3제1항이 관련 인허가 의제의 전제를 직접 규정한다."
+        },
+        {
+          "claim": "질문자의 실제 사업에 필요한 허가·신고 전체 목록을 확정한다.",
+          "facet_id": "case_specific_complete_list",
+          "status": "unsupported",
+          "status_reason": "부지 성격, 설비용량, 전압, 판매·자가소비 방식과 corpus 밖 개별법 확인이 필요하다."
+        }
+      ],
+      "insufficient_reason": "현재 corpus만으로 개별 사업의 인허가 전체 목록을 확정할 수 없다.",
+      "missing_user_facts": [],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_permit"],
+          "provision_id": "471dab54-74f6-5abb-8140-dafbea143180",
+          "rationale": "전기사업 종류·규모별 허가 의무를 직접 답한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["permit_authority_by_capacity"],
+          "provision_id": "3b9af823-8b85-528e-b48a-5ec81934efec",
+          "rationale": "3천킬로와트 이하 발전사업의 허가 신청기관을 직접 구분한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_facility_construction"],
+          "provision_id": "553d5497-cc11-56a5-bfe9-cea1a2588835",
+          "rationale": "사업용전기설비 설치·변경공사의 인가 대상을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_facility_construction"],
+          "provision_id": "a45792e3-d026-5669-9d03-24cd7ea43fec",
+          "rationale": "인가사항 중 경미한 변경의 신고를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_facility_construction"],
+          "provision_id": "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+          "rationale": "인가 외 사업용전기설비 공사의 사전 신고를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["private_facility_construction"],
+          "provision_id": "f6043044-10b4-57a6-a076-3991ca49b9bd",
+          "rationale": "자가용전기설비 설치·변경공사의 인가를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["private_facility_construction"],
+          "provision_id": "4e893375-79da-57be-b009-33a901b87d28",
+          "rationale": "인가 외 자가용전기설비 공사의 사전 신고를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["deemed_permits"],
+          "provision_id": "6801166d-1204-54f0-95f9-15587528e204",
+          "rationale": "태양광 발전사업 허가 시 협의된 관련 인허가 의제를 직접 규정한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "partial_answer_with_limits",
+        "cited_provision_ids": [
+          "471dab54-74f6-5abb-8140-dafbea143180",
+          "3b9af823-8b85-528e-b48a-5ec81934efec",
+          "553d5497-cc11-56a5-bfe9-cea1a2588835",
+          "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+          "f6043044-10b4-57a6-a076-3991ca49b9bd",
+          "4e893375-79da-57be-b009-33a901b87d28",
+          "6801166d-1204-54f0-95f9-15587528e204"
+        ],
+        "text": "먼저 전기를 판매하는 발전사업인지 자가소비 설비인지 구분해야 합니다. 발전사업은 종류·규모별 허가가 원칙이고 3천킬로와트 이하 신청기관도 정해져 있습니다. 설비 공사는 사업용·자가용 여부와 공사 종류에 따라 인가 또는 신고로 나뉘며, 일부 태양광 사업은 협의된 개별 인허가가 의제될 수 있습니다. 실제 전체 목록은 부지·용량·전압·판매방식을 확인한 뒤 개별법까지 추가 확인해야 합니다."
+      }
+    },
+    {
+      "annotation_notes": "용량만으로 허가와 신고가 일률적으로 갈리는 것이 아니라 사업 여부, 설비 구분, 전압과 공사 종류가 함께 필요하므로 추가 질문을 우선한다.",
+      "answerability": "clarification_required",
+      "case_id": "lay-energy-0251",
+      "expected_action": "ask_clarifying_question",
+      "facets": [
+        {
+          "claim": "발전사업은 종류와 규모에 따라 허가 대상이다.",
+          "facet_id": "business_permit_principle",
+          "status": "supported",
+          "status_reason": "전기사업법 제7조제1항이 허가 원칙을 규정한다."
+        },
+        {
+          "claim": "3천킬로와트 이하 발전사업은 시도지사에게 허가를 신청한다.",
+          "facet_id": "small_capacity_authority",
+          "status": "supported",
+          "status_reason": "전기사업법 시행규칙 제4조제1항이 용량 기준 신청기관을 규정한다."
+        },
+        {
+          "claim": "사업용 설비 공사는 인가와 신고로 나뉜다.",
+          "facet_id": "business_construction_route",
+          "status": "supported",
+          "status_reason": "전기사업법 제61조가 공사계획 인가·신고를 구분한다."
+        },
+        {
+          "claim": "자가용 설비 공사는 인가·신고 또는 일부 저압 설비의 사용전검사 신청으로 나뉜다.",
+          "facet_id": "private_construction_route",
+          "status": "supported",
+          "status_reason": "전기안전관리법 제8조가 자가용설비 절차를 구분한다."
+        },
+        {
+          "claim": "질문자의 설비가 어느 절차인지 확정한다.",
+          "facet_id": "route_for_user_facility",
+          "status": "needs_clarification",
+          "status_reason": "발전용량, 전압, 판매·자가소비 여부와 공사 종류가 없다."
+        }
+      ],
+      "insufficient_reason": null,
+      "missing_user_facts": [
+        "발전설비용량",
+        "전압",
+        "전력 판매용인지 자가소비용인지",
+        "신규 설치인지 변경공사인지"
+      ],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_permit_principle"],
+          "provision_id": "471dab54-74f6-5abb-8140-dafbea143180",
+          "rationale": "발전사업 허가 원칙을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["small_capacity_authority"],
+          "provision_id": "3b9af823-8b85-528e-b48a-5ec81934efec",
+          "rationale": "3천킬로와트 이하 발전사업의 신청기관을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_construction_route"],
+          "provision_id": "553d5497-cc11-56a5-bfe9-cea1a2588835",
+          "rationale": "사업용전기설비 공사의 인가 절차를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["business_construction_route"],
+          "provision_id": "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+          "rationale": "사업용전기설비 공사의 사전 신고 절차를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["private_construction_route"],
+          "provision_id": "f6043044-10b4-57a6-a076-3991ca49b9bd",
+          "rationale": "자가용전기설비 공사의 인가 절차를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["private_construction_route"],
+          "provision_id": "4e893375-79da-57be-b009-33a901b87d28",
+          "rationale": "자가용전기설비 공사의 신고 절차를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["private_construction_route"],
+          "provision_id": "15057cea-ae02-58d0-9f27-aa96b8f8962a",
+          "rationale": "일부 저압 자가용설비에서 사용전검사 신청으로 신고를 갈음하는 예외를 규정한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "ask_clarifying_question",
+        "cited_provision_ids": [
+          "471dab54-74f6-5abb-8140-dafbea143180",
+          "3b9af823-8b85-528e-b48a-5ec81934efec",
+          "553d5497-cc11-56a5-bfe9-cea1a2588835",
+          "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+          "f6043044-10b4-57a6-a076-3991ca49b9bd",
+          "4e893375-79da-57be-b009-33a901b87d28",
+          "15057cea-ae02-58d0-9f27-aa96b8f8962a"
+        ],
+        "text": "정확히 구분하려면 발전설비용량과 전압, 전력을 판매하는 발전사업인지 자가소비용인지, 신규 설치인지 변경공사인지가 필요합니다. 발전사업 허가의 신청기관 기준과 사업용·자가용 공사 인가·신고 기준이 서로 다르고, 일부 저압 자가용설비는 사용전검사 신청으로 신고를 갈음할 수 있습니다."
+      }
+    },
+    {
+      "annotation_notes": "법률은 공급자·신청·공급량 확인과 일부 발급 제한·제외를 제공하지만 세부 운영규칙과 실제 설비 상태는 corpus에 없어 부분 답변으로 제안한다. 기존 D-10 직접 답변 판정과의 충돌은 사용자 adjudication 대상이다.",
+      "answerability": "partially_answerable",
+      "case_id": "lay-energy-0521",
+      "expected_action": "partial_answer_with_limits",
+      "facets": [
+        {
+          "claim": "신재생에너지 공급자는 공급인증기관에서 공급인증서를 발급받을 수 있다.",
+          "facet_id": "eligible_supplier",
+          "status": "supported",
+          "status_reason": "신재생에너지법 제12조의7제1항이 발급 가능 주체를 규정한다."
+        },
+        {
+          "claim": "공급인증기관에 발급을 신청해야 한다.",
+          "facet_id": "application_route",
+          "status": "supported",
+          "status_reason": "같은 조 제2항이 신청 의무를 규정한다."
+        },
+        {
+          "claim": "기관은 에너지 종류별 공급량과 공급기간을 확인해 발급한다.",
+          "facet_id": "issuance_check",
+          "status": "supported",
+          "status_reason": "같은 조 제3항이 확인 항목과 발급을 규정한다."
+        },
+        {
+          "claim": "정부 지원을 받은 설비와 특정 직접·분산 거래 전기는 발급이 제한되거나 제외될 수 있다.",
+          "facet_id": "limitations_and_exclusions",
+          "status": "supported",
+          "status_reason": "신재생에너지법 제12조의7제8항, 전기사업법 제16조의5제5항과 분산에너지법 제43조제6항이 규정한다."
+        },
+        {
+          "claim": "해당 설비의 실제 미발급 사유와 제출서류를 확정한다.",
+          "facet_id": "case_specific_rejection_reason",
+          "status": "unsupported",
+          "status_reason": "대통령령·운영규칙과 신청·계량 자료가 현재 corpus에 없다."
+        }
+      ],
+      "insufficient_reason": "현재 corpus에는 세부 발급 운영규칙과 신청·계량 상태가 없다.",
+      "missing_user_facts": [],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["eligible_supplier"],
+          "provision_id": "06d15242-9c06-5d93-a02c-50899d67ebcb",
+          "rationale": "발급 가능 주체와 공급인증기관을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["application_route"],
+          "provision_id": "324b2022-885a-5b12-927c-962e2eeb6471",
+          "rationale": "공급인증기관에 대한 발급 신청을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["issuance_check"],
+          "provision_id": "9c677fb0-ba44-534c-8960-d9cfda49da82",
+          "rationale": "공급량·공급기간 확인 후 발급하는 기준을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["limitations_and_exclusions"],
+          "provision_id": "343c49e0-6ad5-5832-b513-7e9649af9376",
+          "rationale": "정부 지원 설비의 발급 제한 가능성을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["limitations_and_exclusions"],
+          "provision_id": "821628ba-aba4-5fd6-9ea1-0f3a4913d342",
+          "rationale": "특정 직접공급 전기의 REC 발급 제외를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["limitations_and_exclusions"],
+          "provision_id": "6e47c6a2-9bf0-5912-8355-cdb3b3e218d5",
+          "rationale": "분산에너지 특화지역 거래 전기의 REC 발급 제외를 직접 규정한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "partial_answer_with_limits",
+        "cited_provision_ids": [
+          "06d15242-9c06-5d93-a02c-50899d67ebcb",
+          "324b2022-885a-5b12-927c-962e2eeb6471",
+          "9c677fb0-ba44-534c-8960-d9cfda49da82",
+          "343c49e0-6ad5-5832-b513-7e9649af9376",
+          "821628ba-aba4-5fd6-9ea1-0f3a4913d342",
+          "6e47c6a2-9bf0-5912-8355-cdb3b3e218d5"
+        ],
+        "text": "신재생에너지를 공급한 자는 공급인증기관에 REC 발급을 신청할 수 있고, 기관은 에너지 종류별 공급량과 공급기간을 확인합니다. 정부 지원을 받은 설비는 발급이 제한될 수 있으며 일부 직접공급·분산에너지 거래 전기는 발급 대상에서 제외됩니다. 다만 실제 미발급 원인을 확정하려면 현재 corpus에 없는 세부 운영규칙과 신청·계량 자료를 확인해야 합니다."
+      }
+    },
+    {
+      "annotation_notes": "법률상 보급사업과 지원 가능성은 확인되지만 개인 설치비 지원의 대상·금액·공고 조건은 포함되지 않아 부분 답변으로 제안한다.",
+      "answerability": "partially_answerable",
+      "case_id": "lay-energy-0601",
+      "expected_action": "partial_answer_with_limits",
+      "facets": [
+        {
+          "claim": "정부는 신재생에너지 보급을 위한 보급사업을 할 수 있다.",
+          "facet_id": "deployment_program_basis",
+          "status": "supported",
+          "status_reason": "신재생에너지법 제27조제1항이 보급사업의 법적 근거를 규정한다."
+        },
+        {
+          "claim": "실용화된 신재생에너지 설비 보급 지원사업이 법정 사업 유형에 포함된다.",
+          "facet_id": "equipment_support_program",
+          "status": "supported",
+          "status_reason": "같은 항 제4호가 설비 보급 지원사업을 직접 열거한다."
+        },
+        {
+          "claim": "질문자가 현재 설치비 지원 대상인지와 지원액을 확정한다.",
+          "facet_id": "current_individual_eligibility",
+          "status": "unsupported",
+          "status_reason": "세부 대상·조건·공고·예산은 현재 corpus에 없다."
+        }
+      ],
+      "insufficient_reason": "현재 corpus는 지원사업의 근거만 제공하고 개인별 대상·금액·공고 조건은 제공하지 않는다.",
+      "missing_user_facts": [],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["deployment_program_basis"],
+          "provision_id": "06eac4e3-7968-5acb-9771-4152edce6426",
+          "rationale": "신재생에너지 보급사업을 시행할 수 있는 근거를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["equipment_support_program"],
+          "provision_id": "62662b15-5d36-5633-91f6-4e28c81a5788",
+          "rationale": "실용화 설비의 보급 지원사업을 직접 열거한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "partial_answer_with_limits",
+        "cited_provision_ids": [
+          "06eac4e3-7968-5acb-9771-4152edce6426",
+          "62662b15-5d36-5633-91f6-4e28c81a5788"
+        ],
+        "text": "법률은 신재생에너지 보급사업과 실용화된 설비의 보급 지원사업을 할 수 있도록 근거를 두고 있습니다. 그러나 질문자가 현재 설치비 지원 대상인지, 지원액과 신청기간이 무엇인지는 법률 corpus만으로 확정할 수 없으므로 해당 연도 공고와 신청기관의 세부 기준을 추가로 확인해야 합니다."
+      }
+    },
+    {
+      "annotation_notes": "현재 에너지 corpus가 직접 포함하는 토지 관련 내용은 태양광 허가 시 인허가 의제 목록과 산지 복구 의무다. 실제 가능 여부는 토지 종류·용도지역·설비 규모가 필요하다.",
+      "answerability": "clarification_required",
+      "case_id": "lay-energy-0111",
+      "expected_action": "ask_clarifying_question",
+      "facets": [
+        {
+          "claim": "태양광 발전사업 허가 과정에서 개발행위·농지·산지 관련 인허가가 문제될 수 있다.",
+          "facet_id": "land_permit_categories",
+          "status": "supported",
+          "status_reason": "전기사업법 제7조의3제1항과 각 호가 의제 가능한 토지 인허가를 열거한다."
+        },
+        {
+          "claim": "산지 설비는 중간복구명령이 있으면 전력거래 전에 완료해야 한다.",
+          "facet_id": "mountain_restoration",
+          "status": "supported",
+          "status_reason": "전기사업법 제31조의2제1항이 직접 규정한다."
+        },
+        {
+          "claim": "질문자의 토지에서 사업이 가능한지 확정한다.",
+          "facet_id": "site_specific_feasibility",
+          "status": "needs_clarification",
+          "status_reason": "토지 지목·용도지역·산지·농지 여부와 설비 규모·판매방식이 없다."
+        }
+      ],
+      "insufficient_reason": null,
+      "missing_user_facts": [
+        "토지 지목과 용도지역",
+        "농지 또는 산지 여부",
+        "발전설비용량",
+        "판매용 발전사업인지 자가소비용인지"
+      ],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["land_permit_categories"],
+          "provision_id": "6801166d-1204-54f0-95f9-15587528e204",
+          "rationale": "태양광 발전사업 허가 시 관련 인허가 의제의 전제를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["land_permit_categories"],
+          "provision_id": "e93cdba0-ce24-5f44-a499-6ea1d96a7405",
+          "rationale": "개발행위 허가를 의제 대상 토지 인허가로 직접 열거한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["land_permit_categories"],
+          "provision_id": "e4c5f179-5f9f-506e-be65-60a3c9fe5cfe",
+          "rationale": "농지전용 허가·신고 등을 의제 대상으로 직접 열거한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["land_permit_categories"],
+          "provision_id": "b895faed-08fe-52a6-baeb-0fd958d8df14",
+          "rationale": "산지전용·일시사용 허가·신고 등을 의제 대상으로 직접 열거한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["mountain_restoration"],
+          "provision_id": "e4960d73-58ee-5955-bbde-83923175ae90",
+          "rationale": "산지 재생에너지 설비의 중간복구 완료 의무를 직접 규정한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "ask_clarifying_question",
+        "cited_provision_ids": [
+          "6801166d-1204-54f0-95f9-15587528e204",
+          "e93cdba0-ce24-5f44-a499-6ea1d96a7405",
+          "e4c5f179-5f9f-506e-be65-60a3c9fe5cfe",
+          "b895faed-08fe-52a6-baeb-0fd958d8df14",
+          "e4960d73-58ee-5955-bbde-83923175ae90"
+        ],
+        "text": "먼저 토지 지목과 용도지역, 농지·산지 여부, 설비용량과 판매방식을 알려주셔야 합니다. 태양광 발전사업 허가 과정에서는 개발행위, 농지전용, 산지전용·일시사용 등이 확인 대상이 될 수 있고, 산지 설비는 중간복구 의무도 생길 수 있습니다. 현재 정보만으로 해당 토지에서 사업 가능 여부를 확정할 수는 없습니다."
+      }
+    },
+    {
+      "annotation_notes": "법령은 송배전설비 이용조건에 공사비 기준·부담방법이 포함되어야 함을 보여주지만 실제 산출내역은 승인된 이용조건·계약·견적 자료가 필요하다.",
+      "answerability": "partially_answerable",
+      "case_id": "lay-energy-0346",
+      "expected_action": "partial_answer_with_limits",
+      "facets": [
+        {
+          "claim": "송배전설비 이용요금과 이용조건은 장관 인가 대상이다.",
+          "facet_id": "approved_use_terms",
+          "status": "supported",
+          "status_reason": "전기사업법 제15조제1항이 이용요금·조건의 인가를 규정한다."
+        },
+        {
+          "claim": "이용조건에는 공사비 등 이용자 부담 비용의 기준과 부담방법이 포함되어야 한다.",
+          "facet_id": "construction_cost_basis",
+          "status": "supported",
+          "status_reason": "전기사업법 시행규칙 제14조제5호가 직접 규정한다."
+        },
+        {
+          "claim": "질문자의 실제 공사비 산식과 항목별 금액이 맞는지 확정한다.",
+          "facet_id": "invoice_specific_validation",
+          "status": "unsupported",
+          "status_reason": "인가된 이용조건 원문, 접속계약, 설계와 견적 내역이 corpus에 없다."
+        }
+      ],
+      "insufficient_reason": "실제 산출액 검증에는 이용조건·계약·설계·견적 문서가 필요하다.",
+      "missing_user_facts": [],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["approved_use_terms"],
+          "provision_id": "41ebaef4-4a6d-5bdc-a36d-ac54bb04a1e1",
+          "rationale": "송배전설비 이용요금과 이용조건의 인가 근거를 제공한다.",
+          "relevance": 1
+        },
+        {
+          "evidence_scope": "article",
+          "facet_ids": ["construction_cost_basis"],
+          "provision_id": "df991e4c-42bc-510f-848e-b105f3943044",
+          "rationale": "공사비 기준을 포함해야 하는 이용조건 항목의 부모 조문이다.",
+          "relevance": 1
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["construction_cost_basis"],
+          "provision_id": "34eb965b-2ba7-5f67-a686-7e638e02855d",
+          "rationale": "공사비 등 이용자 부담 비용의 기준과 부담방법을 직접 답한다.",
+          "relevance": 2
+        }
+      ],
+      "reference_response": {
+        "action": "partial_answer_with_limits",
+        "cited_provision_ids": [
+          "34eb965b-2ba7-5f67-a686-7e638e02855d"
+        ],
+        "text": "송전·배전용 전기설비의 이용조건에는 공사비 등 이용자가 부담할 비용의 기준과 부담방법이 포함되어야 합니다. 따라서 실제 청구서에서는 적용된 이용조건, 부담 구분, 설계·공사 항목과 산식을 대조해야 합니다. 다만 현재 법령 corpus에는 질문자의 접속계약과 견적 내역이 없어 실제 금액의 정확성까지 판정할 수 없습니다."
+      }
+    },
+    {
+      "annotation_notes": "법령은 전력거래가격·정산·계량·운영규칙의 관계를 제공하지만 실제 발전량·계약가격·공제내역은 거래소·계약 문서가 필요하다.",
+      "answerability": "partially_answerable",
+      "case_id": "lay-energy-0561",
+      "expected_action": "partial_answer_with_limits",
+      "facets": [
+        {
+          "claim": "전력거래가격은 시간대별 수요와 공급에 따라 결정된다.",
+          "facet_id": "market_price_basis",
+          "status": "supported",
+          "status_reason": "전기사업법 제33조제1항이 직접 규정한다."
+        },
+        {
+          "claim": "정산은 전력거래가격을 기초로 하고 구체적인 방법은 전력시장운영규칙에 따른다.",
+          "facet_id": "settlement_rule_basis",
+          "status": "supported",
+          "status_reason": "전기사업법 제33조제3항과 제43조제4항제2호가 직접 규정한다."
+        },
+        {
+          "claim": "거래소가 거래대금 정산·지불과 전력거래량 계량 업무를 수행한다.",
+          "facet_id": "settlement_and_metering_records",
+          "status": "supported",
+          "status_reason": "전기사업법 제36조제1항제4호와 제5호가 직접 규정한다."
+        },
+        {
+          "claim": "질문자의 실제 정산 부족 원인과 공제액 오류를 확정한다.",
+          "facet_id": "case_specific_shortfall",
+          "status": "unsupported",
+          "status_reason": "계량자료, 계약, 정산서와 적용 운영규칙이 현재 corpus에 없다."
+        }
+      ],
+      "insufficient_reason": "실제 정산 검증에는 발전량 계량자료, 계약가격, 정산서와 적용 규칙이 필요하다.",
+      "missing_user_facts": [],
+      "positive_judgments": [
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["market_price_basis"],
+          "provision_id": "5eeae0be-8f81-59c7-9bfb-1025c9ed50a8",
+          "rationale": "전력거래가격의 결정 원칙을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_rule_basis"],
+          "provision_id": "49c7b961-d503-5a56-84c2-18c7e3c566fc",
+          "rationale": "정산의 가격 기초와 구체적인 운영규칙 위임을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_and_metering_records"],
+          "provision_id": "8ec3bcde-341c-5af3-a600-0da96e52ca31",
+          "rationale": "거래대금·비용의 청구·정산·지불 업무를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_and_metering_records"],
+          "provision_id": "ce8b99cc-b054-50f6-b86f-9296ae9a5440",
+          "rationale": "전력거래량 계량 업무를 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_rule_basis"],
+          "provision_id": "eac10b29-464e-5e79-bd78-75de81b8f143",
+          "rationale": "전력시장운영규칙에 정산·결제 사항이 포함됨을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_and_metering_records"],
+          "provision_id": "7b0dcbee-e466-59f8-a122-7e95f3f8f0b8",
+          "rationale": "전력량계 설치·계량 사항이 운영규칙에 포함됨을 직접 규정한다.",
+          "relevance": 2
+        },
+        {
+          "evidence_scope": "leaf",
+          "facet_ids": ["settlement_rule_basis"],
+          "provision_id": "130cf051-a866-5f84-85d3-b0d83e1d844b",
+          "rationale": "전력거래 정보공개 사항이 운영규칙에 포함됨을 보조한다.",
+          "relevance": 1
+        }
+      ],
+      "reference_response": {
+        "action": "partial_answer_with_limits",
+        "cited_provision_ids": [
+          "5eeae0be-8f81-59c7-9bfb-1025c9ed50a8",
+          "49c7b961-d503-5a56-84c2-18c7e3c566fc",
+          "8ec3bcde-341c-5af3-a600-0da96e52ca31",
+          "ce8b99cc-b054-50f6-b86f-9296ae9a5440",
+          "eac10b29-464e-5e79-bd78-75de81b8f143",
+          "7b0dcbee-e466-59f8-a122-7e95f3f8f0b8"
+        ],
+        "text": "전력거래가격은 시간대별 수요·공급에 따라 정해지고, 정산은 그 가격을 기초로 전력시장운영규칙에 따라 이루어집니다. 거래소는 거래대금 정산·지불과 전력거래량 계량 업무를 수행합니다. 실제 부족 원인을 확인하려면 시간대별 발전량·계량값, 계약가격, 정산서의 공제 항목과 당시 적용된 운영규칙을 서로 대조해야 합니다."
+      }
+    },
+    {
+      "annotation_notes": "질문은 해당 연도의 예산·공고·세부 조건이라는 실시간 외부자료를 요구하므로 현재 법령 corpus에는 positive qrel이 없다.",
+      "answerability": "unanswerable",
+      "case_id": "lay-energy-0605",
+      "expected_action": "insufficient_evidence",
+      "facets": [
+        {
+          "claim": "해당 연도의 설치비 지원 예산과 최신 세부 조건을 제공한다.",
+          "facet_id": "current_budget_and_notice",
+          "status": "unsupported",
+          "status_reason": "연도별 예산과 공고는 현재 확정 법령 corpus에 포함되지 않는다."
+        }
+      ],
+      "insufficient_reason": "현재 법령 corpus에는 해당 연도의 예산·공고·신청조건이 없다.",
+      "missing_user_facts": [],
+      "positive_judgments": [],
+      "reference_response": {
+        "action": "insufficient_evidence",
+        "cited_provision_ids": [],
+        "text": "현재 법령 corpus만으로 해당 연도의 지원 예산과 최신 세부 조건을 확인할 수 없습니다. 승인된 최신 공고 출처를 별도로 확인해야 합니다."
+      }
+    },
+    {
+      "annotation_notes": "충전기 고장 상태와 복구 예정 시간은 운영자 실시간 상태정보이며 현재 법령 corpus에 없다.",
+      "answerability": "unanswerable",
+      "case_id": "lay-energy-0836",
+      "expected_action": "insufficient_evidence",
+      "facets": [
+        {
+          "claim": "현재 충전기 고장 상태와 복구 예정 시간을 제공한다.",
+          "facet_id": "live_charger_status",
+          "status": "unsupported",
+          "status_reason": "실시간 운영상태는 법령 조문이 아니라 충전사업자 운영자료가 필요하다."
+        }
+      ],
+      "insufficient_reason": "현재 법령 corpus에는 충전기별 실시간 장애·복구 정보가 없다.",
+      "missing_user_facts": [],
+      "positive_judgments": [],
+      "reference_response": {
+        "action": "insufficient_evidence",
+        "cited_provision_ids": [],
+        "text": "현재 법령 corpus에는 해당 충전기의 고장 상태나 복구 예정 시간이 없습니다. 충전기 운영자의 실시간 상태정보 또는 고객지원 자료가 필요합니다."
+      }
+    },
+    {
+      "annotation_notes": "빛 반사 피해의 사실관계, 관할 민원기관과 시정 절차를 직접 규정하는 조문이 현재 에너지 corpus에 없어 positive qrel을 두지 않았다.",
+      "answerability": "unanswerable",
+      "case_id": "lay-energy-0943",
+      "expected_action": "insufficient_evidence",
+      "facets": [
+        {
+          "claim": "태양광 패널 빛 반사 민원의 관할기관과 시정 절차를 제공한다.",
+          "facet_id": "glare_complaint_route",
+          "status": "unsupported",
+          "status_reason": "현재 임베딩된 에너지 법령 corpus에는 해당 민원 경로와 시정기준이 없다."
+        }
+      ],
+      "insufficient_reason": "현재 corpus에는 빛 반사 민원의 관할·시정 절차를 직접 답하는 근거가 없다.",
+      "missing_user_facts": [],
+      "positive_judgments": [],
+      "reference_response": {
+        "action": "insufficient_evidence",
+        "cited_provision_ids": [],
+        "text": "현재 에너지 법령 corpus만으로 빛 반사 민원의 관할기관과 시정 절차를 확인할 수 없습니다. 위치·시설 소유자와 피해 상황을 바탕으로 별도의 관할 민원·환경·건축 자료가 필요합니다."
+      }
+    }
+  ],
+  "experiment": "D-10-GOLD-V1",
+  "independence_limitation": "Codex는 이전 프로젝트 맥락을 접한 적이 있으나 이 제안서는 검색 score·rank·기존 판정 필드가 제거된 canonical corpus export만 입력으로 사용했다. 모든 positive와 일괄 negative는 사용자 확인 전까지 독립 human Gold가 아니다.",
+  "schema_version": 1,
+  "status": "pending_user_review"
+}

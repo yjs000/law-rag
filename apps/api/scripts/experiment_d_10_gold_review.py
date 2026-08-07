@@ -187,7 +187,7 @@ class AnnotationProposal(StrictModel):
     artifact_class: Literal["assistant_annotation_proposal_not_gold"]
     status: Literal["pending_user_review"]
     annotator_id: NonBlankStr
-    annotation_method: Literal["canonical_full_corpus_review_without_retrieval_labels"]
+    annotation_method: Literal["canonical_full_corpus_proposal_without_retrieval_labels"]
     independence_limitation: NonBlankStr
     cases: list[ProposedCase] = Field(min_length=10, max_length=10)
 
@@ -195,6 +195,39 @@ class AnnotationProposal(StrictModel):
     def case_ids_are_unique(self) -> AnnotationProposal:
         if len({case.case_id for case in self.cases}) != 10:
             raise ValueError("annotation proposal must contain 10 distinct cases")
+        return self
+
+
+class UserReviewCase(StrictModel):
+    case_id: NonBlankStr
+    decision: Literal["pending", "approved", "needs_revision"]
+    positive_qrels_confirmed: bool
+    bulk_negative_confirmed: bool
+    facets_and_reference_confirmed: bool
+    comment: str
+
+
+class UserAdjudication(StrictModel):
+    schema_version: Literal[1]
+    experiment: Literal["D-10-GOLD-V1"]
+    artifact_class: Literal["user_adjudication_input"]
+    status: Literal["pending_user_review", "confirmed"]
+    annotator_id: NonBlankStr
+    reviewer_id: NonBlankStr
+    reviewed_at: datetime | None
+    annotation_draft_sha256: Sha256
+    judgments_jsonl_sha256: Sha256
+    cases: list[UserReviewCase] = Field(min_length=10, max_length=10)
+
+    @model_validator(mode="after")
+    def review_is_well_formed(self) -> UserAdjudication:
+        if len({case.case_id for case in self.cases}) != 10:
+            raise ValueError("user adjudication must contain 10 distinct cases")
+        if self.status == "confirmed":
+            if self.reviewed_at is None or self.reviewed_at.tzinfo is None:
+                raise ValueError("confirmed review timestamp must include a timezone")
+            if self.annotator_id == self.reviewer_id:
+                raise ValueError("reviewer must differ from draft annotator")
         return self
 
 
@@ -437,7 +470,8 @@ def load_annotation_proposal(path: Path) -> AnnotationProposal:
     try:
         return AnnotationProposal.model_validate(_read_json(path, label="annotation proposal"))
     except ValidationError as error:
-        raise D10GoldReviewError("annotation proposal is invalid") from error
+        sample = error.errors(include_url=False)[:10]
+        raise D10GoldReviewError(f"annotation proposal is invalid: {sample}") from error
 
 
 def _render_review(
@@ -455,6 +489,8 @@ def _render_review(
         "각 문항의 positive qrel, 필수 답변 요소와 기준 응답을 확인하십시오. ",
         "`user-adjudication.json`에서 문항별 `decision`을 `approved`로 바꾸고 ",
         "`bulk_negative_confirmed`를 `true`로 해야 seal할 수 있습니다.",
+        "모든 문항 확인 뒤 `status`를 `confirmed`로 바꾸고 서로 다른 `reviewer_id`와 ",
+        "시간대가 포함된 `reviewed_at`을 입력하십시오.",
         "수정이 필요하면 `decision`을 `needs_revision`으로 두고 `comment`에 변경사항을 적으십시오.",
         "",
     ]
@@ -721,7 +757,7 @@ def build_draft(
             "total_judgment_count": len(judgments),
             "annotation_draft_sha256": _sha256_file(temporary / "annotation-draft.json"),
             "judgments_jsonl_sha256": _sha256_file(temporary / "judgments.jsonl"),
-            "user_adjudication_sha256": _sha256_file(temporary / "user-adjudication.json"),
+            "initial_user_adjudication_sha256": _sha256_file(temporary / "user-adjudication.json"),
             "adjudication_draft_sha256": _sha256_file(temporary / "adjudication-draft.json"),
             "review_markdown_sha256": _sha256_file(temporary / "adjudication-review.md"),
         }
@@ -751,16 +787,18 @@ def preflight_draft(
     contract = load_workflow_contract(contract_path)
     manifest = _read_json(review_directory / "review-manifest.json", label="review manifest")
     draft = _read_json(review_directory / "annotation-draft.json", label="annotation draft")
-    adjudication = _read_json(
-        review_directory / "user-adjudication.json", label="user adjudication"
-    )
+    try:
+        adjudication = UserAdjudication.model_validate(
+            _read_json(review_directory / "user-adjudication.json", label="user adjudication")
+        )
+    except ValidationError as error:
+        raise D10GoldReviewError(f"user adjudication is invalid: {error}") from error
     judgments = _load_jsonl(review_directory / "judgments.jsonl")
     if manifest.get("status") != "pending_user_review":
         raise D10GoldReviewError("review bundle status must remain pending_user_review")
     expected_hashes = {
         "annotation_draft_sha256": "annotation-draft.json",
         "judgments_jsonl_sha256": "judgments.jsonl",
-        "user_adjudication_sha256": "user-adjudication.json",
         "adjudication_draft_sha256": "adjudication-draft.json",
         "review_markdown_sha256": "adjudication-review.md",
     }
@@ -779,24 +817,159 @@ def preflight_draft(
         raise D10GoldReviewError("each D-10 case must judge the full corpus")
     if any(item.get("relevance") not in {0, 1, 2} for item in judgments):
         raise D10GoldReviewError("judgment relevance must be 0, 1, or 2")
-    review_cases = adjudication.get("cases")
-    if not isinstance(review_cases, list) or len(review_cases) != 10:
-        raise D10GoldReviewError("user adjudication must contain 10 cases")
+    if adjudication.annotation_draft_sha256 != _sha256_file(
+        review_directory / "annotation-draft.json"
+    ) or adjudication.judgments_jsonl_sha256 != _sha256_file(review_directory / "judgments.jsonl"):
+        raise D10GoldReviewError("user adjudication input binding mismatch")
     pending = sum(
-        not isinstance(case, dict)
-        or case.get("decision") != "approved"
-        or case.get("positive_qrels_confirmed") is not True
-        or case.get("bulk_negative_confirmed") is not True
-        or case.get("facets_and_reference_confirmed") is not True
-        for case in review_cases
+        case.decision != "approved"
+        or case.positive_qrels_confirmed is not True
+        or case.bulk_negative_confirmed is not True
+        or case.facets_and_reference_confirmed is not True
+        for case in adjudication.cases
+    )
+    ready = (
+        pending == 0
+        and adjudication.status == "confirmed"
+        and adjudication.reviewed_at is not None
+        and adjudication.reviewer_id != "__USER_REVIEWER_ID__"
+        and adjudication.reviewer_id != adjudication.annotator_id
     )
     return {
-        "status": "valid_pending_user_review" if pending else "ready_to_seal",
+        "status": "ready_to_seal" if ready else "valid_pending_user_review",
         "case_count": contract.expected_case_count,
         "eligible_provision_count": contract.corpus_binding.eligible_provision_count,
         "total_judgment_count": len(judgments),
         "pending_user_case_count": pending,
         "sealed": False,
+    }
+
+
+def seal_review(
+    review_directory: Path, contract_path: Path = DEFAULT_CONTRACT
+) -> dict[str, object]:
+    report = preflight_draft(review_directory, contract_path)
+    if report["status"] != "ready_to_seal":
+        raise D10GoldReviewError("user adjudication is not ready to seal")
+    draft = _read_json(review_directory / "annotation-draft.json", label="annotation draft")
+    review = UserAdjudication.model_validate(
+        _read_json(review_directory / "user-adjudication.json", label="user adjudication")
+    )
+    if review.reviewed_at is None:
+        raise D10GoldReviewError("confirmed review timestamp is missing")
+    judgments_path = review_directory / "judgments.jsonl"
+    sealed_dataset = {
+        **draft,
+        "artifact_class": "d10_user_adjudicated_calibration_gold",
+        "evaluation_status": "approved_gold",
+        "reviewer_id": review.reviewer_id,
+        "adjudicated_at": review.reviewed_at.isoformat(),
+        "gold_scope": "calibration_only_not_held_out",
+        "independent_human_gold": False,
+        "prohibited_claims": [
+            "independent_human_gold",
+            "held_out_performance",
+            "population_generalization",
+            "production_release_gate",
+        ],
+    }
+    dataset_bytes = json.dumps(sealed_dataset, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+    adjudication_manifest = {
+        "schema_version": 1,
+        "manifest_version": "experiment-d-10-gold-adjudication-v1",
+        "experiment": "D-10-GOLD-V1",
+        "artifact_class": "user_adjudicated_calibration_gold_manifest",
+        "status": "approved",
+        "dataset_sha256": _sha256_bytes(dataset_bytes),
+        "judgments_jsonl_sha256": _sha256_file(judgments_path),
+        "annotator_id": review.annotator_id,
+        "reviewer_id": review.reviewer_id,
+        "approved_at": review.reviewed_at.isoformat(),
+        "case_count": 10,
+        "total_judgment_count": 30660,
+        "cases": [
+            {
+                "case_id": item.case_id,
+                "decision": item.decision,
+                "positive_qrels_confirmed": item.positive_qrels_confirmed,
+                "bulk_negative_confirmed": item.bulk_negative_confirmed,
+                "facets_and_reference_confirmed": item.facets_and_reference_confirmed,
+            }
+            for item in review.cases
+        ],
+        "limitations": [
+            "assistant_annotation_user_adjudication",
+            "calibration_questions_previously_seen_by_retrieval_development",
+            "not_independent_human_gold",
+            "not_held_out",
+        ],
+    }
+    manifest_bytes = (
+        json.dumps(adjudication_manifest, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+    )
+    final = review_directory / "sealed"
+    temporary = review_directory / f".sealed.tmp-{uuid.uuid4().hex}"
+    temporary.mkdir()
+    try:
+        (temporary / "dataset.json").write_bytes(dataset_bytes)
+        shutil.copyfile(judgments_path, temporary / "judgments.jsonl")
+        (temporary / "adjudication-manifest.json").write_bytes(manifest_bytes)
+        seal_manifest = {
+            "schema_version": 1,
+            "status": "sealed",
+            "dataset_sha256": _sha256_file(temporary / "dataset.json"),
+            "judgments_jsonl_sha256": _sha256_file(temporary / "judgments.jsonl"),
+            "adjudication_manifest_sha256": _sha256_file(temporary / "adjudication-manifest.json"),
+        }
+        (temporary / "seal-manifest.json").write_text(
+            json.dumps(seal_manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        _atomic_publish_directory(temporary, final)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return {
+        "status": "sealed_approved_calibration_gold",
+        "directory": str(final),
+        "case_count": 10,
+        "total_judgment_count": 30660,
+        "held_out": False,
+        "independent_human_gold": False,
+    }
+
+
+def preflight_sealed(sealed_directory: Path) -> dict[str, object]:
+    seal = _read_json(sealed_directory / "seal-manifest.json", label="seal manifest")
+    expected = {
+        "dataset_sha256": "dataset.json",
+        "judgments_jsonl_sha256": "judgments.jsonl",
+        "adjudication_manifest_sha256": "adjudication-manifest.json",
+    }
+    for field, filename in expected.items():
+        if seal.get(field) != _sha256_file(sealed_directory / filename):
+            raise D10GoldReviewError(f"sealed artifact SHA-256 mismatch: {filename}")
+    dataset = _read_json(sealed_directory / "dataset.json", label="sealed dataset")
+    manifest = _read_json(
+        sealed_directory / "adjudication-manifest.json",
+        label="sealed adjudication manifest",
+    )
+    judgments = _load_jsonl(sealed_directory / "judgments.jsonl")
+    if (
+        dataset.get("evaluation_status") != "approved_gold"
+        or dataset.get("gold_scope") != "calibration_only_not_held_out"
+        or dataset.get("independent_human_gold") is not False
+        or manifest.get("status") != "approved"
+        or manifest.get("dataset_sha256") != _sha256_file(sealed_directory / "dataset.json")
+        or len(judgments) != 30660
+    ):
+        raise D10GoldReviewError("sealed D-10 Gold contract is invalid")
+    return {
+        "status": "valid_approved_calibration_gold",
+        "case_count": 10,
+        "total_judgment_count": len(judgments),
+        "held_out": False,
+        "independent_human_gold": False,
     }
 
 
@@ -809,7 +982,14 @@ def _arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="D-10 full-corpus Gold review workflow")
     parser.add_argument(
         "command",
-        choices=("preflight-contract", "export-corpus", "build-draft", "preflight-draft"),
+        choices=(
+            "preflight-contract",
+            "export-corpus",
+            "build-draft",
+            "preflight-draft",
+            "seal",
+            "preflight-sealed",
+        ),
     )
     parser.add_argument("--contract", type=_path_argument, default=DEFAULT_CONTRACT)
     parser.add_argument("--export", type=_path_argument)
@@ -829,10 +1009,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             if arguments.export is None or arguments.proposal is None:
                 raise D10GoldReviewError("build-draft requires --export and --proposal")
             result = build_draft(arguments.export, arguments.proposal, arguments.contract)
-        else:
+        elif arguments.command == "preflight-draft":
             if arguments.review is None:
                 raise D10GoldReviewError("preflight-draft requires --review")
             result = preflight_draft(arguments.review, arguments.contract)
+        elif arguments.command == "seal":
+            if arguments.review is None:
+                raise D10GoldReviewError("seal requires --review")
+            result = seal_review(arguments.review, arguments.contract)
+        else:
+            if arguments.review is None:
+                raise D10GoldReviewError("preflight-sealed requires --review")
+            result = preflight_sealed(arguments.review)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except D10GoldReviewError as error:
@@ -863,10 +1051,13 @@ __all__ = [
     "D10GoldWorkflowContract",
     "DEFAULT_CONTRACT",
     "ProposedCase",
+    "UserAdjudication",
     "build_draft",
     "export_corpus",
     "load_annotation_proposal",
     "load_workflow_contract",
     "preflight_contract",
     "preflight_draft",
+    "preflight_sealed",
+    "seal_review",
 ]
