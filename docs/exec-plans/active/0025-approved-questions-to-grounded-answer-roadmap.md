@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0·M1·D-10·M2 완료, D-10 전수 qrel 사용자 review 대기, M3-10 실행 전
+상태: 진행 중 — M0·M1·D-10·M2 완료, D-10 전수 qrel(0030) 사용자 confirm 완료·seal 대기, M3-10 실행 전
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -71,20 +71,48 @@
 질문은행 파일의 `draft_for_human_question_review`와 문항의 `not_annotated`는 승인 실패가 아니다. 질문
 승인은 별도 manifest에 있고, `not_annotated`는 정답 근거 주석이 아직 없다는 뜻이다.
 
+## 튜닝 데이터와 측정 데이터
+
+데이터·평가는 두 가지 다른 일을 한다: **튜닝**(시스템을 고치려고 반복해서 보는 것)과 **측정**(다 고친
+뒤 실제로 좋아졌는지 정직하게 재는 것). 같은 문항으로 둘 다 하면 측정값이 항상 좋게 나오지만, 그건 그
+문항에 맞춘 결과이지 일반적으로 좋아졌다는 증거가 아니다([Dwork 외 2015,
+*Science*](https://www.science.org/doi/10.1126/science.aaa9375) — 같은 holdout을 반복 재사용하면 통계적
+타당성이 매 라운드 저하됨을 formalize; [Google ML Crash
+Course](https://developers.google.com/machine-learning/crash-course/overfitting) — "Don't train on test
+data"). 이 로드맵은 모든 문항을 아래 두 계층 중 하나로 명확히 분류하고, 어느 마일스톤이 어느 계층에서
+동작하는지 표시한다.
+
+| 계층 | 현재 범위 | 반복 튜닝 | "일반적으로 좋다" 측정 주장 |
+| --- | --- | --- | --- |
+| **튜닝(calibration)** | D-10 10문항(확정) → D-full 재개 시 pilot 50 + calibration 200 | 허용 — 계속 보고 고친다 | 불가 |
+| **측정(test)** | D-full 재개 시에만 존재하는 held-out 800문항 | 금지 — 한 번 확정하면 다시 안 본다 | 봉인 뒤 단 한 번만 |
+
+**영구 규칙**: 어떤 문항이든 튜닝에 한 번 쓰이면 다시는 측정용으로 승격하지 않는다. D-10은 이미
+D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참고) 영구히 calibration이며, 이후
+20→50→...→1,000으로 늘려도 D-10을 포함하는 한 그 결과는 튜닝 신호일 뿐 측정값이 아니다. **이
+로드맵(M0~M8)은 전부 튜닝 계층에서만 동작한다.** 측정 계층은 [예정 작업
+0029](../todo/0029-d-full-gold-on-demand.md)가 active로 승격돼 test 800문항이 봉인된 뒤에만 존재하고,
+그때도 E3 결과를 보고 같은 version을 재튜닝하지 않는다 — 필요하면 새 version으로 calibration부터
+다시 시작한다(M6 "보존된 D-full E3" 참고).
+
 ## 선행 관계와 마일스톤
 
-| 순서 | 마일스톤 | 결과물 | 다음 단계 진입 조건 |
-| ---: | --- | --- | --- |
-| M0 | 입력과 상태 감사 | 승인 manifest·active 계획 상태 확인 | 완료 |
-| M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 |
-| M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 |
-| M3 | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 사용자 확인 포함 소표본 오류 분석 완료 |
-| M4 | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 문맥 충분·부족·차단을 사용자 확인 |
-| M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 |
-| M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 |
-| M6 | 실험 E-10 | 답변 품질·안전·비용·반복성 소표본 결과 | 사용자 확인, 일반 release gate로 사용 금지 |
-| M7 | 운영 잔여 계획 해결 | 0008·0012·0015와 0002 출시 항목 | 각 계획의 운영 증거 완료 |
-| M8 | 설계 확정과 전체 검증 | 버전 고정·go/no-go 보고 | 중대 오류 0, 전체 gate 통과 |
+| 순서 | 마일스톤 | 결과물 | 다음 단계 진입 조건 | 데이터 계층 |
+| ---: | --- | --- | --- | --- |
+| M0 | 입력과 상태 감사 | 승인 manifest·active 계획 상태 확인 | 완료 | 인프라 |
+| M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 | 인프라 |
+| M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 | 튜닝 |
+| M3 | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 사용자 확인 포함 소표본 오류 분석 완료 | 튜닝 |
+| M4 | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 문맥 충분·부족·차단을 사용자 확인 | 튜닝 |
+| M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
+| M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 | 인프라 |
+| M6 | 실험 E-10 | 답변 품질·안전·비용·반복성 소표본 결과 | 사용자 확인, 일반 release gate로 사용 금지 | 튜닝(E-10) · 측정(D-full E3, 0029 활성화 시만) |
+| M7 | 운영 잔여 계획 해결 | 0008·0012·0015와 0002 출시 항목 | 각 계획의 운영 증거 완료 | 인프라 |
+| M8 | 설계 확정과 전체 검증 | 버전 고정·go/no-go 보고 | 중대 오류 0, 전체 gate 통과 | 인프라 + 튜닝 결과 종합 |
+
+`인프라` 계층은 corpus·배포·연결 등 어느 문항 계층과도 무관한 운영 작업이다. M6의 실험 E-10 자체는
+D-10 10문항을 쓰므로 튜닝이고, "보존된 D-full E1/E2/E3"만 0029 활성화 후 pilot 50·calibration
+200(튜닝)·test 800(측정)으로 나뉜다.
 
 핵심 경로는 `승인 질문 → corpus 확정 → D-10 수동 진단 → 10문항 계약 동결 → M3 raw/R1 → M4 문맥
 → 검색 전 라우팅 → NVIDIA → E-10 → 설계 확정`이다. D-full 자산은 삭제하지 않고 예정 작업 0029로
@@ -531,6 +559,13 @@ go/no-go 조건:
 - 2026-08-07: 1,000문항 Gold를 필수 선행조건에서 제거하고 필요 시 예정 작업 0029에서 재개한다. 사용자
   요청에 따라 D-10 10문항만 [활성 계획 0030](0030-d-10-full-corpus-qrels-adjudication.md)에서 전수 qrel과
   사용자 adjudication 대상으로 만들며, 승인 전에는 기존 top-10 한정 M2 계약을 유지한다.
+- 2026-08-07: 사용자가 "10문항 결과가 좋아지면 검색기가 실제로 좋아진 것 아니냐"고 질의해 튜닝
+  (calibration)과 측정(test)의 차이를 명시적으로 문서화하도록 요청했다. 기존 D-full E1/E2/E3(50 pilot·
+  200 calibration·800 held-out) 설계가 이미 이 구분을 담고 있었으므로 새로 설계하지 않고, `## 튜닝
+  데이터와 측정 데이터` 절과 마일스톤 표의 `데이터 계층` 열로 표면화했다. D-10은 이미 D-10-R1 튜닝에
+  쓰였으므로 영구히 calibration이며, 문항 수를 늘려도(20→50→...) 별도 봉인된 held-out 없이는 측정
+  주장으로 승격되지 않는다는 규칙을 명문화했다. 근거: Dwork 외(2015, *Science*) "The Reusable
+  Holdout"과 Google ML Crash Course의 train/test 분리 원칙.
 - 2026-08-07: clarification은 자동 turn 병합·slot 저장 대신 원 질문과 추가 정보를 한 메시지로
   복사·보완해 재제출하도록 안내하는 최소비용 방식을 기본안으로 정했다. 구현은 예정 작업 0028로
   계속 보류하며 현재 API·Web·검색 동작은 변경하지 않았다.
