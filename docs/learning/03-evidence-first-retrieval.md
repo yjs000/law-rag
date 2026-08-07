@@ -134,6 +134,21 @@ grouping은 AI reranking이 아니다. 이미 계산된 순위에서 같은 조�
 실험 D의 검색 평가는 dense 자체를 qrels와 비교해야 하므로 이 production grouping을 우회하고 raw
 `provision_id` 순위를 사용한다.
 
+## 작은 확인셋을 Gold처럼 부르지 않는다
+
+D-10의 10문항은 사용자가 직접 근거와 문맥 판정을 확인했으므로 같은 저장 후보를 비교하는 calibration에는
+쓸 수 있다. 그러나 판정 범위는 원래 raw top 10과 알려진 top 5 무관 후보에 한정되고, 독립 주석·전체
+후보 qrels·held-out split이 없다. 따라서 hit@K와 첫 근거 순위는 `manual diagnostic`이며 Evidence Recall과
+모집단 성능이 아니다.
+
+이 구분은 재정렬에서 특히 중요하다. 원래 6~10위 후보가 새 top 5로 올라오면 기존에 무관으로 표시되지
+않았다는 이유만으로 관련 후보가 되지 않는다. `known irrelevant@5` 감소와 실제 Precision@5 개선은 다르며,
+새 top 5를 다시 사람이 판정해야 한다.
+
+현재 M2는 질문·판정·직접 근거 ID·snapshot/profile·artifact SHA를 10문항 계약으로 동결한다. M3는 새
+검색을 하지 않고 이 계약과 저장 raw/R1 순위로 소표본 분석만 수행한다. 1,000문항 질문은행은 삭제하지
+않되 일반화나 운영 회귀가 필요할 때 현재 corpus를 다시 검사하고 필요한 Gold를 작성한다.
+
 검색 점수가 높아도 직접 근거가 아닐 수 있다. “전기사업 허가권자는 누구인가?”에 대해 허가라는 단어가
 있는 다른 의무 조문은 주제가 비슷하지만 질문의 주체를 답하지 못할 수 있다. similarity cutoff 하나를
 법률적 `insufficient_evidence` 판정으로 쓰지 않는 이유다.

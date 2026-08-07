@@ -12,10 +12,11 @@
 | [실험 C 키워드 결합 검색](experiment-c-keyword-retrieval-options.md) | 제안·보류 | dense 기준선 이후 lexical·RRF를 비교할 후속 설계 |
 | [실험 D-10 수동 검색·문맥 진단](experiment-d-10-manual-review.md) | 완료 | 현재 DB corpus의 정답 없는 10문항 수동 진단과 사용자 확인 gate |
 | [실험 D-10-R1 로컬 재정렬](experiment-d-10-local-rerank.md) | 완료 | 동일 top 10의 부모 표제·직접성 무호출 재정렬 진단 |
+| [실험 D-10 M2 동결과 M3 calibration](experiment-d-10-m3-calibration.md) | M2 완료·M3 전 | 사용자 확정 10문항 계약, 무호출 preflight와 소표본 M3 방법 |
 | [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
 | [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
-| [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 질문 승인·gold 주석 전 | D-10과 분리된 BEIR qrels, labelled reference, 경계·대조·비교군 계약 |
-| [실험 D 일반 사용자 질문은행](experiment-d-layperson-question-bank.md) | 질문 승인·gold 주석 전 | 자연어 질문 후보와 독립 gold 주석·평가 승격 경계 |
+| [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 보류·필요 시 재검사 | D-10 밖 일반화가 필요할 때만 여는 qrels·reference·adjudication 계약 |
+| [실험 D 일반 사용자 질문은행](experiment-d-layperson-question-bank.md) | 질문 승인·Gold 보류 | 보존된 자연어 질문 후보와 필요 시 독립 Gold 승격 경계 |
 | [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
 | [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
 | [Vercel·Supabase 운영 전환](vercel-supabase-deployment.md) | 승인 | FastAPI 전환 조건, 외부 선행 입력, Preview 프록시와 운영 책임 |

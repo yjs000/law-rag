@@ -41,6 +41,19 @@ Windows 작업 스케줄러의 수동 실행·등록·해제 방법은 [collecto
 Open API 세 법령의 지정 장·조 청크를 로컬에 저장하고 raw 청크·조 단위 후보 10개와 고정 평가를 확인하는 방법은
 [실험 C 실행 안내](experiments/search/README.md)를 참고한다.
 
+현재 실험 D는 사용자 확인이 끝난 D-10 10문항을 소표본 calibration 계약으로 동결해 진행한다. 승인된
+1,000문항 질문은행은 보존하되 전체 Gold 승격은 일반화·운영 회귀가 실제로 필요할 때만 다시 검토한다.
+D-10 계약은 질문·판정·직접 근거·corpus/profile과 원본 artifact 해시를 검사하며 정식 Evidence Recall이나
+release gate가 아니다.
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_d_10_frozen_contract preflight
+```
+
+M3에서는 저장된 동일 raw top 10과 R1을 비교하며 새 embedding·DB 검색·AI 답변 생성은 하지 않는다.
+[D-10 M2/M3 설계](docs/design-docs/experiment-d-10-m3-calibration.md)에 허용 지표, 사용자 확인사항과
+Codex 확인사항을 정리한다.
+
 ## 문서 시작점
 
 - [작업 계약](AGENTS.md)

@@ -1,7 +1,7 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-08-04
+최종 갱신: 2026-08-07
 
 ## 목적
 
@@ -89,14 +89,21 @@ transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤�
 
 ## 실험 D 검색 평가 게이트
 
-실험 D는 두 계층을 섞지 않는다. D-10은 승인 질문 10개에 정답을 미리 넣지 않고 현재 DB의 오늘
-population을 한 번 검색해 사람이 직접 근거와 문맥 충분성을 확인하는 진단이다. 사용자 확인 전에는
-Recall·MRR을 계산하지 않는다. D-full은 독립 qrels·reference·adjudication이 완성된 1,000문항만 정식
-지표로 평가한다. 과거 실험 C의 로컬 205청크와 결과는 어느 D 계층의 corpus·기준값으로도 사용하지 않는다.
+현재 실험 D는 사용자 확인을 마친 D-10 10문항만 소표본 calibration에 사용한다. M2 frozen contract는
+질문·판정·원래 raw top 10 안의 직접 근거·알려진 무관 top 5와 corpus/profile/artifact SHA를 결박한다.
+preflight는 이를 로컬에서 검증하며 DB·NVIDIA를 호출하지 않는다. M3는 저장된 동일 raw top 10과 R1을
+비교하고 새 top 5 미판정 후보를 다시 사람이 확인한다.
 
-정답이 없는 일반 사용자 질문은행은 질문 문구·범위 검토용 중간 산출물이다. 실제 검색 지표는 사용자가 질문을 승인한 뒤 공식 원문을 독립 검토해 qrels, reference contexts와 reference response를 붙이고 `approved_gold`로 확정한 자료에서만 계산한다. 질문 승인은 질문 문구·범위만 고정하며, 별도 gold adjudication manifest가 전체 dataset과 문항별 완성 payload의 canonical SHA-256을 다시 봉인한다. 시간 순서는 모든 문항에서 `질문 승인 < 독립 annotation review < gold adjudication`이어야 한다. 2026-08-04 일반 사용자 질문 1,000개의 문구·범위 승인은 완료했지만 독립 gold 주석과 실제 검색 평가는 아직 실행하지 않았다.
+이 10문항에는 독립 주석·corpus 전수 qrels·held-out split이 없으므로 `full gold`, `Evidence Recall`,
+`held-out 성능`, `population 일반화`, `production release gate`로 사용하지 않는다. 허용값은 manual
+direct-evidence hit@1/3/5/10, 첫 근거 순위와 reciprocal rank@10, 알려진 무관 top 5와 문맥 판정 수다.
+과거 실험 C의 로컬 205청크와 결과는 기준값으로 사용하지 않는다.
 
-승인된 gold runner는 다음 순서를 강제한다.
+승인된 일반 사용자 질문 1,000개와 D-full Gold schema·runner는 삭제하지 않는다. 10문항 밖 일반화나
+운영 회귀가 실제로 필요할 때만 질문을 현재 corpus에서 다시 검사하고 독립 qrels·reference·adjudication을
+작성한다. 그때만 다음 보존된 D-full runner 계약을 활성화한다.
+
+D-full runner는 다음 순서를 강제한다.
 
 1. dataset, 질문은행, 질문 승인 manifest, gold adjudication manifest와 critical code provenance를 검증한다.
 2. 초기 `REPEATABLE READ, READ ONLY` transaction에서 지원 기준일·corpus·벡터 상태와 gold preflight를 통과하기 전에는 질문을 임베딩하지 않는다.
@@ -108,7 +115,10 @@ Recall·MRR을 계산하지 않는다. D-full은 독립 qrels·reference·adjudi
 
 annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 ID와 후보 집합 해시를 보존한다. 비전체검사 방법은 후보 수가 `min(top_k, 기준 corpus 크기)`와 정확히 같아야 하고, 방법별 후보의 합집합은 문항별 판정 pool과 정확히 같아야 한다. `full_corpus_manual_review` 방법을 선언하면 그 후보 집합은 해당 문항 기준일에 유효한 전체 검색 가능 provision 집합과 정확히 같아야 한다.
 
-핵심 검색 평균의 primary 모집단은 조정에 쓰지 않은 `test` split의 `fully_answerable` 문항이다. grade 2 직접 qrels를 기준으로 Recall@1/3/5/10, HitRate@1/3/5/10, Direct Precision@5와 MRR@10을 계산하고, Precision@5는 grade 1 보조 문맥과 grade 2 직접 근거를 모두 센다. nDCG@1/3/5/10은 두 등급의 차이를 반영한다. 넓은 질문에는 supported 필수 요소의 `facet_recall`과 `all_required_facets_covered`를 함께 계산한다. primary 집계는 scenario-family macro이며 family를 단위로 결정적 bootstrap 2,000회의 95% 신뢰구간을 계산한다. calibration과 calibration+test 결합값은 diagnostic-only이고 partial·clarification·unanswerable도 core 평균과 분리한다.
+D-full을 다시 활성화한 경우에만 핵심 검색 평균의 primary 모집단을 조정에 쓰지 않은 `test` split의
+`fully_answerable` 문항으로 둔다. grade 2 직접 qrels를 기준으로 Recall@1/3/5/10, HitRate@1/3/5/10,
+Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문맥과 grade 2 직접 근거를 모두
+센다. nDCG와 facet 지표, family macro와 bootstrap 95% 구간도 이 정식 Gold 경로에서만 계산한다.
 
 ## 공개 API
 
@@ -131,7 +141,8 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 - 법제처에 등록한 고정 공인 IPv4 Windows PC에서 `apps/collector`를 별도 프로세스로 실행한다. Vercel, 공용 runner와 브라우저에서 법령 API를 직접 호출하지 않으며 collector PC에 포트포워딩이나 공개 API를 열지 않는다.
 - 현재 버전 collector와 Vercel API, Google 인증과 사용자 질문 이력은 Supabase에 연결되어 있다. 연혁·삭제 격리와 영속 운영 플래그는 후속 단계다.
 - 익명 질문은 저장하지 않는다. 운영 로그인은 Supabase Google OAuth만 지원하며 질문 이력은 PostgreSQL에 생성일부터 1년 보존 후 삭제한다. 계정 삭제 시 질문·이력·세션·내보내기·동의 등 해당 사용자와 연결된 데이터를 삭제한다. 개발·테스트의 목업 인증은 production에서 비활성화한다.
-- 공개 서비스의 rate limit HMAC 저장과 승인 gold 기반 Recall·HitRate·Precision·MRR@10·nDCG·facet 회귀 게이트는 배포 전 필수 잔여 작업이다. 임계값은 calibration 결과를 보기 전에 임의로 확정하지 않는다.
+- 공개 서비스의 rate limit HMAC 저장은 배포 전 필수 잔여 작업이다. D-10 10문항은 안전·동작 확인에만
+  사용하며 정량적 일반 release gate가 필요하면 예정 작업 0029의 독립 Gold를 먼저 만든다.
 
 ## 결정 기록
 
@@ -165,3 +176,4 @@ annotation pool은 방법별 설정 해시와 정확한 `top_k`, 실제 후보 I
 | 2026-08-04 | 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산하고 오늘 유효 population의 content identity를 상태로 노출 | 날짜 상수를 매일 고치지 않으면서 현재 수집 corpus만 검색하고, 준비 불완전은 `503`, 범위 밖은 검색 전 `422`로 분리하기 위함. 이 계산은 법률별 timeline 연속성을 검증했다는 주장이 아님 |
 | 2026-08-04 | 일 1회 로컬 bundle을 준비하고 변경이 있을 때만 `gate=false → 65초 drain → DIRECT_URL 단일 반영 transaction → gate=true`로 게시 | 드문 corpus 갱신을 위해 모든 운영 reader에 shared lock이나 고가용성 세대 전환을 추가하지 않고, 짧은 점검 중단으로 비용과 복잡도를 낮춤. writer lock과 실험 D lock은 유지 |
 | 2026-08-04 | 로컬 벡터는 준비·운반에만 사용하고 웹/API 검색은 DB에 검증·commit된 활성 벡터만 사용 | 미확정 파일과 사용자 검색 경계를 분리하고, 점검 transaction이 성공한 시점에만 새 벡터로 전환 |
+| 2026-08-07 | 실험 D의 현재 필수 범위를 사용자 확인 D-10 10문항 frozen calibration으로 축소하고 D-full Gold는 필요 시 재개 | 현재 의사결정 비용을 줄이되 10문항을 Gold·held-out·일반 release 근거로 과장하지 않고 기존 1,000문항 자산을 보존 |

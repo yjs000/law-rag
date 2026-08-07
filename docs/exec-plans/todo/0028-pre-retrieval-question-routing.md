@@ -41,11 +41,12 @@ query 보강은 라우팅 구현과 평가를 통과한 뒤에도 직접 근거 
 
 ## 의존성과 미결정
 
-- D1/D2의 동결 검색·문맥 계약과 연결해야 한다.
+- D-10 M3/M4의 동결 검색·문맥 계약과 연결해야 한다. 10문항 밖 오분류율 일반화가 필요하면 예정 작업
+  0029의 독립 Gold를 먼저 활성화한다.
 - realtime 정보에 사용할 승인된 공식 source와 external document의 보안·보존 계약은 이 항목의
   라우팅 구현 범위 밖이며 별도 사용자 결정이 필요할 수 있다.
-- 라우터 구현 방식과 threshold는 미결정이다. D-full의 partial·clarification·unanswerable 모집단을
-  보기 전에 평가 방법과 비용 gate를 고정해야 한다.
+- 라우터 구현 방식과 threshold는 미결정이다. 동결 10문항의 partial·clarification·corpus 밖 사례를
+  보기 전에 평가 방법과 비용 gate를 고정하며 일반 threshold는 D-full 전 확정하지 않는다.
 
 ## active 승격 조건
 

@@ -1,0 +1,214 @@
+{
+  "allowed_metrics": [
+    "manual_direct_evidence_hit_at_1_3_5_10",
+    "manual_first_direct_evidence_rank",
+    "manual_reciprocal_rank_at_10",
+    "known_irrelevant_top5_count",
+    "context_verdict_counts"
+  ],
+  "artifact_bindings": {
+    "confirmed_diagnostics": {
+      "file_sha256": "def38f046c16ef9f018d7e1ffed1ad252714bf07040d7512e1df58e6704e5d0a",
+      "path": ".data/experiments/d-manual/runs/d10-20260805t065001773007z-442bef4a327b/confirmed-diagnostics.json"
+    },
+    "manual_review": {
+      "file_sha256": "f3e3f72e44215c626512994f59514f394d46c9d7c5875331ee1766f520d4fa96",
+      "path": ".data/experiments/d-manual/runs/d10-20260805t065001773007z-442bef4a327b/manual-review.json"
+    },
+    "question_input": {
+      "file_sha256": "0bb1e6a01c3a7b7f592cd4df907450afa5ad172d8a6dd7dcc7c79c9937bc9e1c",
+      "path": "experiments/d_manual/experiment-d-10-questions.json"
+    },
+    "rerank_comparison": {
+      "file_sha256": "80b4493b40fc42c778373f94b981e86b47f14f951760db40d6db8d8b8eaccf76",
+      "path": ".data/experiments/d-manual/runs/d10-20260805t065001773007z-442bef4a327b/rerank/d10-parent-heading-directness-v1/comparison.json"
+    },
+    "retrieval_result": {
+      "file_sha256": "8beb359333ee94ddf614693b4735688dbc213d96bd4207753e6341ea945a74e6",
+      "path": ".data/experiments/d-manual/runs/d10-20260805t065001773007z-442bef4a327b/result.json"
+    }
+  },
+  "artifact_class": "frozen_small_sample_evaluation_not_full_gold",
+  "cases": [
+    {
+      "case_id": "lay-energy-0201",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "6801166d-1204-54f0-95f9-15587528e204",
+        "4e893375-79da-57be-b009-33a901b87d28",
+        "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+        "03e64d83-801f-57fe-a5a5-a83e43c64c1b"
+      ],
+      "final_verdict": "partially_answerable",
+      "known_irrelevant_top5_provision_ids": [
+        "85a4a1f5-cdac-5335-8c41-aa26e5e967aa"
+      ],
+      "question_scope_sha256": "b712423c7e8f85115ad5e441e31a831bcef9813ab56727b45a3cc35c3b5d9fb5",
+      "question_sha256": "890ea3521afc1427d7d3acbafba6a5d47b4f58c3716756134d014004eb0e6422"
+    },
+    {
+      "case_id": "lay-energy-0251",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "3b9af823-8b85-528e-b48a-5ec81934efec",
+        "fcf5e4f4-0d11-5894-bdda-d8c70988fb55",
+        "3ee6a1a8-c1aa-58b1-a45f-de1b8754f7bc",
+        "4e893375-79da-57be-b009-33a901b87d28",
+        "471dab54-74f6-5abb-8140-dafbea143180"
+      ],
+      "final_verdict": "clarification_required",
+      "known_irrelevant_top5_provision_ids": [],
+      "question_scope_sha256": "ae0f5571d9feacd23e4d6f56d5b1c8e37a616eedd2fc0b0b17ceb907f22185ca",
+      "question_sha256": "ea12bcf10221441cd2e32583c284367249071baaa9be821b6a1a495d96a103e3"
+    },
+    {
+      "case_id": "lay-energy-0521",
+      "context_verdict": "sufficient",
+      "direct_evidence_provision_ids": [
+        "06d15242-9c06-5d93-a02c-50899d67ebcb",
+        "9c677fb0-ba44-534c-8960-d9cfda49da82",
+        "324b2022-885a-5b12-927c-962e2eeb6471",
+        "821628ba-aba4-5fd6-9ea1-0f3a4913d342",
+        "343c49e0-6ad5-5832-b513-7e9649af9376",
+        "6e47c6a2-9bf0-5912-8355-cdb3b3e218d5"
+      ],
+      "final_verdict": "directly_answerable",
+      "known_irrelevant_top5_provision_ids": [
+        "0688aeeb-2ac9-52e6-8d68-60e6d5696768"
+      ],
+      "question_scope_sha256": "a22e09141320637311744a0daf960cb0c4addfbc649b80c874b75152eb88bc68",
+      "question_sha256": "0cb8cad5bf70308bae5220f9d379df142a15c369452606bfd28c73f4acd0413f"
+    },
+    {
+      "case_id": "lay-energy-0601",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "9c93a34b-4a87-5d0a-8568-9784b3966092",
+        "7cd6894f-de6b-54f2-a6fe-310b7edb0550"
+      ],
+      "final_verdict": "partially_answerable",
+      "known_irrelevant_top5_provision_ids": [
+        "ff3f6a9e-47da-5719-8e1f-9d877fe47e7c",
+        "85a4a1f5-cdac-5335-8c41-aa26e5e967aa",
+        "6801166d-1204-54f0-95f9-15587528e204"
+      ],
+      "question_scope_sha256": "90ee24fbef69d832de84824538861b5902117af12338a345e92194127c6699b1",
+      "question_sha256": "64eb4d891bfeb57bd36146a35b021e88e10304c4d67581936c72ea459cb29277"
+    },
+    {
+      "case_id": "lay-energy-0111",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "6801166d-1204-54f0-95f9-15587528e204",
+        "ac443a85-c6b6-5842-b4dc-9dc86dc1e954",
+        "e4960d73-58ee-5955-bbde-83923175ae90",
+        "212810d4-98be-506f-bc2e-ffca8acc23c6"
+      ],
+      "final_verdict": "clarification_required",
+      "known_irrelevant_top5_provision_ids": [
+        "f9726ebd-d8c3-50f3-8a5f-4b9ee692cb4e",
+        "a33618bd-08f7-5456-ad39-de3cc75fb3c2",
+        "99bf3202-9ab2-5d27-801a-351f877b3c62"
+      ],
+      "question_scope_sha256": "5e3c268d8d4d2bc803db4a8c1af9a0856fbd7dbf85ed242c96054e74d05df6d2",
+      "question_sha256": "1cfd89af2004c4575bea306e85194f32cdc83e315f650e920e62675c4faa82cc"
+    },
+    {
+      "case_id": "lay-energy-0346",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "34eb965b-2ba7-5f67-a686-7e638e02855d"
+      ],
+      "final_verdict": "partially_answerable",
+      "known_irrelevant_top5_provision_ids": [
+        "dc397aaa-1247-590a-969a-1b5fdb2efe12",
+        "78d59afa-e71b-5d3c-9a56-60086df0ab4c",
+        "44931b45-8c2a-54f0-afe8-13123f54ac27",
+        "0c05d177-d393-5768-bf70-8c3450aa83ed",
+        "5eca0288-9274-5831-8880-acf417987058"
+      ],
+      "question_scope_sha256": "fa24d582348eb3e9253737de8fd5f6dd2e14070e19b88f34640589db542f7371",
+      "question_sha256": "fc488bff97917db58c102172c9a0b7deb814f21afd845ab40206af94805779f1"
+    },
+    {
+      "case_id": "lay-energy-0561",
+      "context_verdict": "insufficient",
+      "direct_evidence_provision_ids": [
+        "f809b8dc-8b9c-5c9c-b75d-a40f70d2438c",
+        "5569b310-63aa-5cc1-9a31-03550521fa4f",
+        "f06480d2-28ed-5d38-8787-9e9404450a43",
+        "49c7b961-d503-5a56-84c2-18c7e3c566fc"
+      ],
+      "final_verdict": "partially_answerable",
+      "known_irrelevant_top5_provision_ids": [
+        "221793d2-cc99-526f-a2aa-8f9b6953d799",
+        "099acfa7-4ca0-59be-9ef7-f2f780ccfe1d"
+      ],
+      "question_scope_sha256": "465598681339b112be9d7191f44f466ed97262e5c55c19f0e82f5cf76ce407aa",
+      "question_sha256": "2457444048e733d48b7d1377987bd8caa1b16b566ca59abad22b9f43b48f7d74"
+    },
+    {
+      "case_id": "lay-energy-0605",
+      "context_verdict": "blocked",
+      "direct_evidence_provision_ids": [],
+      "final_verdict": "not_answerable_from_current_corpus",
+      "known_irrelevant_top5_provision_ids": [
+        "6801166d-1204-54f0-95f9-15587528e204",
+        "df29f885-8a05-5d3f-a478-0117f1a6250a",
+        "f9726ebd-d8c3-50f3-8a5f-4b9ee692cb4e"
+      ],
+      "question_scope_sha256": "363d00cdb610bd42844aa09b51a93005b4d856939e5e77e1dc00f9781c3a5186",
+      "question_sha256": "5a58fd7c28cadfa6489db5c55a7b292248ca121b98aa3ad940ac1fbcd1736a48"
+    },
+    {
+      "case_id": "lay-energy-0836",
+      "context_verdict": "blocked",
+      "direct_evidence_provision_ids": [],
+      "final_verdict": "not_answerable_from_current_corpus",
+      "known_irrelevant_top5_provision_ids": [
+        "0b15d2ff-dc7d-5698-9b94-271110a1a5e5",
+        "701fa4e5-088d-54bd-8609-e5bafbac874d",
+        "1fdbacc8-3cc5-51d3-8052-77ef4d43f8c9",
+        "f0cf50bd-5133-5c24-9841-078be89db216",
+        "622a9a9b-95fd-5d98-b039-147d92223a30"
+      ],
+      "question_scope_sha256": "de8d1d45ecf8b46f16e8605ace6964392b83488010ae8cf739906694b68b4f8c",
+      "question_sha256": "c73ca62feff2127f9e4bba54adebf7c2b5cb55ebb263e04624b53044f4af9b47"
+    },
+    {
+      "case_id": "lay-energy-0943",
+      "context_verdict": "blocked",
+      "direct_evidence_provision_ids": [],
+      "final_verdict": "not_answerable_from_current_corpus",
+      "known_irrelevant_top5_provision_ids": [
+        "fcf5e4f4-0d11-5894-bdda-d8c70988fb55",
+        "6801166d-1204-54f0-95f9-15587528e204",
+        "293ae812-41fc-5590-b1eb-e06f2c65cc0c",
+        "289fa3f4-8ee6-5054-a788-d0d596215345",
+        "85a4a1f5-cdac-5335-8c41-aa26e5e967aa"
+      ],
+      "question_scope_sha256": "7f12c33099f03c7a4a2f19a9582f8181b93680d871e043cc88ff741976557688",
+      "question_sha256": "2a474d15d48859775429fc0e16bac1393f41afc7c017dd7ee1072ea5bfa228c4"
+    }
+  ],
+  "contract_payload_sha256": "d25bcd2ab00428515797d34a301b13dd73acb5809833de89289093056ae1af2e",
+  "evaluation_scope": "user_confirmed_labels_within_original_raw_top10_only",
+  "experiment": "D-10-M3",
+  "prohibited_claims": [
+    "full_gold",
+    "held_out_performance",
+    "evidence_recall",
+    "population_generalization",
+    "production_release_gate"
+  ],
+  "run_binding": {
+    "as_of_date": "2026-08-05",
+    "corpus_snapshot_id": "corpus-sha256:605b1f53b4fbe3edff19000796e56d906415e7648e7e6ae6119a46f5fc8d9578",
+    "eligible_provision_count": 3066,
+    "embedding_profile_key": "nvidia-nemotron-3-embed-1b-512-v1",
+    "rerank_profile_key": "d10-parent-heading-directness-v1",
+    "run_id": "d10-20260805t065001773007z-442bef4a327b"
+  },
+  "schema_version": 1,
+  "status": "frozen_for_m3_calibration"
+}

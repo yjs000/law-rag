@@ -1,12 +1,16 @@
 # 실행 계획 0022: 검색 인덱스 재설계와 실험 D 1,000문항 평가셋
 
-상태: 진행 중
+상태: 진행 중 — 검색 인프라·질문 승인·D-10 완료, D-full Gold는 예정 작업 0029로 보류
 작성일: 2026-08-03
 소유자: Codex
 
 ## 목적과 사용자 결과
 
 현재 DB에 남아 있는 `hybrid_search`/RRF 중심 스키마를 현재의 dense-only 설계와 일치시킨다. 문서 임베딩의 모델·차원·입력 유형·변환 버전을 명시적으로 추적하고, 향후 BM25나 다른 검색기를 추가할 때 dense 테이블과 점수를 섞지 않고 독립 후보를 비교할 수 있게 한다. 그 뒤 운영 corpus의 벡터를 실제로 생성하고, 일반 사용자 질문 1,000개를 승인·독립 주석한 gold로 승격해 실험 D에서 검색·근거 충분성·근거 부족 경계를 평가한다.
+
+2026-08-07 범위 변경: 검색 인프라와 1,000문항 질문 승인은 보존하되 전체 Gold 승격은 현재 필수 범위가
+아니다. 사용자 확인을 마친 D-10 10문항을 frozen calibration으로 사용하며, D-full은 일반화·운영 회귀가
+실제로 필요할 때 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)에서 다시 검사해 작성한다.
 
 ## 기존 사용자 변경 보호
 
@@ -57,6 +61,9 @@
 9. gold의 `snapshot_id`는 달력 날짜나 embedding profile이 아니라 문항 기준일별 유효 콘텐츠 population identity에서 계산한다. 날짜와 population 대응은 gold dataset·adjudication SHA에 별도로 봉인한다.
 
 ## 완료 조건
+
+검색 인프라·질문 승인·D-10 범위는 완료됐다. 아래 1,000문항 Gold와 정식 지표 조건은 예정 작업 0029를
+active로 승격한 경우에만 다시 적용하며 현재 0022 완료의 선행조건이 아니다.
 
 - DB head 마이그레이션에 hybrid/RRF 실행 함수가 남지 않는다.
 - 임베딩 프로필과 벡터의 차원·콘텐츠 해시·생성 시각·프로필 연결을 DB가 검증한다.
@@ -117,16 +124,16 @@
 - [x] pool 방법별 exact top-k·후보 hash·합집합과 문항 기준일별 full-corpus population 불변조건을 실행 계약과 preflight에 추가한다.
 - [x] 전역 날짜 snapshot을 문항 기준일별 eligible count·content fingerprint로 교체하고, content snapshot ID에서 날짜·embedding profile을 분리한다. runner 결과에는 snapshot ID와 날짜별 population 지문을 함께 기록한다.
 - [x] held-out test fully-answerable만 primary로 두고 calibration·combined를 diagnostic-only로 분리한다.
-- [ ] 별도 D-10 실행 계획에서 현재 DB 검색 결과 10문항을 Codex가 1차 검토하고 사용자가 최종 확인한다.
-- [ ] 사용자 확인 후에만 1,000문항을 검색기에 입력해 실험 D 지표를 측정한다.
+- [x] 별도 D-10 실행 계획에서 현재 DB 검색 결과 10문항을 Codex가 1차 검토하고 사용자가 최종 확인한다.
+- [x] D-10 10문항만 frozen M3 calibration으로 진행하고 1,000문항 검색은 예정 작업 0029로 보류한다.
 - [x] 공식기관 공개 FAQ·절차 주제로 일반 사용자형 에너지 질문 후보 1,000개를 별도 생성한다.
 - [x] 일반 사용자 질문은행이 Recall 평가셋이 아니라 질문 검토 중간 산출물임을 설계·출처 문서에 명시한다.
 - [x] 일반 사용자 질문 1,000개를 세 구간으로 전수 읽고 상황 불일치·중복 의도·위험 작업 표현을 교정한다.
 - [x] 대표 15문항과 고위험 35문항을 모은 질문 승인 검토표와 전체 질문 해시 검증기를 만든다.
 - [x] 승인 manifest가 있을 때만 만들 수 있는 50문항 질문 전용 pilot 작업표 생성기와 엄격한 non-gold 계약을 만든다.
 - [x] 사용자가 일반 사용자 질문 문구와 범위를 승인하고 실제 question approval manifest를 만든다. pilot 작업표와 gold 주석은 별도 후속 단계로 남긴다.
-- [ ] 사용자가 일반 사용자 질문을 승인한 뒤 별도 gold 파일에 answerability·필수 답변 요소·qrels·기준 답변을 독립 주석한다.
-- [ ] 승인·주석·adjudication을 마친 실제 1,000문항만 runner로 실행하고 결과를 기록한다.
+- [x] [예정 작업 0029로 이관] 필요 시 별도 Gold에 answerability·필수 답변 요소·qrels·기준 답변을 독립 주석한다.
+- [x] [예정 작업 0029로 이관] 필요 시 승인·주석·adjudication을 마친 문항만 정식 runner로 실행한다.
 - [x] HNSW 후속 설계·승인 TODO를 폐기한다. gold와 근거 찾기 검증 완료 뒤에도 HNSW를 제안하거나 도입하지 않는다.
 
 ## 검증과 롤백
@@ -204,6 +211,8 @@
 - 2026-08-04: KST 운영 Supabase 읽기 전용 검증에서 `ready=true`, 동적 범위 `2024-07-01..2026-08-04`, 오늘 eligible provision 3,066개와 content-derived `corpus-sha256:*` ID 반환을 확인했다. 관측값은 runtime에 하드코딩하지 않는다.
 - 2026-08-04: 질문 승인 검토에서 고위험 35문항을 유지 2개, `clarification_required` 검토 의도 12개, `unanswerable` 검토 의도 21개로 확정했다. `lay-energy-0511` 문구를 수정한 새 질문·범위 해시로 1,000문항 question approval manifest를 생성했으며 gold 주석·임베딩·검색은 실행하지 않았다.
 - 2026-08-05: D-full 1,000문항 자산과 gold 계약을 유지하면서, 정답 없는 10문항을 현재 DB에서 먼저 수동 진단하는 D-10을 별도 계획 0026으로 분리했다. 과거 실험 C 결과는 재평가하거나 비교하지 않는다.
+- 2026-08-07: D-10 사용자 확인 결과를 10문항 frozen calibration 계약으로 동결하고 D-full 1,000문항
+  Gold 제작·실행은 예정 작업 0029로 이관했다. 질문은행·승인 manifest·Gold schema·runner는 보존한다.
 - 2026-08-03: retrieval 계보 재감사에서 독립 검색기의 설정·build·release와 평가 실행을 같은 corpus 세대에 묶을 DB 계약이 없음을 확인했다. Additive migration `0011`로 8개 catalog 테이블과 평가 계보 열을 추가해 운영 Supabase에 적용했다. 적용 후 `0011 (head)`, 조문·현재 벡터 각 3,066개, 누락·stale·비단위 벡터 0, profile·corpus gate 활성, `hybrid_search` 없음이 유지됐다. 질문 데이터셋, NVIDIA 질문 임베딩, BM25/RRF와 새 HNSW 작업은 실행하지 않았다.
 
 ## 잔여 검토

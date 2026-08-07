@@ -6,6 +6,7 @@
 ## 열린 항목
 
 - [0028: 검색 전 질문 라우팅과 조건부 query 보강](0028-pre-retrieval-question-routing.md) — 제안됨, 미착수
+- [0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 보류, 실제 일반화·회귀 필요 시만 착수
 
 ## 등록 계약
 

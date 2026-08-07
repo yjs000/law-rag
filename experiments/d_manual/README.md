@@ -13,9 +13,10 @@ D-10은 승인된 일반 사용자 질문 1,000개 중 정답을 미리 붙이�
 
 - 실험 C는 저작권법과 과거 전기사업법을 포함한 로컬 205청크의 역사적 후보 관찰 실험이다. D-10으로
   이름을 바꾸거나 현재 결과와 수치를 비교하지 않는다.
-- D-10은 정답 없는 10문항 수동 진단이다. 자동 Recall·MRR 또는 정식 Evidence Recall을 계산하지 않는다.
-- D-full은 독립 qrels·reference·adjudication을 갖춘 기존 1,000문항 정식 평가 설계다. D-10 때문에 기존
-  질문은행, 승인 manifest, Gold 계약을 삭제하거나 변경하지 않는다.
+- D-10은 정답 없이 시작해 사용자 확인을 마친 10문항 수동 진단이다. 2026-08-07부터 이 10문항의
+  top-10 한정 판정만 M3 calibration 계약으로 동결하며 정식 Evidence Recall로 부르지 않는다.
+- D-full은 독립 qrels·reference·adjudication을 갖춘 기존 1,000문항 정식 평가 설계다. 질문은행, 승인
+  manifest와 Gold 계약은 보존하되 일반화·운영 회귀가 실제로 필요할 때만 다시 검사해 Gold를 작성한다.
 - 실험 A·B는 corpus 검색 실험이 아니므로 기존 기록을 그대로 유지한다.
 
 ## 고정 입력과 결과 위치
@@ -101,6 +102,16 @@ uv run --directory apps/api python -m scripts.experiment_d_local_rerank `
 embedding, 외부 API와 모델 reranker를 호출하지 않는다. 같은 10문항 calibration 결과이므로 운영 채택
 근거가 아니며, 새 top 5에 진입한 과거 6~10위 후보는 별도 판정 전까지 관련 후보로 간주하지 않는다.
 
+사용자 확인 10문항과 원본 run·R1을 M3 입력으로 사용하기 전에는 다음 무호출 preflight를 실행한다.
+
+```powershell
+uv run --directory apps/api python -m scripts.experiment_d_10_frozen_contract preflight
+```
+
+이 명령은 `experiment-d-10-m3-frozen-contract.json`의 payload와 질문·result·review·diagnostics·R1
+artifact SHA, corpus snapshot, embedding profile과 판정 범위를 검증한다. `.data` 원본이 없거나 하나라도
+달라지면 실패하며 파일을 생성하거나 DB·NVIDIA를 호출하지 않는다.
+
 ## Codex·AI의 1차 확인사항
 
 Codex는 자동 출력된 실제 원문만 읽고 문항마다 다음 항목을 작성한다. 모델 기억으로 법률 조항이나 정답을
@@ -164,6 +175,6 @@ D-10은 코드 구현이나 검색 실행만으로 완료되지 않는다. 다�
 6. 문맥 구성 수정이 필요한지 여부를 결정한다.
 
 완료 뒤에는 확정된 결과 요약만 `docs/generated/`에 남긴다. 검색·문맥 결함이 있으면 먼저 수정하고 다시
-확인한다. 모두 완료 판정을 받으면 검증된 문맥 구성 방식을 운영 검색 경로에 반영할 범위를 별도로 정하고,
-그 다음에 AI 답변 생성과 실험 E 구현을 시작한다. D-full 1,000문항 Gold 평가는 별도 정식 평가 경로로
-계속 보존한다.
+확인한다. M3에서는 같은 10문항의 raw baseline과 R1을 비교하고 새 top 5 미판정 후보를 사용자 확인한다.
+그 다음 M4 문맥 구성, 검색 전 라우팅, AI 답변 생성 순서로 진행한다. D-full 1,000문항 Gold 설계는
+별도 예정 작업으로 보존하며 10문항 밖 일반화나 운영 회귀가 필요할 때만 착수한다.
