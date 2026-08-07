@@ -1,0 +1,45 @@
+{
+  "artifact_class": "d10_full_corpus_gold_workflow_contract",
+  "corpus_binding": {
+    "as_of_date": "2026-08-05",
+    "corpus_population_fingerprint_sha256": "b0bef0c04b2f85d5197a1dbf1e29166a7cea0e1e0fa8becc5be6c6b1cf54da6e",
+    "corpus_snapshot_id": "corpus-sha256:605b1f53b4fbe3edff19000796e56d906415e7648e7e6ae6119a46f5fc8d9578",
+    "eligible_provision_count": 3066,
+    "parser_contract_version": "3"
+  },
+  "expected_case_count": 10,
+  "expected_total_judgment_count": 30660,
+  "experiment": "D-10-GOLD-V1",
+  "forbidden_annotation_input_fields": [
+    "score",
+    "rank",
+    "raw_rank",
+    "reranked_rank",
+    "retrieval_label",
+    "previous_judgment"
+  ],
+  "frozen_calibration_binding": {
+    "file_sha256": "4805a18437a9a7ba9542bc7269540641e9296fff88b8836ffc288f0bf053bfd6",
+    "path": "experiments/d_manual/experiment-d-10-m3-frozen-contract.json"
+  },
+  "output_root": ".data/experiments/d-gold-10",
+  "prohibited_claims_before_seal": [
+    "approved_gold",
+    "independent_human_gold",
+    "held_out_performance",
+    "population_generalization",
+    "production_release_gate"
+  ],
+  "question_input_binding": {
+    "file_sha256": "0bb1e6a01c3a7b7f592cd4df907450afa5ad172d8a6dd7dcc7c79c9937bc9e1c",
+    "path": "experiments/d_manual/experiment-d-10-questions.json"
+  },
+  "relevance_scale": {
+    "0": "not_relevant",
+    "1": "supporting_context",
+    "2": "direct_evidence"
+  },
+  "schema_version": 1,
+  "status": "annotation_workflow_locked",
+  "workflow_contract_payload_sha256": "c517e16bf0c2e0c0c22e128201ebbcba323d8260124472e45bec2b6d8b10fb23"
+}
