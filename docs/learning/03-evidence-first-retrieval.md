@@ -158,6 +158,16 @@ D-10의 10문항은 사용자가 직접 근거와 문맥 판정을 확인했으�
 직접 고치지 않고 annotation proposal revision을 새로 만들고 전체 judgment SHA를 다시 봉인한다. 이처럼
 `complete candidate coverage`와 `independent human confidence`는 별개의 품질 축이다.
 
+qrel과 필수 답변 요소도 같은 것이 아니다. qrel은 현재 corpus의 특정 provision이 질문의 어떤 facet을
+뒷받침하는지 기록한다. 반면 `needs_clarification` facet은 사용자 사실이 없어 아직 적용할 법적 갈래를
+고를 수 없다는 뜻이고, `unsupported` facet은 현재 corpus 안에 그 답을 뒷받침할 provision이 없다는
+뜻이다. 따라서 이런 facet에 provision ID가 없는 것은 누락이 아니라 의도한 근거 부족 표현이다.
+
+예를 들어 D-10의 0251은 허가·신고 일반 규칙 qrel이 있어도 용량·전압·판매 방식·공사 종류가 없으면
+질문자의 실제 절차를 정할 수 없다. 0521도 REC의 일반 발급·제외 규칙 qrel은 있지만 개별 미발급 사유와
+제출서류는 운영규칙과 신청·계량 자료 없이는 확정할 수 없다. 생성 단계는 supported facet만 근거로
+설명하고, 전자는 추가 질문, 후자는 한계를 밝힌 부분 답변으로 끝내야 한다.
+
 검색 점수가 높아도 직접 근거가 아닐 수 있다. “전기사업 허가권자는 누구인가?”에 대해 허가라는 단어가
 있는 다른 의무 조문은 주제가 비슷하지만 질문의 주체를 답하지 못할 수 있다. similarity cutoff 하나를
 법률적 `insufficient_evidence` 판정으로 쓰지 않는 이유다.

@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0·M1·D-10 완료, M2 10문항 계약·preflight 완료, M3-10 실행 전
+상태: 진행 중 — M0·M1·D-10·M2 완료, D-10 전수 qrel 사용자 review 대기, M3-10 실행 전
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -60,6 +60,7 @@
 | 고위험 35문항 | 유지 의도 2, clarification 의도 12, unanswerable 의도 21 | 최종 answerability가 아닌 gold 검토 힌트 |
 | D-10 동결 라벨 | 10문항 사용자 확인 완료 | 원래 raw top 10 한정 직접 근거·무관 top 5·문맥 판정, 정식 Gold 아님 |
 | D-full Gold | 0/1,000 | 보존·보류, 필요 시 현재 corpus를 다시 검사해 작성 |
+| D-10 calibration Gold | 10문항×3,066 전수 qrel draft 생성, 10/10 사용자 review 대기 | 승인·seal 전에는 Gold 완료나 지표를 주장하지 않음 |
 | 실험 D | D-10 실제 run·R1 완료 | M2 frozen preflight 통과, M3 소표본 분석 전 |
 | AI 입력 문맥 | 조문별 최고 leaf 1개, 최대 5개 조문·60,000자 | 계층 복원과 facet 충족을 평가하지 않은 임시값 |
 | NVIDIA 생성 | adapter와 API 연결 코드는 존재 | hosted 답변 smoke·반복성·법률 품질·비용 미측정 |
@@ -547,6 +548,9 @@ go/no-go 조건:
   등록했다. 코드, embedding, DB·외부 source 호출은 실행하지 않았다.
 - 2026-08-07: D-10 frozen manifest와 무호출 preflight를 추가해 question count 10, 3,066 provision
   snapshot, NVIDIA profile, 사용자 판정과 다섯 artifact SHA를 검증했다. M3 검색·외부 호출은 실행하지 않았다.
+- 2026-08-07: D-10 10문항을 현재 3,066 provision 전체와 대조한 30,660개 qrel draft를 만들었다.
+  0251·0521의 근거 있음과 추가 사실·corpus 부족 경계를 문서화했으며, 현재 10문항 모두 사용자
+  adjudication 대기라 M3와 Gold seal은 실행하지 않았다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 

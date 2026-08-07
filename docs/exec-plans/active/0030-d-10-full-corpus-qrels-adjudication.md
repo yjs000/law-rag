@@ -157,3 +157,7 @@ uv run python scripts/check_docs.py
   fingerprint가 동결값과 일치했고 score·rank·모델 호출 없이 30,660개 judgment를 기록했다.
 - 2026-08-07: relevance 2 35개, relevance 1 3개, relevance 0 30,622개와 answerability·facet·reference
   초안을 생성했다. 10문항 모두 사용자 adjudication 대기이며 seal은 실행하지 않았다.
+- 2026-08-07: 사용자 질의에 따라 0251의 `route_for_user_facility`와 0521의
+  `case_specific_rejection_reason`이 provision이 아닌 필수 답변 facet임을 확인했다. 각각 사용자 사실
+  부족과 현재 corpus 근거 부족을 나타내므로 해당 facet 자체에는 positive qrel이 없고, 관련 일반 규칙만
+  7개·6개 qrel로 연결된다는 점과 검토 순서를 설계 문서에 명시했다.
