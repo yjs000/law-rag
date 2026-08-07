@@ -8,10 +8,16 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.domain.catalog import SourceKind
+from app.domain.routing import RouteDecision
 from app.domain.schemas import AnswerMode, SearchHit
 from app.domain.source_urls import is_allowed_source_url
 from app.main import app
-from app.observability import emit_question_outcome, question_metrics_snapshot
+from app.observability import (
+    emit_question_outcome,
+    emit_route_outcome,
+    question_metrics_snapshot,
+    route_metrics_snapshot,
+)
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
 
@@ -102,6 +108,33 @@ def test_observability_event_has_only_request_id_mode_and_result(caplog) -> None
     assert secret not in caplog.text
     assert question not in caplog.text
     assert question_metrics_snapshot()["search_only"] >= 1
+
+
+def test_route_outcome_event_has_no_question_text(caplog) -> None:
+    question = "정산서 금액이 안 맞는데 어떻게 확인해야 하나요"
+    decision = RouteDecision(
+        route="external_document_required",
+        reason_code="tier1_document_keyword",
+        tier=1,
+        confidence=1.0,
+        missing_fields=("정산서",),
+    )
+    with caplog.at_level(logging.INFO, logger="law_rag.route_outcome"):
+        emit_route_outcome("request-route-id", decision)
+    payload = json.loads(caplog.records[-1].message)
+    assert payload == {
+        "request_id": "request-route-id",
+        "route": "external_document_required",
+        "tier": 1,
+        "reason_code": "tier1_document_keyword",
+        "confidence": 1.0,
+        "missing_field_categories": ["정산서"],
+    }
+    assert question not in caplog.text
+    snapshot = route_metrics_snapshot()
+    assert snapshot["by_route_and_tier"]["external_document_required:tier1"] >= 1
+    assert snapshot["by_reason_code"]["tier1_document_keyword"] >= 1
+    assert snapshot["clarification_missing_field_categories"]["정산서"] >= 1
 
 
 def test_question_and_secret_bearing_failure_are_not_logged(monkeypatch, caplog) -> None:
