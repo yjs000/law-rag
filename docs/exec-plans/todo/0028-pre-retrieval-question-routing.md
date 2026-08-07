@@ -16,13 +16,35 @@ M4.5
 
 ## 범위
 
-- `clarification_required`: 위치·설비용량·자가소비·판매 방식 등 빠진 사용자 사실을 먼저 요청한다.
-- `realtime_required`: 올해 예산·현재 가격·고장 상태처럼 시점에 따라 변하는 질문을 법령 검색으로
-  대신하지 않는다.
-- `external_document_required`: 계약서·정산서·공사비 산출서 등 사용자 또는 운영기관 문서를 요청한다.
+**입력은 질문 text와 법령 corpus뿐이다.** 실시간 정보 source나 사용자 문서 업로드를 받지 않는다
+(2026-08-07 사용자 결정, 아래 "받지 않는 두 경로" 참고).
+
+- `clarification_required`: 위치·설비용량·자가소비·판매 방식 등 빠진 사용자 사실을 **텍스트로** 먼저
+  요청한다(추가 텍스트 입력이라 "text만 받는다" 원칙과 호환).
+- `realtime_required`: 올해 예산·현재 가격·고장 상태처럼 시점에 따라 변하는 질문은 법령 검색을
+  실행하지 않고 **결정적 차단 메시지로 끝난다** — 수집·연동하지 않는다.
+- `external_document_required`: 계약서·정산서·공사비 산출서 등 문서가 필요한 질문도 법령 검색을
+  실행하지 않고 **결정적 차단 메시지로 끝난다** — 업로드·수집하지 않는다.
 - 그 밖의 법령 질문만 동결된 D1/D2 검색·문맥 경로로 보낸다.
-- route, 이유 코드, 필요한 추가 사실·자료와 embedding/search 실행 여부를 기록한다.
+- route, 이유 코드, 필요한 추가 사실과 embedding/search 실행 여부를 기록한다.
 - 라우팅 뒤 법령 검색 결과가 여전히 부족할 때만 query 보강을 별도 단계로 평가한다.
+
+### 받지 않는 두 경로 — realtime과 external document는 항상 차단 응답
+
+`clarification_required`와 달리 `realtime_required`·`external_document_required`는 **후속 수집
+흐름이 없다.** 시스템이 실시간 데이터 source에 연결하거나 사용자 문서를 받는 기능 자체를 만들지
+않기 때문에, 이 두 route로 판정되면 다음 결정적 메시지만 반환하고 종료한다 — embedding·검색·LLM
+호출 0회.
+
+```text
+[realtime_required]
+이 질문은 시점에 따라 달라지는 정보(예: 올해 예산, 현재 가격, 고장 상태)가 필요합니다.
+법령 corpus만으로는 답할 수 없으니 해당 연도·기관의 최신 공고나 담당 기관에 직접 확인해 주세요.
+
+[external_document_required]
+이 질문은 계약서·정산서·공사비 산출서 같은 문서 확인이 필요합니다.
+법령 corpus만으로는 확정할 수 없으니 해당 문서를 직접 대조해 확인해 주세요.
+```
 
 ## 비용 최소화 결정 — 완성 질문 재제출
 
@@ -87,10 +109,11 @@ query 보강은 라우팅 구현과 평가를 통과한 뒤에도 직접 근거 
 
 - D-10 M3/M4의 동결 검색·문맥 계약과 연결해야 한다. 10문항 밖 오분류율 일반화가 필요하면 예정 작업
   0029의 독립 Gold를 먼저 활성화한다.
-- realtime 정보에 사용할 승인된 공식 source와 external document의 보안·보존 계약은 이 항목의
-  라우팅 구현 범위 밖이며 별도 사용자 결정이 필요할 수 있다.
-- 라우터 구현 방식과 threshold는 미결정이다. 동결 10문항의 partial·clarification·corpus 밖 사례를
-  보기 전에 평가 방법과 비용 gate를 고정하며 일반 threshold는 D-full 전 확정하지 않는다.
+- [해소, 2026-08-07] realtime 공식 source·external document 보안 계약은 더 이상 미결정이 아니다 —
+  둘 다 수집하지 않고 결정적 차단 메시지로 끝내기로 확정했다(위 "받지 않는 두 경로" 참고).
+- threshold(tier 2 유사도 컷오프, tier 3 확신도 컷오프)는 여전히 미결정이다. 동결 10문항의
+  partial·clarification·corpus 밖 사례를 보기 전에 평가 방법과 비용 gate를 고정하며 일반 threshold는
+  D-full 전 확정하지 않는다.
 
 ### 라우터 구현 방식(제안, 2026-08-07) — 확신 가능한 경로는 코드, 애매한 것만 LLM
 
@@ -119,12 +142,36 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
 평가 fixture는 각 단계에서 잡히는 사례를 구분해 기록한다 — 1·2단계 커버리지가 높을수록 3단계
 호출률(=비용)이 낮아지므로, 이 비율 자체가 라우터 품질 지표다.
 
+## 세부 구현 계획 (active 승격 시 실행 순서)
+
+1. **route schema 정의** — `route: clarification_required | realtime_required |
+   external_document_required | legal_search`, `reason_code`, `tier`(1/2/3 어디서 잡혔는지),
+   `confidence`, `missing_fields`(clarification 한정)를 Pydantic 모델로 고정한다. 정상·실패·경계
+   테스트를 스키마와 함께 작성한다.
+2. **tier 1 결정적 규칙** — 시점 의존 키워드 사전(realtime), 문서 키워드 사전(external document),
+   질문 유형별 clarification 필수 슬롯 정의를 만든다. 사전 매칭 단위 테스트를 키워드별로 둔다.
+3. **tier 2 근접 예시 분류** — D-10 10문항 + 확정 route를 fixture로 저장하고, 새 질문 embedding과
+   cosine 유사도를 비교한다. threshold는 이 10문항 calibration으로 잠정 고정하고 D-full 전 최종
+   확정하지 않는다.
+4. **tier 3 소형 LLM classifier** — prompt template(질문 원문 + route 정의 10줄 + tier 2 힌트)을
+   작성하고, 법률 답변 생성 모델과 별도 경량 모델/설정을 쓴다. 결과와 tier 2 일치 여부를 로그 스키마에
+   포함한다.
+5. **터미널 응답 구현** — `realtime_required`·`external_document_required`는 위 결정적 메시지를
+   그대로 렌더링(embedding·검색·LLM 호출 0회)하고, `clarification_required`는 기존 "비용 최소화
+   결정" 계약대로 원 질문+누락 필드 재제출 템플릿을 렌더링한다.
+6. **평가 fixture와 비용 gate** — D-10 10문항에 각 route별 경계 사례(예: 문서 키워드가 있지만
+   법령으로도 답 가능한 혼합 질문)를 추가해 오분류율·불필요 검색률·tier별 호출 비율을 계산하고
+   사전 확정 gate를 통과해야 다음 단계로 간다.
+7. **관측 로그 검증** — route·tier·confidence·reason_code만 로그에 남고 질문 원문·사용자가 채운
+   설비 정보·문서 내용이 로그에 없는지 확인한다(개인정보 불변조건).
+8. **통합 테스트** — 네 route 각각의 정상·실패·경계 케이스와 clarification 재제출 end-to-end 흐름을
+   검증한다.
+
 ## active 승격 조건
 
 - 사용자가 이 항목의 착수를 명시한다.
 - route schema에 원 질문, 누락 필드, 복사용 완성 질문과 재제출 지시를 표현하고 실패·보류 동작,
   평가 fixture와 불필요 검색률 지표를 실행 계획에 고정한다.
-- 외부 source·사용자 문서가 없는 경우의 차단 동작을 구현 전에 확정한다.
 - 현재 Git 변경과 파일 범위 충돌이 없음을 확인한다.
 
 ## 완료 조건
@@ -155,3 +202,7 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
 - 2026-08-07: 비용 최소화를 위해 clarification 후속 입력은 서버가 대화 turn을 자동 병합하지 않고,
   사용자가 원 질문과 추가 정보를 한 메시지로 복사·보완해 재제출하는 방식을 기본안으로 정했다.
   clarification 응답은 결정적 템플릿으로 만들며 embedding·검색·별도 answer model을 호출하지 않는다.
+- 2026-08-07: 사용자가 입력 범위를 "질문 text + 법령 corpus"로만 확정했다. 실시간 정보 source
+  연동과 사용자 문서 업로드를 만들지 않기로 하면서, `realtime_required`·`external_document_required`
+  는 후속 수집 흐름 없이 결정적 차단 메시지로 끝나는 것으로 범위를 좁혔다. 이전에 미결정이었던
+  "승인된 공식 source"·"문서 보안·보존 계약" 항목은 이제 필요 자체가 없어져 해소됐다.
