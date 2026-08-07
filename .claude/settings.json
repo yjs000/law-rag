@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/session_start_git_status.py",
+            "timeout": 15,
+            "statusMessage": "git status 확인 중..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/post_edit_lint.py",
+            "timeout": 60,
+            "statusMessage": "lint 실행 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
