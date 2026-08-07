@@ -44,7 +44,7 @@ D-10 v1→v2→v3처럼 "판정 하나 정정 → 전체 재문서화" 패턴이
   걷어낸다.
 - LLM 판정을 rubric 자동화로 전부 대체하는 것 — 애매한 "이 조항이 이 facet을 직접 뒷받침하나?" 류
   판단은 여전히 사람/LLM이 한다. 자동화 대상은 명백한 구조·정합성 검증뿐이다.
-- M4.5 라우터 구현(별도 [0028](0028-pre-retrieval-question-routing.md) 범위).
+- M4.5 라우터 구현(별도 [0028](../active/0028-pre-retrieval-question-routing.md) 범위).
 
 ## 승격 조건
 

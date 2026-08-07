@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0~M4 완료(2026-08-07, 승자 R1+A), M4.5 실행 전
+상태: 진행 중 — M0~M4 완료(2026-08-07, 승자 R1+A), M4.5 착수(0028 active, route schema 전)
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -104,7 +104,7 @@ D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참
 | M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 | 튜닝 |
 | M3 (완료) | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 완료(v3 Gold) — MRR@10 raw 0.525 → R1 0.60 | 튜닝 |
 | M4 (완료) | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 완료 — 승자 R1+A, hit 7/10 | 튜닝 |
-| M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
+| M4.5 (진행 중) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 | 인프라 |
 | M6 | 실험 E-10 | 답변 품질·안전·비용·반복성 소표본 결과 | 사용자 확인, 일반 release gate로 사용 금지 | 튜닝(E-10) · 측정(D-full E3, 0029 활성화 시만) |
 | M7 | 운영 잔여 계획 해결 | 0008·0012·0015와 0002 출시 항목 | 각 계획의 운영 증거 완료 | 인프라 |
@@ -431,25 +431,25 @@ fixture에 공통 검증할 수 있다. 다만 10문항 calibration만으로 운
 M4가 끝나면 프런트 날짜 범위 TODO를 `0002` 공개 Web 범위로 명시적으로 이관한다. `0022`의 D-full
 Gold·정식 runner 범위는 예정 작업 0029로 보류한다.
 
-## M4.5 — 후속 개선 TODO: 검색 전 질문 라우팅
+## M4.5 — 검색 전 질문 라우팅 — 진행 중([0028](0028-pre-retrieval-question-routing.md), 착수 2026-08-07)
 
-상태: [예정 작업 0028에 등록](../todo/0028-pre-retrieval-question-routing.md) · 미구현. D-10에서 법령 corpus로 직접 답할 질문, 사용자 사실이 필요한 질문, 실시간 정보와
-사용자 문서가 필요한 질문이 섞이면 무관 법령을 AI 문맥으로 보낼 수 있음이 확인됐다. 질문 embedding과
-법령 검색 전에 최소 다음 경로를 판정하는 계약을 별도 구현·평가한다.
+D-10에서 법령 corpus로 직접 답할 질문, 사용자 사실이 필요한 질문, 실시간 정보와 사용자 문서가 필요한
+질문이 섞이면 무관 법령을 AI 문맥으로 보낼 수 있음이 확인됐다. 질문 embedding과 법령 검색 전에 다음
+경로를 판정하는 라우터를 별도 구현·평가한다. 세부 계약·8단계 구현 계획·fixture는
+[0028](0028-pre-retrieval-question-routing.md)이 갖고 있다.
 
 - `clarification_required`: 위치·설비용량·자가소비·판매 방식 등 빠진 사용자 사실을 먼저 묻고, 필요한
   답을 받기 전에는 query embedding과 법령 검색을 시작하지 않는다.
-- `realtime_required`: 올해 예산·현재 가격·고장 상태·복구 예정처럼 기준 시점에 따라 변하는 정보는
-  법령 검색으로 대신하지 않는다. 승인된 공식 최신정보 source가 없으면 근거 부족으로 차단한다.
-- `external_document_required`: 계약서·정산서·공사비 산출서처럼 사용자 또는 운영기관 문서가 필요한
-  질문은 해당 문서를 요청한다. 법령 근거도 필요하면 문서 확보 뒤 법령 검색과 분리된 provenance로 결합한다.
-- 그 밖의 법령 질문만 D1/D2의 동결 검색·문맥 경로로 보낸다.
+- `realtime_required`·`external_document_required`: 시스템은 질문 text와 법령 corpus만 입력받는다
+  (2026-08-07 사용자 결정) — 실시간 source 연동이나 문서 업로드를 만들지 않고, 결정적 차단 메시지로
+  끝낸다(embedding·검색·LLM 호출 0회).
+- 그 밖의 법령 질문만 D1/D2의 동결 검색·문맥 경로(M4 승자: R1+A)로 보낸다.
 
-clarification의 최소비용 기본안은 서버가 이전 질문과 추가 사실을 자동 병합하는 것이 아니다. 원 질문과
-누락 필드가 들어간 복사용 완성 질문 템플릿을 결정적으로 반환하고, 사용자가 다음 메시지에 원 질문과
-추가 정보를 모두 넣어 새 독립 질문으로 다시 보내게 한다. 이 응답까지 embedding·검색·별도 answer model을
-호출하지 않으며, 완성 재제출이 라우팅을 통과한 뒤에만 한 번 검색한다. 세부 계약과 fixture는
-[예정 작업 0028](../todo/0028-pre-retrieval-question-routing.md)에 둔다.
+라우터 자체는 결정적 규칙 → D-10 근접 예시 embedding 비교 → 소형 LLM classifier(tier 2 힌트 포함)
+3단계로, LLM 호출을 corpus 크기가 아니라 모호함의 크기에 비례시킨다. clarification의 최소비용
+기본안은 서버가 이전 질문과 추가 사실을 자동 병합하는 것이 아니라, 원 질문과 누락 필드가 들어간
+복사용 완성 질문 템플릿을 결정적으로 반환하고 사용자가 다음 메시지에 새 독립 질문으로 다시 보내게
+하는 것이다.
 
 라우팅은 질문 ID나 D-10 정답을 런타임 규칙으로 넣지 않는다. route, 이유 코드, 필요한 추가 사실·자료,
 embedding/search 실행 여부를 기록하고 동결 10문항의 partial·clarification·corpus 밖 사례에서 오분류와

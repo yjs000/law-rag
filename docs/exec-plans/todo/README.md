@@ -5,7 +5,6 @@
 
 ## 열린 항목
 
-- [0028: 검색 전 질문 라우팅과 조건부 query 보강](0028-pre-retrieval-question-routing.md) — 제안됨, 미착수 · clarification은 원 질문+추가 정보 독립 재제출 방식, 라우터는 규칙→근접예시→소형 LLM 3단계
 - [0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 보류, 실제 일반화·회귀 필요 시만 착수
 - [0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 제안됨, 미착수 · machine-readable rubric·conflict detector·통합 CLI
 
