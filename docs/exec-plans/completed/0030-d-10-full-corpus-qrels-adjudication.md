@@ -193,11 +193,35 @@ uv run python scripts/check_docs.py
 
 ## 실제 결과와 잔여 작업
 
-- 10문항 × 3,066개 = 30,660개 judgment가 sealed. relevance 2(직접 근거) 35+1(0346 정정)=36개,
-  relevance 1(보조 문맥) 3-1=2개, relevance 0 30,622개.
-- v1 draft(`d10-gold-20260807t040448957688z`)는 정정 전 상태로 보존되며 sealed되지 않았다 — 최종
-  Gold는 v2(`d10-gold-20260807t051714397779z`)다.
+- 10문항 × 3,066개 = 30,660개 judgment가 sealed. 최종(v3) relevance 2(직접 근거) 37개, relevance
+  1(보조 문맥) 4개, relevance 0 30,619개.
+- v1(`d10-gold-20260807t040448957688z`)·v2(`d10-gold-20260807t051714397779z`) draft는 정정 전 상태로
+  보존되며 sealed 상태가 아니다 — **최종 Gold는 v3(`d10-gold-20260807t065254073895z`)**다.
 - 잔여 작업: 이 D-10 Gold는 계속 calibration 전용이며 별도 승격 절차가 없다(plan 0025 영구 규칙).
   나머지 990문항 Gold·D-full held-out은 여전히 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)
   보류 상태다. 이 계획의 범위는 여기서 끝나며, 후속 사용(M3~M4)은
   [plan 0025](../active/0025-approved-questions-to-grounded-answer-roadmap.md)가 담당한다.
+
+## v3 추가 기록 — 2026-08-07 (완료 이후 정정)
+
+seal 완료 뒤 사용자가 [0026 수동 검토](0026-experiment-d-10-manual-review.md)의
+`direct_evidence_provision_ids`와 v2 sealed 판정을 문항별로 전수 대조해 6개 문항(9건 후보)의 불일치를
+찾았다. 각 후보를 원문·facet과 대조한 결과:
+
+- 7건(`0201`·`0251`·`0111` 2건·`0561` 3건)은 v2 판정(relevance 0)이 맞았다 — 0026이 배경 맥락을
+  "직접 근거"로 느슨하게 묶었을 뿐 해당 facet을 직접 서술하지 않았다.
+- 2건(`0601`의 `9c93a34b`, `7cd6894f`)은 v2가 틀렸다 — `9c93a34b`은 raw·R1 top 1위인데 `deployment_
+  program_basis`를 그대로 서술하는 leaf가 relevance 0으로 오채점됐고, `7cd6894f`는 위임 조항이라
+  relevance 1이 맞다.
+
+`experiment-d-10-gold-annotation-proposal-v3.json`으로 이 2건만 정정하고, 기존 corpus export를
+재사용해(DB 재호출 없음) `d10-gold-20260807t065254073895z` draft를 새로 만들었다. 30,660개 중 정확히
+2줄만 바뀐 것을 diff로 확인했다. 10문항 재확인 → `preflight-draft: ready_to_seal` → `seal` →
+`preflight-sealed: valid_approved_calibration_gold` 전부 통과했다. 왜 v1 초안이 이걸 놓쳤는지와 다음
+평가에서 고려할 점은 [experiment-d-10-gold-adjudication.md의 "회고"
+절](../../design-docs/experiment-d-10-gold-adjudication.md#회고--v1에서-놓친-것과-다음-평가에서-고려할-점)에
+정리했다.
+
+이 정정은 [plan 0025 M3](../active/0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)의
+이미 발행된 raw/R1 수치에도 영향을 준다(`0601`이 새로 hit, `0561`은 원래 0026 기준으로 과대평가돼 있던
+것이 정확한 값으로 낮아짐) — M3 결과도 v3 기준으로 재계산해 갱신했다.
