@@ -11,3 +11,4 @@
 - [0024: 점검 모드 기반 코퍼스 원자 반영](0024-maintenance-corpus-publish.md)
 - [0026: 실험 D-10 수동 검색·문맥 진단](0026-experiment-d-10-manual-review.md)
 - [0027: 실험 D-10-R1 부모 표제·직접성 로컬 재정렬](0027-experiment-d-10-local-rerank.md)
+- [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md)

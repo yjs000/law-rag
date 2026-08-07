@@ -3,7 +3,7 @@
 상태: `보류 · 미착수`
 
 D-10 10문항만 전수 qrel과 사용자 adjudication 대상으로 만드는 현재 작업은
-[활성 계획 0030](../active/0030-d-10-full-corpus-qrels-adjudication.md)에서 진행한다. 이 계획은 10문항 밖
+[활성 계획 0030](../completed/0030-d-10-full-corpus-qrels-adjudication.md)에서 진행한다. 이 계획은 10문항 밖
 일반화가 필요할 때 여는 D-full 범위로 계속 보류한다.
 
 제안 출처: 2026-08-07 사용자 결정. 승인된 1,000문항을 현재 모두 Gold로 승격하지 않고, 10문항

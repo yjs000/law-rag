@@ -1,6 +1,6 @@
 # 0030: D-10 전수 qrel과 사용자 adjudication
 
-상태: `진행 중 · v2 adjudication 확정(confirmed) · ready_to_seal · seal 실행 대기`
+상태: `완료 · sealed approved_calibration_gold · preflight-sealed 통과`
 
 착수일: 2026-08-07
 
@@ -105,13 +105,20 @@ corpus identity만 기록한다.
       `annotator_id: codex-d10-gold-draft-v2` ≠ `reviewer_id: yjs000-reviewer-v1`, `reviewed_at`
       timezone 포함, pydantic validator 통과로 확인했다.
 
-### M4 — Gold 봉인
+### M4 — Gold 봉인 — 완료
 
-- [ ] 10문항 각각 3,066개 판정과 positive/distractor 완전 분할을 검증한다.
-- [ ] qrel의 provision/version/content/effective-date identity를 corpus export와 재검증한다.
-- [ ] dataset·case·judgment-set SHA를 adjudication manifest에 봉인한다.
-- [ ] 최종 상태를 `approved_gold`로 바꾸고 D-10 calibration Gold임을 명시한다.
-- [ ] 기존 10문항에 이미 조정한 검색기는 held-out으로 평가하지 않는다.
+- [x] 10문항 각각 3,066개 판정과 positive/distractor 완전 분할을 검증한다. `seal` 실행 전 `preflight-draft`가
+      `total_judgment_count: 30660`, 문항당 `eligible_provision_count: 3066`을 확인했다.
+- [x] qrel의 provision/version/content/effective-date identity를 corpus export와 재검증한다. `build-draft`가
+      qrels를 corpus export record에서 직접 구성하고 export manifest SHA를 검증해 identity가 export와
+      분리되지 않는다.
+- [x] dataset·case·judgment-set SHA를 adjudication manifest에 봉인한다.
+      `sealed/adjudication-manifest.json`, `sealed/seal-manifest.json`에 기록됐다.
+- [x] 최종 상태를 `approved_gold`로 바꾸고 D-10 calibration Gold임을 명시한다.
+      `dataset.json.evaluation_status=approved_gold`, `gold_scope=calibration_only_not_held_out`.
+- [x] 기존 10문항에 이미 조정한 검색기는 held-out으로 평가하지 않는다. [plan 0025 "튜닝 데이터와 측정
+      데이터"](../active/0025-approved-questions-to-grounded-answer-roadmap.md#튜닝-데이터와-측정-데이터)에 영구
+      규칙으로 명문화했다.
 
 ## 완료 조건
 
@@ -176,3 +183,21 @@ uv run python scripts/check_docs.py
   `ready_to_seal`을 반환했고, 계약 로직(`supported ⊆ direct_facets`)을 수동 재적용해 0346 통과를 별도
   확인했다. `test_experiment_d_10_gold_review.py` 6 passed(무관한 Windows temp 권한 에러 1건). `seal`은
   아직 실행하지 않았다 — 사용자 승인 대기.
+- 2026-08-07: 사용자 승인 후 `seal --review .../d10-gold-20260807t051714397779z/review`를 실행해
+  `sealed_approved_calibration_gold`를 받았고, `preflight-sealed`가 `valid_approved_calibration_gold`를
+  반환했다. `sealed/dataset.json`은 `evaluation_status=approved_gold`,
+  `gold_scope=calibration_only_not_held_out`, `independent_human_gold=false`와 `prohibited_claims`(
+  independent_human_gold·held_out_performance·population_generalization·production_release_gate)를
+  포함한다. 이어서 [plan 0025 M3](../active/0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)를
+  실행해 이 sealed Gold로 R1 새 top 5의 미판정 후보 9개가 전부 relevance 0임을 확인하고 M3를 완료했다.
+
+## 실제 결과와 잔여 작업
+
+- 10문항 × 3,066개 = 30,660개 judgment가 sealed. relevance 2(직접 근거) 35+1(0346 정정)=36개,
+  relevance 1(보조 문맥) 3-1=2개, relevance 0 30,622개.
+- v1 draft(`d10-gold-20260807t040448957688z`)는 정정 전 상태로 보존되며 sealed되지 않았다 — 최종
+  Gold는 v2(`d10-gold-20260807t051714397779z`)다.
+- 잔여 작업: 이 D-10 Gold는 계속 calibration 전용이며 별도 승격 절차가 없다(plan 0025 영구 규칙).
+  나머지 990문항 Gold·D-full held-out은 여전히 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)
+  보류 상태다. 이 계획의 범위는 여기서 끝나며, 후속 사용(M3~M4)은
+  [plan 0025](../active/0025-approved-questions-to-grounded-answer-roadmap.md)가 담당한다.
