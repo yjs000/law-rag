@@ -1,6 +1,6 @@
 # 0028: 검색 전 질문 라우팅과 조건부 query 보강
 
-상태: `진행 중 · 1~3단계(schema, tier 1, 관측 tracking) 완료 · 4단계(tier 2) 전 — NIM 호출 승인 대기`
+상태: `진행 중 · 1~4단계(schema, tier 1, 관측 tracking, tier 2) 완료 · 5단계(tier 3 LLM) 전`
 
 착수일: 2026-08-07
 
@@ -167,10 +167,18 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
    하는지"를 알려주는 입력이 된다. 실제 문구(용어사전)까지 필요해지면, 새 raw-text 로그를 만들지 않고
    이미 동의를 받은 인증 사용자의 기존 질문 이력 저장소(1년 보존, 계정 삭제 시 삭제)를 사람이 검토하며
    샘플링한다 — D-10 검토와 같은 방식.
-4. **tier 2 근접 예시 분류** — D-10 10문항 + 확정 route를 fixture로 저장하고, 새 질문 embedding과
-   cosine 유사도를 비교한다. clarification의 경우 가장 가까운 예시의 `scenario_family_id`를 따라가
-   그 family의 `missing_user_facts`를 재사용한다. threshold는 이 10문항 calibration으로 잠정 고정하고
-   D-full 전 최종 확정하지 않는다.
+4. **tier 2 근접 예시 분류** — 완료(2026-08-07, `app/domain/routing.py`의 `route_tier2`/
+   `nearest_example`/`cosine_similarity`). D-10 10문항 + v3 Gold의 answerability·insufficient_reason
+   에서 도출한 route(clarification: `0251`·`0111`, realtime: `0605`·`0836`, 나머지 legal_search — 이
+   10문항엔 `external_document_required` 실례가 없다)를 fixture로 저장했다.
+
+   **실제 calibration 실행 결과**(NIM 배치 호출 1회, 새 테스트 질문 10개, 기존 D-10 query vector
+   cache 재사용): 유사도만으로는 신뢰 가능/불가능을 깨끗이 못 가른다 — clarification 테스트 질문 1개가
+   **유사도 0.72(상당히 높음)로 legal_search에 잘못 매칭**됐는데, 이는 실제 정답 매칭들(0.45~0.69)보다
+   오히려 높은 유사도였다. 그래서 `TIER2_CONFIDENCE_THRESHOLD = 0.70`으로 보수적으로 잡았다 —
+   틀린 확신보다 tier 3로 더 자주 넘기는 쪽이 안전하다는 판단이다. 결과적으로 tier 2 커버리지(=tier 3
+   미호출률)는 10문항만으로는 낮을 것으로 예상하며, fixture가 D-10보다 커지기 전까지는 이 값을 최종
+   확정으로 보지 않는다.
 5. **tier 3 소형 LLM classifier** — prompt template(질문 원문 + route 정의 10줄 + tier 2 힌트)을
    작성하고, 법률 답변 생성 모델과 별도 경량 모델/설정을 쓴다. 결과와 tier 2 일치 여부를 3단계 관측
    스키마에 포함한다.
@@ -231,3 +239,8 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
   기록하는 개인정보 안전한 tracking을 tier 2/3보다 먼저 넣어서, 실제 데이터가 쌓이면 그걸 근거로
   tier 1 사전을 나중에 추가하기로 했다. 문구(용어사전) 수준까지 필요해지면 새 raw-text 로그를 만들지
   않고 기존 동의된 질문 이력 저장소를 사람이 검토하며 샘플링한다(D-10과 같은 방식).
+- 2026-08-07: 사용자 승인 하에 tier 2 calibration용 NIM 배치 호출 1회(신규 테스트 질문 10개, D-10
+  10문항은 기존 query vector cache 재사용해 새 호출 0회)를 실행했다. 유사도 0.72의 확신 있어 보이는
+  매칭이 실제로는 틀렸고 여러 정답 매칭은 0.45~0.69로 더 낮게 나와, 단순 유사도 크기만으로는
+  신뢰도를 못 가른다는 게 확인됐다. `TIER2_CONFIDENCE_THRESHOLD`를 0.70으로 보수적으로 고정하고,
+  이 값은 D-10 10개 fixture 기준 잠정값이며 fixture가 커지기 전까지 최종 확정하지 않는다.
