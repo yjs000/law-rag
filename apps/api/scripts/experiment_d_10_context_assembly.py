@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -307,7 +307,13 @@ def main() -> None:
                 else:
                     order = r1_order_by_case[case_id]
                     by_id = {c.provision_id: c for c in raw_cands}
-                    ranked = [by_id[pid] for pid in order if pid in by_id]
+                    # rank must reflect R1 position, not the stale raw rank,
+                    # since evaluate_combo reports first_direct_evidence_rank from it.
+                    ranked = [
+                        replace(by_id[pid], rank=position)
+                        for position, pid in enumerate(order, start=1)
+                        if pid in by_id
+                    ]
 
                 if kind == "A":
                     articles, exceeded = assemble_variant_a(ranked, max_articles, char_budget)
