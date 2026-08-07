@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0·M1·M2·M3 완료(D-10 Gold sealed 2026-08-07), M4 실행 전
+상태: 진행 중 — M0~M4 완료(2026-08-07, 승자 R1+A), M4.5 실행 전
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -103,7 +103,7 @@ D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참
 | M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 | 인프라 |
 | M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 | 튜닝 |
 | M3 (완료) | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 완료(v3 Gold) — MRR@10 raw 0.525 → R1 0.60 | 튜닝 |
-| M4 | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 문맥 충분·부족·차단을 사용자 확인 | 튜닝 |
+| M4 (완료) | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 완료 — 승자 R1+A, hit 7/10 | 튜닝 |
 | M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 | 인프라 |
 | M6 | 실험 E-10 | 답변 품질·안전·비용·반복성 소표본 결과 | 사용자 확인, 일반 release gate로 사용 금지 | 튜닝(E-10) · 측정(D-full E3, 0029 활성화 시만) |
@@ -340,11 +340,28 @@ M3는 같은 10문항을 보며 R1을 만든 calibration이다. `known irrelevan
 Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held-out·population 성능을 계산하지 않는다.
 결과만으로 운영 검색 순서를 바꾸거나 Production AI release를 승인하지 않는다.
 
-## M4 — 실험 D2: AI 입력 검색 문맥 확정
+## M4 — 실험 D2: AI 입력 검색 문맥 확정 — 완료(2026-08-07)
 
 M3 raw 순위만으로 AI 문맥을 확정하지 않는다. M4는 frozen D-10 result의 raw top 10과 이미 복원된 부모
 조문을 읽고 baseline 또는 R1 순서에서 문맥을 조립한다. 새 query embedding·DB read 없이 같은 10문항의
 AI 입력 후보를 비교한다.
+
+### 검증 무게 원칙 — 튜닝과 확정 산출물을 구분한다
+
+D-10 Gold를 v1→v2→v3로 고칠 때마다 매번 새 draft·seal·SHA·design doc 회고·M3 재계산을 전부 다시
+했다. 이건 [플랜의 튜닝/측정 원칙](#튜닝-데이터와-측정-데이터)("튜닝은 반복해서 봐도 된다")을
+문서로만 선언하고 실제 실행에서는 release-gate급 무게를 튜닝 단계에도 그대로 쓴 것이다. 앞으로는
+다음처럼 구분한다.
+
+- **튜닝(calibration) 라운드**: 판정 기준(relevance 2 정의 등)이 이미 확정된 뒤 나오는 개별 라벨
+  수정은 seal·새 draft-id·전체 재문서화를 매번 반복하지 않는다. 가벼운 수정 기록(표 형태 changelog
+  한 줄)만 남기고, 그 수정이 이미 발행한 결론(M3 승자, M4 승자 등)을 실제로 뒤집을 때만 해당 결론
+  절만 갱신한다.
+- **확정 산출물(release-gate급 무게 유지)**: (1) M4의 `search-context-contract-v1`처럼 이후
+  단계(M5~)가 그대로 가져다 쓰는 동결 계약, (2) [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)의
+  D-full held-out(test) 단계. 이 두 곳만 seal·SHA 결박·decision log 수준을 유지한다.
+- D-10 Gold 자체(v3)는 계속 calibration 데이터이므로, 앞으로 추가 오류를 발견해도 v4 seal
+  라운드를 새로 만들지 않는다 — draft judgments를 가볍게 고치고 changelog만 남긴다.
 
 ### raw/R1과 A/B는 서로 다른 축이다
 
@@ -362,35 +379,41 @@ AI 입력 후보를 비교한다.
     B는 맥락 손실을 줄이지만 문자 수·비용이 늘어난다.
   - A/B는 M3와 달리 아직 코드도 비교 결과도 없다 — 이번 M4에서 처음 만든다.
 
-calibration에서 비교할 최소 변형:
+calibration에서 비교한 변형(전부 실행 완료, [요약](../../generated/experiment-d-10-m4-context-assembly-summary.md)):
 
-- A: 현재 방식 — raw top 10을 조문별로 중복 제거하고 최고 leaf 하나씩 최대 5개 조문·60,000자
-- B: 같은 조문 top 10에서 선택 leaf의 조·항·호·목 계층 문맥을 복원
-- B의 최대 조문 수 3개·5개와 문자 예산 30,000자·60,000자만 비교한다. 품질 gate를 통과한 조합 중
-  실제 입력 token이 가장 적은 계약을 선택하고 필요하지 않은 추가 조합은 만들지 않는다.
+- [x] A: 현재 방식 — raw top 10을 조문별로 중복 제거하고 최고 leaf 하나씩 최대 5개 조문·60,000자
+- [x] B: 같은 조문 top 10에서 선택 leaf의 조·항·호·목 계층 문맥을 복원, 최대 조문 수(3·5개) × 문자
+  예산(30,000·60,000자) 4개 변형
+- [x] raw × R1 × {A, B×4} = 10개 조합을 전부 계산했다. **결과: B는 어떤 설정으로도 A보다 hit이 늘지
+  않고 토큰만 2~3배 더 썼다** — hit 여부는 "어떤 조문을 고르나"(순위)에 달려 있지 "얼마나 상세히
+  주나"(조립)에 달려 있지 않았다. budget_exceeded 0건.
+- [x] 승자: **R1 + A(최대 5개 조문·60,000자)** — hit 7/10(raw는 5/10), 평균 371 근사 토큰으로 비교
+  조합 중 가장 적다. "품질 gate 통과 + 토큰 최소" 규칙 그대로 적용한 결과다.
 
-다음 값을 함께 본다.
-
-- 사용자 확정 직접 근거가 문맥에 포함되는지와 첫 포함 순위
-- 사용자 확정 `sufficient | insufficient | blocked`와 구성 결과의 일치
-- 같은 조문 중복, 잘린 계층, 무관 조문 수
-- 문맥 문자 수와 예상 입력 token·비용
-- 범위 밖 날짜, 빈 후보, 부분 답변·추가 질문·근거 부족 사례
+다음 값을 확인했다: 직접 근거 포함 여부와 첫 포함 순위, 같은 조문 중복(0건), 문맥 문자 수·예상
+토큰, `sufficient|insufficient|blocked`와의 일치(참고용, 승자 선택 기준 아님). 범위 밖 날짜·빈 후보
+사례는 이 10문항에 해당 사례가 없어 관찰하지 못했다 — 실제 운영 코드 구현 시 별도로 확인한다.
 
 10문항 결과로 문맥 제한을 고정하되 held-out 검증이나 일반 성능으로 부르지 않는다. 과거 6문항 실험의
 `required_evidence_terms`와 D-10 직접 근거 ID는 평가 라벨일 뿐 런타임 판정기로 재사용하지 않는다.
 
-동결 산출물 `search-context-contract-v1`에는 다음을 기록한다.
+### `search-context-contract-v1` — 문서 동결(코드 동결 아님)
 
-- 입력 D-10 frozen contract·run·corpus·embedding profile SHA
-- raw 후보 → 조문 중복 제거 → 계층 복원 → 문자 예산 → citation ID 부여 순서
-- 후보 K, 최대 조문 수, 최대 문자 수와 잘림 규칙
-- source·기준일·본문 SHA·중복·예산, parent/path 무결성과 원문 순서 hard gate
-- citation ID와 실제 provision·source의 정확한 매핑. 이 매핑은 qrel을 런타임 입력으로 사용하지 않는다.
-- 조문·항·호·목의 문자 중간 절단 금지. 단일 필수 구조 단위가 예산을 넘으면 일부를 자르지 않고
-  `context_budget_exceeded`로 생성하지 않는다.
-- `context_available | no_candidate | blocked_corpus_or_date | context_budget_exceeded` 관찰 상태
-- 빈 후보와 unsupported date/corpus unready의 생성 금지 동작
+위 "검증 무게 원칙"에 따라 이번엔 Pydantic 스키마·SHA 결박 스크립트를 새로 만들지 않고, 계약
+파라미터를 이 문서에 확정하는 것으로 동결을 대신한다. 실제 운영 context builder 구현은 M5(NVIDIA
+연결) 착수 시점으로 미룬다.
+
+| 항목 | 확정값 |
+| --- | --- |
+| 순위 입력 | R1(`d10-parent-heading-directness-v1`) |
+| 조립 방식 | A — 조문별 최고 leaf 1개 |
+| 최대 조문 수 | 5개 |
+| 최대 문자 수 | 60,000자 |
+| 조립 순서 | raw 후보 → 조문 단위 중복 제거(우선순위: R1 순위) → 문자 예산 적용 → citation ID 부여 |
+| 잘림 규칙 | 조·항·호·목 단위 중간 절단 금지 — 예산 초과 시 그 조문은 건너뛰고 `context_budget_exceeded`로 표시(생성 금지 아님, 다음 조문으로 진행) |
+| 관찰 상태 | `context_available` \| `no_candidate` \| `blocked_corpus_or_date` \| `context_budget_exceeded` |
+| citation ID 매핑 | citation ID는 실제 provision_id·source에 1:1 매핑한다. qrel은 런타임 입력으로 사용하지 않는다(오프라인 평가 전용) |
+| 입력 결박(M5 구현 시 SHA로 기록) | D-10 frozen contract, 0026 run, 0030 v3 sealed corpus, NVIDIA embedding profile |
 
 D-10 answerability와 직접 근거 ID는 오프라인 평가에만 사용한다. Production context builder는 질문,
 DB 후보와 구조 메타데이터만 입력받는다. 10문항 문맥 계약은 다음 NVIDIA E-10 입력을 고정하지만 일반
@@ -584,6 +607,10 @@ go/no-go 조건:
 
 ## 결정 로그
 
+- 2026-08-07: D-10 Gold를 v1→v2→v3로 고칠 때마다 매번 seal·새 draft-id·전체 재문서화를 반복한 게
+  튜닝 단계에 release-gate급 무게를 잘못 적용한 것이라는 사용자 지적에 따라, 검증 무게를 계층별로
+  차등화했다. calibration 라벨 수정은 가벼운 changelog로, seal·SHA·decision log 수준은 확정
+  산출물(M4 계약, 0029 D-full held-out)에만 쓴다.
 - 2026-08-04: [대체됨] 질문 문구와 범위 1,000개 승인은 완료됐지만 gold 승인은 아니므로 실험 D 전에
   독립 qrels·기준 문맥·기준 응답과 adjudication을 필수로 뒀다. 2026-08-07 소표본 계약으로 대체했다.
 - 2026-08-04: 실험 D를 raw retrieval D1과 production dense-path context D2로 나눈다. 현재 D runner만으로
@@ -658,6 +685,18 @@ go/no-go 조건:
   정리했다. M4는 아직 시작하지 않았고, M4용으로 미리 만든
   `apps/api/scripts/experiment_d_10_context_assembly.py`는 v2 sealed 경로를 참조하므로 재개 전
   v3 경로로 갱신해야 한다.
+- 2026-08-07: 스크립트를 v3 경로로 갱신하고 raw×R1×{A,B×4} 10개 조합을 계산했다. R1 조합의
+  `first_direct_evidence_rank`가 raw rank를 그대로 보고하는 버그(공유 `Candidate` 객체의 stale
+  `.rank`)를 발견해 R1 재정렬 시 position 기반 rank로 새 객체를 만들도록 고쳤다. 결과: B(계층 복원)는
+  4개 변형 전부 A와 hit count가 동일하고 토큰만 2~3배 더 썼다 — hit 여부는 순위(어떤 조문을 고르나)가
+  결정하지 조립 방식(얼마나 상세히 주나)은 결정하지 않았다. 승자 `R1+A-5-60000`(hit 7/10, 평균 371
+  토큰)을
+  [experiment-d-10-m4-context-assembly-summary.md](../../generated/experiment-d-10-m4-context-assembly-summary.md)에
+  기록했다. 사용자 지적에 따라 "검증 무게 원칙"을 추가했다 — 앞으로 D-10 calibration 라벨 수정은
+  seal 라운드를 새로 만들지 않고, seal·SHA·decision log 수준은 M4의 `search-context-contract-v1`과
+  0029 D-full held-out 단계에만 쓴다. `search-context-contract-v1`은 이 원칙에 따라 Pydantic
+  스키마·SHA 결박 스크립트 대신 이 문서 표로 파라미터를 확정했고, 실제 운영 코드는 M5로 미뤘다. M4를
+  완료로 표시했다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 
