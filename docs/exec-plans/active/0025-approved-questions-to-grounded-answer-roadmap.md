@@ -102,7 +102,7 @@ D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참
 | M0 | 입력과 상태 감사 | 승인 manifest·active 계획 상태 확인 | 완료 | 인프라 |
 | M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 | 인프라 |
 | M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 | 튜닝 |
-| M3 (완료) | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 완료 — MRR@10 raw 0.6125 → R1 0.65 | 튜닝 |
+| M3 (완료) | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 완료(v3 Gold) — MRR@10 raw 0.525 → R1 0.60 | 튜닝 |
 | M4 | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 문맥 충분·부족·차단을 사용자 확인 | 튜닝 |
 | M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 | 인프라 |
@@ -300,35 +300,41 @@ SHA-256 `19b1e40704d38a56751cf7a539a39075af18d1e5bbed8e47b1a3b00dabf82f31`과 �
 5. calibration을 200문항까지 확장하고 gold preflight를 통과한 뒤 test 800문항을 봉인해 제작한다.
 6. 이 절차는 예정 작업 0029가 active로 승격된 경우에만 실행하며 현재 M3의 선행조건이 아니다.
 
-## M3 — D-10 raw/R1 소표본 calibration — 완료(2026-08-07)
+## M3 — D-10 raw/R1 소표본 calibration — 완료(2026-08-07, v3 Gold 기준 재계산)
 
 1. [x] M2 frozen preflight를 통과한다. (0026/0027 완료 당시 통과, 2026-08-05)
 2. [x] 원본 D-10 raw top 10과 cosine 순서를 baseline으로 읽는다. 새 query embedding·DB 검색은 하지 않는다.
    ([0026](../completed/0026-experiment-d-10-manual-review.md) `result.json` 재사용, 새 호출 0회)
 3. [x] 사용자 확정 라벨로 manual hit@1/3/5/10, 첫 직접 근거 순위, manual reciprocal rank@10, 알려진 무관
-   top 5와 문맥 판정 수만 계산한다. raw hit@1/3/5/10 `6/6/6/7`(/10), MRR@10 `0.6125`, known
-   irrelevant@5 `28`.
+   top 5와 문맥 판정 수만 계산한다. **v3 Gold**(`d10-gold-20260807t065254073895z`, [0030 v3 추가
+   기록](../completed/0030-d-10-full-corpus-qrels-adjudication.md#v3-추가-기록--2026-08-07-완료-이후-정정)
+   참고) 기준 raw hit@1/3/5/10 `5/5/5/7`(/10), MRR@10 `0.5250`, known irrelevant@5 `37`.
 4. [x] 같은 후보 집합의 R1 순서를 비교해 `0346`의 8위→2위, hit@3/5 변화와 순위가 나빠진 사례를 함께
-   본다. R1 hit@1/3/5/10 `6/7/7/7`(/10), MRR@10 `0.65`, known irrelevant@5 `18`. **나빠진 문항 0건.**
+   본다. R1 hit@1/3/5/10 `5/7/7/7`(/10), MRR@10 `0.6000`, known irrelevant@5 `34`. **나빠진 문항 0건.**
 5. [x] R1 새 top 5에 들어온 원래 6~10위 미판정 후보를 Codex가 원문 검토하고 사용자가 승인·수정·보류한다.
-   9개 후보(6문항) 전부 [0030 D-10 전수 qrel adjudication](../completed/0030-d-10-full-corpus-qrels-adjudication.md)의
-   sealed Gold에서 이미 relevance `0`(무관)으로 확정됐다 — 별도 review 불필요, hit@k·MRR을 바꾸지 않는다.
-6. [x] 질문별로 baseline 유지, R1 사용 후보, 라우팅 우선, 추가 문맥 필요 중 하나를 기록한다. 6문항
-   baseline=R1 동일, `0346`은 R1 사용, `0605`/`0836`/`0943`은 순위 문제가 아니라 corpus에 positive
-   qrel 자체가 없어 M4.5 라우팅 대상.
+   9개 후보(6문항)를 개별 원문·facet 대조로 재검토했다 — 7건은 v1/v2 relevance 0이 맞았고, 2건
+   (`0601`의 `9c93a34b`·`7cd6894f`)은 오채점이라 v3로 정정했다.
+6. [x] 질문별로 baseline 유지, R1 사용 후보, 라우팅 우선, 추가 문맥 필요 중 하나를 기록한다. `0201`·
+   `0251`·`0521`·`0601`·`0111` 5문항은 baseline=R1 동일(모두 1위), `0346`·`0561` 2문항은 R1 사용
+   (8위→2위), `0605`/`0836`/`0943`은 순위 문제가 아니라 corpus에 positive qrel 자체가 없어 M4.5
+   라우팅 대상.
 7. [x] `docs/generated/` 요약을 만들되 기존 D-10/R1 artifact는 덮어쓰지 않는다.
    [experiment-d-10-m3-calibration-summary.md](../../generated/experiment-d-10-m3-calibration-summary.md)
-   — 별도 원자 JSON(SHA 결박 스크립트)은 만들지 않고 기존 0026/0027 artifact와 0030 sealed
+   — 별도 원자 JSON(SHA 결박 스크립트)은 만들지 않고 기존 0026/0027 artifact와 0030 v3 sealed
    judgments.jsonl을 재계산 없이 읽어 조합했다. D-full 재개 등으로 이 패턴을 반복해야 하면 그때
    전용 스크립트로 formalize한다.
 
-`lay-energy-0346`의 0030 Gold 정정(`approved_use_terms` relevance 1→2)은 raw/R1 top 10 후보 집합
-어디에도 없는 provision이라 위 수치에 영향이 없다 — 계약 정합성 정정이지 이 calibration의 입력이
-아니었다.
+**최초 발행 수치(0026 기준, raw `6/6/6/7`·MRR `0.6125`)는 부정확했다** — 0026의 "직접 근거" 판정이
+project relevance-2 정의보다 느슨해서(배경 맥락도 포함) `0561`을 실제로는 8위인데 1위로 과대평가했다.
+반대로 `0601`은 v1/v2 Gold 초안이 raw·R1 top 1위 후보(`9c93a34b`)를 일괄 무관 처리로 놓쳐서 과소평가돼
+있었다. 두 오차가 부분 상쇄돼 최종 수치(raw MRR `0.525`)가 최초 발행값(`0.6125`)보다 낮다. 왜 놓쳤고
+다음 평가에서 뭘 볼지는 [design doc 회고
+절](../../design-docs/experiment-d-10-gold-adjudication.md#회고--v1에서-놓친-것과-다음-평가에서-고려할-점)에
+정리했다.
 
-M3는 같은 10문항을 보며 R1을 만든 calibration이다. `known irrelevant@5` 감소는 새 후보 판정 전 실제
-Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held-out·population 성능을 계산하지 않는다.
-결과만으로 운영 검색 순서를 바꾸거나 Production AI release를 승인하지 않는다.
+`lay-energy-0346`의 0030 Gold 정정(`approved_use_terms` relevance 1→2)은 raw/R1 top 10 후보 집합
+어디에도 없는 provision이라 이 calibration의 입력이 아니다 — 계약 정합성 정정일 뿐 위 수치에 영향이
+없다.
 
 M3는 같은 10문항을 보며 R1을 만든 calibration이다. `known irrelevant@5` 감소는 새 후보 판정 전 실제
 Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held-out·population 성능을 계산하지 않는다.
@@ -339,6 +345,22 @@ Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held
 M3 raw 순위만으로 AI 문맥을 확정하지 않는다. M4는 frozen D-10 result의 raw top 10과 이미 복원된 부모
 조문을 읽고 baseline 또는 R1 순서에서 문맥을 조립한다. 새 query embedding·DB read 없이 같은 10문항의
 AI 입력 후보를 비교한다.
+
+### raw/R1과 A/B는 서로 다른 축이다
+
+- **raw/R1(순위)** — 후보 10개를 어떤 순서로 줄 세우나. raw는 NVIDIA dense cosine 유사도 실제 검색
+  1회(M2), R1은 같은 후보를 법령명·복원된 부모 조문 표제·직접성 규칙으로 재정렬한 결과(외부 호출
+  0회). M3에서 이미 비교·확정했다: 5문항은 raw==R1(1위 동일), `0346`·`0561` 2문항은 R1이 8위→2위로
+  개선했고 나빠진 문항은 없다.
+- **A/B(조립)** — 그 순위에서 고른 조문을 AI에게 어떤 형태로 넣어주나.
+  - A(현재 방식): raw top 10을 조문별로 중복 제거하고 **조문당 최고 leaf 1개만** 사용, 최대 5개
+    조문·60,000자 고정.
+    A는 "정답 leaf 한 조각만" 주므로 짧고 싸지만, 그 조각이 `제1항에 따른`처럼 상위 조문 맥락이 있어야
+    이해되는 경우 맥락을 놓칠 수 있다.
+  - B(계층 복원): 같은 top 10에서 고른 leaf의 **조·항·호·목 계층 전체**를 복원해 함께 넣는다. 최대
+    조문 수(3·5개) × 문자 예산(30,000·60,000자) 조합으로 4개 변형이 있다.
+    B는 맥락 손실을 줄이지만 문자 수·비용이 늘어난다.
+  - A/B는 M3와 달리 아직 코드도 비교 결과도 없다 — 이번 M4에서 처음 만든다.
 
 calibration에서 비교할 최소 변형:
 
@@ -624,6 +646,18 @@ go/no-go 조건:
   없음을 확인했다. 결과를
   [experiment-d-10-m3-calibration-summary.md](../../generated/experiment-d-10-m3-calibration-summary.md)에
   기록하고 M3를 완료로 표시했다. M4(AI 입력 문맥 확정)는 아직 실행하지 않았다.
+- 2026-08-07: M4 착수 중 raw/R1의 "직접 근거" 판정을 0030 sealed Gold(v2) relevance-2 기준으로 다시
+  계산하니 0026 기준 M3 결과와 어긋남을 발견했다. 사용자가 0026의 `direct_evidence_provision_ids`와
+  v2를 10문항 전수 대조해 6문항(9건)의 불일치를 찾았고, 각각 원문·facet 대조로 재검토했다 — 7건은
+  v1/v2 relevance 0이 맞았고 `0601`의 `9c93a34b`·`7cd6894f` 2건만 오채점이었다. v3 proposal로 정정해
+  `d10-gold-20260807t065254073895z`를 새로 만들고(30,660개 중 정확히 2줄 변경) confirm·seal·
+  preflight-sealed를 통과했다. M3를 v3 기준으로 재계산해 raw hit@1/3/5/10 `5/5/5/7`, MRR@10 `0.525`,
+  R1 hit@1/3/5/10 `5/7/7/7`, MRR@10 `0.60`으로 갱신했다(`0561`이 0026 기준 1위→실제 8위로 하향,
+  `0601`이 없음→1위로 상향). 놓친 이유는 [design doc
+  회고](../../design-docs/experiment-d-10-gold-adjudication.md#회고--v1에서-놓친-것과-다음-평가에서-고려할-점)에
+  정리했다. M4는 아직 시작하지 않았고, M4용으로 미리 만든
+  `apps/api/scripts/experiment_d_10_context_assembly.py`는 v2 sealed 경로를 참조하므로 재개 전
+  v3 경로로 갱신해야 한다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 
