@@ -6,6 +6,7 @@ it needs something the system does not collect: missing user facts
 (clarification), realtime information, or an external document.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -98,7 +99,29 @@ def route_tier1(question: str) -> RouteDecision | None:
             tier=1,
             confidence=1.0,
         )
+    if match_conditional_variance_phrase(question):
+        return RouteDecision(
+            route="clarification_required",
+            reason_code="tier1_conditional_variance_phrase",
+            tier=1,
+            confidence=1.0,
+        )
     return None
+
+
+# "~에 따라 달라지나요/다른가요/다릅니다" etc: a syntactic marker that the answer
+# branches on a fact the question has not supplied, e.g. "용량이나 사용 방식에 따라
+# 허가와 신고가 어떻게 달라지나요?" (D-10 case 0251). Found during 2026-08-07 tier 2
+# calibration: this pattern is what actually separates a clarification-needing
+# question from a same-topic, generally-answerable one (D-10 case 0201) - topic
+# embeddings conflate the two because both are "about" the same permit/report
+# distinction. This rule only catches questions using this specific construction;
+# it does not generalize to every clarification case (see tier 2/3).
+_CONDITIONAL_VARIANCE_PATTERN = re.compile(r"에\s*따라.{0,20}?(달라|다른가|다릅)")
+
+
+def match_conditional_variance_phrase(question: str) -> bool:
+    return _CONDITIONAL_VARIANCE_PATTERN.search(question) is not None
 
 
 # Tier 2: nearest-labeled-example classification over existing query embeddings.
@@ -123,14 +146,16 @@ class NearestExampleMatch:
 
 
 # 2026-08-07 calibration against the 10 D-10 examples (see 0028 decision log): the
-# nearest-neighbor match was WRONG once even at similarity 0.72 (a legal_search example
-# out-scored the correct clarification_required one), while several genuinely correct
-# matches sat as low as 0.45-0.54. A single confidence threshold cannot fully separate
-# "trustworthy" from "confidently wrong" with only 10 fixture points, so this is set
-# conservatively - false positives here are worse than an extra tier-3 call - and tier 2
-# will fall through to tier 3 more often than a naive reading of the similarities would
-# suggest. Revisit once the fixture grows past D-10.
-TIER2_CONFIDENCE_THRESHOLD = 0.70
+# WRONG nearest-neighbor match (0.7185, a legal_search example out-scoring the correct
+# clarification_required one) ranked ABOVE every correct match in the 10-question
+# calibration batch (best correct match: 0.6947). Similarity magnitude and correctness
+# were effectively uncorrelated here, not just noisy near one boundary value - so the
+# threshold must clear the wrong match with real margin, not sit just above it. At 0.75,
+# none of the 10 calibration questions clear it (right or wrong): tier 2 currently
+# resolves ~0% of this batch and everything falls through to tier 3. That is the honest
+# state with only 10 fixture points, not a tuning target to "fix" by lowering this value.
+# Revisit once the fixture grows past D-10 (0029, or accumulated tier 3 outcomes).
+TIER2_CONFIDENCE_THRESHOLD = 0.75
 
 
 def cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:

@@ -1,9 +1,11 @@
 import pytest
 
 from app.domain.routing import (
+    TIER2_CONFIDENCE_THRESHOLD,
     RouteDecision,
     RouteExample,
     cosine_similarity,
+    match_conditional_variance_phrase,
     match_external_document_keywords,
     match_realtime_keywords,
     nearest_example,
@@ -56,6 +58,36 @@ def test_tier1_prefers_document_over_realtime_when_both_match() -> None:
 
 def test_tier1_returns_none_when_inconclusive() -> None:
     assert route_tier1("태양광 발전사업 허가는 어떻게 받나요?") is None
+
+
+def test_conditional_variance_phrase_is_detected() -> None:
+    # D-10 case 0251's exact construction: the answer branches on a fact not given.
+    assert match_conditional_variance_phrase(
+        "소규모 설비는 용량이나 전기 사용 방식에 따라 허가와 신고가 어떻게 달라지나요?"
+    )
+
+
+def test_conditional_variance_phrase_absent_in_general_question() -> None:
+    # D-10 case 0201: same topic, but asks for a general explanation, not "how it varies".
+    assert not match_conditional_variance_phrase(
+        "태양광 발전소 허가를 준비하고 있는데, 어떤 허가나 신고가 필요한지 어떻게 구분하나요?"
+    )
+
+
+def test_tier1_routes_conditional_variance_phrase_as_clarification() -> None:
+    decision = route_tier1("전기 사용 방식에 따라 신고 절차가 다릅니다 어떻게 다른가요?")
+
+    assert decision is not None
+    assert decision.route == "clarification_required"
+    assert decision.reason_code == "tier1_conditional_variance_phrase"
+    assert decision.tier == 1
+
+
+def test_tier2_threshold_excludes_the_known_false_positive_similarity() -> None:
+    # 2026-08-07 calibration: a wrong match scored 0.7185, higher than every correct
+    # match in the batch (best correct: 0.6947). The threshold must clear this with
+    # margin, not sit just above one observed bad value.
+    assert TIER2_CONFIDENCE_THRESHOLD > 0.7185
 
 
 def test_route_decision_rejects_out_of_range_confidence() -> None:
