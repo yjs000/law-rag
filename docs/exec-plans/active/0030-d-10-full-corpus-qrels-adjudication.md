@@ -1,6 +1,6 @@
 # 0030: D-10 전수 qrel과 사용자 adjudication
 
-상태: `진행 중 · draft 생성 완료 · 사용자 adjudication 대기`
+상태: `진행 중 · v2 adjudication 확정(confirmed) · ready_to_seal · seal 실행 대기`
 
 착수일: 2026-08-07
 
@@ -94,10 +94,16 @@ corpus identity만 기록한다.
 
 ### M3 — 사용자 review와 adjudication
 
-- [ ] 사용자가 문항별 `승인 | 수정 | 보류`와 수정 qrel/facet/reason을 기록한다.
-- [ ] 보류 또는 미판정 candidate가 하나라도 있으면 seal을 차단한다.
-- [ ] 사용자 확정 payload로 새 adjudication manifest를 만든다.
-- [ ] annotator/reviewer 분리와 `질문 승인 < annotation review < adjudication`을 검사한다.
+- [x] 사용자가 문항별 `승인 | 수정 | 보류`와 수정 qrel/facet/reason을 기록한다. 0346의
+      `approved_use_terms`(41ebaef4) relevance 1→2 오채점을 사용자가 지적해 v2 proposal로 정정했고,
+      나머지 9문항은 v1 판정을 그대로 승인했다.
+- [x] 보류 또는 미판정 candidate가 하나라도 있으면 seal을 차단한다. v2 bundle
+      (`d10-gold-20260807t051714397779z`)의 `preflight-draft`가 `pending_user_case_count: 0`,
+      `ready_to_seal`을 반환해 통과했다.
+- [ ] 사용자 확정 payload로 새 adjudication manifest를 만든다. `seal` 실행 시 생성되며 아직 미실행.
+- [x] annotator/reviewer 분리와 `질문 승인 < annotation review < adjudication`을 검사한다.
+      `annotator_id: codex-d10-gold-draft-v2` ≠ `reviewer_id: yjs000-reviewer-v1`, `reviewed_at`
+      timezone 포함, pydantic validator 통과로 확인했다.
 
 ### M4 — Gold 봉인
 
@@ -161,3 +167,12 @@ uv run python scripts/check_docs.py
   `case_specific_rejection_reason`이 provision이 아닌 필수 답변 facet임을 확인했다. 각각 사용자 사실
   부족과 현재 corpus 근거 부족을 나타내므로 해당 facet 자체에는 positive qrel이 없고, 관련 일반 규칙만
   7개·6개 qrel로 연결된다는 점과 검토 순서를 설계 문서에 명시했다.
+- 2026-08-07: 사용자가 0346의 `approved_use_terms`(41ebaef4) relevance 1을 계약 위반으로 지적했다.
+  원문이 claim을 직접 서술하는 leaf이고 하위 조각이 없어 프로젝트 relevance-2 정의에 부합함을 corpus
+  대조로 확인하고 `experiment-d-10-gold-annotation-proposal-v2.json`으로 정정했다. 기존 corpus export를
+  재사용해 새 draft `d10-gold-20260807t051714397779z`를 `build-draft`로 생성했고, 변경된 judgment는
+  30,660개 중 정확히 1개(diff로 확인)였다. `user-adjudication.json`을 10문항 전부 승인·확정으로 채우고
+  `status: confirmed`, `reviewer_id: yjs000-reviewer-v1`로 설정했다. `preflight-draft`가
+  `ready_to_seal`을 반환했고, 계약 로직(`supported ⊆ direct_facets`)을 수동 재적용해 0346 통과를 별도
+  확인했다. `test_experiment_d_10_gold_review.py` 6 passed(무관한 Windows temp 권한 에러 1건). `seal`은
+  아직 실행하지 않았다 — 사용자 승인 대기.
