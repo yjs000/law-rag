@@ -1,6 +1,6 @@
 # 0028: 검색 전 질문 라우팅과 조건부 query 보강
 
-상태: `진행 중 · 착수 2026-08-07 · 세부 구현 계획 1단계(route schema) 전`
+상태: `진행 중 · 1~2단계(schema, tier 1) 완료 · 3단계(관측 tracking) 진행 중`
 
 착수일: 2026-08-07
 
@@ -146,27 +146,44 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
 
 ## 세부 구현 계획 (active 승격 시 실행 순서)
 
-1. **route schema 정의** — `route: clarification_required | realtime_required |
+1. **route schema 정의** — 완료(2026-08-07). `route: clarification_required | realtime_required |
    external_document_required | legal_search`, `reason_code`, `tier`(1/2/3 어디서 잡혔는지),
-   `confidence`, `missing_fields`(clarification 한정)를 Pydantic 모델로 고정한다. 정상·실패·경계
-   테스트를 스키마와 함께 작성한다.
-2. **tier 1 결정적 규칙** — 시점 의존 키워드 사전(realtime), 문서 키워드 사전(external document),
-   질문 유형별 clarification 필수 슬롯 정의를 만든다. 사전 매칭 단위 테스트를 키워드별로 둔다.
-3. **tier 2 근접 예시 분류** — D-10 10문항 + 확정 route를 fixture로 저장하고, 새 질문 embedding과
-   cosine 유사도를 비교한다. threshold는 이 10문항 calibration으로 잠정 고정하고 D-full 전 최종
-   확정하지 않는다.
-4. **tier 3 소형 LLM classifier** — prompt template(질문 원문 + route 정의 10줄 + tier 2 힌트)을
-   작성하고, 법률 답변 생성 모델과 별도 경량 모델/설정을 쓴다. 결과와 tier 2 일치 여부를 로그 스키마에
-   포함한다.
-5. **터미널 응답 구현** — `realtime_required`·`external_document_required`는 위 결정적 메시지를
+   `confidence`, `missing_fields`(clarification 한정)를 `app/domain/routing.py`의 `RouteDecision`
+   dataclass로 고정했다.
+2. **tier 1 결정적 규칙** — 완료(2026-08-07, `app/domain/routing.py`). 시점 의존 키워드 사전
+   (realtime), 문서 키워드 사전(external document)을 구현하고 테스트 8개를 통과시켰다.
+   **clarification은 tier 1에 슬롯 사전을 손으로 만들지 않는다** — "어느 질문 유형에 어떤 슬롯이
+   필요한가"는 이미 질문은행의 `scenario_family_id`·`missing_user_facts`에 있지만, 새 질문이 어느
+   family에 속하는지는 tier 2(embedding 유사도)가 있어야 알 수 있다. 그래서 clarification 판정은
+   기본적으로 tier 2·3에서 하고, tier 1의 clarification 사전은 **아래 3단계 tracking으로 실제
+   데이터를 모은 뒤** 자주 나오는 패턴만 추려서 추가한다(하드코딩 슬롯 나열이 아니라 관측 기반).
+3. **관측 tracking 인프라** — tier 1 구현 직후, tier 2/3을 만들기 전에 먼저 넣는다. 이후 모든 실제
+   질문이 처음부터 추적되게 하기 위해서다. `app/observability.py`의 기존
+   `emit_question_outcome`(질문 원문·사용자·비밀 없이 결과만 기록하는 최소 관측 경계) 패턴을 그대로
+   따라 `emit_route_outcome(route, tier, reason_code, confidence, missing_field_categories)`를
+   추가한다. **질문 원문은 기록하지 않는다** — 개인정보 불변조건(`AGENTS.md`)과 이 계획의 완료 조건에
+   이미 있는 제약이다. tier별 호출 비율, reason_code 빈도, clarification이 tier 2/3 중 어디서 얼마나
+   잡히는지를 프로세스 로컬 counter로 누적한다. 이 신호가 "tier 1 clarification 사전에 뭘 추가해야
+   하는지"를 알려주는 입력이 된다. 실제 문구(용어사전)까지 필요해지면, 새 raw-text 로그를 만들지 않고
+   이미 동의를 받은 인증 사용자의 기존 질문 이력 저장소(1년 보존, 계정 삭제 시 삭제)를 사람이 검토하며
+   샘플링한다 — D-10 검토와 같은 방식.
+4. **tier 2 근접 예시 분류** — D-10 10문항 + 확정 route를 fixture로 저장하고, 새 질문 embedding과
+   cosine 유사도를 비교한다. clarification의 경우 가장 가까운 예시의 `scenario_family_id`를 따라가
+   그 family의 `missing_user_facts`를 재사용한다. threshold는 이 10문항 calibration으로 잠정 고정하고
+   D-full 전 최종 확정하지 않는다.
+5. **tier 3 소형 LLM classifier** — prompt template(질문 원문 + route 정의 10줄 + tier 2 힌트)을
+   작성하고, 법률 답변 생성 모델과 별도 경량 모델/설정을 쓴다. 결과와 tier 2 일치 여부를 3단계 관측
+   스키마에 포함한다.
+6. **터미널 응답 구현** — `realtime_required`·`external_document_required`는 위 결정적 메시지를
    그대로 렌더링(embedding·검색·LLM 호출 0회)하고, `clarification_required`는 기존 "비용 최소화
    결정" 계약대로 원 질문+누락 필드 재제출 템플릿을 렌더링한다.
-6. **평가 fixture와 비용 gate** — D-10 10문항에 각 route별 경계 사례(예: 문서 키워드가 있지만
+7. **평가 fixture와 비용 gate** — D-10 10문항에 각 route별 경계 사례(예: 문서 키워드가 있지만
    법령으로도 답 가능한 혼합 질문)를 추가해 오분류율·불필요 검색률·tier별 호출 비율을 계산하고
-   사전 확정 gate를 통과해야 다음 단계로 간다.
-7. **관측 로그 검증** — route·tier·confidence·reason_code만 로그에 남고 질문 원문·사용자가 채운
-   설비 정보·문서 내용이 로그에 없는지 확인한다(개인정보 불변조건).
-8. **통합 테스트** — 네 route 각각의 정상·실패·경계 케이스와 clarification 재제출 end-to-end 흐름을
+   사전 확정 gate를 통과해야 다음 단계로 간다. 3단계 tracking 누계로 tier 1 clarification 사전 후보를
+   함께 검토한다.
+8. **관측 로그 최종 검증** — 3단계에서 만든 tracking이 route·tier·confidence·reason_code만 남기고
+   질문 원문·사용자가 채운 설비 정보·문서 내용이 로그에 없는지 재확인한다(개인정보 불변조건).
+9. **통합 테스트** — 네 route 각각의 정상·실패·경계 케이스와 clarification 재제출 end-to-end 흐름을
    검증한다.
 
 ## active 승격 조건
@@ -208,3 +225,9 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
   연동과 사용자 문서 업로드를 만들지 않기로 하면서, `realtime_required`·`external_document_required`
   는 후속 수집 흐름 없이 결정적 차단 메시지로 끝나는 것으로 범위를 좁혔다. 이전에 미결정이었던
   "승인된 공식 source"·"문서 보안·보존 계약" 항목은 이제 필요 자체가 없어져 해소됐다.
+- 2026-08-07: clarification용 tier 1 슬롯 사전을 지금 손으로 만들지 않기로 했다. scenario family별
+  필요 슬롯은 이미 질문은행에 있지만 family 매칭 자체가 tier 2(embedding) 기능이라, tier 1에서
+  미리 정의하면 실제 사용 패턴과 안 맞을 위험이 크다. 대신 route/tier/reason_code/confidence만
+  기록하는 개인정보 안전한 tracking을 tier 2/3보다 먼저 넣어서, 실제 데이터가 쌓이면 그걸 근거로
+  tier 1 사전을 나중에 추가하기로 했다. 문구(용어사전) 수준까지 필요해지면 새 raw-text 로그를 만들지
+  않고 기존 동의된 질문 이력 저장소를 사람이 검토하며 샘플링한다(D-10과 같은 방식).
