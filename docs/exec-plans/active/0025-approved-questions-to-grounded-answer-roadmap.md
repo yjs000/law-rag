@@ -1,6 +1,6 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0·M1·D-10·M2 완료, D-10 전수 qrel(0030) 사용자 confirm 완료·seal 대기, M3-10 실행 전
+상태: 진행 중 — M0·M1·M2·M3 완료(D-10 Gold sealed 2026-08-07), M4 실행 전
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -61,7 +61,7 @@
 | D-10 동결 라벨 | 10문항 사용자 확인 완료 | 원래 raw top 10 한정 직접 근거·무관 top 5·문맥 판정, 정식 Gold 아님 |
 | D-full Gold | 0/1,000 | 보존·보류, 필요 시 현재 corpus를 다시 검사해 작성 |
 | D-10 calibration Gold | 10문항×3,066 전수 qrel draft 생성, 10/10 사용자 review 대기 | 승인·seal 전에는 Gold 완료나 지표를 주장하지 않음 |
-| 실험 D | D-10 실제 run·R1 완료 | M2 frozen preflight 통과, M3 소표본 분석 전 |
+| 실험 D | D-10 실제 run·R1·M3 calibration 완료, Gold sealed | M4 AI 입력 문맥 확정 전 |
 | AI 입력 문맥 | 조문별 최고 leaf 1개, 최대 5개 조문·60,000자 | 계층 복원과 facet 충족을 평가하지 않은 임시값 |
 | NVIDIA 생성 | adapter와 API 연결 코드는 존재 | hosted 답변 smoke·반복성·법률 품질·비용 미측정 |
 | 실험 E | 계획·runner·산출물 없음 | D 문맥 동결 뒤 별도 설계 필요 |
@@ -102,7 +102,7 @@ D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참
 | M0 | 입력과 상태 감사 | 승인 manifest·active 계획 상태 확인 | 완료 | 인프라 |
 | M1 (완료) | corpus 게시 준비 증명 | CI PostgreSQL 결과와 운영 비파괴 preflight | D·gold 기준 corpus가 DB에 확정됨 | 인프라 |
 | M2 (완료) | D-10 계약 동결 | 10문항 판정·근거·run artifact manifest | 무호출 frozen preflight 통과 | 튜닝 |
-| M3 | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 사용자 확인 포함 소표본 오류 분석 완료 | 튜닝 |
+| M3 (완료) | D-10 raw/R1 calibration | 저장 순위의 직접 근거·잡음 진단과 새 top 5 확인 | 완료 — MRR@10 raw 0.6125 → R1 0.65 | 튜닝 |
 | M4 | D-10 AI 입력 문맥 확정 | 10문항 문맥 계약 v1 | 문맥 충분·부족·차단을 사용자 확인 | 튜닝 |
 | M4.5 (후속 TODO) | 검색 전 질문 라우팅 | clarification·realtime·external-document 경로와 검색 금지/재개 계약 | 라우팅 fixture와 비용 gate 통과 | 튜닝 |
 | M5 | NVIDIA 답변 연결 | 동결 문맥 입력, 답변 동작·인용 gate | bounded hosted smoke 통과 | 인프라 |
@@ -300,16 +300,35 @@ SHA-256 `19b1e40704d38a56751cf7a539a39075af18d1e5bbed8e47b1a3b00dabf82f31`과 �
 5. calibration을 200문항까지 확장하고 gold preflight를 통과한 뒤 test 800문항을 봉인해 제작한다.
 6. 이 절차는 예정 작업 0029가 active로 승격된 경우에만 실행하며 현재 M3의 선행조건이 아니다.
 
-## M3 — D-10 raw/R1 소표본 calibration
+## M3 — D-10 raw/R1 소표본 calibration — 완료(2026-08-07)
 
-1. M2 frozen preflight를 통과한다.
-2. 원본 D-10 raw top 10과 cosine 순서를 baseline으로 읽는다. 새 query embedding·DB 검색은 하지 않는다.
-3. 사용자 확정 라벨로 manual hit@1/3/5/10, 첫 직접 근거 순위, manual reciprocal rank@10, 알려진 무관
-   top 5와 문맥 판정 수만 계산한다.
-4. 같은 후보 집합의 R1 순서를 비교해 `0346`의 8위→2위, hit@3/5 변화와 순위가 나빠진 사례를 함께 본다.
-5. R1 새 top 5에 들어온 원래 6~10위 미판정 후보를 Codex가 원문 검토하고 사용자가 승인·수정·보류한다.
-6. 질문별로 baseline 유지, R1 사용 후보, 라우팅 우선, 추가 문맥 필요 중 하나를 기록한다.
-7. 새 원자 JSON과 `docs/generated/` 요약을 만들되 기존 D-10/R1 artifact는 덮어쓰지 않는다.
+1. [x] M2 frozen preflight를 통과한다. (0026/0027 완료 당시 통과, 2026-08-05)
+2. [x] 원본 D-10 raw top 10과 cosine 순서를 baseline으로 읽는다. 새 query embedding·DB 검색은 하지 않는다.
+   ([0026](../completed/0026-experiment-d-10-manual-review.md) `result.json` 재사용, 새 호출 0회)
+3. [x] 사용자 확정 라벨로 manual hit@1/3/5/10, 첫 직접 근거 순위, manual reciprocal rank@10, 알려진 무관
+   top 5와 문맥 판정 수만 계산한다. raw hit@1/3/5/10 `6/6/6/7`(/10), MRR@10 `0.6125`, known
+   irrelevant@5 `28`.
+4. [x] 같은 후보 집합의 R1 순서를 비교해 `0346`의 8위→2위, hit@3/5 변화와 순위가 나빠진 사례를 함께
+   본다. R1 hit@1/3/5/10 `6/7/7/7`(/10), MRR@10 `0.65`, known irrelevant@5 `18`. **나빠진 문항 0건.**
+5. [x] R1 새 top 5에 들어온 원래 6~10위 미판정 후보를 Codex가 원문 검토하고 사용자가 승인·수정·보류한다.
+   9개 후보(6문항) 전부 [0030 D-10 전수 qrel adjudication](../completed/0030-d-10-full-corpus-qrels-adjudication.md)의
+   sealed Gold에서 이미 relevance `0`(무관)으로 확정됐다 — 별도 review 불필요, hit@k·MRR을 바꾸지 않는다.
+6. [x] 질문별로 baseline 유지, R1 사용 후보, 라우팅 우선, 추가 문맥 필요 중 하나를 기록한다. 6문항
+   baseline=R1 동일, `0346`은 R1 사용, `0605`/`0836`/`0943`은 순위 문제가 아니라 corpus에 positive
+   qrel 자체가 없어 M4.5 라우팅 대상.
+7. [x] `docs/generated/` 요약을 만들되 기존 D-10/R1 artifact는 덮어쓰지 않는다.
+   [experiment-d-10-m3-calibration-summary.md](../../generated/experiment-d-10-m3-calibration-summary.md)
+   — 별도 원자 JSON(SHA 결박 스크립트)은 만들지 않고 기존 0026/0027 artifact와 0030 sealed
+   judgments.jsonl을 재계산 없이 읽어 조합했다. D-full 재개 등으로 이 패턴을 반복해야 하면 그때
+   전용 스크립트로 formalize한다.
+
+`lay-energy-0346`의 0030 Gold 정정(`approved_use_terms` relevance 1→2)은 raw/R1 top 10 후보 집합
+어디에도 없는 provision이라 위 수치에 영향이 없다 — 계약 정합성 정정이지 이 calibration의 입력이
+아니었다.
+
+M3는 같은 10문항을 보며 R1을 만든 calibration이다. `known irrelevant@5` 감소는 새 후보 판정 전 실제
+Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held-out·population 성능을 계산하지 않는다.
+결과만으로 운영 검색 순서를 바꾸거나 Production AI release를 승인하지 않는다.
 
 M3는 같은 10문항을 보며 R1을 만든 calibration이다. `known irrelevant@5` 감소는 새 후보 판정 전 실제
 Precision 개선으로 해석하지 않으며 Evidence Recall·nDCG·facet·held-out·population 성능을 계산하지 않는다.
@@ -557,7 +576,7 @@ go/no-go 조건:
   둔다. query 보강과 D-10 질문 embedding 10개 재실행은 라우팅 뒤 법령 검색 질문이 여전히 부족할 때만
   한 batch로 허용하며 passage embedding과 원본 artifact 변경은 하지 않는다.
 - 2026-08-07: 1,000문항 Gold를 필수 선행조건에서 제거하고 필요 시 예정 작업 0029에서 재개한다. 사용자
-  요청에 따라 D-10 10문항만 [활성 계획 0030](0030-d-10-full-corpus-qrels-adjudication.md)에서 전수 qrel과
+  요청에 따라 D-10 10문항만 [활성 계획 0030](../completed/0030-d-10-full-corpus-qrels-adjudication.md)에서 전수 qrel과
   사용자 adjudication 대상으로 만들며, 승인 전에는 기존 top-10 한정 M2 계약을 유지한다.
 - 2026-08-07: 사용자가 "10문항 결과가 좋아지면 검색기가 실제로 좋아진 것 아니냐"고 질의해 튜닝
   (calibration)과 측정(test)의 차이를 명시적으로 문서화하도록 요청했다. 기존 D-full E1/E2/E3(50 pilot·
@@ -595,6 +614,16 @@ go/no-go 조건:
 - 2026-08-07: D-10 10문항을 현재 3,066 provision 전체와 대조한 30,660개 qrel draft를 만들었다.
   0251·0521의 근거 있음과 추가 사실·corpus 부족 경계를 문서화했으며, 현재 10문항 모두 사용자
   adjudication 대기라 M3와 Gold seal은 실행하지 않았다.
+- 2026-08-07: [0030](../completed/0030-d-10-full-corpus-qrels-adjudication.md)에서 `0346`의 `approved_use_terms`
+  relevance 오채점(1→2)을 사용자 지적으로 정정한 v2 proposal·draft를 만들고 10문항 모두 confirm한 뒤
+  seal했다(`preflight-sealed` → `valid_approved_calibration_gold`). 이어서 M3를 실행했다 — 기존
+  0026/0027 raw/R1 artifact를 새 DB·embedding 호출 없이 재사용해 raw hit@1/3/5/10 `6/6/6/7`, MRR@10
+  `0.6125`, R1 hit@1/3/5/10 `6/7/7/7`, MRR@10 `0.65`, known irrelevant@5 `28→18`을 계산했다. R1이
+  새로 끌어올린 미판정 후보 9개는 0030 sealed Gold에서 전부 relevance 0으로 이미 확정돼 있어 추가
+  검토 없이 M3 step 5를 닫았다. `0346` 정정 대상 provision은 raw/R1 후보 집합 밖이라 이 수치에 영향이
+  없음을 확인했다. 결과를
+  [experiment-d-10-m3-calibration-summary.md](../../generated/experiment-d-10-m3-calibration-summary.md)에
+  기록하고 M3를 완료로 표시했다. M4(AI 입력 문맥 확정)는 아직 실행하지 않았다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 
