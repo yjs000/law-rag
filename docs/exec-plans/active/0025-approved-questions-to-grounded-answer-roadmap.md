@@ -521,8 +521,9 @@ go/no-go 조건:
 - 2026-08-05: D-10 후속 개선으로 검색 전 clarification·realtime·external-document 라우팅을 M4.5 TODO로
   둔다. query 보강과 D-10 질문 embedding 10개 재실행은 라우팅 뒤 법령 검색 질문이 여전히 부족할 때만
   한 batch로 허용하며 passage embedding과 원본 artifact 변경은 하지 않는다.
-- 2026-08-07: 1,000문항 Gold를 필수 선행조건에서 제거하고 필요 시 예정 작업 0029에서 재개한다. 현재는
-  사용자 확인 D-10 10문항의 top-10 한정 라벨을 M2 계약으로 동결하고 M3/M4/E-10 calibration에만 쓴다.
+- 2026-08-07: 1,000문항 Gold를 필수 선행조건에서 제거하고 필요 시 예정 작업 0029에서 재개한다. 사용자
+  요청에 따라 D-10 10문항만 [활성 계획 0030](0030-d-10-full-corpus-qrels-adjudication.md)에서 전수 qrel과
+  사용자 adjudication 대상으로 만들며, 승인 전에는 기존 top-10 한정 M2 계약을 유지한다.
 
 ## 진행 기록
 
