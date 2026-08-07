@@ -362,6 +362,12 @@ D-10 Gold를 v1→v2→v3로 고칠 때마다 매번 새 draft·seal·SHA·desig
   D-full held-out(test) 단계. 이 두 곳만 seal·SHA 결박·decision log 수준을 유지한다.
 - D-10 Gold 자체(v3)는 계속 calibration 데이터이므로, 앞으로 추가 오류를 발견해도 v4 seal
   라운드를 새로 만들지 않는다 — draft judgments를 가볍게 고치고 changelog만 남긴다.
+- **rubric 버전과 판정(calibration) 버전을 구분한다.** `0601`처럼 "relevance 2의 정의는 안 바뀌었는데
+  개별 판정이 틀렸던" 정정은 같은 rubric(`relevance-v1`) 안의 calibration 수정이지 새 rubric
+  version이 아니다. 반대로 "배경 맥락도 2로 친다" → "facet을 직접 서술해야 2"처럼 **relevance 2의
+  정의 자체**가 바뀌는 경우만 `relevance-v2`로 승격한다. v1→v2→v3 draft-id는 전부 `relevance-v1`
+  아래의 calibration 수정이었다 — 이 구분을 몰라서 매번 "새 rubric이 나온 것처럼" 전체를
+  재문서화했다.
 
 ### raw/R1과 A/B는 서로 다른 축이다
 
