@@ -6,10 +6,11 @@ adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라�
 app/main.py 배선 완료 · 평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령
 currency 질문·일반 법적 의무 질문이 잘못 차단되던 것) 타이트닝으로 제거해
 misclassification_rate 0.2857→0.1429, unnecessary_block_rate 0.1429→0(2026-08-08) ·
-NVIDIA API key 실배선 완료(2026-08-08) — 실제 호출로 tier1이 놓친 사례(사업장별 조건부
-질문)를 tier2가 정확히 clarification_required로 잡는 것 확인, D-10 `0111`은 gold와
-다르게 legal_search로 판단(사람 gold와의 불일치, 후속 검토 필요) · fixture 전체 --live
-평가는 무료 티어 공유 용량 제한(503 ResourceExhausted)으로 아직 완주 못 함`
+NVIDIA API key 실배선 완료(2026-08-08) · fixture 14개 전체 --live 완주(재시도 러너,
+2026-08-08): misclassification_rate 0.2143(3/14), unnecessary_block_rate 0.1429(2/14),
+unnecessary_search_rate 0.0714(1/14) — tier1 자체 위양성은 0인데 **tier2 LLM이 새 오분류
+2건(0346·0561, 둘 다 legal_search를 external_document_required로 과대 차단)을 만들어**
+unnecessary_block_rate가 재상승했다 - tier2 calibration 후속 과제로 기록`
 
 착수일: 2026-08-07
 
@@ -481,3 +482,34 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
   reached (33/32)](https://forums.developer.nvidia.com/t/resourceexhausted-worker-local-total-request-limit-reached-33-32/375518),
   [NVIDIA Developer Forums - Request for NVIDIA Build API Rate Limit Increase (40 RPM →
   200 RPM)](https://forums.developer.nvidia.com/t/request-for-nvidia-build-api-rate-limit-increase-40-rpm-200-rpm/377433).
+- 2026-08-08: `scripts/live_fixture_retry_runner.py`(10초 간격, 실패한 케이스만 재시도,
+  최대 30분 캡)를 백그라운드로 돌려 fixture 14개 전체를 `--live`로 완주했다. tier1이
+  4/14를 즉시 처리(타이트닝 이후 mock 평가와 동일한 tier1_resolution_rate 0.2857 - tier1
+  자체 동작은 안 바뀌었다는 뜻), 나머지 10개를 tier2 실제 LLM이 처리했고 그 중 9개는
+  1차 시도, 1개(`lay-energy-0561`)는 `APITimeoutError`로 1회 실패 후 2차 시도에서 성공했다
+  (재시도 러너가 정확히 이 상황을 위해 만든 것 - 실패한 케이스만 다시 물었지 14개를 통째로
+  다시 부르지 않았다).
+
+  **최종 결과**: misclassification_rate **0.2143**(3/14), unnecessary_search_rate
+  0.0714(1/14), unnecessary_block_rate **0.1429**(2/14), tier1_resolution_rate 0.2857,
+  tier2_resolution_rate 0.7143.
+
+  **핵심 발견 — tier2 LLM 자체의 새로운 오분류 패턴**: tier1 위양성은 이번에도 0건이었다
+  (앞서 타이트닝한 게 유효했다는 뜻). 그런데 tier2 LLM이 **새로운 unnecessary_block 2건을
+  만들었다** — 둘 다 legal_search가 정답인데 `external_document_required`로 과대 차단했다.
+  - `lay-energy-0346`("공사비가 어떻게 계산됐는지 어떤 항목을 확인해야 하나요?", confidence
+    0.95) — "확인해야 하나요"를 "내 문서를 대조해야 한다"로 해석한 것으로 보인다.
+  - `lay-energy-0561`("발전량·계약가격·공제액을 어떤 자료와 대조해야 하나요?", confidence
+    0.95) — fixture 작성 당시("자료와 대조 표현이 있지만 D-10 gold는 legal_search로
+    확정") 이미 이 애매함을 예견해 메모해뒀던 바로 그 사례다.
+
+  두 사례 모두 confidence가 낮지 않다(0.95) — tier2가 "확인/대조" 같은 표현을 실제 문서
+  존재 여부와 무관하게 문서 필요 신호로 과대 해석하는 경향이 있어 보인다. 이건 tier1
+  키워드 매칭 때와 **같은 종류의 실수**(표면 표현을 화용론적 판단으로 오해)를 LLM도 할 수
+  있다는 뜻이라 - "LLM이면 다 해결된다"고 가정하면 안 되고, tier2도 자체 calibration이
+  필요하다는 근거다. `lay-energy-0111`은 이전 개별 호출과 같은 이유로 여전히 gold와
+  불일치(legal_search로 판단, gold는 clarification_required)했다.
+
+  fixture 크기가 14개뿐이라 이 패턴이 우연인지 체계적 경향인지는 단정할 수 없다 - 실제
+  운영 tracking(`emit_route_outcome`)이 쌓이거나 fixture를 키운 뒤 재평가가 필요하다.
+  결과는 `route-fixture-v1-results.json`에 저장했다(이제 `LIVE`, `PROVISIONAL` 아님).
