@@ -8,6 +8,10 @@
 - [0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 보류, 실제 일반화·회귀 필요 시만 착수
 - [0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 항목 5(agent context diet) 완료, 나머지(machine-readable rubric·conflict detector·통합 CLI) 미착수
 - [0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 제안됨, 미착수 · tier1 사전 확장 재검토 + 인증·비인증 사용자 이력 검토를 하나의 재검토 라운드로 묶음
+- [0035: 기준일 선택 범위를 오늘까지로 제한](0035-as-of-date-picker-future-limit.md) — 제안됨, 미착수 · 기준일 달력에 `max` 제약 추가
+- [0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리](0036-account-modal-model-label.md) — 제안됨, 미착수 · `gpt-5.6-terra 전용` 문구를 AI 모드 on/off 표시로 교체
+- [0037: 계정 사용 한도 제거 - 토글 가능한 모듈로](0037-account-quota-toggle-off.md) — 제안됨, 미착수 · 로직은 남기고 설정 토글로 끄기, 서버 구현 포함 전체 미착수
+- [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 제안됨, 미착수 · 테스트 선작성 후 통과하도록 구현, 기준(p50/p95/콜드스타트)은 착수 시 확정
 
 ## 등록 계약
 
