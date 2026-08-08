@@ -13,6 +13,7 @@
 - [0037: 계정 사용 한도 제거 - 토글 가능한 모듈로](0037-account-quota-toggle-off.md) — 제안됨, 미착수 · 로직은 남기고 설정 토글로 끄기, 서버 구현 포함 전체 미착수
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 제안됨, 미착수 · 테스트 선작성 후 통과하도록 구현, 기준(p50/p95/콜드스타트)은 착수 시 확정
 - [0039: 구조화된 에러 detail이 "[object Object]"로 표출됨](0039-error-detail-object-shown-as-object-object.md) — 제안됨, 미착수 · `unsupported_corpus_date`/`corpus_unready` 재현 확인, api-client.ts 공용 에러 처리 수정 필요
+- [0040: 탭 재포커스 시 /v1/auth/me 재호출 - 배포 후 검증](0040-verify-auth-rehydration-throttle-in-production.md) — 제안됨, 미착수 · 0034가 아직 미배포라 재현 환경부터 재확인 필요
 
 ## 등록 계약
 
