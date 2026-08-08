@@ -462,3 +462,22 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
   2초 간격을 스크립트에 넣었지만 이 문제 자체는 못 없앴다. 반복 재시도로 무료 자원을
   낭비하지 않기 위해 지금은 중단했고, 전체 14개 배치 실행은 후속 과제로 남긴다(사용량이
   덜한 시간대 재시도, 또는 tier 2 전용으로 덜 붐비는 다른 무료 모델 검토).
+
+  **2026-08-08 웹 조사 — 무료 티어 제한의 정체**: build.nvidia.com/NIM에는 성격이 다른
+  두 제한이 있다는 걸 확인했다.
+  1. **계정 단위 rate limit(~40 RPM)** — `429`로 나타나는, 흔히 알려진 무료 티어 수치.
+     NVIDIA 포럼 모더레이터가 "모델·사용 사례·전체 트래픽량에 따라 달라진다"고 직접
+     확인했다 — 고정값이 아니라 공식 문서화되지 않은 커뮤니티 관측치이며, 무료 티어는
+     상향 요청 경로도 없다.
+  2. **worker 단위 동시성/큐 제한(32) — 우리가 실제로 겪은 것** — `503
+     ResourceExhausted`로 나타나며 계정별 RPM과 별개다. 해당 모델을 서빙하는 backend
+     worker pool의 동시 처리 한도(32)를 넘었다는 뜻이고, 이 pool은 **그 모델을 쓰는
+     모든 무료 사용자가 공유**한다. NVIDIA 개발자 포럼에서 이 32라는 숫자는 공식
+     문서화된 게 아니라 "internal worker/pool 제한"으로만 언급되고, 인기 있는(트래픽이
+     몰리는) 무료 모델에서 특히 자주 발생한다. 즉 우리 API key나 코드 문제가 아니라
+     nemotron-3-ultra 무료 엔드포인트 자체가 다른 사용자 트래픽으로 붐빈 것이다.
+
+  출처: [NVIDIA Developer Forums - ResourceExhausted: Worker local total request limit
+  reached (33/32)](https://forums.developer.nvidia.com/t/resourceexhausted-worker-local-total-request-limit-reached-33-32/375518),
+  [NVIDIA Developer Forums - Request for NVIDIA Build API Rate Limit Increase (40 RPM →
+  200 RPM)](https://forums.developer.nvidia.com/t/request-for-nvidia-build-api-rate-limit-increase-40-rpm-200-rpm/377433).
