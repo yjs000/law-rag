@@ -1,6 +1,9 @@
 # 실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지
 
-상태: 진행 중 — M0~M4 완료(2026-08-07, 승자 R1+A), M4.5 착수(0028 active, route schema 전)
+상태: 진행 중 — M0~M4 완료(2026-08-07, 승자 R1+A), M4.5(0028) tier 1/2 배선·fixture 라이브
+평가 완료(2026-08-08, tier 2 자체 calibration은 후속 과제), M5 항목 1·2·3·4·5·6 실행
+완료(2026-08-08, NVIDIA API key 실배선 + bounded hosted smoke 통과, `answer_timeout_seconds`
+30→60초 수정), M6(실험 E-10) 전 상태
 작성일: 2026-08-04
 소유자: 주 에이전트
 
@@ -461,7 +464,7 @@ query 보강은 라우팅보다 뒤의 조건부 TODO다. 라우팅 결과가 �
 snapshot/profile을 재사용한다. passage embedding, 새 corpus, realtime/external-document 질문의 억지 법령
 검색은 수행하지 않는다. 기존 D-10/D-10-R1 artifact를 덮어쓰지 않고 별도 비교 run으로 기록한다.
 
-## M5 — NVIDIA 답변 연결
+## M5 — NVIDIA 답변 연결 — 완료(2026-08-08)
 
 NVIDIA adapter는 이미 있으므로 새 provider 계층을 만들지 않는다. 다음 최소 변경만 한다.
 
@@ -717,6 +720,28 @@ go/no-go 조건:
   흔히 쓰는 값보다 높아 의도된 값인지 확인이 필요하다는 것도 이때 발견해 `generation_profiles.py`
   주석에 MOCK으로 표시했다. M4.5(0028)는 자체 완료 gate("라우팅 fixture와 비용 gate 통과")를 아직
   통과하지 못했지만, M5는 M4의 동결 검색·문맥 경로를 그대로 쓰는 독립 트랙이라 병행 진행했다.
+- 2026-08-08: 사용자가 `.env.local`에 NVIDIA_API_KEY를 등록해 M5 항목 3(provider
+  `nvidia_nim` 고정)과 항목 6(bounded hosted smoke)을 실행했다. 항목 3은
+  `settings.answer_provider` 기본값을 `nvidia_nim`으로 바꿨다(0028 결정 기록에도 동일 항목
+  기록). 항목 6은 `scripts/hosted_answer_smoke_test.py`로 D-10 legal_search 질문 2개 +
+  의도적 무관 질문 1개를 실제 파이프라인(Postgres 검색 + NVIDIA 생성)에 통과시켰다.
+
+  **발견 — `answer_timeout_seconds` 기본값 30초가 실제로 너무 짧았다**: 첫 실행에서
+  legal_search 질문 2개가 모두 `generation_error`로 fallback됐다. 직접 재현해보니
+  `nemotron-3-ultra-550b-a55b`의 정상 생성 자체가 29.2~36.0초 걸려 30초 timeout에
+  자주 걸렸다 — 답이 틀려서가 아니라 순수 latency 문제였다. 60초로 올리고(`app/settings.py`,
+  `.env.example`, 로컬 `.env.local`) 재현했더니 36.0초로 정상 통과했다. 이 60초도 실측
+  몇 건 기준 추정치라 M6 E1/E2의 p50/p95 latency 기록에서 다시 검증해야 한다. 세 번째
+  질문("냉장고에서 이상한 소리")은 검색은 히트가 나왔지만(코퍼스가 무관 조문을 그나마 가장
+  가까운 것으로 반환) 생성이 grounding gate에서 정상적으로 걸러져 `grounding_failed`
+  fallback으로 끝났다 — 의도한 안전장치가 실제로 작동하는 걸 확인했다.
+  provider-error/timeout 자체의 코드 경로는 이미 mock 기반 단위 테스트
+  (`tests/test_ai_fallback.py`)로 커버돼 있어 실제 장애를 인위로 유발하지는 않았다.
+
+  **부수 발견 — `QuestionResponse.route`가 성공/fallback 경로에서 비어 있었다**: 라우팅
+  결정은 차단된 세 route(`route_blocked_answer`)에만 기록되고 있었고, `legal_search`로
+  통과한 성공/fallback 응답에는 `route` 필드가 안 채워졌다. `route_decision`을 함수
+  스코프로 끌어올려 두 경로 모두에 채우도록 고쳤다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 
