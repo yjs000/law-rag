@@ -80,6 +80,26 @@ export function authEventAction(event: string): "clear" | "hydrate" | "ignore" {
   return "ignore";
 }
 
+export const HYDRATE_THROTTLE_MS = 60_000;
+
+/** Skips redundant `/v1/auth/me` calls from tab-refocus SIGNED_IN noise, unless forced. */
+export function shouldHydrateNow(
+  lastHydrateAt: number,
+  now: number,
+  force: boolean,
+  throttleMs = HYDRATE_THROTTLE_MS,
+): boolean {
+  return force || now - lastHydrateAt >= throttleMs;
+}
+
+/** Keeps the same user reference when the id hasn't changed, so effects keyed on `user` don't refire. */
+export function nextAuthUser(
+  prev: MockUser | null,
+  incoming: MockUser | null,
+): MockUser | null {
+  return prev?.id === incoming?.id ? prev : incoming;
+}
+
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     account: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.7-4 3-6 7-6s6.3 2 7 6" /></>,
@@ -310,14 +330,19 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     let hydrationInFlight = false;
-    const hydrateUser = async () => {
+    let lastHydrateAt = 0;
+    const hydrateUser = async ({ force = false }: { force?: boolean } = {}) => {
       if (hydrationInFlight) return;
+      if (!shouldHydrateNow(lastHydrateAt, Date.now(), force)) return;
       hydrationInFlight = true;
+      lastHydrateAt = Date.now();
       const epoch = ++authEpoch.current;
       setAuthStatus("checking");
       try {
         const storedUser = await getStoredUser();
-        if (active && authEpoch.current === epoch) setUser(storedUser);
+        if (active && authEpoch.current === epoch) {
+          setUser((prev) => nextAuthUser(prev, storedUser));
+        }
       } catch (cause) {
         if (active && authEpoch.current === epoch) {
           setUser(null);
@@ -343,13 +368,13 @@ export default function Home() {
       window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
     }
 
-    void hydrateUser();
+    void hydrateUser({ force: true });
     const { data: { subscription } } = createClient().auth.onAuthStateChange((event: AuthChangeEvent) => {
       const action = authEventAction(event);
       if (action === "clear") {
         clearAuthenticatedWorkspace();
       } else if (action === "hydrate") {
-        void Promise.resolve().then(hydrateUser);
+        void Promise.resolve().then(() => hydrateUser());
       }
     });
     getCorpusStatus().then((status) => {

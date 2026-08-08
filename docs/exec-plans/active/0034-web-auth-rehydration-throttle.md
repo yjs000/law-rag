@@ -1,6 +1,18 @@
 # 0034: 웹 프런트 탭 포커스 시 불필요한 인증·이력 재조회 억제
 
-상태: `제안됨 · 미착수 — 설계 확정, 코드 수정 대기`
+상태: `착수 2026-08-08 — 구현 완료, 완료 조건의 브라우저 재현 검증 대기`
+
+## 진행 기록
+
+- 2026-08-08: 사용자가 착수를 명시해 `todo/`에서 `active/`로 이동. `apps/web/app/page.tsx`에
+  아래 설계대로 구현:
+  - `hydrateUser`가 `{ force }` 옵션을 받고, 마운트 시에만 `force: true`로 호출한다.
+  - throttle·id 비교 판단을 `shouldHydrateNow`/`nextAuthUser` 순수 함수로 분리해
+    `authEventAction`과 같은 방식으로 `apps/web/lib/auth-page-state.test.ts`에서 검증한다
+    (`HYDRATE_THROTTLE_MS` export 포함).
+  - `npm test`(51 passed), `tsc --noEmit` 통과 확인.
+  - 미검증: 실제 브라우저에서 탭 재포커스 시 네트워크 요청이 실제로 억제되는지는
+    dev 서버 preview 환경이 구성되지 않아 아직 확인하지 못했다.
 
 제안 출처: 2026-08-08 사용자가 배포된 `law-rag-web.vercel.app`에서 다른 창에 갔다가
 돌아올 때마다 인증 재검토(`/v1/auth/me`)와 질문 이력 재조회가 반복되는 걸 확인하고,
