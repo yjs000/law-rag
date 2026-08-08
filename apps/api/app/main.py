@@ -15,6 +15,7 @@ from app.adapters.mock_identity import identity_repository
 from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
 from app.adapters.openai_answerer import OpenAIAnswerer, select_generation_hits, validate_draft
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
@@ -37,7 +38,7 @@ from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
-from app.domain.routing import route_tier1, route_tier2
+from app.domain.routing import RouteDecision, route_tier1, route_tier2
 from app.domain.schemas import (
     AiFallbackReason,
     ChecklistDocument,
@@ -272,7 +273,18 @@ async def _answer_question(
         routing_stage.update({"attempted": True, "status": "started"})
         route_decision = route_tier1(payload.question)
         if route_decision is None:
-            route_decision = await route_tier2(payload.question, _route_classifier())
+            try:
+                route_decision = await route_tier2(payload.question, _route_classifier())
+            except Exception:
+                # tier 2 실패(NVIDIA 오류·timeout 등)는 라우팅 실패로 전체 요청을 막지
+                # 않는다 - legal_search로 안전하게 진행한다(0028: 근거 없이 차단 쪽으로
+                # 기본값을 두면 답할 수 있는 질문을 막는 피해가 더 크다).
+                route_decision = RouteDecision(
+                    route="legal_search",
+                    reason_code="tier2_classifier_error",
+                    tier=2,
+                    confidence=0.0,
+                )
         routing_stage.update(
             {
                 "status": "resolved",
@@ -750,10 +762,17 @@ def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
     return OpenAIAnswerer(api_key=settings.openai_api_key or "", model=settings.openai_answer_model)
 
 
-# TODO(0028 M4.5): NVIDIA API key가 배선되면 MockRouteClassifier를 NvidiaNimRouteClassifier로
-# 교체한다 - 그 전까지는 tier 2가 실제 판단을 하지 않으므로 misclassification/비용 게이트
-# 수치는 잠정치다(evaluation/route-fixture-v1.json 평가 결과 참고).
-def _route_classifier() -> MockRouteClassifier:
+# 2026-08-08: NVIDIA API key가 배선되면 실제 NvidiaNimRouteClassifier를 쓴다. key가 없는
+# 환경(로컬 개발, 일부 테스트)에서는 MockRouteClassifier로 물러난다 - route_tier2 실패
+# 자체도 아래 라우팅 블록에서 legal_search로 안전하게 처리한다.
+def _route_classifier() -> MockRouteClassifier | NvidiaNimRouteClassifier:
+    if settings.nvidia_api_key:
+        return NvidiaNimRouteClassifier(
+            api_key=settings.nvidia_api_key,
+            base_url=settings.nvidia_base_url,
+            model=settings.nvidia_route_classifier_model,
+            timeout_seconds=settings.route_classifier_timeout_seconds,
+        )
     return MockRouteClassifier()
 
 

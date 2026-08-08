@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    # 0028 M4.5 tier 2: 답변 생성 모델과 분리된 소형 분류 전용 호출(설계상 요구사항 - 실패
+    # blast radius를 답변 생성과 나눈다). 지금은 무료 티어에서 실제 확인된 nemotron-3-ultra와
+    # 같은 모델을 재사용한다 - 더 작은 모델(nemotron-super-49b 등)이 이 카탈로그에서 실제로
+    # 무료인지 아직 확인 전이라, 확인되지 않은 모델로 바꾸는 대신 검증된 모델을 그대로 쓴다.
+    nvidia_route_classifier_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    route_classifier_timeout_seconds: float = Field(default=15, gt=0, le=60)
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
     answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
     answer_timeout_seconds: float = Field(default=30, gt=0, le=120)

@@ -5,11 +5,53 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
+from app.adapters.mock_route_classifier import MockRouteClassifier
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
 from app.domain.catalog import SourceKind
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
+
+def test_route_classifier_uses_mock_without_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", None)
+    assert isinstance(main_module._route_classifier(), MockRouteClassifier)
+
+
+def test_route_classifier_uses_nvidia_with_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
+    assert isinstance(main_module._route_classifier(), NvidiaNimRouteClassifier)
+
+
+def test_tier2_classifier_failure_falls_back_to_legal_search(monkeypatch) -> None:
+    embedding_calls: list[int] = []
+    search_calls: list[int] = []
+    _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+
+    class FailingClassifier:
+        async def classify(self, question, hint):
+            raise RuntimeError("NVIDIA mock outage")
+
+    monkeypatch.setattr(main_module, "_route_classifier", lambda: FailingClassifier())
+
+    class StubAnswerer:
+        async def answer(self, payload, hits):
+            raise RuntimeError("not exercised")
+
+    monkeypatch.setattr(main_module, "_answerer", lambda: StubAnswerer())
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "태양광 발전사업 허가는 어떻게 받나요?", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    # tier 2 failure degrades to legal_search rather than a 500 - see main.py's routing
+    # block: blocking on an infra error would deny more answerable questions than
+    # searching would incorrectly search unanswerable ones.
+    assert embedding_calls == [1]
+    assert search_calls == [1]
 
 
 def _with_trace(search):
