@@ -1,6 +1,8 @@
 # 0028: 검색 전 질문 라우팅과 조건부 query 보강
 
-상태: `진행 중 · 1~4단계(schema, tier 1, 관측 tracking, tier 2) 완료 · 5단계(tier 3 LLM) 전`
+상태: `진행 중 · schema/tier 1/관측 tracking 완료 · tier 1 사전 v1 질문은행(1,000문항) 전수
+분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM 판단으로 교체 확정,
+adapter 골격 구현 · tier 3(더 어려운 잔여 사례) 미정`
 
 착수일: 2026-08-07
 
@@ -113,36 +115,127 @@ query 보강은 라우팅 구현과 평가를 통과한 뒤에도 직접 근거 
   0029의 독립 Gold를 먼저 활성화한다.
 - [해소, 2026-08-07] realtime 공식 source·external document 보안 계약은 더 이상 미결정이 아니다 —
   둘 다 수집하지 않고 결정적 차단 메시지로 끝내기로 확정했다(위 "받지 않는 두 경로" 참고).
-- threshold(tier 2 유사도 컷오프, tier 3 확신도 컷오프)는 여전히 미결정이다. 동결 10문항의
-  partial·clarification·corpus 밖 사례를 보기 전에 평가 방법과 비용 gate를 고정하며 일반 threshold는
-  D-full 전 확정하지 않는다.
+- [2026-08-08 갱신] tier 2 유사도 컷오프는 더 이상 미결정 항목이 아니다 — 임베딩 유사도를 결정
+  gate로 쓰는 설계 자체를 폐기했다(아래 "문제 탐색과 결론" 참고). 남은 threshold는 tier 2 LLM
+  판단의 confidence 컷오프(있다면)와 tier 3 확신도 컷오프이며, 둘 다 동결 10문항의 partial·
+  clarification·corpus 밖 사례를 보기 전에는 확정하지 않는다.
 
-### 라우터 구현 방식(제안, 2026-08-07) — 확신 가능한 경로는 코드, 애매한 것만 LLM
+### 라우터 구현 방식 — tier 1/2 확정(2026-08-08), tier 3 미정
 
-세 단계를 순서대로 시도하고, 앞 단계가 확신 있게 판정하면 뒷 단계를 호출하지 않는다. LLM 호출은
-corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
+세 단계를 순서대로 시도하고, 앞 단계가 확신 있게 판정하면 뒷 단계를 호출하지 않는다는 원칙(LLM
+호출은 corpus 크기가 아니라 **모호함의 크기**에 비례)은 그대로다. 다만 아래 "문제 탐색과 결론"의
+calibration 결과로 tier 2의 방법 자체가 바뀌었다 — 자세한 내용은 해당 섹션을 참고.
 
-1. **결정적 규칙(비용 0)** — 질문 텍스트에 대한 패턴 매칭만으로 확신 가능한 경우:
-   - `realtime_required`: "올해"·"현재"·"지금"·특정 연도+"가격/예산/고장/복구" 같은 시점 의존 표현.
-   - `external_document_required`: "계약서"·"정산서"·"공사비 산출서"·"청구서" 등 문서 대조를 요구하는
-     표현.
-   - `clarification_required`의 일부: 질문 유형별 필수 슬롯(설비용량·전압·판매방식 등) 정의와 대조해
-     명백히 빠진 경우.
+1. **tier 1: 결정적 규칙(비용 0, 확정)** — 질문 텍스트에 대한 패턴 매칭만으로 확신 가능한 경우:
+   - `realtime_required`: 시점·개인 계정 상태 의존 표현. v1 질문은행 1,000문항 전수 분석으로
+     검증·확장된 사전(아래 "tier 1 사전 확장" 참고).
+   - `external_document_required`: "계약서"·"정산서"·"보증서" 등 문서 대조를 요구하는 표현.
+   - `clarification_required`의 일부: "~에 따라 달라지나요" 같은 조건부 비교 구문.
    여기서 잡히면 embedding·검색·LLM 호출 없이 바로 라우팅을 확정한다(0028 본문의 비용 계약과 동일).
-2. **근접 예시 분류(저비용, LLM 아님)** — 1단계가 확신하지 못하면, D-10 10문항처럼 이미 라우팅이
-   확정된 소수 예시 질문의 embedding과 유사도를 비교해 가장 가까운 예시의 route를 따른다. 새 LLM
-   호출 없이 기존 임베딩 인프라만 재사용한다.
-3. **소형 LLM classifier(최후 수단)** — 1·2단계 모두 확신하지 못하면 그때만 작은 분류 전용 호출을 한다.
-   전체 corpus나 design doc를 주지 않고 질문 원문 + 4개 route 정의 10줄 미만을 준다. **2단계의 가장
-   가까운 예시 route와 유사도 점수도 힌트로 함께 넣는다** — 이미 계산된 결과라 추가 비용이 없고,
-   버리면 정보 손실이다. 다만 anchoring bias를 막기 위해 프롬프트에 "이건 참고용 힌트이며 최종
-   판단은 질문 원문을 근거로 독립적으로 하라"고 명시하고, 유사도가 낮을 때는 힌트를 약하게 신뢰하도록
-   지시한다. 이 호출 자체는 법률 답변 생성 모델과 분리하고, 결과(route, 확신도, 근거, 2단계 힌트와의
-   일치 여부)를 관측 로그에 남긴다. 2단계와 3단계가 자주 불일치하면 2단계 예시 세트를 늘릴 신호로
-   쓴다.
+2. **tier 2: LLM 판단(확정, 2026-08-08)** — 1단계가 확신하지 못하면 질문 원문 + route 정의
+   10줄 미만을 소형 LLM 호출에 직접 판단시킨다. 기존에 별도 gate였던 "근접 예시 유사도"는
+   폐기하지 않고 판단을 돕는 **참고용 힌트**로 프롬프트에 포함한다(자세한 이유와 구현은 아래
+   "문제 탐색과 결론" 참고).
+3. **tier 3(최후 수단, 미정)** — tier 2 LLM 판단도 못 잡는 잔여 사례를 어떻게 처리할지는 아직
+   정하지 않았다. INTENT-SIM류(여러 가정으로 답을 시뮬레이션해 갈리는지 확인)가 후보지만, tier 2
+   운영 데이터가 쌓이기 전에는 착수하지 않는다.
 
-평가 fixture는 각 단계에서 잡히는 사례를 구분해 기록한다 — 1·2단계 커버리지가 높을수록 3단계
+평가 fixture는 각 단계에서 잡히는 사례를 구분해 기록한다 — tier 1 커버리지가 높을수록 tier 2
 호출률(=비용)이 낮아지므로, 이 비율 자체가 라우터 품질 지표다.
+
+## 문제 탐색과 결론 (2026-08-08)
+
+### 문제: 임베딩 유사도는 화용론적 충분성을 재지 못한다
+
+2026-08-07 tier 2 calibration(위 "실제 calibration 실행 결과")에서 확인된 실패는 threshold
+튜닝으로 고칠 수 있는 문제가 아니었다. `0201`("허가나 신고가 필요한지 어떻게 구분하나요")과
+`0251`("...에 따라 어떻게 달라지나요")은 어휘가 거의 같아 임베딩이 가깝게 붙지만, 실제로 다른 건
+주제가 아니라 "일반 설명으로 충분한가(legal_search) vs 답이 갈려서 먼저 물어야 하는가
+(clarification_required)"라는 **화용론적(pragmatic) 판단**이다.
+
+NVIDIA nemotron-3-embed 같은 검색용 임베딩 모델은 "이 두 텍스트가 같은 주제를 다루는가"를
+학습하도록 만들어졌다. 라우팅이 실제로 필요로 하는 "이 질문에 이미 검색을 실행할 만큼 충분한
+정보가 담겼는가"는 이 모델이 애초에 학습받은 목적이 아니다 — 그래서 유사도 크기와 route 정답
+여부가 이번 calibration 표본에서 사실상 무관했던 것이다(오답 매칭 0.7185가 정답 매칭 전체
+0.326~0.6947보다 순위가 높았다).
+
+### 공인 문헌 조사
+
+같은 문제를 다루는 두 연구 분야를 확인했다 — 둘 다 **임베딩 유사도를 판단 메커니즘으로 쓰지
+않는다**는 점이 공통적이다.
+
+- **"검색을 실행해도 되는가" = adaptive retrieval.** Self-RAG(Asai et al., 2023)는 모델이
+  reflection token을 출력해 검색 필요 여부를 직접 판단하게 한다. Adaptive-RAG(Jeong et al.,
+  2024)는 질문 복잡도를 예측하는 별도 학습 분류기로 검색 전략을 라우팅한다. FLARE는 생성 중
+  토큰 신뢰도가 낮아지는 지점에서 능동적으로 검색을 트리거한다. 셋 다 "판단"을 모델 출력이나
+  생성 확신도로 만들지, 최근접 이웃 거리로 만들지 않는다.
+- **"지금 사용자에게 물어봐야 하는가" = clarification necessity detection.** ClariQ/Qulac
+  (Aliannejadi et al., 2019), AmbigQA(Min et al., 2020) 등은 "clarification이 필요한가"를
+  별도 판단 단계로 분리하는 공통 프레임워크를 쓴다. INTENT-SIM(Kuhn et al., 2023, "Clarify
+  When Necessary")은 이 판단을 **의도(intent)에 대한 엔트로피**로 추정한다 — 같은 질문에 대해
+  서로 다른 암묵적 가정 하에서 답을 시뮬레이션해보고, 답이 갈리면(엔트로피 높음) clarification이
+  필요하다고 본다. 이 역시 임베딩 거리가 아니라 **모델이 직접 답을 시도해 갈리는지 확인하는
+  방식**이다.
+
+### 결론과 확정 사항
+
+1. **tier 1 (결정적 규칙, 확정)** — 실시간/외부문서 키워드와 조건부 비교 구문처럼 순수
+   어휘·문법 신호는 여전히 규칙으로 0원에 잡는다. 다만 손으로 나열한 표면형은 활용형과 corpus
+   실제 표현을 놓친다는 게 확인되어(아래 "tier 1 사전 확장" 참고), 이제 corpus 전수 분석으로
+   검증·확장한 사전을 쓴다.
+2. **tier 2 (embedding 최근접 gate → LLM 판단, 확정)** — 기존 tier 2("근접 예시 분류 + threshold
+   gate")는 폐기한다. 대신 Self-RAG 스타일로 **질문 원문 + route 정의 10줄 미만을 소형 LLM 호출에
+   직접 판단시킨다.** 기존 tier 2가 계산하던 최근접 예시와 유사도는 버리지 않고 프롬프트 안에
+   "참고용 힌트이며 최종 판단의 근거로 쓰지 말 것"이라는 명시적 경고와 함께 넣는다 — 이미 계산된
+   결과라 추가 비용이 없고, anchoring bias만 프롬프트로 통제한다. 이렇게 하면 기존에 별도
+   단계였던 "tier 2 근접 예시"와 "tier 3 소형 LLM"이 하나로 합쳐진다: LLM 판단이 최종 결정권을
+   갖고, 임베딩 유사도는 그 판단의 입력 신호 중 하나로 격하된다.
+3. **tier 3 (미정)** — INTENT-SIM처럼 "여러 가정 하에 답을 시뮬레이션해 갈리는지로 판단"하는
+   방식은 tier 2 LLM 판단이 실제로 못 잡는 잔여 사례가 tracking으로 쌓인 뒤 재검토한다. 지금은
+   비용 대비 효과를 판단할 데이터가 없어 착수하지 않는다.
+
+### tier 1 사전 확장 — v1 질문은행(1,000문항) 전수 분석
+
+한국어는 조사·어미 활용이 많아 표면형 나열은 금방 한계에 부딪힌다(다르다/다른가요/다릅니다/
+달라요/달라지는지...). `kiwipiepy`(Kiwi, LGPL, 순수 pip 설치, JVM 불필요 — Vercel 서버리스
+Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용형을 나열하지 않아도 된다. 학습된
+분류 모델(BERT류)은 지금 채택하지 않는다 — fixture가 D-10 10개뿐이라 tier 2가 겪은 것과 같은
+"라벨 부족" 문제가 재발하기 때문이다. 순수 규칙 기반 사전이 지금 단계의 데이터량에 맞는 방법이다.
+
+`scripts/build_tier1_term_dictionary.py`가
+[experiment-d-lay-energy-query-bank-v1-draft.json](../../../apps/api/evaluation/experiment-d-lay-energy-query-bank-v1-draft.json)의
+1,000문항 전체를 Kiwi로 형태소 분석해
+[tier1-term-dictionary-analysis-v1.json](../../../apps/api/evaluation/tier1-term-dictionary-analysis-v1.json)을
+만든다. 결과:
+
+- 기존 키워드 목록의 corpus 적중률이 낮았다(realtime 3.3%, document 2.8%) — 활용형 문제가
+  아니라 목록 자체가 corpus의 실제 표현을 많이 놓치고 있었다는 뜻이다.
+- "현재"·"지금"·"최근" 단독 어간이 등장한 문항 15개를 **전수 검토**(표본이 아니라 전부)한 결과
+  전부 "현재 대기 순서"·"현재 계약 조건"·"현재 명의"처럼 개인 계정·시점 상태를 묻는 질문이라
+  세 어간 모두 `_REALTIME_KEYWORDS`에 추가했다.
+- `서`·`증`으로 끝나는 명사 후보(인증서·보증서·계산서·확인서 등)는 자동으로 채택하지 않고
+  전부 읽어서 검토했다. "인증서"는 실제로는 REC(신재생에너지 공급인증서) 발급 절차를 묻는
+  문항에 쏠려 있어 법령으로 설명 가능한 절차 질문이었고, "계산서"도 "달라지나요"·"무엇을 내야
+  하나요"처럼 요건을 묻는 절차형 질문이라 **제외**했다. 명확히 "내가 가진 문서를 대조해야
+  한다"는 의미로 쓰인 "보증서"만 채택했다. 빈도 1인 확인서·통지서·동의서는 근거 부족으로 보류.
+- 조건부 비교 어간 후보(달라지·다르·따르·나뉘) 중 "따르"("~에 따라"의 활용형 자체)와 "나뉘"
+  ("종류에 따라 어떻게 나뉘나요"처럼 일반적 분류를 묻는 질문에도 나타남, 즉 legal_search
+  0201류와 구분이 안 됨)는 **채택하지 않았다** — 이 둘을 단독 신호로 추가하면 정확히 이 계획이
+  경계하는 "주제 유사와 화용론적 판단을 혼동하는" 실수를 다시 반복하게 된다. 기존
+  `match_conditional_variance_phrase`(에 따라...달라/다른가/다릅) 정규식만 유지한다.
+
+빈도 기반 후보 추출은 자동화했지만 채택 여부는 전부 사람이 읽고 판단했다 — 사전 구축 자체도
+"표면 어휘가 곧 화용론적 의미"라고 가정하지 않는다는 원칙을 지켰다.
+
+### tier 2 구현 방식(확정, 2026-08-08)
+
+`app/domain/routing.py`에 `RouteJudgment`, `RouteClassifier`(Protocol), `build_tier2_prompt`,
+`route_tier2`(async, LLM 호출 기반)를 추가했다. `app/adapters/nvidia_nim_route_classifier.py`가
+`NvidiaNimAnswerer`와 같은 guided_json 패턴으로 `NvidiaNimRouteClassifier`를 제공하되, 법률
+답변 생성 모델과는 별도 client/model이라 라우팅 오판이 답변 생성에 번지지 않는다.
+`cosine_similarity`/`nearest_example`은 그대로 남아 있고, tier 2 호출 전에 계산해 프롬프트에
+힌트로 전달하는 용도로 재배치됐다. 실제 API key·모델 선정·설정 배선(`app/settings.py`)은 아직
+하지 않았다 — active 승격 시 실행 순서에 포함한다.
 
 ## 세부 구현 계획 (active 승격 시 실행 순서)
 
@@ -150,12 +243,13 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
    external_document_required | legal_search`, `reason_code`, `tier`(1/2/3 어디서 잡혔는지),
    `confidence`, `missing_fields`(clarification 한정)를 `app/domain/routing.py`의 `RouteDecision`
    dataclass로 고정했다.
-2. **tier 1 결정적 규칙** — 완료(2026-08-07, `app/domain/routing.py`). 시점 의존 키워드 사전
-   (realtime), 문서 키워드 사전(external document)을 구현하고 테스트 8개를 통과시켰다.
+2. **tier 1 결정적 규칙** — 완료(2026-08-07, `app/domain/routing.py`), 2026-08-08 v1
+   질문은행(1,000문항) 전수 분석으로 사전 확장 완료(위 "tier 1 사전 확장" 참고). 시점 의존
+   키워드 사전(realtime), 문서 키워드 사전(external document)을 구현하고 테스트를 통과시켰다.
    **clarification은 tier 1에 슬롯 사전을 손으로 만들지 않는다** — "어느 질문 유형에 어떤 슬롯이
    필요한가"는 이미 질문은행의 `scenario_family_id`·`missing_user_facts`에 있지만, 새 질문이 어느
-   family에 속하는지는 tier 2(embedding 유사도)가 있어야 알 수 있다. 그래서 clarification 판정은
-   기본적으로 tier 2·3에서 하고, tier 1의 clarification 사전은 **아래 3단계 tracking으로 실제
+   family에 속하는지는 tier 2(LLM 판단)가 있어야 알 수 있다. 그래서 clarification 판정은
+   기본적으로 tier 2에서 하고, tier 1의 clarification 사전은 **아래 3단계 tracking으로 실제
    데이터를 모은 뒤** 자주 나오는 패턴만 추려서 추가한다(하드코딩 슬롯 나열이 아니라 관측 기반).
 3. **관측 tracking 인프라** — tier 1 구현 직후, tier 2/3을 만들기 전에 먼저 넣는다. 이후 모든 실제
    질문이 처음부터 추적되게 하기 위해서다. `app/observability.py`의 기존
@@ -167,10 +261,10 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
    하는지"를 알려주는 입력이 된다. 실제 문구(용어사전)까지 필요해지면, 새 raw-text 로그를 만들지 않고
    이미 동의를 받은 인증 사용자의 기존 질문 이력 저장소(1년 보존, 계정 삭제 시 삭제)를 사람이 검토하며
    샘플링한다 — D-10 검토와 같은 방식.
-4. **tier 2 근접 예시 분류** — 완료(2026-08-07, `app/domain/routing.py`의 `route_tier2`/
-   `nearest_example`/`cosine_similarity`). D-10 10문항 + v3 Gold의 answerability·insufficient_reason
-   에서 도출한 route(clarification: `0251`·`0111`, realtime: `0605`·`0836`, 나머지 legal_search — 이
-   10문항엔 `external_document_required` 실례가 없다)를 fixture로 저장했다.
+4. **tier 2 (superseded 설계) 근접 예시 gate — 2026-08-07 완료, 2026-08-08 폐기.** D-10 10문항 +
+   v3 Gold의 answerability·insufficient_reason에서 도출한 route(clarification: `0251`·`0111`,
+   realtime: `0605`·`0836`, 나머지 legal_search — 이 10문항엔 `external_document_required` 실례가
+   없다)를 fixture로 저장하고 threshold gate를 구현했었다.
 
    **실제 calibration 실행 결과**(NIM 배치 호출 1회, 새 테스트 질문 10개, 기존 D-10 query vector
    cache 재사용): 유사도만으로는 신뢰 가능/불가능을 깨끗이 못 가른다 — clarification 테스트 질문
@@ -178,22 +272,22 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
    **유사도 0.7185로 legal_search 예시(`0201`)에 잘못 매칭**됐는데, 이는 이 배치의 **정답 매칭
    6개 전부(0.326~0.6947)보다 높은 순위 1위** 유사도였다. 즉 유사도 크기와 정답 여부가 이 표본에서는
    사실상 무관했다 — 처음 `TIER2_CONFIDENCE_THRESHOLD = 0.70`으로 잡았던 값은 0.7185보다 낮아 이
-   오류를 막지 못하는 버그였고, 이후 0.75로 정정했다. 이 값에서는 10문항 중 옳고 그름 상관없이
-   **아무 것도 threshold를 못 넘는다** — tier 2 커버리지가 지금은 사실상 0%라는 뜻이며, 이건 낮춰서
-   "고칠" 튜닝 대상이 아니라 fixture가 10개뿐인 현재의 정직한 상태다.
+   오류를 막지 못하는 버그였고, 이후 0.75로 정정했으나 그 값에서는 10문항 중 옳고 그름 상관없이
+   아무 것도 threshold를 못 넘어 tier 2 커버리지가 사실상 0%였다. **원인 분석과 결론은 위 "문제
+   탐색과 결론" 참고** — threshold 튜닝이 아니라 판단 메커니즘 자체(임베딩 유사도 → LLM 판단)를
+   바꿔야 하는 문제였다. `TIER2_CONFIDENCE_THRESHOLD` 상수와 threshold gate형 `route_tier2`는
+   코드에서 제거했고, `nearest_example`/`cosine_similarity`는 tier 2 LLM 판단의 힌트 계산용으로
+   남겼다.
 
-   **원인**: 임베딩 모델은 "같은 주제인가"를 판별하도록 학습됐지 "이 질문에 이미 답할 수 있는 정보가
-   충분한가"라는 화용론적 판단을 하도록 학습되지 않았다. `0201`("허가나 신고가 필요한지 어떻게
-   구분하나요")과 `0251`("...에 따라 어떻게 달라지나요")은 어휘가 거의 같아서(태양광·허가·신고·필요)
-   임베딩이 가깝게 붙지만, 실제로 다른 건 주제가 아니라 "일반 설명으로 충분한가 vs 답이 갈려서 먼저
-   물어야 하는가"라는 판단이다. 이 판단은 tier 1/2가 못 잡고 tier 3(추론)가 필요한 영역으로 남긴다.
-
-   **tier 1로 부분 해결**: `0251`의 "~에 따라 달라지나요/다른가요/다릅니다" 조건부 비교 구문은 순수
-   문법 패턴이라 임베딩과 무관하게 정규식으로 잡을 수 있어 `match_conditional_variance_phrase`로
-   추가했다. 다만 `0111`처럼 이 구문을 안 쓰는 clarification 질문은 여전히 못 잡는 부분 해결이다.
-5. **tier 3 소형 LLM classifier** — prompt template(질문 원문 + route 정의 10줄 + tier 2 힌트)을
-   작성하고, 법률 답변 생성 모델과 별도 경량 모델/설정을 쓴다. 결과와 tier 2 일치 여부를 3단계 관측
-   스키마에 포함한다.
+   **tier 1로 부분 해결**(그대로 유효): `0251`의 "~에 따라 달라지나요/다른가요/다릅니다" 조건부
+   비교 구문은 순수 문법 패턴이라 임베딩과 무관하게 정규식으로 잡을 수 있어
+   `match_conditional_variance_phrase`로 추가했다. 다만 `0111`처럼 이 구문을 안 쓰는 clarification
+   질문은 여전히 못 잡는 부분 해결이다 — 이런 잔여 사례가 tier 2 LLM 판단이 필요한 이유다.
+5. **tier 2 LLM 판단 (신규 설계, 확정 · 골격 구현 2026-08-08)** — `RouteJudgment`,
+   `RouteClassifier`, `build_tier2_prompt`, async `route_tier2`를 `app/domain/routing.py`에,
+   `NvidiaNimRouteClassifier` adapter를 `app/adapters/nvidia_nim_route_classifier.py`에 추가했다
+   (설계는 위 "tier 2 구현 방식" 참고). **미완료**: 실제 API key·모델 선정·`app/settings.py` 배선,
+   라우팅 파이프라인 진입점 연결, tier 3 fallback 여부 결정.
 6. **터미널 응답 구현** — `realtime_required`·`external_document_required`는 위 결정적 메시지를
    그대로 렌더링(embedding·검색·LLM 호출 0회)하고, `clarification_required`는 기존 "비용 최소화
    결정" 계약대로 원 질문+누락 필드 재제출 템플릿을 렌더링한다.
@@ -261,3 +355,21 @@ corpus 크기가 아니라 **모호함의 크기**에 비례해야 한다.
   달라지나요/다른가요" 조건부 비교 구문처럼 순수 문법 신호는 tier 1 정규식으로 옮겨 부분적으로
   보완했다(`match_conditional_variance_phrase`). fixture가 D-10보다 커지기 전까지 threshold를 최종
   확정하지 않는다.
+- 2026-08-08: 사용자 요청으로 2026-08-07 calibration 실패 원인을 공인 문헌과 대조해 "문제 탐색과
+  결론" 섹션으로 정리했다. 결론: 임베딩 유사도는 "주제가 같은가"를 재는 도구고, 라우팅이 필요한
+  건 "이 질문에 이미 충분한 정보가 있는가"라는 화용론적 판단이라 구조적으로 안 맞는다(Self-RAG,
+  Adaptive-RAG, ClariQ/Qulac, INTENT-SIM 등 문헌 모두 이 판단을 임베딩 거리가 아니라 모델 판단이나
+  답변 시뮬레이션의 엔트로피로 만든다). 이에 따라 tier 2를 "embedding 최근접 + threshold gate"에서
+  "질문 원문 + route 정의를 소형 LLM에 직접 판단시키고, 기존 최근접 예시 유사도는 참고용 힌트로만
+  넣는" 방식으로 교체하기로 확정했다(tier 3는 미정으로 남긴다). `TIER2_CONFIDENCE_THRESHOLD`와
+  threshold gate형 `route_tier2`를 제거하고 `RouteJudgment`/`RouteClassifier`/`build_tier2_prompt`/
+  async `route_tier2`와 `NvidiaNimRouteClassifier` adapter 골격을 추가했다(API key·설정 배선은
+  아직 안 함).
+- 2026-08-08: tier 1 사전을 "2천 개 질문"이 아니라 실제로 저장소에 있는 v1 질문은행
+  1,000문항(experiment-d-lay-energy-query-bank-v1-draft.json) 전수를 Kiwi(kiwipiepy)로 형태소
+  분석해 검증·확장했다 — 사용자가 처음 말한 "2천 개"는 저장소에 존재하지 않아 확인 후 1,000개로
+  진행하기로 정정했다. `scripts/build_tier1_term_dictionary.py`로 빈도 기반 후보를 자동 추출했지만
+  채택은 전부 사람이 직접 읽고 판단했다(예: "인증서"는 REC 발급 절차 질문에 쏠려 있어 실제로는
+  법령으로 설명 가능한 절차 질문이라 제외, "나뉘"는 legal_search 0201류의 일반 분류 질문에도
+  나타나 조건부 비교 신호로 채택하지 않음) — 자동 빈도 추출을 최종 판단으로 쓰면 이 계획이 경계하는
+  "주제 유사와 화용론적 판단의 혼동"을 사전 구축 단계에서 반복하게 되기 때문이다.
