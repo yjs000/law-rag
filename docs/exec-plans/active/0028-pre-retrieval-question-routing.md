@@ -4,7 +4,9 @@
 분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM 판단으로 교체 확정,
 adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라우팅 파이프라인
 app/main.py 배선 완료(tier 2는 NVIDIA API key 미배선으로 MockRouteClassifier 임시 사용) ·
-평가 fixture(14 케이스) 구축·실행 완료, misclassification_rate 0.2857은 API key 배선
+평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령 currency 질문·일반 법적
+의무 질문이 잘못 차단되던 것) 타이트닝으로 제거해 misclassification_rate 0.2857→0.1429,
+unnecessary_block_rate 0.1429→0(2026-08-08) · 남은 misclassification 0.1429는 API key 배선
 전 잠정치`
 
 착수일: 2026-08-07
@@ -308,17 +310,29 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
    [route-fixture-v1.json](../../../apps/api/evaluation/route-fixture-v1.json)에 D-10 10문항
    전체와 경계 사례 4개(총 14 케이스)를 만들고
    [evaluate_routing_fixture.py](../../../apps/api/scripts/evaluate_routing_fixture.py)로
-   실행했다. 결과(`route-fixture-v1-results.json`): misclassification_rate 0.2857(4/14),
-   unnecessary_search_rate 0.1429, unnecessary_block_rate 0.1429, tier1_resolution_rate
-   0.4286, tier2_resolution_rate 0.5714. 오분류 4건은 전부 **의도적으로 넣은 경계
-   사례**다 — ① `0111`과 `boundary-clarification-without-conditional-phrase`는 tier1 정규식이
-   못 잡는 조건부 질문을 tier2(mock)가 힌트 없이 `legal_search`로 기본 처리해 놓친 사례,
-   ② `boundary-document-keyword-false-positive`("계약서를 꼭 써야 하는 법적 의무가 있나요")와
-   `boundary-realtime-keyword-false-positive`("현재 시행 중인 법")는 tier1 키워드가 단어 존재만
-   보고 오작동하는, 이미 알려진 한계를 그대로 드러낸 사례다. **이 수치는 잠정치다** — tier2가
-   `MockRouteClassifier`라 실제 LLM 판단이 아니다. NVIDIA API key를 배선한 뒤
-   `evaluate_routing_fixture.py`를 다시 실행해서 misclassification_rate·tier2_resolution_rate를
-   갱신해야 한다(`app/main.py`의 `_route_classifier()` TODO 참고).
+   실행했다. 1차 결과(`route-fixture-v1-results.json`): misclassification_rate 0.2857(4/14),
+   unnecessary_search_rate 0.1429, **unnecessary_block_rate 0.1429**, tier1_resolution_rate
+   0.4286, tier2_resolution_rate 0.5714.
+
+   **2026-08-08 사용자 지적 — tier1 타이트닝**: `unnecessary_block_rate`(법령으로 답할 수
+   있는 질문을 잘못 차단하는 비율)가 0이 아니었다. `boundary-document-keyword-false-positive`
+   ("계약서를 꼭 써야 하는 법적 의무가 있나요")와 `boundary-realtime-keyword-false-positive`
+   ("현재 시행 중인 신재생에너지법의 허가 절차")가 각각 "계약서"·"현재" 단어 존재만으로
+   tier1에 잘못 차단됐다. "정말 답할 수 없는 것만 타이트하게 거른다"는 방향에 따라 두 가지를
+   고쳤다: ① `match_realtime_personal_state_phrase`로 시점어(현재/지금/최근/요즘) 단독
+   매칭을 버리고 개인·계정 상태 명사(순서·계약·명의·소유자 등, corpus 표본 15문항에서
+   확인된 공기어)와의 12자 이내 근접 매칭으로 좁히면서, "시행/유효한/법령/법률/규정/기준일"이
+   바로 뒤에 오면 애초에 제외(법령 currency 질문 구분). ② 문서 키워드에
+   `_GENERAL_LEGAL_REQUIREMENT_INQUIRY_PATTERN`("법적 의무가 있나요" 류) 제외 규칙을
+   추가해 "법이 요구하는가"를 묻는 일반 질문과 "내 문서를 대조해달라"를 구분. 재실행 결과:
+   misclassification_rate 0.2857→**0.1429**(2/14), **unnecessary_block_rate 0.1429→0**.
+   남은 오분류 2건(`0111`, `boundary-clarification-without-conditional-phrase`)은 둘 다
+   `unnecessary_search`(검색 쪽으로 실패) 방향이지 `unnecessary_block`이 아니다 — tier1
+   정규식이 못 잡는 조건부 질문을 tier2(mock)가 힌트 없이 `legal_search`로 기본 처리해서
+   생기며, 실제 LLM 판단이 붙으면 해소될 것으로 예상한다. **이 수치는 여전히 잠정치다** —
+   tier2가 `MockRouteClassifier`라 실제 LLM 판단이 아니다. NVIDIA API key를 배선한 뒤
+   `evaluate_routing_fixture.py`를 다시 실행해서 갱신해야 한다(`app/main.py`의
+   `_route_classifier()` TODO 참고).
 8. **관측 로그 최종 검증 — 완료(2026-08-08)** — `emit_route_outcome()`을 `app/main.py`의 라우팅
    결정 직후에 연결했다. `RouteOutcomeEvent`는 `request_id`·`route`·`tier`·`reason_code`·
    `confidence`·`missing_field_categories`만 담고 질문 원문·자유 텍스트는 받지 않는다(개인정보
