@@ -2,7 +2,10 @@
 
 상태: `진행 중 · schema/tier 1/관측 tracking 완료 · tier 1 사전 v1 질문은행(1,000문항) 전수
 분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM 판단으로 교체 확정,
-adapter 골격 구현 · tier 3(더 어려운 잔여 사례) 미정`
+adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라우팅 파이프라인
+app/main.py 배선 완료(tier 2는 NVIDIA API key 미배선으로 MockRouteClassifier 임시 사용) ·
+평가 fixture(14 케이스) 구축·실행 완료, misclassification_rate 0.2857은 API key 배선
+전 잠정치`
 
 착수일: 2026-08-07
 
@@ -286,19 +289,46 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
 5. **tier 2 LLM 판단 (신규 설계, 확정 · 골격 구현 2026-08-08)** — `RouteJudgment`,
    `RouteClassifier`, `build_tier2_prompt`, async `route_tier2`를 `app/domain/routing.py`에,
    `NvidiaNimRouteClassifier` adapter를 `app/adapters/nvidia_nim_route_classifier.py`에 추가했다
-   (설계는 위 "tier 2 구현 방식" 참고). **미완료**: 실제 API key·모델 선정·`app/settings.py` 배선,
-   라우팅 파이프라인 진입점 연결, tier 3 fallback 여부 결정.
-6. **터미널 응답 구현** — `realtime_required`·`external_document_required`는 위 결정적 메시지를
-   그대로 렌더링(embedding·검색·LLM 호출 0회)하고, `clarification_required`는 기존 "비용 최소화
-   결정" 계약대로 원 질문+누락 필드 재제출 템플릿을 렌더링한다.
-7. **평가 fixture와 비용 gate** — D-10 10문항에 각 route별 경계 사례(예: 문서 키워드가 있지만
-   법령으로도 답 가능한 혼합 질문)를 추가해 오분류율·불필요 검색률·tier별 호출 비율을 계산하고
-   사전 확정 gate를 통과해야 다음 단계로 간다. 3단계 tracking 누계로 tier 1 clarification 사전 후보를
-   함께 검토한다.
-8. **관측 로그 최종 검증** — 3단계에서 만든 tracking이 route·tier·confidence·reason_code만 남기고
-   질문 원문·사용자가 채운 설비 정보·문서 내용이 로그에 없는지 재확인한다(개인정보 불변조건).
-9. **통합 테스트** — 네 route 각각의 정상·실패·경계 케이스와 clarification 재제출 end-to-end 흐름을
-   검증한다.
+   (설계는 위 "tier 2 구현 방식" 참고). **2026-08-08 사용자 결정**: 실제 NVIDIA API key는 아직
+   배선하지 않고 `app/adapters/mock_route_classifier.py`의 `MockRouteClassifier`로 파이프라인을
+   먼저 완성한다 — 힌트가 있으면 힌트를 그대로 따르고, 없으면 항상 `legal_search`로 기본
+   처리한다(다른 세 route는 검색을 완전히 막으므로, 근거 없이 차단 쪽으로 기본값을 두면 답할 수
+   있는 질문을 막는 피해가 검색 쪽 기본값보다 크다고 판단했다). **tier 3는 사용하지 않기로
+   확정**했다 — INTENT-SIM류는 tier 2 운영 데이터가 쌓인 뒤 재검토 대상으로 미룬다.
+6. **터미널 응답 구현 — 완료(2026-08-08)** — `app/application/answering.py`의
+   `route_blocked_answer()`가 `realtime_required`·`external_document_required`는 결정적
+   차단 메시지를(embedding·검색·LLM 호출 0회), `clarification_required`는 기존 "비용 최소화
+   결정" 계약대로 원 질문+누락 필드 재제출 템플릿을 렌더링한다. `app/main.py`의
+   `_answer_question()`에서 `route_tier1`→`route_tier2`를 embedding보다 먼저 호출하도록
+   배선했다. **범위 축소 결정**: 지금은 `answer_mode="terra"`(AI 경로)에만 적용한다 —
+   `search_only` 모드는 원문을 사용자가 직접 대조하는 모드라 D-10에서 발견된 "무관 법령이 AI
+   문맥에 섞이는" 문제 자체가 없고, 기존 `search_only` 테스트 범위를 이번 변경에서 건드리지
+   않기 위해서다. `search_only`까지 넓히는 건 별도 결정 필요.
+7. **평가 fixture와 비용 gate — 완료(2026-08-08, 잠정치)**
+   [route-fixture-v1.json](../../../apps/api/evaluation/route-fixture-v1.json)에 D-10 10문항
+   전체와 경계 사례 4개(총 14 케이스)를 만들고
+   [evaluate_routing_fixture.py](../../../apps/api/scripts/evaluate_routing_fixture.py)로
+   실행했다. 결과(`route-fixture-v1-results.json`): misclassification_rate 0.2857(4/14),
+   unnecessary_search_rate 0.1429, unnecessary_block_rate 0.1429, tier1_resolution_rate
+   0.4286, tier2_resolution_rate 0.5714. 오분류 4건은 전부 **의도적으로 넣은 경계
+   사례**다 — ① `0111`과 `boundary-clarification-without-conditional-phrase`는 tier1 정규식이
+   못 잡는 조건부 질문을 tier2(mock)가 힌트 없이 `legal_search`로 기본 처리해 놓친 사례,
+   ② `boundary-document-keyword-false-positive`("계약서를 꼭 써야 하는 법적 의무가 있나요")와
+   `boundary-realtime-keyword-false-positive`("현재 시행 중인 법")는 tier1 키워드가 단어 존재만
+   보고 오작동하는, 이미 알려진 한계를 그대로 드러낸 사례다. **이 수치는 잠정치다** — tier2가
+   `MockRouteClassifier`라 실제 LLM 판단이 아니다. NVIDIA API key를 배선한 뒤
+   `evaluate_routing_fixture.py`를 다시 실행해서 misclassification_rate·tier2_resolution_rate를
+   갱신해야 한다(`app/main.py`의 `_route_classifier()` TODO 참고).
+8. **관측 로그 최종 검증 — 완료(2026-08-08)** — `emit_route_outcome()`을 `app/main.py`의 라우팅
+   결정 직후에 연결했다. `RouteOutcomeEvent`는 `request_id`·`route`·`tier`·`reason_code`·
+   `confidence`·`missing_field_categories`만 담고 질문 원문·자유 텍스트는 받지 않는다(개인정보
+   불변조건 유지). 별도 후속 항목: 익명 사용자의 fallback/생성 실패 사유는 아직 분석 가능한
+   형태로 안 남는다 — `app/observability.py`의 TODO(2026-08-08) 참고.
+9. **통합 테스트 — 완료(2026-08-08)** —
+   [test_routing_pipeline.py](../../../apps/api/tests/test_routing_pipeline.py)에 realtime·
+   external-document 차단, clarification 재제출, 일반 legal_search 통과, `search_only` 모드가
+   라우팅에 안 걸리는 경계 케이스를 end-to-end로 검증했다(전부 embedding/search 호출 수까지
+   확인).
 
 ## active 승격 조건
 
@@ -373,3 +403,17 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
   법령으로 설명 가능한 절차 질문이라 제외, "나뉘"는 legal_search 0201류의 일반 분류 질문에도
   나타나 조건부 비교 신호로 채택하지 않음) — 자동 빈도 추출을 최종 판단으로 쓰면 이 계획이 경계하는
   "주제 유사와 화용론적 판단의 혼동"을 사전 구축 단계에서 반복하게 되기 때문이다.
+- 2026-08-08: 사용자가 M4.5 게이트 작업을 계획대로 진행하기로 결정하면서 세 가지를 확정했다.
+  ① tier 3는 사용하지 않는다 — INTENT-SIM류는 tier 2 운영 데이터가 쌓인 뒤 재검토. ② NVIDIA
+  API key는 지금 배선하지 않고 `MockRouteClassifier`(힌트 있으면 힌트 따름, 없으면 항상
+  `legal_search`)로 파이프라인을 먼저 완성한다. ③ 평가 fixture는 제안해서 만들고, 비용 게이트는
+  잠정치로 진행하되 API key 배선 뒤 다시 계산해야 함을 명시한다. 이 결정에 따라
+  `app/main.py`의 `_answer_question()`에 `route_tier1`→`route_tier2`를 embedding 앞에
+  배선하고(단 `answer_mode="terra"`에만 적용, `search_only`는 범위 밖으로 남김),
+  `route_blocked_answer()`로 세 차단 route의 결정적 응답을 구현했다. `route-fixture-v1.json`
+  (D-10 10개 + 경계 사례 4개)을 만들어 `evaluate_routing_fixture.py`로 실행한 결과
+  misclassification_rate 0.2857 — 오분류 4건 전부 의도적으로 넣은 경계 사례(tier1 키워드
+  오탐 2건, tier2 mock의 힌트 없는 기본값이 놓친 조건부 질문 2건)라 예상과 일치했다. 이
+  수치는 tier2가 mock이라 API key 배선 뒤 다시 재야 하는 잠정치임을 스크립트·fixture·이
+  문서 세 곳에 모두 명시했다. `emit_route_outcome()`도 이번에 `app/main.py`에 연결해 라우팅
+  결정이 관측 가능해졌다.
