@@ -286,6 +286,15 @@ async def _answer_question(
                     tier=2,
                     confidence=0.0,
                 )
+        # mock_classifier 설명은 디버그용 placeholder지 실제 판단 근거가 아니다 - 사용자
+        # 응답에도, 저장되는 diagnostics에도 남기지 않는다(NVIDIA_API_KEY 없는 로컬 개발
+        # 에서만 발생 가능).
+        real_explanation = (
+            route_decision.explanation
+            if route_decision.explanation
+            and not route_decision.explanation.startswith("mock_classifier:")
+            else None
+        )
         routing_stage.update(
             {
                 "status": "resolved",
@@ -293,18 +302,17 @@ async def _answer_question(
                 "tier": route_decision.tier,
                 "reason_code": route_decision.reason_code,
                 "confidence": route_decision.confidence,
+                # 2026-08-08 (사용자 요청 - tier2 calibration tracking): tier2 LLM의 판단
+                # 근거를 diagnostics에 남겨 인증 사용자 이력(_save_if_authenticated ->
+                # postgres_identity.save_question, 이미 동의된 저장소)에서 D-10처럼 사람이
+                # 표본 검토할 수 있게 한다. 새 저장소·새 동의 흐름을 만들지 않고 기존
+                # diagnostics 저장 경로를 그대로 재사용한다.
+                "explanation": real_explanation,
             }
         )
         emit_route_outcome(str(payload.client_request_id), route_decision)
         if route_decision.route != "legal_search":
-            # mock_classifier 설명은 디버그용 placeholder지 실제 판단 근거가 아니다 -
-            # 사용자에게 보이면 안 된다(NVIDIA_API_KEY 없는 로컬 개발에서만 발생 가능).
-            user_facing_explanation = (
-                route_decision.explanation
-                if route_decision.explanation
-                and not route_decision.explanation.startswith("mock_classifier:")
-                else None
-            )
+            user_facing_explanation = real_explanation
             blocked = route_blocked_answer(
                 payload,
                 route_decision.route,
