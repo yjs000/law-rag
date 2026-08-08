@@ -36,10 +36,25 @@ class RouteDecision:
 # Tier 1: deterministic keyword rules. Confident matches skip tiers 2/3
 # entirely (0 embedding/search/LLM calls).
 
+# 2026-08-08: v1 질문은행(1,000문항, lay-energy-query-bank-v1-draft)을 question_sha256
+# 기준으로 결정적 분할한 BUILD 200문항만 Kiwi로 형태소 분석해 후보를 채굴하고, 나머지
+# EVAL 800문항은 사전에 반영하지 않고 커버리지 확인에만 쓴다(scripts/
+# build_tier1_term_dictionary.py, evaluation/tier1-term-dictionary-analysis-v1.json) -
+# 사전 구축에 쓴 데이터로 다시 사전을 "검증"하는 leakage를 피하기 위해서다. BUILD 200에서
+# "현재" 단독 어간이 등장한 문항 2개를 전수 검토한 결과 둘 다 "현재 계약 조건"·"현재
+# 소유자"처럼 법령 corpus가 답할 수 없는 개인·시점 상태 질문이라 추가했다. "지금"·"최근"은
+# 전체 1,000문항 중에서는 유효한 사례가 있었지만 BUILD 200에는 한 번도 나타나지 않아 -
+# 이번 분할 기준으로는 채택 근거가 없어 표준 문구(지금 가격/지금 시세/최근 가격 등, 원래
+# 손으로 쓴 항목)만 남기고 단독 어간은 넣지 않았다. document 목록은 서·증으로 끝나는 명사
+# 후보 중 BUILD 200에서 나온 것만 검토했다 - "인증서"(3건)는 전부 REC(신재생에너지
+# 공급인증서) 발급 절차를 묻는 문항이라 법령으로 설명 가능한 절차 질문으로 판단해 제외했고,
+# "보증서"(1건)는 "계약서와 보증서에서 수리 책임을 확인" 같은 실제 문서 대조 질문이라
+# 채택했다.
 _REALTIME_KEYWORDS: tuple[str, ...] = (
     "올해",
     "이번 달",
     "이번달",
+    "현재",
     "현재 가격",
     "지금 가격",
     "요즘 가격",
@@ -62,6 +77,7 @@ _EXTERNAL_DOCUMENT_KEYWORDS: tuple[str, ...] = (
     "산출내역서",
     "견적서",
     "명세서",
+    "보증서",
 )
 
 

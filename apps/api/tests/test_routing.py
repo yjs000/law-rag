@@ -24,6 +24,22 @@ def test_external_document_keyword_is_detected() -> None:
     )
 
 
+def test_realtime_stem_from_corpus_analysis_is_detected() -> None:
+    # 2026-08-08 tier 1 term-dictionary build (build/eval split of v1 질문은행): bare
+    # 현재 hits in the 200-question BUILD set were all personal/point-in-time status
+    # checks, not stable law - see scripts/build_tier1_term_dictionary.py.
+    assert match_realtime_keywords("전력망 연결 신청 후 현재 대기 순서를 어디서 확인하나요?") == (
+        "현재",
+    )
+
+
+def test_document_keyword_from_corpus_analysis_is_detected() -> None:
+    assert match_external_document_keywords(
+        "인버터가 고장 났지만 설치업체가 폐업한 상황인데, 계약서와 보증서에서 수리 책임을 "
+        "어떻게 확인하나요?"
+    ) == ("계약서", "보증서")
+
+
 def test_question_with_neither_keyword_type_has_no_matches() -> None:
     assert match_realtime_keywords("태양광 발전사업 허가는 어떻게 받나요?") == ()
     assert match_external_document_keywords("태양광 발전사업 허가는 어떻게 받나요?") == ()

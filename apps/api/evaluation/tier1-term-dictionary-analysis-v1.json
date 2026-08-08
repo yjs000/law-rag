@@ -1,0 +1,757 @@
+{
+  "corpus_size": 1000,
+  "build": {
+    "build_set_size": 200,
+    "temporal_deictic_candidates": {
+      "올해": 3,
+      "현재": 2
+    },
+    "document_type_candidates": {
+      "계약서": 8,
+      "인증서": 3,
+      "견적서": 1,
+      "보증서": 1
+    },
+    "document_type_excluded_false_positives": [
+      "등록증",
+      "신고서",
+      "인가서",
+      "허가서"
+    ],
+    "conditional_variance_stem_candidates": {
+      "달라지": 9,
+      "따르": 5,
+      "다르": 4,
+      "나뉘": 3
+    },
+    "top_100_content_stems": [
+      {
+        "stem": "확인",
+        "tag": "NNG",
+        "document_frequency": 96
+      },
+      {
+        "stem": "사업",
+        "tag": "NNG",
+        "document_frequency": 51
+      },
+      {
+        "stem": "설비",
+        "tag": "NNG",
+        "document_frequency": 46
+      },
+      {
+        "stem": "계약",
+        "tag": "NNG",
+        "document_frequency": 40
+      },
+      {
+        "stem": "태양광",
+        "tag": "NNG",
+        "document_frequency": 35
+      },
+      {
+        "stem": "전기",
+        "tag": "NNG",
+        "document_frequency": 35
+      },
+      {
+        "stem": "발전소",
+        "tag": "NNG",
+        "document_frequency": 34
+      },
+      {
+        "stem": "설치",
+        "tag": "NNG",
+        "document_frequency": 29
+      },
+      {
+        "stem": "신청",
+        "tag": "NNG",
+        "document_frequency": 28
+      },
+      {
+        "stem": "필요",
+        "tag": "NNG",
+        "document_frequency": 23
+      },
+      {
+        "stem": "발전",
+        "tag": "NNG",
+        "document_frequency": 21
+      },
+      {
+        "stem": "공사",
+        "tag": "NNG",
+        "document_frequency": 19
+      },
+      {
+        "stem": "판매",
+        "tag": "NNG",
+        "document_frequency": 17
+      },
+      {
+        "stem": "에너지",
+        "tag": "NNG",
+        "document_frequency": 16
+      },
+      {
+        "stem": "먼저",
+        "tag": "MAG",
+        "document_frequency": 15
+      },
+      {
+        "stem": "운영",
+        "tag": "NNG",
+        "document_frequency": 15
+      },
+      {
+        "stem": "업체",
+        "tag": "NNG",
+        "document_frequency": 15
+      },
+      {
+        "stem": "추가",
+        "tag": "NNG",
+        "document_frequency": 14
+      },
+      {
+        "stem": "방식",
+        "tag": "NNG",
+        "document_frequency": 14
+      },
+      {
+        "stem": "허가",
+        "tag": "NNG",
+        "document_frequency": 14
+      },
+      {
+        "stem": "가능",
+        "tag": "NNG",
+        "document_frequency": 14
+      },
+      {
+        "stem": "지원",
+        "tag": "NNG",
+        "document_frequency": 14
+      },
+      {
+        "stem": "준비",
+        "tag": "NNG",
+        "document_frequency": 13
+      },
+      {
+        "stem": "계획",
+        "tag": "NNG",
+        "document_frequency": 13
+      },
+      {
+        "stem": "용량",
+        "tag": "NNG",
+        "document_frequency": 13
+      },
+      {
+        "stem": "조건",
+        "tag": "NNG",
+        "document_frequency": 13
+      },
+      {
+        "stem": "시작",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "재생",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "절차",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "요청",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "신고",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "안전",
+        "tag": "NNG",
+        "document_frequency": 12
+      },
+      {
+        "stem": "기관",
+        "tag": "NNG",
+        "document_frequency": 11
+      },
+      {
+        "stem": "문제",
+        "tag": "NNG",
+        "document_frequency": 11
+      },
+      {
+        "stem": "사업자",
+        "tag": "NNG",
+        "document_frequency": 11
+      },
+      {
+        "stem": "자료",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "부지",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "진행",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "궁금하",
+        "tag": "VA",
+        "document_frequency": 10
+      },
+      {
+        "stem": "기존",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "검사",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "사용",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "범위",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "바꾸",
+        "tag": "VV",
+        "document_frequency": 10
+      },
+      {
+        "stem": "연결",
+        "tag": "NNG",
+        "document_frequency": 10
+      },
+      {
+        "stem": "서류",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "규모",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "요금",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "비용",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "정보",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "달라지",
+        "tag": "VV",
+        "document_frequency": 9
+      },
+      {
+        "stem": "동의",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "장소",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "관련",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "이용",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "다시",
+        "tag": "MAG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "기록",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "저장",
+        "tag": "NNG",
+        "document_frequency": 9
+      },
+      {
+        "stem": "건물",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "수익",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "지역",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "바뀌",
+        "tag": "VV",
+        "document_frequency": 8
+      },
+      {
+        "stem": "기한",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "안내",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "전력",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "계약서",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "점검",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "발급",
+        "tag": "NNG",
+        "document_frequency": 8
+      },
+      {
+        "stem": "상담",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "문의",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "줄이",
+        "tag": "VV",
+        "document_frequency": 7
+      },
+      {
+        "stem": "공장",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "직접",
+        "tag": "MAG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "생산",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "담당",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "토지",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "패널",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "생기",
+        "tag": "VV",
+        "document_frequency": 7
+      },
+      {
+        "stem": "주차장",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "보완",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "가동",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "발전량",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "가격",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "정산",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "주택",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "충전기",
+        "tag": "NNP",
+        "document_frequency": 7
+      },
+      {
+        "stem": "충전",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "배터리",
+        "tag": "NNG",
+        "document_frequency": 7
+      },
+      {
+        "stem": "함께",
+        "tag": "MAG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "위험",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "순서",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "만들",
+        "tag": "VV",
+        "document_frequency": 6
+      },
+      {
+        "stem": "자격",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "주인",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "개인",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "나오",
+        "tag": "VV",
+        "document_frequency": 6
+      },
+      {
+        "stem": "인버터",
+        "tag": "NNP",
+        "document_frequency": 6
+      },
+      {
+        "stem": "장치",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "책임",
+        "tag": "NNG",
+        "document_frequency": 6
+      },
+      {
+        "stem": "거래",
+        "tag": "NNG",
+        "document_frequency": 6
+      }
+    ]
+  },
+  "eval": {
+    "eval_set_size": 800,
+    "realtime_hit_rate": 0.0437,
+    "document_hit_rate": 0.0262,
+    "conditional_variance_hit_rate": 0.0037,
+    "realtime_sample": [
+      "전력망 연결 신청 후 오랫동안 순서를 기다리고 있는데, 현재 대기 순서와 예상 연결 시점을 어디서 확인하나요?",
+      "전력회사 전기와 옥상 태양광을 함께 쓰는 건물에서 정전이나 고장이 나면, 직접 만지지 않고 두 전원이 안전하게 끊어지도록 어떤 차단 장치와 전문가 점검이 필요한가요?",
+      "태양광 공사가 끝나 인계 자료를 받으려는데, 운전·점검·고장 대응을 위해 꼭 받아야 할 자료는 무엇인가요?",
+      "태양광 설치 후 성능이 견적보다 낮게 나오고 있는데, 날씨·그늘·고장 중 원인을 구분하려면 어떤 자료가 필요한가요?",
+      "고정가격 계약 후 발전소 준공이 늦어지고 있는데, 현재 준공기한과 연장 안내는 어디서 확인하나요?"
+    ],
+    "document_sample": [
+      "시공업체가 제안한 태양광 사업을 진행해도 될지 고민인데, 사업성 계산서와 계약서 등 어떤 자료를 받아 확인해야 하나요?",
+      "발전사업 경험이 전혀 없어 대행업체를 써야 할지 궁금한데, 수수료·업무 범위·환불 조건을 계약서에서 어떻게 확인하나요?",
+      "토지 소유자의 동의를 받을 때 공사·철거·원상복구·임대기간을 계약서에 어떻게 정해야 하나요?",
+      "허가받기 전에 시공업체와 공사 계약을 맺으려는데, 허가 실패 때 처리와 비용 부담을 계약서에 어떻게 적어야 하나요?",
+      "전력망 연결이 확정되기 전에 공사를 시작했다가 연결이 취소되거나 용량이 줄면 공사비를 누가 부담하는지 계약서에서 무엇을 확인해야 하나요?"
+    ],
+    "conditional_variance_sample": [
+      "소규모 설비는 용량이나 전기 사용 방식에 따라 허가와 신고가 어떻게 달라지나요?",
+      "REC 거래 수수료와 세금 처리가 궁금한데, 거래 방식에 따라 세금계산서 처리가 달라지나요?",
+      "농업 부산물로 바이오에너지를 생산하려는데, 전기·열·가스·연료 중 무엇을 만들지에 따라 연결과 판매 계약이 어떻게 달라지나요?"
+    ]
+  },
+  "build_question_ids": [
+    "lay-energy-0003",
+    "lay-energy-0018",
+    "lay-energy-0019",
+    "lay-energy-0022",
+    "lay-energy-0024",
+    "lay-energy-0027",
+    "lay-energy-0030",
+    "lay-energy-0031",
+    "lay-energy-0035",
+    "lay-energy-0040",
+    "lay-energy-0046",
+    "lay-energy-0054",
+    "lay-energy-0056",
+    "lay-energy-0057",
+    "lay-energy-0059",
+    "lay-energy-0061",
+    "lay-energy-0063",
+    "lay-energy-0069",
+    "lay-energy-0076",
+    "lay-energy-0081",
+    "lay-energy-0084",
+    "lay-energy-0087",
+    "lay-energy-0097",
+    "lay-energy-0098",
+    "lay-energy-0100",
+    "lay-energy-0105",
+    "lay-energy-0106",
+    "lay-energy-0117",
+    "lay-energy-0121",
+    "lay-energy-0123",
+    "lay-energy-0129",
+    "lay-energy-0135",
+    "lay-energy-0136",
+    "lay-energy-0142",
+    "lay-energy-0147",
+    "lay-energy-0151",
+    "lay-energy-0163",
+    "lay-energy-0168",
+    "lay-energy-0171",
+    "lay-energy-0172",
+    "lay-energy-0177",
+    "lay-energy-0186",
+    "lay-energy-0188",
+    "lay-energy-0192",
+    "lay-energy-0194",
+    "lay-energy-0196",
+    "lay-energy-0204",
+    "lay-energy-0209",
+    "lay-energy-0212",
+    "lay-energy-0215",
+    "lay-energy-0216",
+    "lay-energy-0225",
+    "lay-energy-0233",
+    "lay-energy-0235",
+    "lay-energy-0236",
+    "lay-energy-0240",
+    "lay-energy-0244",
+    "lay-energy-0247",
+    "lay-energy-0255",
+    "lay-energy-0256",
+    "lay-energy-0261",
+    "lay-energy-0266",
+    "lay-energy-0267",
+    "lay-energy-0269",
+    "lay-energy-0273",
+    "lay-energy-0276",
+    "lay-energy-0281",
+    "lay-energy-0282",
+    "lay-energy-0285",
+    "lay-energy-0289",
+    "lay-energy-0291",
+    "lay-energy-0299",
+    "lay-energy-0303",
+    "lay-energy-0305",
+    "lay-energy-0308",
+    "lay-energy-0320",
+    "lay-energy-0324",
+    "lay-energy-0337",
+    "lay-energy-0348",
+    "lay-energy-0364",
+    "lay-energy-0365",
+    "lay-energy-0375",
+    "lay-energy-0378",
+    "lay-energy-0387",
+    "lay-energy-0389",
+    "lay-energy-0392",
+    "lay-energy-0395",
+    "lay-energy-0407",
+    "lay-energy-0409",
+    "lay-energy-0412",
+    "lay-energy-0418",
+    "lay-energy-0423",
+    "lay-energy-0425",
+    "lay-energy-0428",
+    "lay-energy-0439",
+    "lay-energy-0446",
+    "lay-energy-0459",
+    "lay-energy-0463",
+    "lay-energy-0470",
+    "lay-energy-0474",
+    "lay-energy-0489",
+    "lay-energy-0493",
+    "lay-energy-0507",
+    "lay-energy-0510",
+    "lay-energy-0520",
+    "lay-energy-0523",
+    "lay-energy-0524",
+    "lay-energy-0526",
+    "lay-energy-0529",
+    "lay-energy-0535",
+    "lay-energy-0536",
+    "lay-energy-0543",
+    "lay-energy-0548",
+    "lay-energy-0549",
+    "lay-energy-0552",
+    "lay-energy-0554",
+    "lay-energy-0556",
+    "lay-energy-0564",
+    "lay-energy-0567",
+    "lay-energy-0572",
+    "lay-energy-0575",
+    "lay-energy-0578",
+    "lay-energy-0583",
+    "lay-energy-0591",
+    "lay-energy-0598",
+    "lay-energy-0604",
+    "lay-energy-0606",
+    "lay-energy-0612",
+    "lay-energy-0638",
+    "lay-energy-0640",
+    "lay-energy-0641",
+    "lay-energy-0642",
+    "lay-energy-0649",
+    "lay-energy-0655",
+    "lay-energy-0663",
+    "lay-energy-0664",
+    "lay-energy-0669",
+    "lay-energy-0678",
+    "lay-energy-0683",
+    "lay-energy-0685",
+    "lay-energy-0690",
+    "lay-energy-0701",
+    "lay-energy-0709",
+    "lay-energy-0714",
+    "lay-energy-0730",
+    "lay-energy-0737",
+    "lay-energy-0739",
+    "lay-energy-0745",
+    "lay-energy-0758",
+    "lay-energy-0763",
+    "lay-energy-0766",
+    "lay-energy-0767",
+    "lay-energy-0769",
+    "lay-energy-0773",
+    "lay-energy-0777",
+    "lay-energy-0780",
+    "lay-energy-0781",
+    "lay-energy-0791",
+    "lay-energy-0794",
+    "lay-energy-0796",
+    "lay-energy-0801",
+    "lay-energy-0804",
+    "lay-energy-0805",
+    "lay-energy-0809",
+    "lay-energy-0812",
+    "lay-energy-0815",
+    "lay-energy-0824",
+    "lay-energy-0825",
+    "lay-energy-0827",
+    "lay-energy-0830",
+    "lay-energy-0832",
+    "lay-energy-0833",
+    "lay-energy-0834",
+    "lay-energy-0847",
+    "lay-energy-0849",
+    "lay-energy-0850",
+    "lay-energy-0860",
+    "lay-energy-0867",
+    "lay-energy-0873",
+    "lay-energy-0876",
+    "lay-energy-0882",
+    "lay-energy-0897",
+    "lay-energy-0908",
+    "lay-energy-0919",
+    "lay-energy-0920",
+    "lay-energy-0924",
+    "lay-energy-0925",
+    "lay-energy-0934",
+    "lay-energy-0939",
+    "lay-energy-0951",
+    "lay-energy-0953",
+    "lay-energy-0956",
+    "lay-energy-0962",
+    "lay-energy-0963",
+    "lay-energy-0964",
+    "lay-energy-0969",
+    "lay-energy-0982",
+    "lay-energy-0986",
+    "lay-energy-0993",
+    "lay-energy-0994"
+  ]
+}
