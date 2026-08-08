@@ -513,3 +513,12 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
   fixture 크기가 14개뿐이라 이 패턴이 우연인지 체계적 경향인지는 단정할 수 없다 - 실제
   운영 tracking(`emit_route_outcome`)이 쌓이거나 fixture를 키운 뒤 재평가가 필요하다.
   결과는 `route-fixture-v1-results.json`에 저장했다(이제 `LIVE`, `PROVISIONAL` 아님).
+- 2026-08-08: 사용자 제안으로 `realtime_required`·`external_document_required`의 막다른
+  차단 메시지(0028 "받지 않는 두 경로")를 개선했다 - tier 2 LLM 호출이 이미 만들어내는
+  판단 근거 자연어(`RouteJudgment.reason`)를 그동안 버리고 있었는데, 이걸 `RouteDecision.
+  explanation`으로 실어 `route_blocked_answer()`의 고정 문구 뒤에 "(참고: ...)"로 덧붙이게
+  했다 - **추가 LLM 호출 없이** 질문에 맞춘 구체적 안내를 준다. 후속 재시도 흐름은 여전히
+  안 만든다(그 설계는 그대로) - 이건 막다른 길의 메시지 품질만 개선한 것이다.
+  `MockRouteClassifier`의 `reason`은 디버그 placeholder("mock_classifier:" 접두사)라
+  사용자에게 노출되지 않도록 `app/main.py`에서 걸러낸다(실제로는 NVIDIA_API_KEY 없는 로컬
+  개발에서만 발생 가능).
