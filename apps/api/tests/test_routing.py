@@ -1,9 +1,11 @@
 import pytest
 
 from app.domain.routing import (
-    TIER2_CONFIDENCE_THRESHOLD,
+    NearestExampleMatch,
     RouteDecision,
     RouteExample,
+    RouteJudgment,
+    build_tier2_prompt,
     cosine_similarity,
     match_conditional_variance_phrase,
     match_external_document_keywords,
@@ -99,13 +101,6 @@ def test_tier1_routes_conditional_variance_phrase_as_clarification() -> None:
     assert decision.tier == 1
 
 
-def test_tier2_threshold_excludes_the_known_false_positive_similarity() -> None:
-    # 2026-08-07 calibration: a wrong match scored 0.7185, higher than every correct
-    # match in the batch (best correct: 0.6947). The threshold must clear this with
-    # margin, not sit just above one observed bad value.
-    assert TIER2_CONFIDENCE_THRESHOLD > 0.7185
-
-
 def test_route_decision_rejects_out_of_range_confidence() -> None:
     with pytest.raises(ValueError, match="confidence"):
         RouteDecision(
@@ -148,28 +143,80 @@ def test_nearest_example_picks_the_closest_vector() -> None:
     assert match.similarity > 0.5
 
 
-def test_route_tier2_confirms_route_above_threshold() -> None:
-    decision, match = route_tier2(
-        (0.05, 0.95), (_LEGAL_SEARCH_EXAMPLE, _CLARIFICATION_EXAMPLE), threshold=0.7
-    )
-
-    assert decision is not None
-    assert decision.route == "clarification_required"
-    assert decision.tier == 2
-    assert decision.missing_fields == ("발전설비용량", "전압")
-    assert match.example_id == "lay-energy-0251"
-
-
-def test_route_tier2_falls_through_below_threshold_but_returns_hint() -> None:
-    decision, match = route_tier2(
-        (0.6, 0.4), (_LEGAL_SEARCH_EXAMPLE, _CLARIFICATION_EXAMPLE), threshold=0.9
-    )
-
-    assert decision is None
-    assert match.route == "legal_search"
-    assert match.similarity < 0.9
-
-
 def test_route_tier2_requires_at_least_one_example() -> None:
     with pytest.raises(ValueError, match="at least one"):
         nearest_example((1.0, 0.0), ())
+
+
+class _FakeClassifier:
+    """Test double for RouteClassifier - records the hint it was called with."""
+
+    def __init__(self, judgment: RouteJudgment) -> None:
+        self.judgment = judgment
+        self.received_hint: NearestExampleMatch | None | str = "not called"
+
+    async def classify(
+        self, question: str, hint: NearestExampleMatch | None
+    ) -> RouteJudgment:
+        self.received_hint = hint
+        return self.judgment
+
+
+async def test_route_tier2_llm_judgment_becomes_route_decision() -> None:
+    classifier = _FakeClassifier(
+        RouteJudgment(
+            route="clarification_required",
+            confidence=0.9,
+            reason="설비용량에 따라 답이 갈린다",
+            missing_fields=("발전설비용량",),
+        )
+    )
+
+    decision = await route_tier2("용량에 따라 허가와 신고가 어떻게 달라지나요?", classifier)
+
+    assert decision.route == "clarification_required"
+    assert decision.tier == 2
+    assert decision.reason_code == "tier2_llm_judgment"
+    assert decision.confidence == 0.9
+    assert decision.missing_fields == ("발전설비용량",)
+
+
+async def test_route_tier2_passes_nearest_example_hint_to_classifier() -> None:
+    classifier = _FakeClassifier(
+        RouteJudgment(route="legal_search", confidence=0.6, reason="일반 설명 가능")
+    )
+    hint = nearest_example((0.9, 0.1), (_LEGAL_SEARCH_EXAMPLE, _CLARIFICATION_EXAMPLE))
+
+    await route_tier2("허가나 신고가 필요한지 어떻게 구분하나요?", classifier, hint=hint)
+
+    assert classifier.received_hint == hint
+
+
+async def test_route_tier2_works_without_a_hint() -> None:
+    classifier = _FakeClassifier(
+        RouteJudgment(route="legal_search", confidence=0.6, reason="일반 설명 가능")
+    )
+
+    await route_tier2("허가나 신고가 필요한지 어떻게 구분하나요?", classifier)
+
+    assert classifier.received_hint is None
+
+
+def test_route_judgment_rejects_out_of_range_confidence() -> None:
+    with pytest.raises(ValueError, match="confidence"):
+        RouteJudgment(route="legal_search", confidence=1.5, reason="x")
+
+
+def test_tier2_prompt_marks_hint_as_advisory_not_authoritative() -> None:
+    hint = nearest_example((0.9, 0.1), (_LEGAL_SEARCH_EXAMPLE, _CLARIFICATION_EXAMPLE))
+
+    prompt = build_tier2_prompt("허가나 신고가 필요한지 어떻게 구분하나요?", hint)
+
+    assert "근거로 쓰지 말" in prompt
+    assert hint.route in prompt
+
+
+def test_tier2_prompt_without_hint_says_no_example() -> None:
+    prompt = build_tier2_prompt("허가나 신고가 필요한지 어떻게 구분하나요?", None)
+
+    assert "참고할 유사 예시 없음" in prompt

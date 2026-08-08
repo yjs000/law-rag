@@ -8,7 +8,7 @@ it needs something the system does not collect: missing user facts
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 QuestionRoute = Literal[
     "clarification_required",
@@ -140,12 +140,27 @@ def match_conditional_variance_phrase(question: str) -> bool:
     return _CONDITIONAL_VARIANCE_PATTERN.search(question) is not None
 
 
-# Tier 2: nearest-labeled-example classification over existing query embeddings.
-# No new LLM call - reuses whatever embedder already produced the query vector.
+# Tier 2: LLM self-judgment (Self-RAG "reflection token" style), optionally hinted by
+# nearest-example embedding similarity. cosine_similarity/nearest_example are kept as a
+# cheap, already-computed *hint* fed into the LLM prompt - not a standalone decision gate.
+#
+# 2026-08-08 decision (0028 "문제 탐색과 결론"): an embedding-similarity threshold gate
+# (the previous tier 2) is retired as the decision mechanism. The 2026-08-07 calibration
+# found a WRONG nearest-neighbor match (0.7185, a legal_search example out-scoring the
+# correct clarification_required one) ranked ABOVE every correct match in the same batch
+# (best correct match: 0.6947) - similarity magnitude and correctness were uncorrelated,
+# not just noisy near one boundary. Root cause: topic embeddings answer "is this the same
+# subject", but tier 2 needs "does this question already carry enough information to
+# route it" - a pragmatic-sufficiency judgment, not a topic-similarity one. Published
+# approaches to this class of problem (Self-RAG, Adaptive-RAG, ClariQ/Qulac, INTENT-SIM -
+# see 0028 문제 탐색과 결론) use a judgment call (model-produced or entropy-over-answers),
+# never raw embedding distance, to decide this. Nearest-example similarity is retained
+# only as a weak, explicitly-labeled hint inside the tier-2 prompt.
+
 
 @dataclass(frozen=True)
 class RouteExample:
-    """A question with a confirmed route, used as a tier-2 reference point."""
+    """A question with a confirmed route, used as a tier-2 hint reference point."""
 
     example_id: str
     route: QuestionRoute
@@ -159,19 +174,6 @@ class NearestExampleMatch:
     route: QuestionRoute
     similarity: float
     missing_fields: tuple[str, ...] = ()
-
-
-# 2026-08-07 calibration against the 10 D-10 examples (see 0028 decision log): the
-# WRONG nearest-neighbor match (0.7185, a legal_search example out-scoring the correct
-# clarification_required one) ranked ABOVE every correct match in the 10-question
-# calibration batch (best correct match: 0.6947). Similarity magnitude and correctness
-# were effectively uncorrelated here, not just noisy near one boundary value - so the
-# threshold must clear the wrong match with real margin, not sit just above it. At 0.75,
-# none of the 10 calibration questions clear it (right or wrong): tier 2 currently
-# resolves ~0% of this batch and everything falls through to tier 3. That is the honest
-# state with only 10 fixture points, not a tuning target to "fix" by lowering this value.
-# Revisit once the fixture grows past D-10 (0029, or accumulated tier 3 outcomes).
-TIER2_CONFIDENCE_THRESHOLD = 0.75
 
 
 def cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:
@@ -199,26 +201,66 @@ def nearest_example(
     )
 
 
-def route_tier2(
-    query_embedding: tuple[float, ...],
-    examples: tuple[RouteExample, ...],
-    *,
-    threshold: float = TIER2_CONFIDENCE_THRESHOLD,
-) -> tuple[RouteDecision | None, NearestExampleMatch]:
-    """Try the nearest-example tier. Always returns the match (for tier-3 hinting),
+# <10-line route definitions per the 0028 tier-3 cost design: the prompt gets this and
+# the question only, never the full corpus or design doc.
+ROUTE_DEFINITIONS = """\
+- legal_search: 법령 조문으로 일반적인 설명이 가능한 질문.
+- clarification_required: 설비용량 등 사용자 사실에 따라 답이 달라져 먼저 물어야 하는 질문.
+- realtime_required: 시점/개인 계정 상태에 따라 바뀌는 정보(가격·예산·처리 상태 등)가 \
+필요한 질문.
+- external_document_required: 계약서·정산서 등 사용자가 보유한 문서 대조가 필요한 질문.
+"""
 
-    plus a RouteDecision only when the match clears ``threshold`` confidently.
+
+@dataclass(frozen=True)
+class RouteJudgment:
+    """Parsed tier-2 LLM output, before it becomes a RouteDecision."""
+
+    route: QuestionRoute
+    confidence: float
+    reason: str
+    missing_fields: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence must be within [0, 1]")
+
+
+class RouteClassifier(Protocol):
+    """Adapter boundary for the tier-2 LLM call (see NvidiaNimRouteClassifier)."""
+
+    async def classify(
+        self, question: str, hint: NearestExampleMatch | None
+    ) -> RouteJudgment: ...
+
+
+def build_tier2_prompt(question: str, hint: NearestExampleMatch | None) -> str:
+    """Question + route definitions + an optional, explicitly weak nearest-example hint.
+
+    The hint is framed as advisory to avoid anchoring the model on a possibly-wrong
+    nearest neighbor (2026-08-07 calibration: similarity doesn't track correctness).
     """
-    match = nearest_example(query_embedding, examples)
-    if match.similarity < threshold:
-        return None, match
-    return (
-        RouteDecision(
-            route=match.route,
-            reason_code=f"tier2_nearest_example:{match.example_id}",
-            tier=2,
-            confidence=match.similarity,
-            missing_fields=match.missing_fields,
-        ),
-        match,
+    hint_text = "(참고할 유사 예시 없음)"
+    if hint is not None:
+        hint_text = (
+            f"참고용 힌트(최종 판단의 근거로 쓰지 말 것): 가장 비슷한 예시의 route는 "
+            f"'{hint.route}'이고 유사도는 {hint.similarity:.2f}. 유사도가 낮으면 이 힌트를 "
+            "약하게만 신뢰하라. 최종 판단은 질문 원문만으로 독립적으로 하라."
+        )
+    return f"다음 route 중 하나로만 분류하라.\n{ROUTE_DEFINITIONS}\n질문: {question}\n{hint_text}"
+
+
+async def route_tier2(
+    question: str,
+    classifier: RouteClassifier,
+    *,
+    hint: NearestExampleMatch | None = None,
+) -> RouteDecision:
+    judgment = await classifier.classify(question, hint)
+    return RouteDecision(
+        route=judgment.route,
+        reason_code="tier2_llm_judgment",
+        tier=2,
+        confidence=judgment.confidence,
+        missing_fields=judgment.missing_fields,
     )
