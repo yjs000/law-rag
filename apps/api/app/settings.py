@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     supabase_raw_bucket: str = "law-raw"
     openai_api_key: str | None = None
     ai_mode: Literal["auto", "off"] = "auto"
-    answer_provider: Literal["openai", "nvidia_nim"] = "openai"
+    # 2026-08-08 (0025 M5 항목 3): OpenAI는 운영 비교·fallback으로 쓰지 않기로 확정해
+    # 기본값을 nvidia_nim으로 바꿨다. 여전히 M6 실험 E를 통과하기 전에는 ai_mode/quota 등
+    # 다른 gate로 Production AI 자체가 기본 비활성 상태를 유지한다.
+    answer_provider: Literal["openai", "nvidia_nim"] = "nvidia_nim"
     openai_answer_model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
