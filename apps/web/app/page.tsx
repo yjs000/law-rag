@@ -32,6 +32,7 @@ import {
   resolveResponseAnswerMode,
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
+import { askQuestionWithRetry } from "../lib/generation-retry";
 import {
   appendPendingTurn,
   completePendingTurn,
@@ -303,7 +304,7 @@ export default function Home() {
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
   const authEpoch = useRef(0);
-  const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
+  const activeRequest = useRef<{ id: string; controller: AbortController; attemptId?: string } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
 
@@ -519,7 +520,7 @@ export default function Home() {
     requestAnimationFrame(() => composer.current?.focus());
     const requestedAnswerMode = terraUnavailable ? "search_only" : answerPreference;
     try {
-      const answer = await askQuestion({
+      const answer = await askQuestionWithRetry({
         client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
@@ -534,7 +535,17 @@ export default function Home() {
         ...(pending.rolledOver || !activeChat.confirmed
           ? {}
           : { conversation_id: activeChat.id }),
-      }, controller.signal);
+      }, {
+        ask: askQuestion,
+        cancel: cancelQuestion,
+        nextClientRequestId: () => crypto.randomUUID(),
+        outerSignal: controller.signal,
+        onAttemptChange: (attemptId) => {
+          if (activeRequest.current?.id === requestId) {
+            activeRequest.current = { ...activeRequest.current, attemptId };
+          }
+        },
+      });
       if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer);
       setModeNotice(resolution.notice ?? "");
@@ -580,7 +591,7 @@ export default function Home() {
   function stopGeneration() {
     const request = activeRequest.current;
     if (!request) return;
-    void cancelQuestion(request.id).catch(() => undefined);
+    void cancelQuestion(request.attemptId ?? request.id).catch(() => undefined);
     request.controller.abort();
     setActiveChat((current) => stopPendingTurn(current, request.id));
     activeRequest.current = null;
