@@ -1,11 +1,29 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-08-07
+최종 갱신: 2026-08-08
 
 ## 목적
 
 일반 사용자가 에너지 사업 규제를 질문하면 국가법령정보 공동활용 Open API 원문만으로 기준일에 유효한 의무·예외·인허가를 설명한다. 답변의 실질 주장은 조·항·호·목 인용으로 검증되며, 검증 실패나 AI 쿼터 소진 시 원문 검색만 제공한다.
+
+모든 구현 판단이 따르는 기본 원칙은 [핵심 신념](docs/design-docs/core-beliefs.md)에 있다.
+
+## 문서 지도
+
+이 문서는 각 영역을 한 문단으로 요약만 한다. "왜 이렇게 만들었는가"의 전체 논증과 대안 비교는 아래 설계 문서(`docs/design-docs/`, 상태·전체 목록은 [색인](docs/design-docs/index.md))와 실행 계획(`docs/exec-plans/`)에 있다 — 이 표가 그 지도다.
+
+| 이 문서의 영역 | 한눈에 무엇인가 | 자세히 |
+|---|---|---|
+| 배포와 데이터 흐름 | collector(수집)·Supabase(저장)·Vercel(API/Web)이 어떻게 나뉘어 도는지 | [기술 스택 ADR](docs/design-docs/technology-stack.md) · [Vercel·Supabase 운영 전환](docs/design-docs/vercel-supabase-deployment.md) |
+| 수집 계약 | 법제처 Open API에서 법령 원문을 어떻게 가져오는지 | [Open API 수집 계약](docs/design-docs/open-law-api-ingestion.md) |
+| 저장과 검색 | 조문을 어떻게 저장하고 질문에 맞는 근거를 어떻게 찾는지(벡터 검색 우선) | [RAG 파이프라인](docs/design-docs/rag-pipeline.md) · [검색 인덱스·임베딩 계보](docs/design-docs/retrieval-index-storage.md) · [근거 우선 검색 품질](docs/design-docs/evidence-first-retrieval-quality.md) · [시간 효력 모델](docs/design-docs/temporal-validity.md) |
+| 질문 사전 라우팅 | 검색 전에 "이 질문이 법령만으로 답이 되는가"부터 거르는 단계 | [질문 사전 라우팅 설계](docs/design-docs/pre-retrieval-question-routing.md) · [0028 실행 계획](docs/exec-plans/active/0028-pre-retrieval-question-routing.md) |
+| 답변 안전 게이트 | AI가 근거 없는 주장을 하지 못하게 막는 검증 절차 | [AI 차별화](docs/design-docs/ai-differentiation.md) · [답변 근거 검증](docs/design-docs/answer-grounding-validation.md) · [0032 실행 계획](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) |
+| 검색 품질 검증(실험 D) | 검색이 실제로 맞는 조문을 찾는지 사람이 표본으로 확인하는 절차 | [평가 전략](docs/design-docs/evaluation-strategy.md) · [D-10 수동 진단](docs/design-docs/experiment-d-10-manual-review.md) · [D-10 M2/M3 calibration](docs/design-docs/experiment-d-10-m3-calibration.md) · [D-10 전수 qrel](docs/design-docs/experiment-d-10-gold-adjudication.md) · [D-full 1,000문항](docs/design-docs/experiment-d-1000-evaluation.md) |
+| 인증과 계정 | 로그인·세션·계정 삭제가 어떻게 연결되는지 | [Google OAuth·Supabase Auth 연결](docs/design-docs/google-oauth-supabase-flow.md) |
+| 질문 취소 | 사용자가 요청 도중 멈추면 무슨 일이 일어나는지 | [분산 질문 취소](docs/design-docs/distributed-question-cancellation.md) |
+| 보안·신뢰 경계 | 무엇을 신뢰하고 무엇을 안 믿는지, 주요 위협과 통제 | [위협 모델](docs/design-docs/threat-model.md) |
 
 ## 배포와 데이터 흐름
 
@@ -55,6 +73,8 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 
 ## 저장과 검색
 
+조문을 조·항·호·목 단위로 저장하고, 질문이 들어오면 그 조문들 중 근거가 될 만한 것을 찾아온다. 벡터(의미) 검색이 기본이고, 벡터로 못 찾을 때만 키워드 검색이 보조로 개입한다.
+
 - `legal_documents`: 안정적인 출처 ID와 정확 명칭
 - `document_versions`: `안정 ID + MST + 시행일` 버전 키, 공포/시행/종료일, 원문 포맷·해시·경로
 - `provisions`: 조·항·호·목 경로와 원문
@@ -77,17 +97,33 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 `embeddings.jsonl`은 점검 반영 전 준비·운반 계층이며 runtime 검색 fallback이 아니다. 새 로컬 벡터는
 transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤에만 사용자 검색에 노출된다.
 
+## 질문 사전 라우팅 (0028)
+
+`terra`(AI) 답변 요청은 embedding·검색보다 먼저 2단계 라우터를 거친다. 목적은 "같은 주제인가"(임베딩이 재는 것)와 "지금 근거만으로 답할 수 있는가"(임베딩이 못 재는 화용론적 판단)를 분리하는 것이다. 자세한 문제 탐색·확정 근거는 [0028](docs/exec-plans/active/0028-pre-retrieval-question-routing.md)을 참고한다.
+
+- **tier1** (`app/domain/routing.py`의 `route_tier1`): 비용 0, 결정적 Kiwi 형태소 분석 기반 키워드/정규식 규칙. 승인된 질문은행 1,000문항 전수 분석으로 만든 사전([tier1-term-dictionary-analysis-v1.json](apps/api/evaluation/tier1-term-dictionary-analysis-v1.json))을 쓴다. "정말 답할 수 없는 것만 타이트하게 거른다"는 원칙으로, 위양성(답할 수 있는데 차단)을 줄이는 쪽으로 2026-08-08에 조정했다.
+- **tier2** (`route_tier2`, `app/adapters/nvidia_nim_route_classifier.py`): tier1이 못 잡으면 NVIDIA NIM LLM에게 라우팅 자체를 판단하게 한다. 원래는 임베딩 최근접 방식이었으나, "같은 주제 유사도"와 "이 근거로 답이 되는가"가 다른 질문이라는 게 드러나 2026-08-08에 LLM judgment로 교체했다. tier2 실패(timeout·오류)는 요청을 막지 않고 `legal_search`로 안전하게 넘어간다.
+- **tier3**: 미확정, 아직 미사용.
+
+판정은 4가지 route로 나온다: `legal_search`(검색·생성 정상 진행), `clarification_required`(설비용량 등 사용자 사실이 빠짐 — 텍스트로 재질문, 후속 대화 자동 수집 없음), `realtime_required`/`external_document_required`(법령 검색으로 원천적으로 답할 수 없음 — 결정적 차단 메시지, embedding·검색·LLM 호출 0회). `clarification_required`가 아닌 두 차단 route는 tier2가 판단했을 경우 LLM이 직접 생성한 `explanation`(왜 이 근거로는 안 되는지)을 그대로 사용자 안내 문구에 재사용한다 — 별도 LLM 호출을 추가하지 않고 이미 계산된 판단 근거를 노출하는 방식이다.
+
+라우팅 tier2가 "확인/대조" 같은 표현을 과대 해석해 `external_document_required`로 잘못 차단한 사례가 실측에서 발견됐다(TD-024). 트래픽이 쌓이면 [0033](docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md)에서 재검토한다.
+
 ## 답변 안전 게이트
 
+검색으로 근거를 찾은 뒤에도 AI가 근거 없는 주장을 답에 섞어 내지 못하게 막는 절차다. 아래 5단계 중 하나라도 실패하면 AI 답변 대신 검색 결과만 보여준다(원문 자체는 사용자가 항상 볼 수 있다).
+
 1. 질문의 기준일이 현재 corpus 지원 범위 안인지와 사업 단계를 검증한다.
-2. direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
-3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID를 받는다.
-4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다.
+2. 위 사전 라우팅을 통과([legal_search]인 경우만)하면 direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
+3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID와 함께, 모델이 스스로 판단한 완결성 신호 `action`(`fully_answerable`/`partially_answerable`/`clarification_required`/`unanswerable`)과 `missing_information`을 받는다. 검증기는 이 명시적 신호로 요구 수준을 정하며 summary 텍스트에서 확신도를 추측하지 않는다.
+4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다. `action=unanswerable`이면 sections·checklist가 비어도 되지만 summary·limitations의 무근거 규범 주장(다른 법령·기관을 단정)은 계속 차단한다. `action=clarification_required`면 (사전 라우팅이 아니라 실제 검색·생성을 해본 뒤에야 드러난 부족함이므로) `missing_information`만 있으면 통과하고, 같은 재질문 응답 형식으로 사용자에게 반환한다.
 5. 선택된 생성 provider 실패, quota 402/429, 권한 오류, AI 비활성 시 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다.
 
-현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다.
+현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다. 검증 로직(`app/adapters/openai_answerer.py`의 `validate_draft`)은 근거 원문에서 조문 경로(`hit.path`)를 빠뜨려 정확한 조문 인용을 무근거 숫자로 오판하던 버그와, 한국어 겸양 표현("판단할 수 없다")이 법적 금지 주장과 표면 문법이 같아 오탐되던 버그를 2026-08-08에 고쳤다 — 상세 진단은 [0032](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)를 참고한다. 검증기 코드를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 낭비를 없애기 위해, 진단 스크립트(`scripts/diagnose_grounding_failures.py`)가 검색 근거(`SearchHit`) 원문을 통째로 저장하고, `scripts/replay_grounding_validation.py`가 그 저장분으로 `validate_draft()`만 새 API 호출 없이 재실행한다.
 
-## 실험 D 검색 평가 게이트
+## 검색 품질 검증 (실험 D)
+
+"실험 D"는 검색이 실제로 맞는 조문을 찾아오는지 사람이 표본으로 확인하는 사내 품질 검증 절차 이름이다(제품 기능이 아니다). 현재는 사용자가 결과를 직접 확인한 10개 질문(D-10)만으로 소규모 점검(calibration)을 한다 — 아직 통계적으로 일반화할 수 있는 정식 평가(D-full, 아래 참고)는 아니다.
 
 현재 실험 D는 사용자 확인을 마친 D-10 10문항만 소표본 calibration에 사용한다. M2 frozen contract는
 질문·판정·원래 raw top 10 안의 직접 근거·알려진 무관 top 5와 corpus/profile/artifact SHA를 결박한다.
@@ -182,3 +218,11 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 | 2026-08-04 | 일 1회 로컬 bundle을 준비하고 변경이 있을 때만 `gate=false → 65초 drain → DIRECT_URL 단일 반영 transaction → gate=true`로 게시 | 드문 corpus 갱신을 위해 모든 운영 reader에 shared lock이나 고가용성 세대 전환을 추가하지 않고, 짧은 점검 중단으로 비용과 복잡도를 낮춤. writer lock과 실험 D lock은 유지 |
 | 2026-08-04 | 로컬 벡터는 준비·운반에만 사용하고 웹/API 검색은 DB에 검증·commit된 활성 벡터만 사용 | 미확정 파일과 사용자 검색 경계를 분리하고, 점검 transaction이 성공한 시점에만 새 벡터로 전환 |
 | 2026-08-07 | 실험 D의 현재 필수 범위를 사용자 확인 D-10 10문항 frozen calibration으로 축소하고 D-full Gold는 필요 시 재개 | 현재 의사결정 비용을 줄이되 10문항을 Gold·held-out·일반 release 근거로 과장하지 않고 기존 1,000문항 자산을 보존 |
+| 2026-08-08 | 질문 사전 라우팅을 tier1(Kiwi 결정적 키워드)+tier2(LLM judgment) 2단계로 확정하고 embedding·검색보다 먼저 실행([0028](docs/exec-plans/active/0028-pre-retrieval-question-routing.md)) | 임베딩 유사도는 "같은 주제인가"만 재고 "이 근거로 답이 되는가"라는 화용론적 판단은 못 함 - 공인 문헌(Self-RAG, Adaptive-RAG, FLARE 등) 조사 후 판단 자체를 LLM에 맡기기로 결정 |
+| 2026-08-08 | tier2를 임베딩 최근접에서 NVIDIA NIM LLM judgment(`route_tier2`)로 교체 | threshold gate형 임베딩 유사도가 화용론적 충분성 판단에 구조적으로 부적합함을 실측(0201 오분류 사례)으로 확인 |
+| 2026-08-08 | tier1 사전을 승인된 질문은행 1,000문항 전수 분석으로 재구축하고, 위양성(답할 수 있는 질문 차단)을 줄이는 방향으로 타이트닝 | "정말 답할 수 없는 것만 걸러낸다"는 사용자 원칙 - 과차단이 과소차단보다 사용자 피해가 큼 |
+| 2026-08-08 | `realtime_required`/`external_document_required` 차단 응답에 tier2 LLM이 이미 생성한 `explanation`을 재사용해 노출 | 별도 LLM 호출 없이 "왜 이 근거로 안 되는지"를 사용자에게 그대로 안내 - 기존 계산 결과를 버리지 않음 |
+| 2026-08-08 | `DraftAnswer`에 `action`(fully/partially_answerable, clarification_required, unanswerable)과 `missing_information`을 구조화 필드로 추가하고 검증기가 이를 근거로 요구 수준을 분기 | 검증기가 summary 텍스트에서 확신도·완결성을 정규식으로 추측하던 것을 모델의 명시적 신호로 대체 - 텍스트 추측은 오탐(겸양 표현을 금지 주장으로 오판 등)의 근본 원인이었음 |
+| 2026-08-08 | `unanswerable` 응답도 정형화된 "법령 corpus로 답할 수 없습니다"로 끝내지 않고, 모델이 생성한 근거 설명을 노출하되 다른 법령·기관 지목은 단정형이 아닌 권유형만 허용 | 사용자가 왜 답이 안 되는지 알 수 있게 하면서도, 근거 없는 다른 법령·기관에 대한 단정적 주장(오탐 위험)은 계속 차단 |
+| 2026-08-08 | grounding 검증기(`validate_draft`)의 evidence 문자열에 조문 경로(`hit.path`)를 포함하고, 메타인지 동사 뒤 겸양 표현("판단할 수 없다")을 신호에서 제외 | 정확히 인용된 조문 번호가 무근거 숫자로, 인식론적 겸양이 법적 금지 주장으로 오판되던 grounding_failed 오탐 두 근본 원인을 제거 |
+| 2026-08-08 | 진단 스크립트가 검색 근거(`SearchHit`) 원문 전체를 저장하고, 별도 replay 스크립트로 검증기 코드 변경을 새 API 호출 없이 재검증 | 검증기를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 반복 낭비를 제거 |
