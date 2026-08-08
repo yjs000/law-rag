@@ -135,6 +135,46 @@ _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE = (
 )
 
 
+def clarification_resubmission_summary(
+    question: str, missing_fields: tuple[str, ...] | list[str]
+) -> str:
+    """0028 "비용 최소화 결정"의 재제출 템플릿. route_blocked_answer(사전 라우팅)와
+    post_generation_clarification_answer(생성 후 발견된 부족)가 같은 문구를 쓴다 - 사용자가
+    보는 안내가 어느 단계에서 왔든 일관되게 한다.
+    """
+    fields_block = "\n".join(f"- {field}: [ ]" for field in missing_fields) or "- [ ]"
+    return (
+        "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n"
+        "다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 한 번에 보내주세요.\n"
+        "추가 정보만 따로 보내지 마세요.\n\n"
+        f"질문: {question}\n추가 정보:\n{fields_block}"
+    )
+
+
+def post_generation_clarification_answer(
+    request: QuestionRequest, missing_information: list[str]
+) -> QuestionResponse:
+    """2026-08-08: DraftAnswer.action == "clarification_required"일 때 쓴다 - 사전 라우팅이
+    못 잡고 검색·생성까지 해본 뒤에야 드러난 clarification 케이스다. route는 그대로
+    legal_search로 둔다(라우팅 판단 자체는 맞았다 - "검색해도 됐다"는 사실은 변하지 않는다.
+    "생성된 답이 충분한가"는 별개 축이다).
+    """
+    return QuestionResponse(
+        request_id=str(request.client_request_id),
+        mode="search_only",
+        summary=clarification_resubmission_summary(request.question, missing_information),
+        scope="답변 생성 중 추가 정보 필요 확인됨 (검색은 실행됨)",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=["이 서비스는 법률 자문을 대체하지 않습니다."],
+        result_status="no_results",
+        requested_answer_mode=request.answer_mode,
+        route="legal_search",
+        action="clarification_required",
+    )
+
+
 def route_blocked_answer(
     request: QuestionRequest,
     route: str,
@@ -166,13 +206,7 @@ def route_blocked_answer(
         if explanation:
             summary += f"\n\n(참고: {explanation})"
     elif route == "clarification_required":
-        fields_block = "\n".join(f"- {field}: [ ]" for field in missing_fields) or "- [ ]"
-        summary = (
-            "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n"
-            "다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 한 번에 보내주세요.\n"
-            "추가 정보만 따로 보내지 마세요.\n\n"
-            f"질문: {request.question}\n추가 정보:\n{fields_block}"
-        )
+        summary = clarification_resubmission_summary(request.question, missing_fields)
     else:
         raise ValueError(f"route_blocked_answer does not handle route={route!r}")
     return QuestionResponse(

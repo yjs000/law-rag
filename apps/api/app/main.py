@@ -24,7 +24,11 @@ from app.adapters.supabase_auth import (
     SupabaseAuthError,
     SupabaseAuthUnavailableError,
 )
-from app.application.answering import route_blocked_answer, search_only_answer
+from app.application.answering import (
+    post_generation_clarification_answer,
+    route_blocked_answer,
+    search_only_answer,
+)
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.answer_actions import derive_answer_action
@@ -427,6 +431,18 @@ async def _answer_question(
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
+    # 2026-08-08: 모델이 스스로 판단한 action이 checklist 기반 추정(derive_answer_action)과
+    # 얼마나 일치하는지 diagnostics에 남긴다 - tier2 explanation을 저장한 것과 같은 이유로,
+    # D-10 표본 검토 때 이 자기보고 신호를 신뢰해도 되는지 나중에 확인하기 위해서다.
+    generation_stage["model_action"] = draft.action
+    generation_stage["checklist_derived_action"] = derive_answer_action(draft.checklist)
+    generation_stage["action_agrees_with_checklist"] = draft.action == generation_stage[
+        "checklist_derived_action"
+    ]
+    if draft.action == "clarification_required":
+        clarification = post_generation_clarification_answer(payload, draft.missing_information)
+        generation_stage["status"] = "clarification_required"
+        return await _save_if_authenticated(user, payload, clarification, diagnostics)
     citations = [
         Citation(
             id=f"C{index}",
@@ -450,7 +466,7 @@ async def _answer_question(
         limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
-        action=derive_answer_action(draft.checklist),
+        action=draft.action,
         route=route_decision.route if route_decision is not None else None,
     )
     generation_stage["status"] = "succeeded"

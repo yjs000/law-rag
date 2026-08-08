@@ -66,6 +66,7 @@ def _draft(*, claim: str, explanation: str, checklist: str, citation: str = "C1"
             )
         ],
         checklist=[ChecklistItem(label=checklist, status="required", citation_ids=[citation])],
+        action="fully_answerable",
     )
 
 
@@ -113,6 +114,85 @@ def test_empty_evidence_or_empty_claims_fail(hit: SearchHit) -> None:
     assert not validate_draft(valid.model_copy(update={"sections": []}), [hit])
 
 
+def _hit_with_content(content: str) -> SearchHit:
+    return SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="신재생에너지법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        path="제12조의13제3항",
+        content=content,
+        source_url="https://www.law.go.kr/법령/신재생에너지법",
+        score=1,
+    )
+
+
+# 2026-08-08: E-10 base 실행에서 grounding_failed로 잘못 거부됐던 실제 D-10 요약문
+# 3건(evaluation/experiment-e10-grounding-diagnosis.json)을 축약한 회귀 사례. "판단할 수
+# 없다" 류 겸양 표현이 negation/prohibition 신호와 겹쳐 무근거 주장으로 오판됐다 -
+# action=unanswerable + 겸양 표현 완화로 통과해야 한다. 근거(evidence)는 요약문과 용어가
+# 겹치도록 맞춘 것이다(실제 진단에서도 검색 자체는 관련 있는 근거를 찾았었다).
+@pytest.mark.parametrize(
+    ("summary", "evidence_content"),
+    [
+        (
+            "국가와 지방자치단체는 재정적 지원을 할 수 있으나, 제공된 근거만으로는 구체적 "
+            "지원 요건은 판단할 수 없다.",
+            "국가와 지방자치단체는 신재생에너지 설비를 설치하려는 자에게 재정적·행정적 지원을 "
+            "할 수 있다.",
+        ),
+        (
+            "제공된 근거만으로는 전력망 연결 공사비의 구체적인 산정 항목을 확인할 수 없다.",
+            "전력망 연결 공사비 산정에 관한 세부 항목은 별도로 정한다.",
+        ),
+        (
+            "현행 근거만으로는 구체적 민원 접수 기관을 특정할 수 없다.",
+            "전기설비의 안전·사용에 관한 민원은 관계 기관에 접수할 수 있다.",
+        ),
+    ],
+)
+def test_unanswerable_with_epistemic_hedge_passes(summary: str, evidence_content: str) -> None:
+    draft = DraftAnswer(
+        summary=summary,
+        scope="기준일 현재 제공된 원문",
+        sections=[],
+        checklist=[],
+        action="unanswerable",
+    )
+    assert validate_draft(draft, [_hit_with_content(evidence_content)])
+
+
+def test_unanswerable_with_ungrounded_specific_claim_still_fails(hit: SearchHit) -> None:
+    # 겸양 표현이 아니라 근거에 없는 다른 법령을 단정하는 문장은 여전히 막혀야 한다 -
+    # 완화가 과도해지지 않았는지 확인하는 반대 사례.
+    draft = DraftAnswer(
+        summary=(
+            "이 민원은 소음진동관리법 소관이므로 해당 부서에 반드시 신고해야 합니다."
+        ),
+        scope="기준일 현재 제공된 원문",
+        sections=[],
+        checklist=[],
+        action="unanswerable",
+    )
+    assert not validate_draft(draft, [hit])
+
+
+def test_clarification_required_action_needs_missing_information(hit: SearchHit) -> None:
+    draft = DraftAnswer(
+        summary="사업장 조건에 따라 답이 달라집니다.",
+        scope="기준일 현재 제공된 원문",
+        sections=[],
+        checklist=[],
+        action="clarification_required",
+        missing_information=["발전설비용량"],
+    )
+    assert validate_draft(draft, [hit])
+    assert not validate_draft(draft.model_copy(update={"missing_information": []}), [hit])
+
+
 @pytest.mark.parametrize(
     "summary",
     [
@@ -158,6 +238,7 @@ def test_number_unit_must_match_exact_evidence() -> None:
         checklist=[
             ChecklistItem(label="15일 이내 신고 확인", status="required", citation_ids=["C1"])
         ],
+        action="fully_answerable",
     )
     assert validate_draft(valid, [hit])
     assert not validate_draft(
@@ -212,6 +293,7 @@ def test_required_checklist_needs_direct_obligation_evidence() -> None:
         checklist=[
             ChecklistItem(label="지원 신청 확인", status="conditional", citation_ids=["C1"])
         ],
+        action="partially_answerable",
     )
     assert validate_draft(draft, [hit])
     required = draft.model_copy(

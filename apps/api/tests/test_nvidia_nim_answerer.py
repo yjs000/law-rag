@@ -56,6 +56,7 @@ async def test_nvidia_nim_uses_guided_schema_and_validates_answer() -> None:
             {"label": "원문 확인", "status": "check", "citation_ids": ["C1"]}
         ],
         "limitations": [],
+        "action": "fully_answerable",
     }
 
     async def create(**kwargs):

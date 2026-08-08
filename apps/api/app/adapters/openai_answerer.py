@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,17 @@ class DraftAnswer(BaseModel):
     sections: list[AnswerSection]
     checklist: list[ChecklistItem]
     limitations: list[str] = Field(default_factory=list)
+    # 2026-08-08 (grounding_failed 근본 원인 대응): 모델이 자기 답변의 완결성을 직접
+    # 밝히게 한다. 검증기가 summary 텍스트에서 "이건 확신 있는 주장인가 겸양 표현인가"를
+    # 정규식으로 추측하지 않고, 모델이 명시한 이 필드를 근거로 검증 강도를 결정한다 -
+    # app/domain/answer_actions.py의 AnswerAction과 값을 맞췄다(어휘를 새로 안 만든다).
+    action: Literal[
+        "fully_answerable", "partially_answerable", "clarification_required", "unanswerable"
+    ]
+    # action이 clarification_required일 때만 채운다. 0028 clarification_required
+    # route(사전 라우팅)의 missing_fields와 같은 역할이지만, 이건 검색·생성을 실제로 해본
+    # 뒤에야 드러나는 부족함이라 별도 필드다.
+    missing_information: list[str] = Field(default_factory=list)
 
 
 MAX_GENERATION_ARTICLES = 5
@@ -90,6 +102,17 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
                 "limitations에 새로운 법률 주장을 추가하지 않는다."
                 " 이전 대화는 맥락일 뿐 법률 근거가 아니다. 이전 답변의 주장을 그대로 "
                 "재사용하지 말고 이번 요청에 제공된 C번호 근거로 다시 검증한다."
+                " action에 이 답변의 완결성을 스스로 밝힌다: 제공된 근거만으로 질문에 "
+                "충분히 답했으면 'fully_answerable', 일부만 답했거나 조건에 따라 갈리면 "
+                "'partially_answerable', 질문자의 개별 사실(설비용량·계약 조건 등)을 알아야 "
+                "만 좁힐 수 있으면 'clarification_required', 제공된 근거가 질문과 근본적으로 "
+                "무관하거나 다루지 않으면 'unanswerable'을 쓴다. 'clarification_required'면 "
+                "missing_information에 필요한 사실을 구체적으로 적는다(예: '발전설비용량'). "
+                "'unanswerable'이면 sections·checklist는 비워도 되고, summary에는 제공된 "
+                "근거가 왜 부족한지만 쓴다 - '~할 수 없다/판단하기 어렵다' 같은 겸양 표현은 "
+                "허용되지만, 다른 법령·기관을 지목할 때는 단정하지 말고(예: '~법 소관이다') "
+                "반드시 권유형으로 쓰고(예: '~에 확인해 보시기 바랍니다') limitations에 넣는다 "
+                "- 근거에 없는 다른 법령명을 단정적으로 주장하지 않는다."
             ),
         },
     ]
@@ -153,6 +176,19 @@ _NORMATIVE_SIGNAL_PATTERNS = {
     "exemption": re.compile(r"면제|제외|예외|적용하지 아니"),
     "negation": re.compile(r"아니|않|없"),
 }
+# 2026-08-08 (grounding_failed 오탐 진단): 한국어 "~할 수 없다"는 법적 금지("출입할 수
+# 없다")와 모델의 인식론적 겸양("판단할 수 없다") 둘 다에 똑같이 쓰여 표면 문법으로는
+# 구분이 안 된다. 메타인지 동사(판단/확인/특정/단정/파악/결론) 뒤에 오는 경우만 겸양으로
+# 보고, 신호 패턴 검사 직전에 이 부분만 제거한다 - "출입할 수 없다"처럼 메타인지 동사가
+# 아닌 경우는 그대로 남아 실제 금지 주장은 계속 걸린다. 근거(evidence) 쪽에는 절대
+# 적용하지 않는다 - 이건 모델이 만든 text에만 적용하는 관용이다.
+_EPISTEMIC_HEDGE_PATTERN = re.compile(
+    r"(?:판단|확인|특정|단정|파악|결론(?:을\s*내리)?)(?:할\s*수\s*없|하기\s*(?:어렵|곤란)|기\s*어렵)"
+)
+
+
+def _strip_epistemic_hedges(text: str) -> str:
+    return _EPISTEMIC_HEDGE_PATTERN.sub("", text)
 _OVERSTATEMENT_TERMS = ("모든", "항상", "예외 없이", "무조건", "오직", "즉시")
 _ASSERTIVE_NORMATIVE_PREDICATE = re.compile(
     r"(?:허가|신고|등록|검사|승인|인가|제출|점검|납부).{0,12}"
@@ -188,14 +224,30 @@ _PARTICLE_SUFFIXES = (
 
 
 def validate_draft(draft: DraftAnswer, hits: list[SearchHit]) -> bool:
-    """설명 가능한 보수적 핵심용어 게이트. 의미 추론이나 모델 호출은 하지 않는다."""
-    if not hits or not draft.sections or not draft.checklist:
+    """설명 가능한 보수적 핵심용어 게이트. 의미 추론이나 모델 호출은 하지 않는다.
+
+    2026-08-08부터 draft.action에 따라 요구 수준이 다르다:
+    - clarification_required: 실질적 법적 주장이 아니라 missing_information만 있으면 된다
+      (sections·checklist가 비어도 됨 - 검색 자체는 성공했어도 어떤 조문을 인용할지는 사용자
+      사실을 알아야 정해지는 경우다).
+    - unanswerable: 근거를 못 찾았다는 정직한 진술이라 sections·checklist가 비어도 된다.
+      summary·limitations는 여전히 검증한다(무근거 규범 주장은 계속 차단) - 다만
+      `_strip_epistemic_hedges`가 "판단할 수 없다" 같은 겸양 표현은 신호로 안 본다.
+    - fully_answerable/partially_answerable: 기존과 동일하게 전부 엄격히 검증한다.
+    """
+    if not hits:
         return False
+    if draft.action == "clarification_required":
+        return bool(draft.missing_information)
     hit_by_id = {f"C{index}": hit for index, hit in enumerate(hits, 1)}
+    # 2026-08-08: path(조문 경로, 예: "제44조의4")를 evidence 문자열에서 빼먹고 있었다 -
+    # 모델이 실제 인용된 조문 번호를 정확히 언급해도 무근거 숫자로 오판됐다.
     all_evidence = " ".join(
-        f"{hit.document_title} {hit.heading or ''} {hit.content}" for hit in hits
+        f"{hit.document_title} {hit.path} {hit.heading or ''} {hit.content}" for hit in hits
     )
-    if not _text_matches_evidence(draft.summary, all_evidence):
+    if not _text_matches_evidence(
+        draft.summary, all_evidence, require_topic_overlap=draft.action != "unanswerable"
+    ):
         return False
     if _contains_normative_assertion(draft.scope):
         return False
@@ -204,6 +256,10 @@ def validate_draft(draft: DraftAnswer, hits: list[SearchHit]) -> bool:
         and not _text_matches_evidence(limitation, all_evidence)
         for limitation in draft.limitations
     ):
+        return False
+    if draft.action == "unanswerable" and not draft.sections and not draft.checklist:
+        return True
+    if not draft.sections or not draft.checklist:
         return False
     for section in draft.sections:
         if not _texts_match_citations(
@@ -241,21 +297,32 @@ def _evidence_for_citations(
     citation_ids: list[str], hit_by_id: dict[str, SearchHit]
 ) -> str:
     return " ".join(
-        f"{hit_by_id[citation_id].document_title} "
+        f"{hit_by_id[citation_id].document_title} {hit_by_id[citation_id].path} "
         f"{hit_by_id[citation_id].heading or ''} {hit_by_id[citation_id].content}"
         for citation_id in citation_ids
     )
 
 
-def _text_matches_evidence(text: str, evidence: str) -> bool:
+def _text_matches_evidence(text: str, evidence: str, *, require_topic_overlap: bool = True) -> bool:
+    """근거와 겹치는 용어 비율(>=50%)을 요구해 무근거 주장을 막는다.
+
+    2026-08-08: `unanswerable` action의 summary는 require_topic_overlap=False로 호출한다 -
+    "근거가 이 주제를 안 다룬다"는 설명은 정의상 근거와 용어가 안 겹치는 게 정상이라(예:
+    질문 주제인 "전력망 연결 공사비"를 evidence가 다루지 않는다고 말하는 문장), 겹침
+    비율로 무근거 주장을 걸러내는 게 안 맞는다. 이 경우에도 아래 규범어·과장어·신호
+    패턴·숫자 대조는 그대로 적용한다 - "주제가 다르다"와 "숫자·규범을 지어냈다"는 다른
+    문제다.
+    """
+    text = _strip_epistemic_hedges(text)
     terms = [term for term in _terms(text) if term not in _GENERIC_TERMS]
     evidence_terms = set(_terms(evidence))
     evidence_flat = "".join(re.findall(r"[가-힣a-z0-9]+", evidence.casefold()))
     if not terms or not evidence_terms:
         return False
-    matched = sum(term in evidence_terms or term in evidence_flat for term in terms)
-    if matched / len(terms) < 0.5:
-        return False
+    if require_topic_overlap:
+        matched = sum(term in evidence_terms or term in evidence_flat for term in terms)
+        if matched / len(terms) < 0.5:
+            return False
     text_flat = "".join(re.findall(r"[가-힣a-z0-9]+", text.casefold()))
     if any(term in text_flat and term not in evidence_flat for term in _NORMATIVE_TERMS):
         return False
@@ -274,6 +341,7 @@ def _text_matches_evidence(text: str, evidence: str) -> bool:
 
 
 def _contains_normative_assertion(text: str) -> bool:
+    text = _strip_epistemic_hedges(text)
     text_flat = "".join(re.findall(r"[가-힣a-z0-9]+", text.casefold()))
     return any(term in text_flat for term in ("과태료", "벌금", "징역")) or any(
         _NORMATIVE_SIGNAL_PATTERNS[signal].search(text)
