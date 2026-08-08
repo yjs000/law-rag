@@ -25,6 +25,7 @@ from app.adapters.supabase_auth import (
 from app.application.answering import search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
+from app.domain.answer_actions import derive_answer_action
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.corpus_temporal_contract import (
     UnsupportedCorpusDateError,
@@ -33,6 +34,7 @@ from app.domain.corpus_temporal_contract import (
 )
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
+from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.schemas import (
     AiFallbackReason,
@@ -328,6 +330,19 @@ async def _answer_question(
             "selected_evidence_count": len(generation_hits),
             "dropped_evidence_count": len(hits) - len(generation_hits),
             "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
+            # 0025 M5 item 4: 어떤 model/prompt/schema/context/sampling 조합이 이 답변을
+            # 만들었는지 SHA로 남긴다. NVIDIA 프로필만 기록한다 - OpenAI 프로필은 sampling
+            # 값이 MOCK(미확인)이라 provenance로 쓰기엔 아직 부정확하다.
+            "generation_profile_key": (
+                NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key
+                if settings.answer_provider == "nvidia_nim"
+                else None
+            ),
+            "generation_profile_sha256": (
+                NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256
+                if settings.answer_provider == "nvidia_nim"
+                else None
+            ),
         }
     )
     try:
@@ -371,6 +386,7 @@ async def _answer_question(
         limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
+        action=derive_answer_action(draft.checklist),
     )
     generation_stage["status"] = "succeeded"
     return await _save_if_authenticated(user, payload, answer, diagnostics)

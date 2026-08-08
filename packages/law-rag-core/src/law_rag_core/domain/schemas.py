@@ -165,6 +165,18 @@ class QuestionResponse(BaseModel):
     requested_answer_mode: Literal["terra", "search_only"] = "search_only"
     fallback_reason: AiFallbackReason | None = None
     conversation_id: UUID | None = None
+    # 0025 M5 item 2, 2026-08-08 - MOCK/미확정: D-10 gold의 answerability 네 값과 이름을
+    # 맞췄지만 app/domain/answer_actions.py의 파생 규칙 자체는 아직 D-10로 검증하지 않았다.
+    # 하위 호환을 위해 optional로 추가했다 - 기존 클라이언트는 무시해도 된다.
+    action: (
+        Literal[
+            "fully_answerable",
+            "partially_answerable",
+            "clarification_required",
+            "unanswerable",
+        ]
+        | None
+    ) = None
 
 
 class MockUser(BaseModel):
