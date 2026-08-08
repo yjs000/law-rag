@@ -39,10 +39,16 @@ class Settings(BaseSettings):
     # 같은 모델을 재사용한다 - 더 작은 모델(nemotron-super-49b 등)이 이 카탈로그에서 실제로
     # 무료인지 아직 확인 전이라, 확인되지 않은 모델로 바꾸는 대신 검증된 모델을 그대로 쓴다.
     nvidia_route_classifier_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
-    route_classifier_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    route_classifier_timeout_seconds: float = Field(default=20, gt=0, le=60)
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
     answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
-    answer_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    # 2026-08-08 (0025 M5 항목 6 bounded smoke): 원래 기본값 30초는 근거 없이 골라둔
+    # 값이었는데, scripts/hosted_answer_smoke_test.py로 실제 D-10 질문을 돌려보니
+    # nemotron-3-ultra-550b-a55b 정상 생성 자체가 ~30초 걸려 APITimeoutError로 자주
+    # generation_error fallback이 났다(재현: gen_hits 5개·876자 근거로 30.1초). 60초로
+    # 올렸다 - 이것도 실측 몇 건 기준 추정치라 트래픽이 쌓이면 p50/p95로 다시 확인해야
+    # 한다(M6 E1/E2에서 latency를 기록하므로 거기서 자연히 검증된다).
+    answer_timeout_seconds: float = Field(default=60, gt=0, le=120)
     nvidia_embedding_model: Literal["nvidia/nemotron-3-embed-1b"] = (
         "nvidia/nemotron-3-embed-1b"
     )

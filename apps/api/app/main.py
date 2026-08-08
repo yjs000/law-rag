@@ -267,6 +267,7 @@ async def _answer_question(
     # "무관 법령이 AI 문맥에 섞이는" 문제가 애초에 발생하지 않는다. search_only까지
     # 넓히는 건 별도 결정이 필요하다(범위를 넓히기 전에 기존 search_only 테스트 영향을
     # 먼저 검토해야 한다).
+    route_decision: RouteDecision | None = None
     if use_ai:
         routing_stage = diagnostics["routing"]
         assert isinstance(routing_stage, dict)
@@ -350,6 +351,8 @@ async def _answer_question(
         )
     fallback = search_only_answer(payload, hits, corpus_as_of, fallback_reason=fallback_reason)
     fallback.request_id = str(payload.client_request_id)
+    if route_decision is not None:
+        fallback.route = route_decision.route
     if not use_ai or not hits:
         generation_stage = diagnostics["generation"]
         assert isinstance(generation_stage, dict)
@@ -429,6 +432,7 @@ async def _answer_question(
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
         action=derive_answer_action(draft.checklist),
+        route=route_decision.route if route_decision is not None else None,
     )
     generation_stage["status"] = "succeeded"
     return await _save_if_authenticated(user, payload, answer, diagnostics)
