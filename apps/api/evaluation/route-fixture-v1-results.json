@@ -1,0 +1,157 @@
+{
+  "fixture_size": 14,
+  "misclassification_rate": 0.2857,
+  "unnecessary_search_rate": 0.1429,
+  "unnecessary_block_rate": 0.1429,
+  "tier1_resolution_rate": 0.4286,
+  "tier2_resolution_rate": 0.5714,
+  "misclassified_cases": [
+    "lay-energy-0111",
+    "boundary-document-keyword-false-positive",
+    "boundary-realtime-keyword-false-positive",
+    "boundary-clarification-without-conditional-phrase"
+  ],
+  "cost_gate_status": "PROVISIONAL - tier 2 is MockRouteClassifier, not a real NVIDIA call",
+  "cases": [
+    {
+      "id": "lay-energy-0201",
+      "question": "태양광 발전소 허가를 준비하고 있는데, 어떤 허가나 신고가 필요한지 어떻게 구분하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0251",
+      "question": "소규모 설비는 용량이나 전기 사용 방식에 따라 허가와 신고가 어떻게 달라지나요?",
+      "expected_route": "clarification_required",
+      "predicted_route": "clarification_required",
+      "tier": 1,
+      "reason_code": "tier1_conditional_variance_phrase",
+      "confidence": 1.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0521",
+      "question": "발전량은 기록되지만 신재생에너지 공급인증서(REC)가 발급되지 않고 있는데, 발급 대상과 신청 조건을 어떻게 확인하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0601",
+      "question": "태양광 설치비 지원을 받을 수 있는지 알아보는데, 지원 대상인지 어떤 조건으로 판단하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0111",
+      "question": "시골에 가진 땅에 태양광을 설치해도 되는지 알아보는데, 이 장소에서 사업이 가능한지 무엇을 확인해야 하나요?",
+      "expected_route": "clarification_required",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": false
+    },
+    {
+      "id": "lay-energy-0346",
+      "question": "전력망 연결 공사비가 예상보다 많이 나왔는데, 공사비가 어떻게 계산됐는지 어떤 항목을 확인해야 하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0561",
+      "question": "예상보다 전기 판매 정산금이 적게 들어왔는데, 발전량·계약가격·공제액을 어떤 자료와 대조해야 하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0605",
+      "question": "태양광 설치비 지원을 받을 수 있는지 알아보는데, 올해 예산과 세부 조건은 어디서 최신 정보를 확인하나요?",
+      "expected_route": "realtime_required",
+      "predicted_route": "realtime_required",
+      "tier": 1,
+      "reason_code": "tier1_realtime_keyword",
+      "confidence": 1.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0836",
+      "question": "충전기가 자주 고장 나 이용하지 못하고 있는데, 고장 상태와 복구 예정 시간을 어디서 확인하나요?",
+      "expected_route": "realtime_required",
+      "predicted_route": "realtime_required",
+      "tier": 1,
+      "reason_code": "tier1_realtime_keyword",
+      "confidence": 1.0,
+      "correct": true
+    },
+    {
+      "id": "lay-energy-0943",
+      "question": "태양광 패널의 빛 반사가 생활에 불편을 주는데, 빛 반사를 줄이거나 시정 조치를 요청하려면 어디에 민원을 내야 하나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
+    },
+    {
+      "id": "boundary-document-keyword-false-positive",
+      "question": "태양광 발전사업을 하려면 계약서를 반드시 작성해야 하는 법적 의무가 있나요?",
+      "expected_route": "legal_search",
+      "predicted_route": "external_document_required",
+      "tier": 1,
+      "reason_code": "tier1_document_keyword",
+      "confidence": 1.0,
+      "correct": false
+    },
+    {
+      "id": "boundary-realtime-keyword-false-positive",
+      "question": "현재 시행 중인 신재생에너지법의 허가 절차를 알려주세요.",
+      "expected_route": "legal_search",
+      "predicted_route": "realtime_required",
+      "tier": 1,
+      "reason_code": "tier1_realtime_keyword",
+      "confidence": 1.0,
+      "correct": false
+    },
+    {
+      "id": "boundary-external-document-true-positive",
+      "question": "인버터가 고장 났지만 설치업체가 폐업한 상황인데, 계약서와 보증서에서 수리 책임을 어떻게 확인하나요?",
+      "expected_route": "external_document_required",
+      "predicted_route": "external_document_required",
+      "tier": 1,
+      "reason_code": "tier1_document_keyword",
+      "confidence": 1.0,
+      "correct": true
+    },
+    {
+      "id": "boundary-clarification-without-conditional-phrase",
+      "question": "우리 사업장에 이 지원 제도를 적용할 수 있는지 어떻게 확인하나요?",
+      "expected_route": "clarification_required",
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": false
+    }
+  ]
+}
