@@ -101,6 +101,24 @@ def test_nvidia_provider_without_key_keeps_ai_disabled() -> None:
     assert not settings.embedding_enabled
 
 
+def test_web_origins_splits_comma_separated_list() -> None:
+    settings = Settings(
+        web_origin="https://prod.example.com, https://preview-abc123.vercel.app",
+        _env_file=None,
+    )
+
+    assert settings.web_origins == [
+        "https://prod.example.com",
+        "https://preview-abc123.vercel.app",
+    ]
+
+
+def test_web_origins_single_value_is_still_a_list() -> None:
+    settings = Settings(web_origin="https://prod.example.com", _env_file=None)
+
+    assert settings.web_origins == ["https://prod.example.com"]
+
+
 def test_openai_generation_key_does_not_enable_nvidia_embedding() -> None:
     settings = Settings(
         answer_provider="openai",

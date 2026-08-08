@@ -61,8 +61,15 @@ class Settings(BaseSettings):
     authenticated_search_daily_limit: int = Field(default=100, ge=1)
     terms_version: str = "beta-2026-07-15"
     privacy_version: str = "beta-2026-07-15"
+    # 2026-08-08: 콤마로 구분된 정확한 origin 목록을 지원한다(예: prod + 특정 preview
+    # 배포). 여전히 정확한 origin만 받고 와일드카드(*.vercel.app 등)는 지원하지 않는다 -
+    # CORS는 정확히 알고 승인한 origin만 열어야 한다는 원칙을 유지한다.
     web_origin: str = "http://localhost:3000"
     request_timeout_seconds: float = 30
+
+    @property
+    def web_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.web_origin.split(",") if origin.strip()]
 
     @field_validator("supabase_secret_key", mode="before")
     @classmethod
