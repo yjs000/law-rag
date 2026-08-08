@@ -703,6 +703,20 @@ go/no-go 조건:
   0029 D-full held-out 단계에만 쓴다. `search-context-contract-v1`은 이 원칙에 따라 Pydantic
   스키마·SHA 결박 스크립트 대신 이 문서 표로 파라미터를 확정했고, 실제 운영 코드는 M5로 미뤘다. M4를
   완료로 표시했다.
+- 2026-08-08: M5 항목 중 API 호출·비용이 없는 부분만 먼저 구현했다 — 항목 1(M4 문맥 재사용)과
+  5(검증 실패 시 검색 전용 fallback)는 `app/main.py`에 이미 구현돼 있어 확인만 했다. 항목 4는
+  `app/domain/generation_profiles.py`(model/prompt/schema/context/sampling을 묶고 SHA로 참조하는
+  `GenerationProfile`)를 추가해 `diagnostics["generation"]`에 `generation_profile_key`/
+  `_sha256`으로 기록했다. 항목 2는 `app/domain/answer_actions.py`의 `derive_answer_action()`으로
+  D-10 gold의 answerability 네 값(`fully_answerable`·`partially_answerable`·
+  `clarification_required`·`unanswerable`)과 이름을 맞춘 `QuestionResponse.action`(optional,
+  하위 호환)을 추가했다 — **MOCK/미확정**: checklist status→action 매핑 규칙은 D-10으로 검증한 적이
+  없는 첫 추정치다. 항목 3(provider를 `nvidia_nim`으로 고정)과 항목 6(hosted smoke)은 실행하지
+  않았다 — 전자는 기본값 변경이라 사용자 확인이 먼저 필요하고, 후자는 실제 유료 API 호출이 필요하다.
+  NVIDIA 답변 모델(`nvidia/nemotron-3-ultra-550b-a55b`)의 `temperature=1.0`이 결정론적 법률 답변에
+  흔히 쓰는 값보다 높아 의도된 값인지 확인이 필요하다는 것도 이때 발견해 `generation_profiles.py`
+  주석에 MOCK으로 표시했다. M4.5(0028)는 자체 완료 gate("라우팅 fixture와 비용 gate 통과")를 아직
+  통과하지 못했지만, M5는 M4의 동결 검색·문맥 경로를 그대로 쓰는 독립 트랙이라 병행 진행했다.
 
 ## 초기 로드맵 작성에서 하지 않은 일
 
