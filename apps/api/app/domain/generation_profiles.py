@@ -32,10 +32,12 @@ class GenerationProfile:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-# MOCK/미확정, 2026-08-08: temperature=1.0은 nvidia_nim_answerer.py의 기존 하드코딩 값을
-# 그대로 옮긴 것이다. 법률 답변처럼 결정론적 출력이 바람직한 곳에 흔히 쓰는 값(0~0.3)보다
-# 높아 의도된 값인지 확인이 필요하다 - 사용자 검토 전까지는 기존 동작을 바꾸지 않기 위해
-# 그대로 둔다.
+# TODO(2026-08-08, 0025 M5): temperature=0.3은 잠정값이다. 기존 1.0은 근거 없는 하드코딩
+# 이었다(git blame: 45edf43, 설명 없음). 법률 답변처럼 재현성이 중요한 출력에 맞춰
+# 사용자 결정으로 0.3으로 낮췄지만, D-10/E-10 실제 실행으로 검증 전까지는 확정이 아니다.
+# 검증 제안: nvidia_nim_answerer.py의 동일 TODO 참고 - D-10 10문항을 온도
+# {0.0, 0.3, 0.7} 각 3회 반복 호출해 재현성(변동률)과 gold answerability 일치율을 같이
+# 보고 E1(pilot 50문항) 전에 확정한다.
 NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
     key="nvidia-nemotron-3-ultra-550b-a55b-answer-v1",
     provider="nvidia_nim",
@@ -43,7 +45,7 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
     prompt_version="answer-system-prompt-v1",  # openai_answerer.build_messages()
     schema_version="draft-answer-v1",  # openai_answerer.DraftAnswer
     context_version="m4-frozen-r1-a",  # 0025 M4 winner: R1+A
-    temperature=1.0,
+    temperature=0.3,
     top_p=0.95,
     max_output_tokens=4096,
     profile_version="1",
