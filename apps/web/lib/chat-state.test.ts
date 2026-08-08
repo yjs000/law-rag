@@ -88,6 +88,7 @@ describe("token-budgeted context", () => {
       title: "기존 제목",
       messages: messages(6),
       contextMessageCount: 6,
+      confirmed: true,
     };
     const latestTurn = selectConversationContext(current, "현재 질문", 100);
 
@@ -116,6 +117,7 @@ describe("token-budgeted context", () => {
       title: "이전 대화",
       messages: messages(4),
       contextMessageCount: 4,
+      confirmed: true,
     };
     const result = appendPendingTurn(current, {
       ...pendingInput(5),
@@ -126,6 +128,21 @@ describe("token-budgeted context", () => {
     expect(result.session.id).toBe("rollover-5");
     expect(result.session.rolloverNotice).toBe(CONTEXT_ROLLOVER_NOTICE);
     expect(result.session.messages[0]).toMatchObject({ role: "user", text: "첫 질문 5 입니다" });
+    expect(result.session.confirmed).toBe(false);
+  });
+
+  it("never marks a session confirmed until the backend actually returns a conversation id", () => {
+    const fresh = createChatSession("chat-1");
+    expect(fresh.confirmed).toBe(false);
+
+    // A failed or timed-out turn must not leave the session looking confirmed -
+    // callers rely on `confirmed` to decide whether it's safe to resend this id
+    // as conversation_id on retry (see law-rag-api's save_question 404 case).
+    const pending = appendPendingTurn(fresh, pendingInput(1)).session;
+    const failed = failPendingTurn(pending, "request-1", "timeout");
+    expect(failed.confirmed).toBe(false);
+    const stopped = stopPendingTurn(pending, "request-1");
+    expect(stopped.confirmed).toBe(false);
   });
 
   it("keeps the current chat when all completed context fits", () => {
@@ -134,6 +151,7 @@ describe("token-budgeted context", () => {
       title: "기존 제목",
       messages: messages(2),
       contextMessageCount: 2,
+      confirmed: true,
     };
     const result = appendPendingTurn(current, {
       ...pendingInput(3),

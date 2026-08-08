@@ -37,6 +37,8 @@ export type ChatSession = {
   /** @deprecated Display-only compatibility counter; never used for context limits. */
   contextMessageCount: number;
   rolloverNotice?: string;
+  /** True once the backend has actually created a conversation row for `id`. */
+  confirmed: boolean;
 };
 
 export type PendingTurnInput = {
@@ -67,7 +69,7 @@ export type ConversationContextSelection = {
 };
 
 export function createChatSession(id: string): ChatSession {
-  return { id, title: null, messages: [], contextMessageCount: 0 };
+  return { id, title: null, messages: [], contextMessageCount: 0, confirmed: false };
 }
 
 export function firstQuestionTitle(question: string): string {

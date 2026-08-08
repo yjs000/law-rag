@@ -506,7 +506,7 @@ export default function Home() {
               answer: conversationAnswerText(turn.response),
             })) }
           : {}),
-        ...(pending.rolledOver || activeChat.messages.length === 0
+        ...(pending.rolledOver || !activeChat.confirmed
           ? {}
           : { conversation_id: activeChat.id }),
       }, controller.signal);
@@ -526,6 +526,7 @@ export default function Home() {
       setActiveChat((current) => ({
         ...completePendingTurn(current, requestId, answer),
         id: answer.conversation_id ?? current.id,
+        confirmed: answer.conversation_id != null || current.confirmed,
       }));
       setSelectedCitationId(null);
       setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
@@ -580,7 +581,7 @@ export default function Home() {
       ]);
       const latest = ordered.at(-1);
       if (!latest) throw new Error("대화에 표시할 질문이 없습니다.");
-      setActiveChat({ id: item.id, title: item.title, messages, contextMessageCount: item.turn_count * 2 });
+      setActiveChat({ id: item.id, title: item.title, messages, contextMessageCount: item.turn_count * 2, confirmed: true });
       setTurnCursor(page.next_cursor ?? null);
       setTurnHasMore(page.has_more);
       setQuestion("");
