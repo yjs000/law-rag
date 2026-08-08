@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from app.domain.answer_actions import derive_fallback_action
 from app.domain.provision_queries import parse_provision_references
 from app.domain.schemas import (
     AiFallbackReason,
@@ -119,4 +120,59 @@ def search_only_answer(
         no_results_reason=None if hits else no_results_reason,
         requested_answer_mode=request.answer_mode,
         fallback_reason=fallback_reason,
+        action=derive_fallback_action(fallback_reason),
+    )
+
+
+_REALTIME_BLOCKED_MESSAGE = (
+    "이 질문은 시점에 따라 달라지는 정보(예: 올해 예산, 현재 가격, 고장 상태)가 필요합니다.\n"
+    "법령 corpus만으로는 답할 수 없으니 해당 연도·기관의 최신 공고나 담당 기관에 직접 확인해 "
+    "주세요."
+)
+_EXTERNAL_DOCUMENT_BLOCKED_MESSAGE = (
+    "이 질문은 계약서·정산서·공사비 산출서 같은 문서 확인이 필요합니다.\n"
+    "법령 corpus만으로는 확정할 수 없으니 해당 문서를 직접 대조해 확인해 주세요."
+)
+
+
+def route_blocked_answer(
+    request: QuestionRequest,
+    route: str,
+    *,
+    missing_fields: tuple[str, ...] = (),
+) -> QuestionResponse:
+    """0028 M4.5: terminal response for a route that never reaches search.
+
+    realtime_required and external_document_required end here with a deterministic
+    block message (0 embedding/search/LLM calls - see 0028 "받지 않는 두 경로").
+    clarification_required ends here with the "완성 질문 재제출" template (0028 "비용
+    최소화 결정"): the caller resends the original question plus the missing facts in one
+    message; the server never auto-merges turns.
+    """
+    if route == "realtime_required":
+        summary = _REALTIME_BLOCKED_MESSAGE
+    elif route == "external_document_required":
+        summary = _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE
+    elif route == "clarification_required":
+        fields_block = "\n".join(f"- {field}: [ ]" for field in missing_fields) or "- [ ]"
+        summary = (
+            "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n"
+            "다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 한 번에 보내주세요.\n"
+            "추가 정보만 따로 보내지 마세요.\n\n"
+            f"질문: {request.question}\n추가 정보:\n{fields_block}"
+        )
+    else:
+        raise ValueError(f"route_blocked_answer does not handle route={route!r}")
+    return QuestionResponse(
+        request_id=str(request.client_request_id),
+        mode="search_only",
+        summary=summary,
+        scope=f"라우팅: {route} (검색 미실행)",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=["이 서비스는 법률 자문을 대체하지 않습니다."],
+        result_status="no_results",
+        requested_answer_mode=request.answer_mode,
+        route=route,  # type: ignore[arg-type]
     )

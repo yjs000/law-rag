@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from law_rag_core.domain.schemas import ChecklistItem
+from law_rag_core.domain.schemas import AiFallbackReason, ChecklistItem
 
 AnswerAction = Literal[
     "fully_answerable",
@@ -29,3 +29,18 @@ def derive_answer_action(checklist: list[ChecklistItem]) -> AnswerAction:
     if "conditional" in statuses:
         return "partially_answerable"
     return "fully_answerable"
+
+
+# 2026-08-08: search_only_answer()의 fallback checklist는 근거가 있으면 무조건 전부
+# "check" 상태를 쓴다("원문에서 요건을 대조하세요") - 이는 AI가 판단을 유보했다는 뜻이
+# 아니라 애초에 AI 생성을 시도조차 안 했다는 뜻이라 derive_answer_action()을 그대로
+# 적용하면 항상 clarification_required로 잘못 나온다. fallback_reason만으로 판단한다:
+# NO_EVIDENCE·GROUNDING_FAILED는 "법령 corpus로 답을 못 냈다"는 뜻이라 unanswerable로
+# 본다. 나머지(AI_DISABLED·QUOTA_EXHAUSTED·BILLING_OR_QUOTA_ERROR·EMBEDDING_ERROR·
+# GENERATION_ERROR)는 시스템/운영 실패이지 "법령으로 답할 수 있는지"에 대한 판단이
+# 아니므로 action을 모른다는 뜻의 None을 반환한다. fallback_reason이 아예 없으면
+# (사용자가 search_only를 직접 요청한 경우) 마찬가지로 None.
+def derive_fallback_action(fallback_reason: AiFallbackReason | None) -> AnswerAction | None:
+    if fallback_reason in (AiFallbackReason.NO_EVIDENCE, AiFallbackReason.GROUNDING_FAILED):
+        return "unanswerable"
+    return None

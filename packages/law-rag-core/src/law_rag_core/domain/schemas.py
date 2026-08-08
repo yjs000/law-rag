@@ -177,6 +177,21 @@ class QuestionResponse(BaseModel):
         ]
         | None
     ) = None
+    # 0028 M4.5, 2026-08-08: 검색 전 라우팅 결과. app/domain/routing.py의 QuestionRoute와
+    # 값을 맞췄지만(그 모듈은 app 계층이라 여기서 직접 import할 수 없어 리터럴을 복제했다),
+    # `action`(D-10 answerability 4값)과는 다른 축이다 - route는 "검색을 실행해도 되는가",
+    # action은 "생성된 답이 얼마나 완전한가"를 나타낸다. clarification_required라는 이름이
+    # 우연히 겹치지만 서로 다른 필드다. legal_search 외 세 route는 검색·생성 없이 결정적
+    # 응답으로 끝나므로 이때 action은 항상 None이다. 하위 호환을 위해 optional.
+    route: (
+        Literal[
+            "legal_search",
+            "clarification_required",
+            "realtime_required",
+            "external_document_required",
+        ]
+        | None
+    ) = None
 
 
 class MockUser(BaseModel):

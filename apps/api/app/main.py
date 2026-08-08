@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
+from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.openai_answerer import OpenAIAnswerer, select_generation_hits, validate_draft
@@ -22,7 +23,7 @@ from app.adapters.supabase_auth import (
     SupabaseAuthError,
     SupabaseAuthUnavailableError,
 )
-from app.application.answering import search_only_answer
+from app.application.answering import route_blocked_answer, search_only_answer
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
 from app.domain.answer_actions import derive_answer_action
@@ -36,6 +37,7 @@ from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
+from app.domain.routing import route_tier1, route_tier2
 from app.domain.schemas import (
     AiFallbackReason,
     ChecklistDocument,
@@ -55,7 +57,7 @@ from app.domain.schemas import (
     SearchRequest,
 )
 from app.domain.source_urls import is_allowed_source_url
-from app.observability import emit_question_outcome
+from app.observability import emit_question_outcome, emit_route_outcome
 from app.settings import get_settings
 
 settings = get_settings()
@@ -249,6 +251,7 @@ async def _answer_question(
         },
         "retrieval": {},
         "generation": {"attempted": False, "status": "not_attempted"},
+        "routing": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
     await _check_quota(
@@ -258,6 +261,33 @@ async def _answer_question(
         user=user,
     )
     await asyncio.sleep(0)
+    # 0028 M4.5: 라우팅은 embedding보다 먼저 실행한다. 지금은 use_ai(terra) 경로에만
+    # 적용한다 - search_only는 결과를 사용자가 직접 원문 대조하는 모드라 D-10에서 발견된
+    # "무관 법령이 AI 문맥에 섞이는" 문제가 애초에 발생하지 않는다. search_only까지
+    # 넓히는 건 별도 결정이 필요하다(범위를 넓히기 전에 기존 search_only 테스트 영향을
+    # 먼저 검토해야 한다).
+    if use_ai:
+        routing_stage = diagnostics["routing"]
+        assert isinstance(routing_stage, dict)
+        routing_stage.update({"attempted": True, "status": "started"})
+        route_decision = route_tier1(payload.question)
+        if route_decision is None:
+            route_decision = await route_tier2(payload.question, _route_classifier())
+        routing_stage.update(
+            {
+                "status": "resolved",
+                "route": route_decision.route,
+                "tier": route_decision.tier,
+                "reason_code": route_decision.reason_code,
+                "confidence": route_decision.confidence,
+            }
+        )
+        emit_route_outcome(str(payload.client_request_id), route_decision)
+        if route_decision.route != "legal_search":
+            blocked = route_blocked_answer(
+                payload, route_decision.route, missing_fields=route_decision.missing_fields
+            )
+            return await _save_if_authenticated(user, payload, blocked, diagnostics)
     query_embedding = None
     embedding_failed = False
     if use_ai and settings.embedding_enabled:
@@ -718,6 +748,13 @@ def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
             max_output_tokens=settings.answer_max_output_tokens,
         )
     return OpenAIAnswerer(api_key=settings.openai_api_key or "", model=settings.openai_answer_model)
+
+
+# TODO(0028 M4.5): NVIDIA API key가 배선되면 MockRouteClassifier를 NvidiaNimRouteClassifier로
+# 교체한다 - 그 전까지는 tier 2가 실제 판단을 하지 않으므로 misclassification/비용 게이트
+# 수치는 잠정치다(evaluation/route-fixture-v1.json 평가 결과 참고).
+def _route_classifier() -> MockRouteClassifier:
+    return MockRouteClassifier()
 
 
 def _ai_unavailable_reason() -> str | None:

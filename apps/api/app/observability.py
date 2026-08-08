@@ -32,6 +32,18 @@ def emit_question_outcome(request_id: str, mode: AnswerMode) -> None:
     logger.info(json.dumps(event.model_dump(mode="json"), ensure_ascii=True))
 
 
+# TODO(2026-08-08, 사용자 요청): 지금 fallback_reason은 인증 사용자에게만 diagnostics로
+# 저장된다(app/main.py의 _save_if_authenticated -> postgres_identity.save_question).
+# 익명 사용자는 emit_question_outcome이 mode만 남기고 fallback_reason은 안 남아, 익명
+# 요청이 왜 fallback됐는지 나중에 분석할 수 없다. 이 파일의 다른 이벤트(emit_route_outcome
+# 등)도 마찬가지로 route/tier/reason_code 분포는 집계되지만 fallback_reason·generation
+# 실패 사유·embedding 실패 사유는 익명 사용자 기준으로 집계되지 않는다. 개인정보 없이
+# (질문 원문·사용자 식별자 없이) mode/route/tier/reason_code처럼 이미 안전한 필드들과
+# 나란히 embedding/generation 단계의 실패 사유도 process-local counter로 남기는
+# emit_question_stage_outcome류 이벤트를 추가해, 인증 여부와 무관하게 "왜 실패했는지"
+# 분포를 분석 가능하게 만드는 걸 후속 작업으로 등록한다.
+
+
 def question_metrics_snapshot() -> dict[str, int]:
     """외부 메트릭 백엔드 연결 전 사용하는 프로세스 로컬 누계."""
     with _metrics_lock:
