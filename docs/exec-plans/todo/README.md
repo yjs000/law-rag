@@ -12,6 +12,7 @@
 - [0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리](0036-account-modal-model-label.md) — 제안됨, 미착수 · `gpt-5.6-terra 전용` 문구를 AI 모드 on/off 표시로 교체
 - [0037: 계정 사용 한도 제거 - 토글 가능한 모듈로](0037-account-quota-toggle-off.md) — 제안됨, 미착수 · 로직은 남기고 설정 토글로 끄기, 서버 구현 포함 전체 미착수
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 제안됨, 미착수 · 테스트 선작성 후 통과하도록 구현, 기준(p50/p95/콜드스타트)은 착수 시 확정
+- [0039: 구조화된 에러 detail이 "[object Object]"로 표출됨](0039-error-detail-object-shown-as-object-object.md) — 제안됨, 미착수 · `unsupported_corpus_date`/`corpus_unready` 재현 확인, api-client.ts 공용 에러 처리 수정 필요
 
 ## 등록 계약
 
