@@ -60,7 +60,7 @@ adjudication 대기 상태다. 승인 전에는 Gold 지표를 계산하지 않�
 
 ## 문서 시작점
 
-- [작업 계약](AGENTS.md)
+- [저장소 규칙](AGENTS.md)
 - [아키텍처](ARCHITECTURE.md)
 - [제품 명세](docs/product-specs/index.md)
 - [설계 문서](docs/design-docs/index.md)

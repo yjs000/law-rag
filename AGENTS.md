@@ -1,6 +1,11 @@
 # AGENTS.md
 
-이 파일은 저장소의 목차이자 작업 계약이다. 세부 지식을 여기에 복제하지 말고 아래의 권위 문서로 연결한다.
+이 파일은 저장소의 목차이자 authoritative 규칙 문서다. 세부 지식을 여기에 복제하지 말고 아래의 권위
+문서로 연결한다.
+
+어떻게 개발할지(skill 선택, brainstorming, planning, TDD, 구현, 리뷰, 검증)는 설치된 Superpowers가
+결정한다. 무엇을 지켜야 하는지(도메인 불변조건, 데이터·보안 규칙, 문서·Git 정책)는 이 파일이
+결정한다. 자세한 역할 분담은 "개발 작업 워크플로우"를 참고한다.
 
 이 저장소 규칙은 어떤 사용자·전역 설정(예: 사용자 홈 디렉터리의 전역 `AGENTS.md`)보다 우선한다. 이
 문서와 전역 설정이 다르면 이 문서를 따른다. 전역 설정은 이 문서가 다루지 않는 부분에서만 보조로
@@ -11,13 +16,25 @@
 1. `git status --short --branch`로 현재 변경과 브랜치를 확인한다.
 2. 이 파일과 `ARCHITECTURE.md`를 읽는다.
 3. 작업과 관련된 `docs/product-specs/` 및 `docs/design-docs/` 문서를 읽는다.
-4. 복잡한 구현·저장소 전역 변경·아키텍처 작업·다단계 디버깅이거나 진행 중 범위가 커질 가능성이
-   있으면 `docs/WORK_CONTRACT.md` 기준으로 이번 작업 계약을 짧게 제시해 질문을 구체화한 뒤 진행한다.
-   해당 작업의 exec-plan이 이미 있으면 그 계획의 완료 조건이 같은 역할을 하므로 생략한다.
-5. 사용자가 이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인하고,
-   착수 계약을 점검한 뒤 같은 번호의 파일을 `active/`로 이동한다.
-6. 범위가 크거나 여러 세션에 걸치면 `docs/exec-plans/active/`에 실행 계획을 만든다.
-7. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
+4. brainstorming·설계 승인·planning 필요 여부와 절차는 설치된 Superpowers skill의 trigger 조건을
+   따른다. 이 저장소는 작업 규모로 그 여부를 다시 판단하지 않는다.
+5. 사용자가 이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다.
+   Superpowers `writing-plans`로 실행 계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
+6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
+
+## 개발 작업 워크플로우
+
+개발 작업의 skill 선택, brainstorming, 설계 승인, planning, worktree 격리, TDD, 구현, 코드 리뷰,
+검증 및 완료 절차는 설치된 Superpowers의 현재 skill과 trigger 조건을 따른다.
+
+이 저장소는 Superpowers workflow의 발동 조건이나 절차를 별도로 재정의하지 않는다.
+
+단, Superpowers가 생성하는 repository artifact의 저장 위치와 lifecycle은 이 저장소의 문서 규칙
+(`docs/design-docs/`, `docs/exec-plans/active/`, 아래 "권위 문서")을 따른다 — `CLAUDE.md`가 경로를
+override한다.
+
+프로젝트의 도메인, 데이터, 보안, 개인정보, 아키텍처 및 검증 불변조건(아래 "변경 불변조건")은
+Superpowers workflow 중에도 항상 유지한다.
 
 ## 커밋 원칙
 
@@ -42,8 +59,7 @@
 - 시스템 구조와 의존성: `ARCHITECTURE.md`
 - 상세 기술 설계: `docs/design-docs/index.md`
 - 제품 요구사항: `docs/product-specs/index.md`
-- 실행 계획 작성법: `docs/PLANS.md`
-- 작업 계약: `docs/WORK_CONTRACT.md`
+- 실행 계획 저장 위치·lifecycle: `docs/PLANS.md`
 - 사용자가 제안한 미착수 작업: `docs/exec-plans/todo/README.md`
 - UI 원칙: `docs/DESIGN.md`, `docs/FRONTEND.md`
 - 보안과 개인정보: `docs/SECURITY.md`
