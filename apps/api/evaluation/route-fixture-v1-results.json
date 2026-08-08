@@ -1,15 +1,18 @@
 {
   "fixture_size": 14,
-  "misclassification_rate": 0.1429,
-  "unnecessary_search_rate": 0.1429,
-  "unnecessary_block_rate": 0.0,
+  "resolved_count": 14,
+  "pending_count": 0,
+  "misclassification_rate": 0.2143,
+  "unnecessary_search_rate": 0.0714,
+  "unnecessary_block_rate": 0.1429,
   "tier1_resolution_rate": 0.2857,
   "tier2_resolution_rate": 0.7143,
   "misclassified_cases": [
     "lay-energy-0111",
-    "boundary-clarification-without-conditional-phrase"
+    "lay-energy-0346",
+    "lay-energy-0561"
   ],
-  "cost_gate_status": "PROVISIONAL - tier 2 is MockRouteClassifier, not a real NVIDIA call",
+  "cost_gate_status": "LIVE - tier 2 used a real NVIDIA NIM call for every unresolved case",
   "cases": [
     {
       "id": "lay-energy-0201",
@@ -18,7 +21,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.95,
       "correct": true
     },
     {
@@ -38,7 +41,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.9,
       "correct": true
     },
     {
@@ -48,7 +51,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.9,
       "correct": true
     },
     {
@@ -58,28 +61,28 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.9,
       "correct": false
     },
     {
       "id": "lay-energy-0346",
       "question": "전력망 연결 공사비가 예상보다 많이 나왔는데, 공사비가 어떻게 계산됐는지 어떤 항목을 확인해야 하나요?",
       "expected_route": "legal_search",
-      "predicted_route": "legal_search",
+      "predicted_route": "external_document_required",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
-      "correct": true
+      "confidence": 0.95,
+      "correct": false
     },
     {
       "id": "lay-energy-0561",
       "question": "예상보다 전기 판매 정산금이 적게 들어왔는데, 발전량·계약가격·공제액을 어떤 자료와 대조해야 하나요?",
       "expected_route": "legal_search",
-      "predicted_route": "legal_search",
+      "predicted_route": "external_document_required",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
-      "correct": true
+      "confidence": 0.95,
+      "correct": false
     },
     {
       "id": "lay-energy-0605",
@@ -108,7 +111,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.9,
       "correct": true
     },
     {
@@ -118,7 +121,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.95,
       "correct": true
     },
     {
@@ -128,7 +131,7 @@
       "predicted_route": "legal_search",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
+      "confidence": 0.95,
       "correct": true
     },
     {
@@ -145,11 +148,11 @@
       "id": "boundary-clarification-without-conditional-phrase",
       "question": "우리 사업장에 이 지원 제도를 적용할 수 있는지 어떻게 확인하나요?",
       "expected_route": "clarification_required",
-      "predicted_route": "legal_search",
+      "predicted_route": "clarification_required",
       "tier": 2,
       "reason_code": "tier2_llm_judgment",
-      "confidence": 0.0,
-      "correct": false
+      "confidence": 0.9,
+      "correct": true
     }
   ]
 }
