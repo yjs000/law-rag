@@ -140,6 +140,7 @@ def route_blocked_answer(
     route: str,
     *,
     missing_fields: tuple[str, ...] = (),
+    explanation: str | None = None,
 ) -> QuestionResponse:
     """0028 M4.5: terminal response for a route that never reaches search.
 
@@ -148,11 +149,22 @@ def route_blocked_answer(
     clarification_required ends here with the "완성 질문 재제출" template (0028 "비용
     최소화 결정"): the caller resends the original question plus the missing facts in one
     message; the server never auto-merges turns.
+
+    2026-08-08: when tier 2 (LLM) made the decision, it already produced a natural-
+    language `explanation` of why - reused here (no extra LLM call) as a question-
+    specific supplement to the canned message, not a replacement for it. The canned
+    message stays the authoritative, reviewed structural content; the LLM text is purely
+    supplementary color, clearly labeled so it's never mistaken for a legal claim. tier 1
+    (deterministic keyword match) has no such text, so `explanation` is None there.
     """
     if route == "realtime_required":
         summary = _REALTIME_BLOCKED_MESSAGE
+        if explanation:
+            summary += f"\n\n(참고: {explanation})"
     elif route == "external_document_required":
         summary = _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE
+        if explanation:
+            summary += f"\n\n(참고: {explanation})"
     elif route == "clarification_required":
         fields_block = "\n".join(f"- {field}: [ ]" for field in missing_fields) or "- [ ]"
         summary = (

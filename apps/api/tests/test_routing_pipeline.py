@@ -8,6 +8,7 @@ import app.main as main_module
 from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
 from app.domain.catalog import SourceKind
+from app.domain.routing import RouteDecision, RouteExample, nearest_example
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 
@@ -217,3 +218,76 @@ def test_search_only_mode_is_not_gated_by_routing(monkeypatch) -> None:
     assert response.json()["mode"] == "search_only"
     assert response.json().get("route") is None
     assert search_calls == [1]
+
+
+def test_tier2_llm_explanation_is_appended_to_blocked_message(monkeypatch) -> None:
+    """2026-08-08 (user proposal): tier 2's own reasoning, already produced for free,
+    should make blocked-route messages question-specific instead of purely canned."""
+    embedding_calls: list[int] = []
+    search_calls: list[int] = []
+    _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+
+    class ExplainingClassifier:
+        async def classify(self, question, hint):
+            from app.domain.routing import RouteJudgment
+
+            return RouteJudgment(
+                route="external_document_required",
+                confidence=0.9,
+                reason="사용자가 보유한 보증서 내용을 직접 대조해야 판단할 수 있다.",
+            )
+
+    monkeypatch.setattr(main_module, "_route_classifier", lambda: ExplainingClassifier())
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "이거 애매한 질문인데 확인해줄래요?", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == "external_document_required"
+    assert "보증서 내용을 직접 대조" in body["summary"]
+    assert embedding_calls == []
+    assert search_calls == []
+
+
+def test_mock_classifier_explanation_never_reaches_the_user(monkeypatch) -> None:
+    """MockRouteClassifier's reason text is a debug placeholder, not meant for display -
+    only exercised when NVIDIA_API_KEY is absent (local dev)."""
+    embedding_calls: list[int] = []
+    search_calls: list[int] = []
+    _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+
+    class HintedClassifier:
+        async def classify(self, question, hint_arg):
+            return await MockRouteClassifier().classify(question, hint_arg)
+
+    monkeypatch.setattr(main_module, "_route_classifier", lambda: HintedClassifier())
+
+    with_hint_result = None
+
+    async def route_tier2_with_hint(question, classifier, *, hint=None):
+        nonlocal with_hint_result
+        example = RouteExample(
+            example_id="x", route="realtime_required", embedding=(1.0, 0.0)
+        )
+        forced_hint = nearest_example((1.0, 0.0), (example,))
+        with_hint_result = await classifier.classify(question, forced_hint)
+        return RouteDecision(
+            route=with_hint_result.route,
+            reason_code="tier2_llm_judgment",
+            tier=2,
+            confidence=with_hint_result.confidence,
+            explanation=with_hint_result.reason,
+        )
+
+    monkeypatch.setattr(main_module, "route_tier2", route_tier2_with_hint)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "이거 애매한 질문인데 확인해줄래요?", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    assert "mock_classifier" not in response.json()["summary"]

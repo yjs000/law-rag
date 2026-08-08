@@ -297,8 +297,19 @@ async def _answer_question(
         )
         emit_route_outcome(str(payload.client_request_id), route_decision)
         if route_decision.route != "legal_search":
+            # mock_classifier 설명은 디버그용 placeholder지 실제 판단 근거가 아니다 -
+            # 사용자에게 보이면 안 된다(NVIDIA_API_KEY 없는 로컬 개발에서만 발생 가능).
+            user_facing_explanation = (
+                route_decision.explanation
+                if route_decision.explanation
+                and not route_decision.explanation.startswith("mock_classifier:")
+                else None
+            )
             blocked = route_blocked_answer(
-                payload, route_decision.route, missing_fields=route_decision.missing_fields
+                payload,
+                route_decision.route,
+                missing_fields=route_decision.missing_fields,
+                explanation=user_facing_explanation,
             )
             return await _save_if_authenticated(user, payload, blocked, diagnostics)
     query_embedding = None

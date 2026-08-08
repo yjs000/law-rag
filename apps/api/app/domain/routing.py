@@ -27,6 +27,12 @@ class RouteDecision:
     tier: RouterTier
     confidence: float
     missing_fields: tuple[str, ...] = ()
+    # 2026-08-08: tier 2 LLM 판단은 이미 "왜 이 route인가"를 자연어로 만든다
+    # (RouteJudgment.reason). 이걸 버리지 않고 여기 실어서 realtime_required·
+    # external_document_required의 차단 메시지에 재사용한다 - 추가 LLM 호출 없이
+    # 질문에 맞춘 구체적 안내를 줄 수 있다(사용자 제안). tier 1(결정적 규칙)은 자연어
+    # 설명이 없어 None으로 둔다.
+    explanation: str | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
@@ -324,4 +330,5 @@ async def route_tier2(
         tier=2,
         confidence=judgment.confidence,
         missing_fields=judgment.missing_fields,
+        explanation=judgment.reason,
     )
