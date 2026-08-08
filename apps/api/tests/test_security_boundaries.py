@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.domain.catalog import SourceKind
 from app.domain.routing import RouteDecision
-from app.domain.schemas import AnswerMode, SearchHit
+from app.domain.schemas import AiFallbackReason, AnswerMode, SearchHit
 from app.domain.source_urls import is_allowed_source_url
 from app.main import app
 from app.observability import (
     emit_question_outcome,
     emit_route_outcome,
+    fallback_reason_metrics_snapshot,
     question_metrics_snapshot,
     route_metrics_snapshot,
 )
@@ -104,10 +105,32 @@ def test_observability_event_has_only_request_id_mode_and_result(caplog) -> None
         "request_id": "request-safe-id",
         "mode": "search_only",
         "result": "served",
+        "fallback_reason": None,
     }
     assert secret not in caplog.text
     assert question not in caplog.text
     assert question_metrics_snapshot()["search_only"] >= 1
+
+
+def test_observability_event_fallback_reason_is_safe_enum_only(caplog) -> None:
+    # 2026-08-08: fallback_reason is an anonymous-user observability gap fix - it must
+    # stay a closed enum value (never question text or a free-text explanation).
+    question = "개인 사건 질문 전문"
+    with caplog.at_level(logging.INFO, logger="law_rag.question_outcome"):
+        emit_question_outcome(
+            "request-fallback-id",
+            AnswerMode.SEARCH_ONLY,
+            fallback_reason=AiFallbackReason.NO_EVIDENCE,
+        )
+    payload = json.loads(caplog.records[-1].message)
+    assert payload == {
+        "request_id": "request-fallback-id",
+        "mode": "search_only",
+        "result": "served",
+        "fallback_reason": "no_evidence",
+    }
+    assert question not in caplog.text
+    assert fallback_reason_metrics_snapshot()["no_evidence"] >= 1
 
 
 def test_route_outcome_event_has_no_question_text(caplog) -> None:

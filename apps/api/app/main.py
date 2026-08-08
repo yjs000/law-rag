@@ -812,7 +812,9 @@ async def _save_if_authenticated(
     response: QuestionResponse,
     diagnostics: dict[str, object] | None = None,
 ) -> QuestionResponse:
-    emit_question_outcome(response.request_id, response.mode)
+    emit_question_outcome(
+        response.request_id, response.mode, fallback_reason=response.fallback_reason
+    )
     if diagnostics is not None:
         diagnostics["outcome"] = {
             "mode": response.mode,
