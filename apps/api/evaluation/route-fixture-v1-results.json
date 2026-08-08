@@ -1,14 +1,12 @@
 {
   "fixture_size": 14,
-  "misclassification_rate": 0.2857,
+  "misclassification_rate": 0.1429,
   "unnecessary_search_rate": 0.1429,
-  "unnecessary_block_rate": 0.1429,
-  "tier1_resolution_rate": 0.4286,
-  "tier2_resolution_rate": 0.5714,
+  "unnecessary_block_rate": 0.0,
+  "tier1_resolution_rate": 0.2857,
+  "tier2_resolution_rate": 0.7143,
   "misclassified_cases": [
     "lay-energy-0111",
-    "boundary-document-keyword-false-positive",
-    "boundary-realtime-keyword-false-positive",
     "boundary-clarification-without-conditional-phrase"
   ],
   "cost_gate_status": "PROVISIONAL - tier 2 is MockRouteClassifier, not a real NVIDIA call",
@@ -117,21 +115,21 @@
       "id": "boundary-document-keyword-false-positive",
       "question": "태양광 발전사업을 하려면 계약서를 반드시 작성해야 하는 법적 의무가 있나요?",
       "expected_route": "legal_search",
-      "predicted_route": "external_document_required",
-      "tier": 1,
-      "reason_code": "tier1_document_keyword",
-      "confidence": 1.0,
-      "correct": false
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
     },
     {
       "id": "boundary-realtime-keyword-false-positive",
       "question": "현재 시행 중인 신재생에너지법의 허가 절차를 알려주세요.",
       "expected_route": "legal_search",
-      "predicted_route": "realtime_required",
-      "tier": 1,
-      "reason_code": "tier1_realtime_keyword",
-      "confidence": 1.0,
-      "correct": false
+      "predicted_route": "legal_search",
+      "tier": 2,
+      "reason_code": "tier2_llm_judgment",
+      "confidence": 0.0,
+      "correct": true
     },
     {
       "id": "boundary-external-document-true-positive",

@@ -40,21 +40,24 @@ class RouteDecision:
 # 기준으로 결정적 분할한 BUILD 200문항만 Kiwi로 형태소 분석해 후보를 채굴하고, 나머지
 # EVAL 800문항은 사전에 반영하지 않고 커버리지 확인에만 쓴다(scripts/
 # build_tier1_term_dictionary.py, evaluation/tier1-term-dictionary-analysis-v1.json) -
-# 사전 구축에 쓴 데이터로 다시 사전을 "검증"하는 leakage를 피하기 위해서다. BUILD 200에서
-# "현재" 단독 어간이 등장한 문항 2개를 전수 검토한 결과 둘 다 "현재 계약 조건"·"현재
-# 소유자"처럼 법령 corpus가 답할 수 없는 개인·시점 상태 질문이라 추가했다. "지금"·"최근"은
-# 전체 1,000문항 중에서는 유효한 사례가 있었지만 BUILD 200에는 한 번도 나타나지 않아 -
-# 이번 분할 기준으로는 채택 근거가 없어 표준 문구(지금 가격/지금 시세/최근 가격 등, 원래
-# 손으로 쓴 항목)만 남기고 단독 어간은 넣지 않았다. document 목록은 서·증으로 끝나는 명사
-# 후보 중 BUILD 200에서 나온 것만 검토했다 - "인증서"(3건)는 전부 REC(신재생에너지
-# 공급인증서) 발급 절차를 묻는 문항이라 법령으로 설명 가능한 절차 질문으로 판단해 제외했고,
-# "보증서"(1건)는 "계약서와 보증서에서 수리 책임을 확인" 같은 실제 문서 대조 질문이라
-# 채택했다.
+# 사전 구축에 쓴 데이터로 다시 사전을 "검증"하는 leakage를 피하기 위해서다. document 목록은
+# 서·증으로 끝나는 명사 후보 중 BUILD 200에서 나온 것만 검토했다 - "인증서"(3건)는 전부
+# REC(신재생에너지 공급인증서) 발급 절차를 묻는 문항이라 법령으로 설명 가능한 절차 질문으로
+# 판단해 제외했고, "보증서"(1건)는 "계약서와 보증서에서 수리 책임을 확인" 같은 실제 문서
+# 대조 질문이라 채택했다.
+#
+# [2026-08-08 되돌림] 처음엔 "현재" 단독 어간도 BUILD 200의 개인 계정 상태 질문 2건
+# 근거로 추가했으나, 사용자 지적으로 route-fixture-v1.json 평가에서 "현재 시행 중인
+# 신재생에너지법의 허가 절차를 알려주세요"(법령 currency 질문, corpus의 as_of_date가 이미
+# 처리하는 개념)가 realtime_required로 잘못 차단되는 걸 확인했다. tier1이 잘못 걸러내면
+# 법령으로 답할 수 있는 질문도 못 답하게 되므로 - "정말 답할 수 없는 것만 타이트하게
+# 거른다"는 방향에 따라 단독 어간 매칭을 버리고, 아래 `match_realtime_personal_state_phrase`
+# 처럼 "시점어 + 개인·계정 상태 명사" 근접 매칭으로 좁혔다(더불어 "시행/유효한/법/법령/
+# 기준일"이 바로 뒤에 오면 애초에 제외한다).
 _REALTIME_KEYWORDS: tuple[str, ...] = (
     "올해",
     "이번 달",
     "이번달",
-    "현재",
     "현재 가격",
     "지금 가격",
     "요즘 가격",
@@ -80,6 +83,50 @@ _EXTERNAL_DOCUMENT_KEYWORDS: tuple[str, ...] = (
     "보증서",
 )
 
+# 시점어(현재/지금/최근/요즘) 바로 뒤에 이런 말이 오면 "지금 내 상태"가 아니라 "지금
+# 시행 중인 법"을 가리키는 것이다 - as_of_date로 이미 처리되는 개념이라 realtime_required가
+# 아니다.
+_REALTIME_LAW_CURRENCY_EXCLUSION = r"시행|유효한|법령|법률|법(?!인)|규정|기준일|조문"
+
+# 2026-08-08 corpus 검토(v1 질문은행 BUILD 200 + 전수 15문항 표본)에서 "현재"·"지금"·
+# "최근"이 진짜 realtime_required였던 사례는 전부 이런 개인·계정 상태 명사와 같이
+# 나타났다("현재 대기 순서", "현재 계약 조건", "현재 명의", "최근 사용량" 등). 시점어
+# 단독으로는 판단하지 않고 이 명사와의 근접(12자 이내) 공기를 요구해 위양성을 줄인다.
+_REALTIME_PERSONAL_STATE_NOUNS = (
+    "순서",
+    "조건",
+    "기한",
+    "수수료",
+    "지원",
+    "대출",
+    "요금",
+    "명의",
+    "소유자",
+    "사용량",
+    "신청",
+    "대기",
+    "처리",
+    "계약",
+    "상태",
+)
+_REALTIME_PERSONAL_STATE_PATTERN = re.compile(
+    r"(?:현재|지금|최근|요즘)(?!\s*(?:" + _REALTIME_LAW_CURRENCY_EXCLUSION + r"))"
+    r"[^.?!]{0,12}(?:" + "|".join(_REALTIME_PERSONAL_STATE_NOUNS) + r")"
+)
+
+
+def match_realtime_personal_state_phrase(question: str) -> bool:
+    return _REALTIME_PERSONAL_STATE_PATTERN.search(question) is not None
+
+
+# 계약서·정산서 같은 단어가 있어도 "이 문서를 대조해달라"가 아니라 "법이 이걸 요구하는가"를
+# 묻는 일반 법령 질문이면 external_document_required가 아니다 - 법령 corpus로 답 가능하다.
+# 2026-08-08: route-fixture-v1.json 평가에서 "계약서를 반드시 작성해야 하는 법적 의무가
+# 있나요?"가 잘못 차단되는 걸 확인하고 추가했다.
+_GENERAL_LEGAL_REQUIREMENT_INQUIRY_PATTERN = re.compile(
+    r"법적\s*의무|법령에\s*규정|법으로\s*정해|법적으로\s*정해|의무가\s*있|의무인가요|법령상"
+)
+
 
 def match_realtime_keywords(question: str) -> tuple[str, ...]:
     """Return the realtime-dependency keywords found in the question, if any."""
@@ -87,7 +134,14 @@ def match_realtime_keywords(question: str) -> tuple[str, ...]:
 
 
 def match_external_document_keywords(question: str) -> tuple[str, ...]:
-    """Return the external-document keywords found in the question, if any."""
+    """Return the external-document keywords found in the question, if any.
+
+    A general "does the law require X document" question is excluded even if a
+    document word appears - it's asking about the legal requirement, not asking to
+    check the user's own document (see _GENERAL_LEGAL_REQUIREMENT_INQUIRY_PATTERN).
+    """
+    if _GENERAL_LEGAL_REQUIREMENT_INQUIRY_PATTERN.search(question):
+        return ()
     return tuple(keyword for keyword in _EXTERNAL_DOCUMENT_KEYWORDS if keyword in question)
 
 
@@ -112,6 +166,13 @@ def route_tier1(question: str) -> RouteDecision | None:
         return RouteDecision(
             route="realtime_required",
             reason_code="tier1_realtime_keyword",
+            tier=1,
+            confidence=1.0,
+        )
+    if match_realtime_personal_state_phrase(question):
+        return RouteDecision(
+            route="realtime_required",
+            reason_code="tier1_realtime_personal_state_phrase",
             tier=1,
             confidence=1.0,
         )
