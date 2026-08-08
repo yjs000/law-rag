@@ -55,8 +55,6 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=512, ge=512, le=512)
     embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
-    ai_daily_limit: int = Field(default=3, ge=1)
-    search_daily_limit: int = Field(default=30, ge=1)
     authenticated_ai_daily_limit: int = Field(default=10, ge=1)
     authenticated_search_daily_limit: int = Field(default=100, ge=1)
     terms_version: str = "beta-2026-07-15"
