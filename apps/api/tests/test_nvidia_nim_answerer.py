@@ -95,6 +95,120 @@ async def test_nvidia_nim_rejects_missing_or_invalid_structured_output(content) 
         await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
 
 
+@pytest.mark.asyncio
+async def test_nvidia_nim_retries_transient_failures_and_succeeds() -> None:
+    answerer = _answerer()
+    payload = {
+        "summary": "전기사업에 관한 근거입니다.",
+        "scope": "기준일 현재 검색 범위",
+        "sections": [
+            {"claim": "전기사업에 관한 근거", "explanation": "원문 확인", "citation_ids": ["C1"]}
+        ],
+        "checklist": [{"label": "원문 확인", "status": "check", "citation_ids": ["C1"]}],
+        "limitations": [],
+        "action": "fully_answerable",
+    }
+    calls = 0
+
+    async def create(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            error = Exception("Service Unavailable")
+            error.status_code = 503  # type: ignore[attr-defined]
+            raise error
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    draft = await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    assert draft.sections[0].citation_ids == ["C1"]
+    assert calls == 3
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_stops_after_max_attempts_and_raises_last_error() -> None:
+    answerer = _answerer()
+    calls = 0
+
+    async def create(**kwargs):
+        nonlocal calls
+        calls += 1
+        error = Exception(f"Service Unavailable #{calls}")
+        error.status_code = 503  # type: ignore[attr-defined]
+        raise error
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    with pytest.raises(Exception, match="Service Unavailable #3"):
+        await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    assert calls == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [402, 429])
+async def test_nvidia_nim_does_not_retry_billing_or_quota_errors(status_code: int) -> None:
+    answerer = _answerer()
+    calls = 0
+
+    async def create(**kwargs):
+        nonlocal calls
+        calls += 1
+        error = Exception("quota exceeded")
+        error.status_code = status_code  # type: ignore[attr-defined]
+        raise error
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    with pytest.raises(Exception, match="quota exceeded"):
+        await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_stops_retrying_once_the_overall_deadline_is_gone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answerer = NvidiaNimAnswerer(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3-ultra-550b-a55b",
+        timeout_seconds=10,
+        max_output_tokens=4096,
+    )
+    calls = 0
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        "app.adapters.nvidia_nim_answerer.time.monotonic", lambda: clock["now"]
+    )
+
+    async def create(**kwargs):
+        nonlocal calls
+        calls += 1
+        clock["now"] += 9  # each attempt eats most of the 10s budget
+        error = Exception("Service Unavailable")
+        error.status_code = 503  # type: ignore[attr-defined]
+        raise error
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    with pytest.raises(Exception, match="Service Unavailable"):
+        await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    # Budget is 10s and each attempt burns 9s, so a second attempt (18s) would
+    # blow past the deadline - only one attempt should have been made.
+    assert calls == 1
+
+
 def test_nvidia_nim_rejects_unapproved_base_url() -> None:
     with pytest.raises(ValueError, match="unsupported NVIDIA"):
         NvidiaNimAnswerer(

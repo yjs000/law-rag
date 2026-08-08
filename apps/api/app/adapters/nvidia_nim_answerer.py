@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import time
+
 from openai import AsyncOpenAI
 
 from app.adapters.openai_answerer import DraftAnswer, build_messages
 from app.domain.schemas import QuestionRequest, SearchHit
+
+# Below this many remaining seconds, a retry can't realistically get a response
+# back before the caller's own deadline (Vercel's function hard cap) hits, so
+# it isn't worth starting.
+_MIN_RETRY_SECONDS = 3.0
+_NON_RETRYABLE_STATUS_CODES = {402, 429}
 
 
 class NvidiaNimAnswerer:
@@ -17,6 +25,7 @@ class NvidiaNimAnswerer:
         model: str,
         timeout_seconds: float,
         max_output_tokens: int,
+        max_attempts: int = 3,
     ) -> None:
         if not api_key:
             raise ValueError("NVIDIA API key is required")
@@ -30,8 +39,28 @@ class NvidiaNimAnswerer:
         )
         self.model = model
         self.max_output_tokens = max_output_tokens
+        self.timeout_seconds = timeout_seconds
+        self.max_attempts = max_attempts
 
     async def answer(self, request: QuestionRequest, hits: list[SearchHit]) -> DraftAnswer:
+        deadline = time.monotonic() + self.timeout_seconds
+        last_error: Exception
+        for attempt in range(self.max_attempts):
+            remaining = deadline - time.monotonic()
+            if attempt > 0 and remaining < _MIN_RETRY_SECONDS:
+                break
+            try:
+                attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
+                return await self._attempt(request, hits, attempt_timeout=attempt_timeout)
+            except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
+                last_error = exc
+                if getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES:
+                    raise
+        raise last_error
+
+    async def _attempt(
+        self, request: QuestionRequest, hits: list[SearchHit], *, attempt_timeout: float
+    ) -> DraftAnswer:
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=build_messages(request, hits),  # type: ignore[arg-type]
@@ -47,6 +76,7 @@ class NvidiaNimAnswerer:
             temperature=0.3,
             top_p=0.95,
             stream=False,
+            timeout=attempt_timeout,
             extra_body={
                 "guided_json": DraftAnswer.model_json_schema(),
                 "chat_template_kwargs": {"enable_thinking": False},

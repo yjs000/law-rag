@@ -779,6 +779,7 @@ def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
             model=settings.nvidia_answer_model,
             timeout_seconds=settings.answer_timeout_seconds,
             max_output_tokens=settings.answer_max_output_tokens,
+            max_attempts=settings.answer_generation_max_attempts,
         )
     return OpenAIAnswerer(api_key=settings.openai_api_key or "", model=settings.openai_answer_model)
 
