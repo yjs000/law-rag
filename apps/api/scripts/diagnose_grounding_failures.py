@@ -1,13 +1,17 @@
-"""0032 E-10 후속: grounding_failed(2026-08-08 E-10 base 4/6) 원인 진단.
+"""0032 E-10 후속: grounding_failed 원인 진단 + 근거·draft 원문을 통째로 저장한다.
 
-1차 E-10 실행이 거부된 draft 내용을 저장하지 않아 원인을 알 수 없었다 - 이 스크립트는 같은
-D-10 문항(기본: 1차에서 grounding_failed였던 4개)을 다시 생성 호출하되, 이번엔
-`validate_draft`(app/adapters/openai_answerer.py)가 쓰는 실제 검증 함수들을 그대로 재사용해
-**어느 단계에서 왜** 거부됐는지와 draft 원문 전체를 함께 기록한다. 검증 로직 자체는 복제하지
-않는다(원본과 결과가 갈릴 위험을 피하려고 private 함수를 직접 import해서 쓴다).
+2026-08-08 초판은 draft만 저장하고 검색된 근거(SearchHit) 내용을 저장하지 않아, 검증기
+코드를 고친 뒤 "이제 통과하는지" 확인하려면 매번 NVIDIA를 다시 호출해야 했다(사용자 지적).
+이번 판은 hits 전체를 JSON에 그대로 저장해서, `replay_grounding_validation.py`로 **새
+API 호출 없이** 언제든 재검증할 수 있게 한다.
 
-비용: 이 실행 자체가 새 NVIDIA 생성 호출(기본 4회, 무료 티어)이다 - 1차 결과를 저장 안 해서
-다시 부르는 것이지, "결과 저장" 자체에는 추가 호출이 없다.
+판정 자체(`passed`)는 항상 실제 `validate_draft()`를 그대로 호출한 결과다 - 별도 재구현
+로직과 결과가 갈릴 위험을 없앤다. `diagnose_validate_draft()`는 validate_draft가 거부했을
+때 "어느 단계에서 왜"를 보여주는 보조 진단이며, validate_draft와 같은 순서·같은 action
+분기를 따른다.
+
+비용: NVIDIA 생성 호출(기본 4회, 무료 티어). 결과를 한 번 저장해두면 이후 검증기 코드만
+바꾼 재확인은 `replay_grounding_validation.py`로 비용 0에 할 수 있다.
 
 Usage: uv run python scripts/diagnose_grounding_failures.py
 """
@@ -33,8 +37,9 @@ from app.adapters.openai_answerer import (  # noqa: E402
     _evidence_for_citations,
     _text_matches_evidence,
     _texts_match_citations,
+    validate_draft,
 )
-from app.domain.schemas import QuestionRequest  # noqa: E402
+from app.domain.schemas import QuestionRequest, SearchHit  # noqa: E402
 
 OUTPUT_PATH = _API_ROOT / "evaluation" / "experiment-e10-grounding-diagnosis.json"
 RETRY_INTERVAL_SECONDS = 10
@@ -61,10 +66,34 @@ TARGET_CASES = {
 }
 
 
-def diagnose_validate_draft(draft, hits) -> dict:
-    """validate_draft()와 같은 순서·같은 함수를 써서 실패 지점을 남긴다."""
-    if not hits or not draft.sections or not draft.checklist:
-        return {"passed": False, "failed_at": "empty_hits_sections_or_checklist"}
+def _hit_to_dict(hit: SearchHit) -> dict:
+    return {
+        "provision_id": str(hit.provision_id),
+        "document_id": str(hit.document_id),
+        "document_title": hit.document_title,
+        "source_kind": hit.source_kind.value,
+        "version_label": hit.version_label,
+        "effective_from": hit.effective_from.isoformat(),
+        "effective_to": hit.effective_to.isoformat() if hit.effective_to else None,
+        "path": hit.path,
+        "heading": hit.heading,
+        "content": hit.content,
+        "source_url": hit.source_url,
+        "score": hit.score,
+    }
+
+
+def diagnose_validate_draft(draft, hits: list[SearchHit]) -> dict:
+    """validate_draft()와 같은 순서·같은 action 분기로 실패 지점을 남긴다.
+
+    판정(True/False) 자체의 근거는 아니다 - 그건 항상 validate_draft() 호출로만 정한다.
+    이 함수는 거부됐을 때 "왜"만 보여준다.
+    """
+    if not hits:
+        return {"passed": False, "failed_at": "no_hits"}
+    if draft.action == "clarification_required":
+        ok = bool(draft.missing_information)
+        return {"passed": ok} if ok else {"passed": False, "failed_at": "missing_information_empty"}
     hit_by_id = {f"C{index}": hit for index, hit in enumerate(hits, 1)}
     all_evidence = " ".join(
         f"{hit.document_title} {hit.heading or ''} {hit.content}" for hit in hits
@@ -82,6 +111,10 @@ def diagnose_validate_draft(draft, hits) -> dict:
                 "failed_at": "limitation_unsupported_normative",
                 "text": limitation,
             }
+    if draft.action == "unanswerable" and not draft.sections and not draft.checklist:
+        return {"passed": True}
+    if not draft.sections or not draft.checklist:
+        return {"passed": False, "failed_at": "empty_sections_or_checklist"}
     for i, section in enumerate(draft.sections):
         if not _texts_match_citations(
             (section.claim, section.explanation), section.citation_ids, hit_by_id
@@ -144,12 +177,16 @@ async def run_one(case_id: str, question: str, answerer) -> dict:
     draft = await answerer.answer(request, generation_hits)
     latency = round(time.monotonic() - t0, 2)
 
-    diagnosis = diagnose_validate_draft(draft, generation_hits)
+    passed = validate_draft(draft, generation_hits)
+    diagnosis = {"passed": passed} if passed else diagnose_validate_draft(draft, generation_hits)
     return {
         "id": case_id,
         "question": question,
+        "as_of_date": request.as_of_date.isoformat(),
         "generation_latency_seconds": latency,
-        "citation_ids_available": [f"C{i}" for i in range(1, len(generation_hits) + 1)],
+        # 근거 원문을 통째로 저장한다 - replay_grounding_validation.py가 이걸로 새 호출
+        # 없이 검증기를 재실행한다.
+        "hits": [_hit_to_dict(h) for h in generation_hits],
         "draft": {
             "summary": draft.summary,
             "scope": draft.scope,
@@ -162,6 +199,8 @@ async def run_one(case_id: str, question: str, answerer) -> dict:
                 for c in draft.checklist
             ],
             "limitations": draft.limitations,
+            "action": draft.action,
+            "missing_information": draft.missing_information,
         },
         "diagnosis": diagnosis,
     }
@@ -188,12 +227,12 @@ async def main() -> None:
         if pending:
             await asyncio.sleep(RETRY_INTERVAL_SECONDS)
 
-    report = {"schema_version": "1", "cases": list(results.values())}
+    report = {"schema_version": "2", "cases": list(results.values())}
     OUTPUT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n-> {OUTPUT_PATH}")
     failed_at_counts: dict[str, int] = {}
     for r in results.values():
-        key = r["diagnosis"]["failed_at"] if not r["diagnosis"]["passed"] else "PASSED"
+        key = "PASSED" if r["diagnosis"]["passed"] else r["diagnosis"]["failed_at"]
         failed_at_counts[key] = failed_at_counts.get(key, 0) + 1
     print("failure breakdown:", failed_at_counts)
 
