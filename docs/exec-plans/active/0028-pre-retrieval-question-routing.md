@@ -3,11 +3,13 @@
 상태: `진행 중 · schema/tier 1/관측 tracking 완료 · tier 1 사전 v1 질문은행(1,000문항) 전수
 분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM 판단으로 교체 확정,
 adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라우팅 파이프라인
-app/main.py 배선 완료(tier 2는 NVIDIA API key 미배선으로 MockRouteClassifier 임시 사용) ·
-평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령 currency 질문·일반 법적
-의무 질문이 잘못 차단되던 것) 타이트닝으로 제거해 misclassification_rate 0.2857→0.1429,
-unnecessary_block_rate 0.1429→0(2026-08-08) · 남은 misclassification 0.1429는 API key 배선
-전 잠정치`
+app/main.py 배선 완료 · 평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령
+currency 질문·일반 법적 의무 질문이 잘못 차단되던 것) 타이트닝으로 제거해
+misclassification_rate 0.2857→0.1429, unnecessary_block_rate 0.1429→0(2026-08-08) ·
+NVIDIA API key 실배선 완료(2026-08-08) — 실제 호출로 tier1이 놓친 사례(사업장별 조건부
+질문)를 tier2가 정확히 clarification_required로 잡는 것 확인, D-10 `0111`은 gold와
+다르게 legal_search로 판단(사람 gold와의 불일치, 후속 검토 필요) · fixture 전체 --live
+평가는 무료 티어 공유 용량 제한(503 ResourceExhausted)으로 아직 완주 못 함`
 
 착수일: 2026-08-07
 
@@ -329,10 +331,11 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
    남은 오분류 2건(`0111`, `boundary-clarification-without-conditional-phrase`)은 둘 다
    `unnecessary_search`(검색 쪽으로 실패) 방향이지 `unnecessary_block`이 아니다 — tier1
    정규식이 못 잡는 조건부 질문을 tier2(mock)가 힌트 없이 `legal_search`로 기본 처리해서
-   생기며, 실제 LLM 판단이 붙으면 해소될 것으로 예상한다. **이 수치는 여전히 잠정치다** —
-   tier2가 `MockRouteClassifier`라 실제 LLM 판단이 아니다. NVIDIA API key를 배선한 뒤
-   `evaluate_routing_fixture.py`를 다시 실행해서 갱신해야 한다(`app/main.py`의
-   `_route_classifier()` TODO 참고).
+   생기며, 실제 LLM 판단이 붙으면 해소될 것으로 예상한다. **2026-08-08 NVIDIA API key 실배선
+   완료** — `_route_classifier()`가 key 유무로 `NvidiaNimRouteClassifier`/
+   `MockRouteClassifier`를 자동 전환한다(아래 결정 기록 참고). fixture 전체 14개를
+   `--live`로 재실행해 misclassification_rate를 갱신하는 건 무료 티어 공유 용량 제한(503)
+   때문에 아직 완주하지 못했다 - 후속 과제로 남긴다.
 8. **관측 로그 최종 검증 — 완료(2026-08-08)** — `emit_route_outcome()`을 `app/main.py`의 라우팅
    결정 직후에 연결했다. `RouteOutcomeEvent`는 `request_id`·`route`·`tier`·`reason_code`·
    `confidence`·`missing_field_categories`만 담고 질문 원문·자유 텍스트는 받지 않는다(개인정보
@@ -431,3 +434,31 @@ Python 함수에 적합)로 형태소를 분석해 어간만 매칭하면 활용
   수치는 tier2가 mock이라 API key 배선 뒤 다시 재야 하는 잠정치임을 스크립트·fixture·이
   문서 세 곳에 모두 명시했다. `emit_route_outcome()`도 이번에 `app/main.py`에 연결해 라우팅
   결정이 관측 가능해졌다.
+- 2026-08-08: 사용자가 `.env.local`에 이미 등록해 둔 NVIDIA_API_KEY로 tier 2를 실제
+  배선했다. `app/settings.py`에 `nvidia_route_classifier_model`(기본값은 답변 모델과 같은
+  `nemotron-3-ultra-550b-a55b` - 더 작은 모델이 이 카탈로그에서 실제 무료인지 미확인이라
+  검증된 모델을 그대로 씀)과 `route_classifier_timeout_seconds`를 추가했다. `_route_classifier()`
+  는 `nvidia_api_key`가 있으면 `NvidiaNimRouteClassifier`, 없으면(로컬 개발·테스트)
+  `MockRouteClassifier`로 자동 전환한다. tier 2 호출 자체가 실패(NVIDIA 오류·timeout)해도
+  전체 요청이 500으로 죽지 않도록 `route_tier2` 호출을 try/except로 감싸 `legal_search`로
+  안전하게 진행하게 했다 - 근거 없이 차단 쪽으로 기본값을 두면 답할 수 있는 질문을 막는
+  피해가 더 크다는 원칙을 실패 경로에도 그대로 적용했다.
+
+  개별 호출 3건으로 확인한 결과: `0201`류 일반 질문은 confidence 0.95로 `legal_search`
+  정확히 판정. mock이 놓쳤던 `boundary-clarification-without-conditional-phrase`
+  ("우리 사업장에 이 지원 제도를 적용할 수 있는지 어떻게 확인하나요?")는 실제 LLM이
+  "사업장의 업종·규모·설비용량·지역 등 사실관계에 따라 달라진다"는 근거로 정확히
+  `clarification_required`로 잡았다 — mock이 왜 필요했는지(힌트 없이는 임의 조건부 질문을
+  못 잡는다)와 실제 LLM이 그 gap을 메운다는 걸 동시에 확인했다. 다만 D-10 `0111`("시골에
+  가진 땅에 태양광을 설치해도 되는지")은 gold(`clarification_required`)와 다르게 LLM이
+  "국토계획법·농지법·산지관리법 등으로 일반 설명 가능"이라며 `legal_search`로 판단했다 —
+  틀렸다고 단정하기보다 gold 라벨과 모델 판단이 갈리는 실제 사례로 기록해두고, fixture
+  전체 평가가 가능해지면 이런 불일치가 몇 건인지로 재검토한다.
+
+  `evaluate_routing_fixture.py --live`로 fixture 14개 전체를 실제 호출로 돌리려 했으나
+  "ResourceExhausted: Worker local total request limit reached"(503) 에러로 완주하지
+  못했다 — nemotron-3-ultra-550b-a55b 무료 티어의 **공유** 용량 제한으로 보이며(20초
+  뒤 재시도도 동일 에러), 우리 쪽 코드 문제가 아니라 NVIDIA 쪽 큐/용량 문제다. 호출 사이
+  2초 간격을 스크립트에 넣었지만 이 문제 자체는 못 없앴다. 반복 재시도로 무료 자원을
+  낭비하지 않기 위해 지금은 중단했고, 전체 14개 배치 실행은 후속 과제로 남긴다(사용량이
+  덜한 시간대 재시도, 또는 tier 2 전용으로 덜 붐비는 다른 무료 모델 검토).
