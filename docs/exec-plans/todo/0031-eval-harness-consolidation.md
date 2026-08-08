@@ -1,6 +1,7 @@
 # 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI
 
-상태: `제안됨 · 미착수`
+상태: `제안됨 · 항목 5(agent context diet) 반영 완료(2026-08-08) · 나머지(rubric·conflict
+detector·통합 CLI·정확한 token 계산·decision 정규화) 미착수`
 
 제안 출처: 2026-08-07 사용자가 외부(ChatGPT) harness 설계 검토를 공유하고 그 방향으로 최적화를
 요청했다. 저비용 항목(rubric/calibration 버전 분리, WORK_CONTRACT scope 제한, learning 문서 갱신
@@ -31,8 +32,9 @@ D-10 v1→v2→v3처럼 "판정 하나 정정 → 전체 재문서화" 패턴이
    노출한다. `d10-gold-20260807...` 같은 draft/run ID 하드코딩을 `experiments/d10/state.yaml`
    포인터(mode/rubric/question_set/corpus/retrieval_run/rerank/judgments/milestone) 하나로 옮긴다.
 4. **정확한 token 계산**: M4의 `total_chars / 2.2` 근사치를 실제 NVIDIA/tokenizer 계산으로 교체한다.
-5. **agent context diet**: 세션 시작 시 항상 읽는 문서를 `AGENTS.md` + 짧은 `CURRENT_STATE` 포인터로
-   줄이고, `ARCHITECTURE.md`·design docs·과거 exec-plan·learning은 필요할 때만 읽게 한다.
+5. **agent context diet** — 완료(2026-08-08, 아래 결정 기록 참고): 세션 시작 시 항상 읽는 문서를
+   `AGENTS.md` + 짧은 `docs/CURRENT_STATE.md` 포인터로 줄이고, `ARCHITECTURE.md`·design docs·과거
+   exec-plan·learning은 필요할 때만 읽게 한다.
 6. **decision 정규화**: 같은 결정이 0025/0030/design doc/generated summary/learning/commit에 조금씩
    다른 말로 중복되지 않도록, ID가 붙은 구조화 decision record(`{id, scope, type, status, decision,
    supersedes, reason, effective_from}`)를 도입하고 문서는 "현재 계약: EVAL-REL-002"처럼 최신
@@ -57,3 +59,11 @@ D-10 v1→v2→v3처럼 "판정 하나 정정 → 전체 재문서화" 패턴이
 - 2026-08-07: 저비용 항목(rubric/calibration 버전 분리, WORK_CONTRACT scope, learning 갱신 완화)은
   즉시 plan 0025에 반영했다. 코드 인프라가 필요한 나머지(rubric 파일, conflict detector, 통합 CLI,
   state.yaml, context diet, decision 정규화)는 이 todo로 분리해 필요할 때 착수한다.
+- 2026-08-08: 사용자가 항목 5(agent context diet)만 지금 착수하기로 결정했다. 코드 인프라(rubric,
+  conflict detector, CLI, state.yaml, decision 정규화)가 필요 없는 저비용 항목이라 별도 active plan
+  없이 바로 반영했다 — 위 2026-08-07 결정과 같은 패턴("저비용 항목은 즉시 반영, 인프라가 필요한
+  나머지만 별도 착수 대상")이다. `docs/CURRENT_STATE.md`(신규)를 세션 시작 시 기본으로 읽는 짧은
+  포인터로 추가하고, `AGENTS.md`의 "작업 시작 순서"에서 `ARCHITECTURE.md`·`docs/design-docs/`·
+  `docs/product-specs/`를 항상 읽던 것을 작업이 실제로 그 영역을 건드릴 때만 읽도록 좁혔다. 나머지
+  항목(rubric/conflict detector/통합 CLI/정확한 token 계산/decision 정규화)은 여전히 코드 인프라가
+  필요해 미착수 상태로 `todo/`에 남긴다.

@@ -14,8 +14,10 @@
 ## 작업 시작 순서
 
 1. `git status --short --branch`로 현재 변경과 브랜치를 확인한다.
-2. 이 파일과 `ARCHITECTURE.md`를 읽는다.
-3. 작업과 관련된 `docs/product-specs/` 및 `docs/design-docs/` 문서를 읽는다.
+2. 이 파일과 `docs/CURRENT_STATE.md`를 읽는다.
+3. 작업이 아키텍처·모듈 경계·배포를 건드리면 그때 `ARCHITECTURE.md`를 읽고, 특정 기능의 설계·제품
+   요구사항이 필요하면 그때 관련 `docs/design-docs/` 및 `docs/product-specs/` 문서를 읽는다 — 매
+   세션 전체를 미리 읽지 않는다.
 4. brainstorming·설계 승인·planning 필요 여부와 절차는 설치된 Superpowers skill의 trigger 조건을
    따른다. 이 저장소는 작업 규모로 그 여부를 다시 판단하지 않는다.
 5. 사용자가 이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다.
@@ -55,6 +57,7 @@ Superpowers workflow 중에도 항상 유지한다.
 
 ## 권위 문서
 
+- 세션 시작 포인터(무엇을 언제 읽을지): `docs/CURRENT_STATE.md`
 - 제품 목적과 사용자 가치: `docs/PRODUCT_SENSE.md`
 - 시스템 구조와 의존성: `ARCHITECTURE.md`
 - 상세 기술 설계: `docs/design-docs/index.md`
