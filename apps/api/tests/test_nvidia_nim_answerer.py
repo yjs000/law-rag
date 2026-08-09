@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
+from app.adapters.openai_answerer import build_messages, build_messages_v2
 from app.domain.catalog import SourceKind
 from app.domain.schemas import QuestionRequest, SearchHit
 
@@ -218,3 +219,73 @@ def test_nvidia_nim_rejects_unapproved_base_url() -> None:
             timeout_seconds=30,
             max_output_tokens=4096,
         )
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_defaults_to_v1_message_builder() -> None:
+    answerer = _answerer()
+    captured: dict[str, object] = {}
+    payload = {
+        "summary": "전기사업에 관한 근거입니다.",
+        "scope": "기준일 현재 검색 범위",
+        "sections": [
+            {"claim": "전기사업에 관한 근거", "explanation": "원문 확인", "citation_ids": ["C1"]}
+        ],
+        "checklist": [{"label": "원문 확인", "status": "check", "citation_ids": ["C1"]}],
+        "limitations": [],
+        "action": "fully_answerable",
+    }
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    request = QuestionRequest(question="전기사업 근거")
+    hits = [_hit()]
+    await answerer.answer(request, hits)
+
+    assert captured["messages"] == build_messages(request, hits)
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_uses_injected_message_builder() -> None:
+    answerer = NvidiaNimAnswerer(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3-ultra-550b-a55b",
+        timeout_seconds=30,
+        max_output_tokens=4096,
+        message_builder=build_messages_v2,
+    )
+    captured: dict[str, object] = {}
+    payload = {
+        "summary": "전기사업에 관한 근거입니다.",
+        "scope": "기준일 현재 검색 범위",
+        "sections": [
+            {"claim": "전기사업에 관한 근거", "explanation": "원문 확인", "citation_ids": ["C1"]}
+        ],
+        "checklist": [{"label": "원문 확인", "status": "check", "citation_ids": ["C1"]}],
+        "limitations": [],
+        "action": "fully_answerable",
+    }
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    request = QuestionRequest(question="전기사업 근거")
+    hits = [_hit()]
+    await answerer.answer(request, hits)
+
+    assert captured["messages"] == build_messages_v2(request, hits)
+    assert captured["messages"] != build_messages(request, hits)

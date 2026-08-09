@@ -193,6 +193,9 @@ async def main() -> None:
         "experiment": "0032-e10-base",
         "run_at": datetime.now(UTC).isoformat(),
         "code_sha": _git_sha(),
+        # 0043, 2026-08-09: 이 프로필 참조는 실험이 실제로 쓰는 message_builder와 짝을
+        # 맞춰야 한다 - build_messages_v2로 바꾸면 이 줄도 같이 갱신한다, 안 그러면 기록이
+        # 어긋난다.
         "generation_profile": {
             "key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
             "sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,

@@ -2,14 +2,14 @@
 
 상태: 승인 전 초안
 작성일: 2026-08-09
-관련: [0043 실행 계획(todo)](../exec-plans/todo/0043-layperson-answer-contract-v2.md), [DESIGN.md](../DESIGN.md), [답변 근거 검증](answer-grounding-validation.md)
+관련: [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md), [DESIGN.md](../DESIGN.md), [답변 근거 검증](answer-grounding-validation.md)
 
 ## 맥락
 
 현재 답변 생성 프롬프트(`answer-system-prompt-v1`)는 인용·근거 안전 규칙은 상세하지만 독자 수준,
 전문용어 설명 방식, 정보 우선순위, 문장 길이를 정하지 않는다. 그 결과 `summary`·`sections`·
 `checklist`·`limitations`가 법률 조사 보고서 문체로 나와 처음 보는 사용자가 핵심 행동보다 전문
-용어를 먼저 보게 된다. [0043](../exec-plans/todo/0043-layperson-answer-contract-v2.md)이 이 문제의
+용어를 먼저 보게 된다. [0043](../exec-plans/active/0043-layperson-answer-contract-v2.md)이 이 문제의
 목적·범위·완료 조건을 이미 정의했고, 이 문서는 그 실행 설계다.
 
 오늘 세션에서 사용자가 추가로 요청한 "원문은 링크 방식" 요구는 UI 변경이라 0043 원문의 비범위
@@ -97,7 +97,7 @@ D-10 `lay-energy-0201` 포함 최대 3문항 v1·v2 비교(0043 범위 4번)는 
 NVIDIA 실제 호출 횟수·재시도 상한·hosted 경로(Web 59초 재요청, Vercel 함수 종료 전 fallback)
 계약은 사용자가 별도로 설계 중이다. 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,
 결정적 테스트, 원문 링크 UI)까지만 구현·검증**하고, "실제 비교를 무엇으로·몇 번·어떤 승인으로
-실행할지"는 [0043 todo](../exec-plans/todo/0043-layperson-answer-contract-v2.md)에 후속 항목으로
+실행할지"는 [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md)에 후속 항목으로
 남긴다 — 호출 제한 설계가 끝난 뒤 별도로 착수한다.
 
 ## 비범위 (재확인)
@@ -124,3 +124,8 @@ NVIDIA 실제 호출 횟수·재시도 상한·hosted 경로(Web 59초 재요청
 - 원문 링크가 근거 카드에서 렌더링되고 `source_url`로 정상 이동하는지 프론트 테스트 또는 수동
   확인으로 검증한다.
 - 재검토 시점: 5번(실제 비교) 설계가 확정되어 착수할 때 이 문서의 "결과"를 실제 비교 결과로 갱신한다.
+
+## 결정 기록
+
+- 2026-08-09: `NvidiaNimAnswerer`에 `message_builder` 주입 파라미터(기본값 `build_messages`)를 추가해 v1 동작을 바꾸지 않으면서 v2를 나중에 배선할 수 있게 했다.
+- 2026-08-09: 근거 카드를 `apps/web/app/citation-card.tsx`로 분리해 `renderToStaticMarkup` 기반 단위 테스트(기존 `safe-text.test.tsx` 패턴)로 원문 링크 위치를 검증할 수 있게 했다.

@@ -51,6 +51,21 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
     profile_version="1",
 )
 
+# 0043, 2026-08-09: 일반인 답변 계약 v2. prompt만 바뀌고 model/schema/context/sampling은
+# v1과 동일하게 유지해 문체 차이만 비교할 수 있게 한다.
+NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2 = GenerationProfile(
+    key="nvidia-nemotron-3-ultra-550b-a55b-answer-v2",
+    provider="nvidia_nim",
+    model="nvidia/nemotron-3-ultra-550b-a55b",
+    prompt_version="answer-system-prompt-v2",  # openai_answerer.build_messages_v2()
+    schema_version="draft-answer-v1",  # openai_answerer.DraftAnswer, 불변
+    context_version="m4-frozen-r1-a",
+    temperature=0.3,
+    top_p=0.95,
+    max_output_tokens=4096,
+    profile_version="2",
+)
+
 # MOCK/미확정, 2026-08-08: OpenAI 경로(openai_answerer.py)는 현재 temperature/top_p를
 # API 호출에 명시하지 않아 provider 기본값에 의존한다 - NVIDIA 경로와 sampling 설정이
 # 불일치한다. M5 item 3(provider를 nvidia_nim으로 고정)이 확정되면 이 프로필은 참고용으로만
