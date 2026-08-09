@@ -3,7 +3,7 @@
 생성 명령: Claude Artifact의 HTML/CSS/SVG를 로컬화한 뒤 현행 코드·결정 기록·NVIDIA 공식 자료 링크를 단계별로 주입
 원본: https://claude.ai/code/artifact/24403714-0712-4cce-af86-757ab9761c8f
 기준 시점: 2026-08-09
-코드 스냅샷: https://github.com/yjs000/law-rag/tree/6447833a66f2049af0834c1f31c245318900d354
+코드 스냅샷: https://github.com/yjs000/law-rag/tree/a4effe7fa54d003ae0ab4b63410f3de0d0f514de
 생성일: 2026-08-09
 -->
 <html lang="ko">
@@ -275,7 +275,7 @@
   </div>
 
   <figure class="diagram-wrap" role="group" aria-label="파이프라인 흐름도">
-    <svg class="flow" viewBox="0 0 960 2020" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="질문 요청이 라우팅, 임베딩, 5단계 검색, 필터, 근거 선정, 생성, 구조 검증을 거쳐 응답으로 조립되는 흐름. 요청 전 계정 쿼터 확인은 없다.">
+    <svg class="flow" viewBox="0 0 960 2020" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="질문 요청이 현재 OFF인 계정 quota 토글 확인, 라우팅, 임베딩, 검색, 필터, 근거 선정, 생성, 구조 검증을 거쳐 응답으로 조립되는 흐름.">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
@@ -287,8 +287,14 @@
         <rect x="330" y="10" width="300" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"></rect>
         <text x="480" y="31" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="13">POST /v1/questions</text>
         <a class="svg-source-link" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/main.py#L232" target="_blank" rel="noreferrer" aria-label="GitHub 원문: main.py:232 _answer_question"><text x="480" y="48" text-anchor="middle" fill="var(--muted)">main.py:232 _answer_question</text></a>
-        <line x1="480" y1="62" x2="480" y2="178" stroke="currentColor" marker-end="url(#arrow)"></line>
-        <text x="495" y="124" fill="var(--muted)" font-size="11">요청 전 계정 쿼터 검사 없음</text>
+        <line x1="480" y1="62" x2="480" y2="90" stroke="currentColor" marker-end="url(#arrow)"></line>
+
+        <!-- 2 account quota toggle -->
+        <rect x="330" y="90" width="300" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"></rect>
+        <text x="480" y="111" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="13">계정 quota 토글 확인</text>
+        <text x="480" y="127" text-anchor="middle" fill="var(--muted)" font-size="11">현재 기본 OFF · 익명은 항상 통과</text>
+        <a class="svg-source-link" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/app/main.py#L740-L749" target="_blank" rel="noreferrer" aria-label="GitHub 원문: main.py _check_quota"><text x="480" y="142" text-anchor="middle" fill="var(--muted)" font-size="11">main.py:740 _check_quota</text></a>
+        <line x1="480" y1="150" x2="480" y2="178" stroke="currentColor" marker-end="url(#arrow)"></line>
 
         <!-- 3 tier1 -->
         <rect x="330" y="178" width="300" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"></rect>
@@ -467,6 +473,21 @@
     <div class="stage">
       <div class="num">00</div>
       <div>
+        <h3>로그인 계정 quota 토글 — 현재 OFF</h3>
+        <p class="desc"><code style="font-family:var(--font-mono)">_check_quota()</code>와 기존 일일 한도 로직은 <b>삭제하지 않고 보존</b>한다. 서버 설정 <code style="font-family:var(--font-mono)">ACCOUNT_QUOTA_ENABLED</code>의 기본값이 <code style="font-family:var(--font-mono)">false</code>라 현재는 로그인 사용자도 <code style="font-family:var(--font-mono)">consume_quota</code>를 호출하지 않고 바로 통과한다. 익명 사용자는 사용자 계정이 없으므로 이 계정 quota의 적용 대상이 아니다.</p>
+        <p class="desc">나중에 환경 변수를 <code style="font-family:var(--font-mono)">true</code>로 켜면 코드 변경 없이 기존 AI 10회/일·검색 100회/일 제한이 다시 동작하고, 초과 시 429를 반환한다. 관리자 UI 토글이 아니라 서버 환경 변수 토글이다. NVIDIA가 외부 호출 결과로 반환하는 402/429는 이 계정 일일 한도와 별개의 provider 결제·quota 오류이며 검색 전용 폴백으로 처리한다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/app/settings.py#L60-L64" target="_blank" rel="noreferrer" title="GitHub 원문 열기">settings.py:60-64 한도·토글 기본값</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/app/main.py#L740-L749" target="_blank" rel="noreferrer" title="GitHub 원문 열기">main.py:740-749 _check_quota</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/tests/test_account_quota_toggle.py" target="_blank" rel="noreferrer" title="GitHub 원문 열기">test_account_quota_toggle.py OFF/ON 회귀 테스트</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/docs/exec-plans/completed/0037-account-quota-toggle-off.md" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0037 결정: 삭제하지 않고 현재 OFF</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="num">01</div>
+      <div>
         <h3>사전 라우팅 (tier1 → tier2)</h3>
         <p class="desc">규칙 기반 tier1이 외부 문서 요구·실시간성·개인 상태·조건부 변동 문구를 먼저 판단한다. 규칙으로 확정하지 못한 질문만 tier2가 NVIDIA NIM에 구조화 분류를 요청한다.</p>
         <p class="desc"><b>“tier2가 예외를 던진다”</b>는 분류 호출이 정상적인 <code style="font-family:var(--font-mono)">RouteJudgment</code>를 돌려주지 못하고 Python 오류로 끝나는 경우다. 예를 들어 NVIDIA timeout·네트워크/5xx·인증 오류, 빈 응답, JSON schema 파싱 실패가 해당한다. main.py가 이 오류를 한꺼번에 잡아 <code style="font-family:var(--font-mono)">route=legal_search</code>, <code style="font-family:var(--font-mono)">reason_code=tier2_classifier_error</code>, 신뢰도 0으로 기록하고 임베딩·법령 검색을 계속한다. 이는 “안전하다고 판정했다”는 뜻이 아니라, 분류기 장애만으로 답할 수 있는 질문까지 차단하지 않는 <b>fail-open</b> 정책이다. 이후 검색·생성·인용 검증 안전장치는 그대로 적용된다.</p>
@@ -480,7 +501,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">01</div>
+      <div class="num">02</div>
       <div>
         <h3>검색 — 5단계, 매칭되면 즉시 반환</h3>
         <p class="desc">각 단계는 자체 SQL의 WHERE절에서 기준일 유효 버전만 이미 걸러서 조회한다(효력 시작일 이전·종료일 이후 버전은 애초에 후보에 안 들어옴) — 전체 코퍼스를 긁은 뒤 나중에 자르는 게 아니다.</p>
@@ -515,7 +536,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">02</div>
+      <div class="num">03</div>
       <div>
         <h3>필터 · 출처 URL 허용목록</h3>
         <p class="desc">검색 SQL이 이미 기준일로 걸러진 결과를 돌려주면, 그중 <code style="font-family:var(--font-mono)">source_url</code>의 scheme이 https이고 호스트가 law.go.kr 계열 3개 중 하나이며 포트·userinfo가 비정상이 아닌 것만 남긴다. 이건 검색 SQL 안이 아니라 <b>결과가 Python으로 돌아온 뒤</b> 리스트를 한 번 더 거르는 별도 단계다 — 브라우저에 노출해도 되는 원문 URL만 남기려는 보안 목적이지, 관련도 필터가 아니다. 점수 임계값이나 <code style="font-family:var(--font-mono)">source_kind</code> 필터는 없다.</p>
@@ -527,7 +548,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">02b</div>
+      <div class="num">03b</div>
       <div>
         <h3>검색 전용 안전망 미리 조립</h3>
         <p class="desc">이 시점에 근거가 있든 없든, AI를 쓰든 안 쓰든 <b>항상</b> "검색 결과만으로 된 응답"을 하나 미리 만들어 둔다. 근거가 있으면 각 hit을 사건·체크리스트로 그대로 나열하고, 근거가 0건이면 <code style="font-family:var(--font-mono)">parse_provision_references</code>로 왜 없는지(조문 범위가 내림차순이다, 범위가 20개 조 넘는다, 법령명을 못 알아봤다 등) 구체적인 사유 문구까지 골라 넣는다. 이렇게 미리 만들어 둔 객체가 이후 AI 경로가 실패하는 모든 지점(생성 자체 실패, 구조 검증 실패)에서 <b>그대로 재사용</b>된다 — 실패 시점마다 새로 조립하지 않는다.</p>
@@ -552,7 +573,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">03</div>
+      <div class="num">04</div>
       <div>
         <h3>생성용 근거 선정</h3>
         <p class="desc">검색이 준 순서(재순위 없음) 그대로 훑으면서 3가지를 동시에 적용한다.</p>
@@ -570,7 +591,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">04</div>
+      <div class="num">05</div>
       <div>
         <h3>답변 생성 (NVIDIA NIM)</h3>
         <p class="desc">생성 provider는 이제 <b>NVIDIA NIM 하나</b>다. OpenAI 설정, <code style="font-family:var(--font-mono)">OpenAIAnswerer</code> 실행 코드, <code style="font-family:var(--font-mono)">_answerer()</code>의 provider 분기를 제거했다. 이름이 남은 <code style="font-family:var(--font-mono)">openai_answerer.py</code>에는 NVIDIA 어댑터도 공유하는 DraftAnswer schema·prompt·검증기만 있고 OpenAI API 호출 코드는 없다.</p>
@@ -587,7 +608,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">05</div>
+      <div class="num">06</div>
       <div>
         <h3>구조 검증 (2026-08-08 변경)</h3>
         <p class="desc">인용 ID가 실제 제공된 근거를 가리키는지, action별 필수 필드가 채워졌는지만 본다. 문장 내용이 근거와 의미적으로 겹치는지는 더 이상 이 구조 검증기가 판단하지 않는다. 관련 근거를 고르는 책임은 검색·재순위 평가에 있고, 부모 문맥보강 B는 위 실험에서 효과가 없어 제외됐다. 따라서 “재순위와 문맥보강을 나중에 모두 붙인다”는 확정 결정은 없다.</p>
@@ -606,7 +627,7 @@
     </div>
 
     <div class="stage">
-      <div class="num">06</div>
+      <div class="num">07</div>
       <div>
         <h3>응답 조립 · 저장</h3>
         <p class="desc"><b>Citation</b>: <code style="font-family:var(--font-mono)">generation_hits</code>(04단계에서 예산 안으로 추려진 것, 검색된 전체가 아님)를 1번부터 순서대로 C1, C2...로 번호 매겨 만든다. 이제 <code style="font-family:var(--font-mono)">source_kind</code>(law/administrative_rule)와 <code style="font-family:var(--font-mono)">law_type_code</code>(법률·시행령·시행규칙 등의 Open API 분류 코드)를 둘 다 싣는다.</p>
