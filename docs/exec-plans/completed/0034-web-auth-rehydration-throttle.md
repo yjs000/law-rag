@@ -1,6 +1,6 @@
 # 0034: 웹 프런트 탭 포커스 시 불필요한 인증·이력 재조회 억제
 
-상태: `착수 2026-08-08 — 구현 완료, 완료 조건의 브라우저 재현 검증 대기`
+상태: `완료 (2026-08-09)`
 
 ## 진행 기록
 
@@ -13,6 +13,15 @@
   - `npm test`(51 passed), `tsc --noEmit` 통과 확인.
   - 미검증: 실제 브라우저에서 탭 재포커스 시 네트워크 요청이 실제로 억제되는지는
     dev 서버 preview 환경이 구성되지 않아 아직 확인하지 못했다.
+- 2026-08-09: [0040](../completed/0040-verify-auth-rehydration-throttle-in-production.md)에서
+  GitHub Deployments API로 배포 확인 + 코드 재검토(effect가 마운트 시 한 번만 실행됨을
+  확인, throttle 로직 자체엔 버그 없음) 후, 사용자가 "탭 재포커스로는 아예 재호출 안 함"을
+  최종 결정했다. `authEventAction`을 `(event, hasActiveSession)` 시그니처로 바꿔 진짜
+  재로그인(직전 `SIGNED_OUT` 이후 첫 `SIGNED_IN`)에서만 hydrate하도록 재설계 - 60초
+  throttle은 여전히 안전망으로 유지하되, 탭 재포커스만으로는 60초가 지나도 재호출되지
+  않는다. `npm test`(64 passed), `tsc --noEmit` 통과. 완료 조건의 실제 배포 사이트
+  네트워크 재현 확인은 다음 배포 후 권장(이 세션에서는 로컬 코드 검토·유닛 테스트로만
+  검증).
 
 제안 출처: 2026-08-08 사용자가 배포된 `law-rag-web.vercel.app`에서 다른 창에 갔다가
 돌아올 때마다 인증 재검토(`/v1/auth/me`)와 질문 이력 재조회가 반복되는 걸 확인하고,

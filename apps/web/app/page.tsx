@@ -75,13 +75,32 @@ export function oauthRedirectMessage(search: string): string | null {
   return "Google 로그인을 완료하지 못했습니다. 인증을 취소했거나 요청이 만료되었을 수 있습니다. 다시 시도해 주세요.";
 }
 
-export function authEventAction(event: string): "clear" | "hydrate" | "ignore" {
+/**
+ * `hasActiveSession` distinguishes a real sign-in from Supabase's tab-refocus
+ * `SIGNED_IN` noise (0040): once a session is already hydrated, further
+ * `SIGNED_IN` events are ignored until the next `SIGNED_OUT`.
+ */
+export function authEventAction(
+  event: string,
+  hasActiveSession: boolean,
+): "clear" | "hydrate" | "ignore" {
   if (event === "SIGNED_OUT") return "clear";
-  if (event === "SIGNED_IN" || event === "USER_UPDATED") return "hydrate";
+  if (event === "USER_UPDATED") return "hydrate";
+  if (event === "SIGNED_IN") return hasActiveSession ? "ignore" : "hydrate";
   return "ignore";
 }
 
 export const HYDRATE_THROTTLE_MS = 60_000;
+
+/** KST calendar date (YYYY-MM-DD), matching the server's `korea_today()` used to bound `as_of_date`. */
+export function koreaTodayIsoDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
+}
+
+/** Prevents picking an as-of date after the KST "today" the server accepts, including direct keyboard entry. */
+export function clampAsOfDate(value: string, todayIso: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value > todayIso ? todayIso : value;
+}
 
 /** Skips redundant `/v1/auth/me` calls from tab-refocus SIGNED_IN noise, unless forced. */
 export function shouldHydrateNow(
@@ -332,6 +351,7 @@ export default function Home() {
     let active = true;
     let hydrationInFlight = false;
     let lastHydrateAt = 0;
+    let hasActiveSession = false;
     const hydrateUser = async ({ force = false }: { force?: boolean } = {}) => {
       if (hydrationInFlight) return;
       if (!shouldHydrateNow(lastHydrateAt, Date.now(), force)) return;
@@ -344,11 +364,13 @@ export default function Home() {
         if (active && authEpoch.current === epoch) {
           setUser((prev) => nextAuthUser(prev, storedUser));
         }
+        hasActiveSession = storedUser !== null;
       } catch (cause) {
         if (active && authEpoch.current === epoch) {
           setUser(null);
           setError(cause instanceof Error ? cause.message : "로그인 정보를 확인하지 못했습니다.");
         }
+        hasActiveSession = false;
       } finally {
         if (active && authEpoch.current === epoch) setAuthStatus("ready");
         hydrationInFlight = false;
@@ -371,8 +393,9 @@ export default function Home() {
 
     void hydrateUser({ force: true });
     const { data: { subscription } } = createClient().auth.onAuthStateChange((event: AuthChangeEvent) => {
-      const action = authEventAction(event);
+      const action = authEventAction(event, hasActiveSession);
       if (action === "clear") {
+        hasActiveSession = false;
         clearAuthenticatedWorkspace();
       } else if (action === "hydrate") {
         void Promise.resolve().then(() => hydrateUser());

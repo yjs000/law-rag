@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { authEventAction, HYDRATE_THROTTLE_MS, nextAuthUser, oauthRedirectMessage, shouldHydrateNow } from "../app/page";
+import {
+  authEventAction,
+  clampAsOfDate,
+  HYDRATE_THROTTLE_MS,
+  koreaTodayIsoDate,
+  nextAuthUser,
+  oauthRedirectMessage,
+  shouldHydrateNow,
+} from "../app/page";
 import type { MockUser } from "./contracts";
 
 describe("auth page state", () => {
@@ -14,15 +22,25 @@ describe("auth page state", () => {
     expect(oauthRedirectMessage("")).toBeNull();
   });
 
-  it("clears private workspace state when another tab signs out", () => {
-    expect(authEventAction("SIGNED_OUT")).toBe("clear");
+  it("clears private workspace state when another tab signs out, regardless of session state", () => {
+    expect(authEventAction("SIGNED_OUT", true)).toBe("clear");
+    expect(authEventAction("SIGNED_OUT", false)).toBe("clear");
   });
 
-  it("rehydrates account state for sign-in and user updates without reacting to token noise", () => {
-    expect(authEventAction("SIGNED_IN")).toBe("hydrate");
-    expect(authEventAction("USER_UPDATED")).toBe("hydrate");
-    expect(authEventAction("TOKEN_REFRESHED")).toBe("ignore");
-    expect(authEventAction("INITIAL_SESSION")).toBe("ignore");
+  it("always rehydrates on a real user update, and ignores token/session noise", () => {
+    expect(authEventAction("USER_UPDATED", true)).toBe("hydrate");
+    expect(authEventAction("TOKEN_REFRESHED", true)).toBe("ignore");
+    expect(authEventAction("INITIAL_SESSION", true)).toBe("ignore");
+  });
+});
+
+describe("authEventAction SIGNED_IN dedup (0040)", () => {
+  it("hydrates on the first SIGNED_IN after a sign-out, i.e. a real sign-in", () => {
+    expect(authEventAction("SIGNED_IN", false)).toBe("hydrate");
+  });
+
+  it("ignores repeated SIGNED_IN noise from tab refocus while a session is already active", () => {
+    expect(authEventAction("SIGNED_IN", true)).toBe("ignore");
   });
 });
 
