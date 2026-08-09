@@ -31,6 +31,7 @@
 | TD-023 | P2 | AI 답변 품질 | `temperature=0.3`·`answer_timeout_seconds=60`(2026-08-08 수정, 원래 1.0/30초는 근거 없는 하드코딩이었음)과 `derive_answer_action()`의 checklist→action 매핑 규칙이 실측 D-10 실행으로 검증된 적이 없음 | [0032](active/0032-experiment-e-10-ai-answer-evaluation.md) E-10 실행 결과로 재현성·latency·gold 일치율을 확인하고 값을 확정 | 미지정 |
 | TD-024 | P2 | 라우팅 tier 2 | route-fixture-v1 실제 라이브 실행(2026-08-08)에서 tier2 LLM이 "확인/대조" 표현을 문서 필요 신호로 과대 해석해 `lay-energy-0346`·`0561`을 `external_document_required`로 잘못 차단(둘 다 confidence 0.95) - tier1 키워드 매칭 때와 같은 종류의 실수를 LLM도 반복할 수 있음을 보여준 사례. fixture가 14개뿐이라 우연인지 체계적 경향인지 미확정 | [0033](todo/0033-traffic-based-routing-calibration-review.md) 트래픽 축적 후 재검토, 필요 시 tier2 프롬프트/few-shot 보강 | 미지정 |
 | TD-025 | P1 | 배포 | 2026-08-08 실제 프로덕션 응답(`requested_answer_mode:"terra"`, `route:"legal_search"`, `fallback_reason:"generation_error"`)으로 확인 - 로컬에서 고친 `answer_timeout_seconds`(30→60초, TD-023)가 배포된 Vercel API에 반영됐는지 미검증. 같은 질문을 재시도해도 동일하게 `generation_error`로 fallback됨 | Vercel API 프로젝트가 최신 커밋으로 재배포됐는지, `ANSWER_TIMEOUT_SECONDS` 환경변수가 30으로 고정돼 있지 않은지 확인 | 사용자 |
+| TD-026 | P2 | 데이터 모델 | [0041](completed/0041-parse-law-type-classification-code.md) 완료 뒤 `source_kind`와 `law_type_code`가 의미상 겹친다고 확인됨(둘 다 쓰는 코드 4곳 존재, 대체된 사용처는 없음). `source_kind`는 `legal_documents`의 `UNIQUE(source_kind, source_id)`·upsert `ON CONFLICT` 키·`corpus-publish-base-v1` drift 계약·population fingerprint에 걸친 identity 컬럼이라 통합 시 재설계 범위가 크므로 지금은 병합하지 않기로 결정(2026-08-09) | 두 값이 실제로 어긋나는 사례가 발견되거나 identity/drift 계약을 다른 이유로 재설계할 기회가 생기면 `law_type_code → source_kind` 도출 방식으로 통합 재검토 | 미지정 |
 
 ## 종료된 항목
 

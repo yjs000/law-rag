@@ -98,3 +98,21 @@
   확인(기존 RLS 미설정 등은 이 변경과 무관한 기존 상태). 운영 데이터 자체는 수정하지
   않았다 - 신규·재수집 문서부터 실제 값이 채워진다.
 - `docs/generated/db-schema.md`를 `0012` 반영해 갱신했다.
+
+## 후속 결정: `source_kind`·`law_type_code` 통합 보류 (2026-08-09)
+
+- 사용자가 `source_kind`와 `law_type_code`가 의미상 겹친다는 점을 지적하며 컬럼 정리
+  (예: `source_kind` 저장을 없애고 `law_type_code`에서 JOIN/매핑으로 도출)를 요청했다.
+- 실제 코드를 재확인한 결과: `law_type_code`를 쓰는 4개 파일(`main.py`,
+  `postgres_repository.py`, `answering.py`, `memory_repository.py`)이 전부 `source_kind`도
+  함께 쓰고 있고, `source_kind → law_type_code`로 대체된 사용처는 없다. 즉 중복은 실제이지만
+  `source_kind`는 여전히 `legal_documents`의 `UNIQUE(source_kind, source_id)` 제약, upsert
+  `ON CONFLICT` 키, `corpus-publish-base-v1` drift 계약, population fingerprint 해시에
+  걸쳐 있는 identity 컬럼이고 `law_type_code`는 그중 어디에도 걸려 있지 않은 표시용
+  pass-through 컬럼이다.
+- **결정**: `source_kind`를 없애고 `law_type_code`에서 도출하는 방향이 개념적으로는 맞다는
+  점은 인정하지만, identity·upsert·drift 계약·fingerprint를 모두 재설계해야 하는 큰
+  리팩터링이라 지금 병합하지 않는다. 두 컬럼을 그대로 유지한다.
+- 알려진 부채로 [TD-026](../tech-debt-tracker.md)에 등록했다 - 실제로 이 중복이 문제를
+  일으키거나(예: 두 값이 실제로 어긋나는 사례 발견) 위 계약들을 어차피 다른 이유로 재설계할
+  기회가 생기면 그때 통합을 재검토한다.
