@@ -64,8 +64,16 @@
 - `partially_answerable` 외에 `fully_answerable` 또는 `clarification_required` 대표 사례를 포함해
   총 3문항 이내에서 v1·v2를 비교한다.
 - 실제 NVIDIA 호출 횟수와 재시도 상한은 실행 전에 다시 명시하고 사용자의 외부 호출 승인을 받는다.
-- hosted 비교 전에 Web 질문 경로가 59초마다 새 request ID로 최대 3회 재요청하는 계약과, API가
-  Vercel 강제 종료 전에 AI 답변 또는 안전한 검색 전용 fallback을 반환하는지 확인한다.
+- hosted D-10 v1·v2 비교는
+  [0045 조정된 질문 timeout 예산](../active/0045-coordinated-question-timeout-budget.md)이
+  통과한 뒤에만 시작한다. 통과 전에 비교하면 Vercel 60초 강제 종료로 인한 504가 답변
+  품질 실패로 오인될 수 있다 - API 서버측 전체 예산 52초, Web attempt 55초·최대 3회·
+  UX 전체 170초 상한 계약이 실제로 지켜지는지(어떤 요청도 Vercel 504로만 끝나지
+  않는지) 먼저 확인한다.
+- 0045와 0043은 책임을 분리해서 유지한다 - 0045는 전송·재시도 타이밍(요청 예산,
+  timeout, 재시도 판단, 안전한 폴백 유지)을 소유하고, 0043은 그 위에서 실제로 생성되는
+  답변이 일반인이 읽을 수 있는 문체인지와 그 평가 기준만 소유한다. 0045가 만든 timeout
+  경계 자체를 0043에서 다시 바꾸지 않는다.
 
 ## 비범위
 

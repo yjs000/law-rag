@@ -4,13 +4,17 @@ from collections import Counter
 from threading import Lock
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.domain.routing import QuestionRoute, RouteDecision, RouterTier
 from app.domain.schemas import AiFallbackReason, AnswerMode
 
 logger = logging.getLogger("law_rag.question_outcome")
 route_logger = logging.getLogger("law_rag.route_outcome")
+stage_timing_logger = logging.getLogger("law_rag.question_stage_timing")
+
+QuestionStageTimingStage = Literal["routing", "embedding", "retrieval", "generation", "request"]
+QuestionStageTimingOutcome = Literal["succeeded", "failed", "timed_out", "degraded"]
 _served_by_mode: Counter[str] = Counter()
 _route_by_route_tier: Counter[tuple[str, int]] = Counter()
 _route_by_reason: Counter[str] = Counter()
@@ -103,3 +107,40 @@ def route_metrics_snapshot() -> dict[str, object]:
             "by_reason_code": dict(_route_by_reason),
             "clarification_missing_field_categories": dict(_clarification_missing_fields),
         }
+
+
+class QuestionStageTimingEvent(BaseModel):
+    """0045: routing/embedding/retrieval/generation/request 각 stage의 예산 소비를
+    구조화 이벤트로 남긴다. 필드는 닫힌 enum과 정수 밀리초뿐이다 - 질문 원문, 근거 내용,
+    문서 제목, 예외 메시지, 사용자 식별자는 이 이벤트로 절대 전달할 수 없다(모델
+    검증기가 임의 문자열을 거부한다).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str
+    stage: QuestionStageTimingStage
+    outcome: QuestionStageTimingOutcome
+    elapsed_ms: int
+    remaining_ms: int
+
+
+def emit_question_stage_timing(
+    request_id: str,
+    stage: QuestionStageTimingStage,
+    outcome: QuestionStageTimingOutcome,
+    elapsed_ms: int,
+    remaining_ms: int,
+) -> None:
+    """0045: 조정된 요청 예산(52s < 55s < 60s) 아래 각 stage가 얼마나 썼고 얼마나
+    남았는지 안전하게 관측한다. 호출부는 절대 잡은 예외를 이 함수에 넘기면 안 된다 -
+    이 함수는 그럴 수 있는 매개변수 자체를 받지 않는다.
+    """
+    event = QuestionStageTimingEvent(
+        request_id=request_id,
+        stage=stage,
+        outcome=outcome,
+        elapsed_ms=elapsed_ms,
+        remaining_ms=remaining_ms,
+    )
+    stage_timing_logger.info(json.dumps(event.model_dump(mode="json"), ensure_ascii=True))

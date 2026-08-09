@@ -35,6 +35,23 @@
 
 현재 목업 API는 요청 ID·응답 모드·제공 결과만 구조화 이벤트로 남기고 응답 모드별 프로세스 로컬 누계를 제공한다. 중앙 메트릭·분산 추적·비용 계측은 실제 클라우드 연결 계획에서 영속 백엔드로 교체한다.
 
+### 조정된 질문 timeout 예산 (0045)
+
+`52 < 55 < 60`: `/v1/questions`는 서버측 전체 예산 52초(`QUESTION_REQUEST_TIMEOUT_SECONDS`) 안에서 routing·embedding·retrieval stage와, provider 재시도까지 포함하는 생성 40초 slice(`ANSWER_TIMEOUT_SECONDS`)를 나눠 쓰고 응답 마무리에 3초(`RESPONSE_RESERVE_SECONDS`)를 남긴다. Web은 각 서버 요청을 55초(`GENERATION_ATTEMPT_TIMEOUT_MS`)로 제한한다 - API가 스스로 끝내는 52초보다 항상 늦게, Vercel이 함수를 강제 종료하는 60초보다 항상 먼저 끊는다. Web 재시도는 매 시도마다 새 `client_request_id`와 새 서버측 예산으로 처음부터 다시 시작하며, UX 전체 상한은 170초(`GENERATION_OVERALL_TIMEOUT_MS`)이고 최대 3회는 최초 시도를 포함한 총 Web 시도 횟수다(최초 1회 + 추가 재시도 3회가 아니다).
+
+재시도 판단 행렬(`apps/web/lib/generation-retry.ts`):
+
+| 서버 응답 | Web 판단 |
+|---|---|
+| HTTP 502/503/504 | 재시도(새 `client_request_id`) |
+| 클라이언트 attempt timeout(55초, AbortError) | 서버에 취소 요청(최대 1초 대기) 후 재시도 |
+| 200 + `mode=search_only` + `fallback_reason=generation_error` | 재시도(생성만 다시 시도 - 이미 확보한 근거는 최종 fallback으로 보존) |
+| 그 외 오류 또는 다른 `fallback_reason` | 재시도하지 않고 즉시 반환·실패 |
+
+각 stage 타이밍 이벤트(`emit_question_stage_timing`)는 `request_id`, 닫힌 `stage`(`routing`/`embedding`/`retrieval`/`generation`/`request`) enum, 닫힌 `outcome`(`succeeded`/`failed`/`timed_out`/`degraded`) enum, 정수 밀리초 `elapsed_ms`·`remaining_ms` 다섯 필드만 기록한다. 질문 원문, 근거 내용, 문서 제목, 예외 메시지, 사용자 식별자는 어떤 형태로도 이 이벤트에 담기지 않는다.
+
+허용 기준: 각 hosted 요청은 API가 52초 안에 응답을 반환하거나 Web이 55초 안에 재시도를 시작해야 하며, 어떤 요청도 Vercel 60초 504로만 끝나지 않는다.
+
 ## 운영 준비 체크
 
 - 의존 서비스별 시간 제한, 제한된 재시도, 회로 차단

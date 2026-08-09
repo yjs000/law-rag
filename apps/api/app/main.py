@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Annotated
@@ -64,7 +65,12 @@ from app.domain.schemas import (
 )
 from app.domain.search_queries import SearchTrace
 from app.domain.source_urls import is_allowed_source_url
-from app.observability import emit_question_outcome, emit_route_outcome
+from app.observability import (
+    QuestionStageTimingOutcome,
+    emit_question_outcome,
+    emit_question_stage_timing,
+    emit_route_outcome,
+)
 from app.settings import get_settings
 
 settings = get_settings()
@@ -211,27 +217,47 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         settings.question_request_timeout_seconds,
         settings.response_reserve_seconds,
     )
-    await _require_supported_as_of_date(payload.as_of_date)
-    user = await _optional_user(request.headers.get("authorization"))
-    owner = _question_owner(request, user)
-    task = asyncio.current_task()
-    if task is None:
-        raise HTTPException(status_code=503, detail="질문 처리를 시작할 수 없습니다.")
-    if not await question_tasks.register(owner, payload.client_request_id, task):
-        raise HTTPException(status_code=409, detail="같은 요청이 이미 처리 중입니다.")
+    request_id = str(payload.client_request_id)
+    request_started = time.monotonic()
+    # 0045: 기본값은 "failed" - 아래 어떤 성공 경로에도 도달하지 못하고 조기 반환(인증·검증
+    # 실패 등 stage 시작 전 오류 포함)되면 이 값 그대로 finally에서 기록된다.
+    outcome: QuestionStageTimingOutcome = "failed"
     try:
-        await asyncio.sleep(0)
-        async with asyncio.timeout(budget.remaining_seconds()):
-            return await _answer_question(payload, request, user, budget)
-    except asyncio.CancelledError as exc:
-        raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
-    except TimeoutError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="질문 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
-        ) from exc
+        await _require_supported_as_of_date(payload.as_of_date)
+        user = await _optional_user(request.headers.get("authorization"))
+        owner = _question_owner(request, user)
+        task = asyncio.current_task()
+        if task is None:
+            raise HTTPException(status_code=503, detail="질문 처리를 시작할 수 없습니다.")
+        if not await question_tasks.register(owner, payload.client_request_id, task):
+            raise HTTPException(status_code=409, detail="같은 요청이 이미 처리 중입니다.")
+        try:
+            await asyncio.sleep(0)
+            async with asyncio.timeout(budget.remaining_seconds()):
+                response = await _answer_question(payload, request, user, budget)
+        except asyncio.CancelledError as exc:
+            outcome = "failed"
+            raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
+        except TimeoutError as exc:
+            outcome = "timed_out"
+            raise HTTPException(
+                status_code=503,
+                detail="질문 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+            ) from exc
+        finally:
+            await question_tasks.unregister(owner, payload.client_request_id, task)
+        outcome = _request_outcome_for_response(response)
+        return response
     finally:
-        await question_tasks.unregister(owner, payload.client_request_id, task)
+        # 0045: finally라서 위 모든 조기 반환(인증 401/409, corpus 503, quota 429,
+        # stage 예외로 인한 503 등)에서도 request 단위 마무리 이벤트가 정확히 한 번 나간다.
+        emit_question_stage_timing(
+            request_id,
+            "request",
+            outcome,
+            _elapsed_ms(request_started),
+            _remaining_ms(budget),
+        )
 
 
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
@@ -256,6 +282,25 @@ async def _retrieve_question_evidence(
         NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
     )
     return hits, trace, await repository.last_sync()
+
+
+def _elapsed_ms(started_at: float) -> int:
+    """0045: 실제 경과 시간(wall clock)이다 - `RequestBudget.clock`과는 별개다. 테스트
+    일부가 예산 계산용 clock을 가짜 값으로 주입하므로, 관측 전용 타이밍에서 그 clock을
+    다시 호출하면 예산 로직이 소비할 값을 먼저 가로채 기존 timeout 테스트를 깨뜨린다."""
+    return max(0, round((time.monotonic() - started_at) * 1000))
+
+
+def _remaining_ms(budget: RequestBudget) -> int:
+    """0045: `budget.deadline`은 이미 계산된 값을 그대로 읽기만 한다 - `budget.clock()`을
+    다시 호출하지 않아 위와 같은 이유로 예산 판정에 쓰이는 clock 소비 순서를 건드리지 않는다."""
+    return max(0, round((budget.deadline - time.monotonic()) * 1000))
+
+
+def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTimingOutcome:
+    """0045: 안전한 검색 전용 폴백(예: `generation_error`)으로 끝난 요청은 실패가 아니라
+    degraded다 - 사용자는 검증된 근거를 받았다. AI가 완결된 답을 낸 경우만 succeeded다."""
+    return "degraded" if response.fallback_reason is not None else "succeeded"
 
 
 async def _answer_question(
@@ -302,6 +347,8 @@ async def _answer_question(
         route_decision = route_tier1(payload.question)
         routing_timed_out = False
         if route_decision is None:
+            routing_started = time.monotonic()
+            routing_outcome: QuestionStageTimingOutcome = "succeeded"
             try:
                 route_decision = await budget.run(
                     "routing",
@@ -312,6 +359,7 @@ async def _answer_question(
                 # 라우팅 stage 예산을 다 썼다 - legal_search로 안전하게 진행한다(아래
                 # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다).
                 routing_timed_out = True
+                routing_outcome = "timed_out"
                 route_decision = RouteDecision(
                     route="legal_search",
                     reason_code="tier2_timeout",
@@ -322,11 +370,20 @@ async def _answer_question(
                 # tier 2 실패(NVIDIA 오류 등)는 라우팅 실패로 전체 요청을 막지
                 # 않는다 - legal_search로 안전하게 진행한다(0028: 근거 없이 차단 쪽으로
                 # 기본값을 두면 답할 수 있는 질문을 막는 피해가 더 크다).
+                routing_outcome = "failed"
                 route_decision = RouteDecision(
                     route="legal_search",
                     reason_code="tier2_classifier_error",
                     tier=2,
                     confidence=0.0,
+                )
+            finally:
+                emit_question_stage_timing(
+                    str(payload.client_request_id),
+                    "routing",
+                    routing_outcome,
+                    _elapsed_ms(routing_started),
+                    _remaining_ms(budget),
                 )
         # mock_classifier 설명은 디버그용 placeholder지 실제 판단 근거가 아니다 - 사용자
         # 응답에도, 저장되는 diagnostics에도 남기지 않는다(NVIDIA_API_KEY 없는 로컬 개발
@@ -368,6 +425,8 @@ async def _answer_question(
         embedding_stage = diagnostics["embedding"]
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})
+        embedding_started = time.monotonic()
+        embedding_outcome: QuestionStageTimingOutcome = "succeeded"
         try:
             query_embedding = (
                 await budget.run(
@@ -379,14 +438,26 @@ async def _answer_question(
             embedding_stage.update({"status": "succeeded", "dimensions": len(query_embedding)})
         except StageTimeoutError:
             embedding_failed = True
+            embedding_outcome = "timed_out"
             embedding_stage.update({"status": "timed_out", "dimensions": None})
         except Exception:
             embedding_failed = True
+            embedding_outcome = "failed"
             embedding_stage.update({"status": "failed", "dimensions": None})
+        finally:
+            emit_question_stage_timing(
+                str(payload.client_request_id),
+                "embedding",
+                embedding_outcome,
+                _elapsed_ms(embedding_started),
+                _remaining_ms(budget),
+            )
     elif use_ai:
         embedding_stage = diagnostics["embedding"]
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": False, "status": "skipped_provider_unavailable"})
+    retrieval_started = time.monotonic()
+    retrieval_outcome: QuestionStageTimingOutcome = "succeeded"
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
@@ -397,17 +468,28 @@ async def _answer_question(
         # 검색 stage 예산을 다 썼다 - 아직 신뢰할 근거가 없으므로(부분 결과로 답을
         # 만들지 않는다) 재시도를 유도하는 고정 503 메시지로 끝낸다. corpus 미준비·일반
         # 검색 실패와는 원인이 다르므로 별도 분기로 유지한다.
+        retrieval_outcome = "timed_out"
         raise HTTPException(
             status_code=503,
             detail="법령 검색 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
         ) from exc
     except CorpusSearchUnavailableError as exc:
+        retrieval_outcome = "failed"
         raise _corpus_unready_http_error() from exc
     except Exception as exc:
+        retrieval_outcome = "failed"
         raise HTTPException(
             status_code=503,
             detail="법령 검색을 일시적으로 사용할 수 없습니다.",
         ) from exc
+    finally:
+        emit_question_stage_timing(
+            str(payload.client_request_id),
+            "retrieval",
+            retrieval_outcome,
+            _elapsed_ms(retrieval_started),
+            _remaining_ms(budget),
+        )
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
     diagnostics["retrieval"] = {
         **search_trace.as_dict(),
@@ -456,6 +538,8 @@ async def _answer_question(
             "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
         }
     )
+    generation_started = time.monotonic()
+    generation_outcome: QuestionStageTimingOutcome = "succeeded"
     try:
         draft = await budget.run(
             "generation",
@@ -466,10 +550,12 @@ async def _answer_question(
         # 생성 stage 예산을 다 썼다 - 이미 검증된 근거(fallback)가 있으니 에러가 아니라
         # 200 + search_only로 끝낸다. 웹 클라이언트 재시도 로직이 이 응답 모양에
         # 의존한다(에러 응답으로 바꾸면 안 된다).
+        generation_outcome = "timed_out"
         fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
         generation_stage["status"] = "timed_out"
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
     except Exception as exc:
+        generation_outcome = "failed"
         status_code = getattr(exc, "status_code", None)
         if status_code in {402, 429}:
             global ai_quota_exhausted
@@ -481,6 +567,14 @@ async def _answer_question(
             "billing_or_quota_error" if status_code in {402, 429} else "failed"
         )
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
+    finally:
+        emit_question_stage_timing(
+            str(payload.client_request_id),
+            "generation",
+            generation_outcome,
+            _elapsed_ms(generation_started),
+            _remaining_ms(budget),
+        )
     if not validate_draft(draft, generation_hits):
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
