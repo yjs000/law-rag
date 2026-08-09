@@ -239,10 +239,9 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
       <dl className="policy-grid">
         <div><dt>로그인</dt><dd>Google</dd></div>
         <div><dt>질문 보존</dt><dd>생성일로부터 1년</dd></div>
-        <div><dt>생성 모델</dt><dd>gpt-5.6-terra 전용</dd></div>
-        <div><dt>현재 상태</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "NVIDIA AI 사용 가능" : "검색 전용"}</dd></div>
+        <div><dt>AI 모드</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "사용 가능" : "검색 전용"}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
-        <div><dt>계정 사용 한도</dt><dd>AI 10회/일 · 검색 100회/일 (베타)</dd></div>
+        <div><dt>계정 사용 한도</dt><dd>제한 없음</dd></div>
       </dl>
       <div className="account-actions"><button onClick={onLogout}>로그아웃</button><button className="danger" onClick={onDelete}>계정 삭제</button></div>
     </Dialog>

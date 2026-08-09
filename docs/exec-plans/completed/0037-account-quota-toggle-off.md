@@ -1,6 +1,6 @@
 # 0037: 계정(로그인 사용자) 사용 한도 제거 - 토글 가능한 모듈로
 
-상태: `제안됨 · 미착수`
+상태: `완료 (2026-08-09)`
 
 제안 출처: 2026-08-08 사용자가 로그인 계정의 일일 사용 한도(AI 10회/일 · 검색 100회/일)를
 없애야 한다고 지시했다. 단, 완전히 코드를 지우지 말고 나중에 다시 켤 수 있게 토글
@@ -67,3 +67,20 @@ async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
 - 계정 모달에 더 이상 존재하지 않는 한도 숫자가 노출되지 않는다.
 - 토글을 다시 켜면(설정값만 바꿔서) 기존 계정 한도 로직이 그대로 복구된다는 걸 테스트로
   증명한다(즉 로직 자체는 삭제되지 않고 조건부로만 꺼져 있어야 한다).
+
+## 구현 결과 (2026-08-09)
+
+- `Settings.account_quota_enabled: bool = False` 토글을 추가했다
+  ([settings.py](../../../apps/api/app/settings.py)).
+- `_check_quota`를 `if user is None or not postgres_identity or not
+  settings.account_quota_enabled: return`으로 감쌌다 - 기존 `authenticated_ai_daily_limit`/
+  `authenticated_search_daily_limit`/`postgres_identity.consume_quota` 호출 로직은 그대로
+  남겨뒀다([main.py](../../../apps/api/app/main.py)).
+- `apps/api/tests/test_account_quota_toggle.py` 신규: (1) 토글 기본값 False일 때
+  `consume_quota`가 거부(False)를 반환해도 `_check_quota`가 절대 호출하지 않음을
+  증명(`DenyingPostgresIdentity.calls == 0`), (2) 토글을 True로 켜면 동일한 거부 응답에
+  429가 발생하고 `consume_quota`가 실제로 호출됨을 증명 - 즉 로직이 삭제되지 않고
+  조건부로만 꺼져 있음을 회귀 테스트로 고정했다.
+- 계정 모달의 `계정 사용 한도` 줄을 `AI 10회/일 · 검색 100회/일 (베타)`에서 `제한 없음`
+  고정 문구로 바꿨다(프론트는 토글 상태를 조회하지 않고, 현재 기본값에 맞는 문구만 표시).
+- `pytest`(api, 588 passed) 전체 통과, `npm test`(web) 전체 통과.

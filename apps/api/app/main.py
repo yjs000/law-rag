@@ -745,7 +745,7 @@ def _embedder() -> NvidiaNimEmbedder:
 
 
 async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
-    if user is None or not postgres_identity:
+    if user is None or not postgres_identity or not settings.account_quota_enabled:
         return
     account_limit = (
         settings.authenticated_ai_daily_limit

@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
     authenticated_ai_daily_limit: int = Field(default=10, ge=1)
     authenticated_search_daily_limit: int = Field(default=100, ge=1)
+    account_quota_enabled: bool = False
     terms_version: str = "beta-2026-07-15"
     privacy_version: str = "beta-2026-07-15"
     # 2026-08-08: 콤마로 구분된 정확한 origin 목록을 지원한다(예: prod + 특정 preview
