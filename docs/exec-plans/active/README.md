@@ -10,5 +10,6 @@
 - [0025: 승인 질문에서 근거 기반 AI 답변까지](0025-approved-questions-to-grounded-answer-roadmap.md) — M0~M4 완료(승자 R1+A), M4.5는 [0028](0028-pre-retrieval-question-routing.md)에서 진행 중
 - [0028: 검색 전 질문 라우팅과 조건부 query 보강](0028-pre-retrieval-question-routing.md) — 착수 2026-08-07, route schema(1단계) 전, 입력은 질문 text+법령 corpus만
 - [0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리](0036-account-modal-model-label.md) — 재진행, 계정 화면 포함 전체 사용자 노출 copy의 공급자 중립화·production 재검증
+- [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md) — 프롬프트 v2·프로필·결정적 테스트·원문 링크 UI 완료, 실제 hosted v1/v2 비교는 호출 제한 설계 대기
 
 Discord thread `1528216345924337805`에서 시작한 작업의 착수 순서와 단일 `Picked Up` 상태는 [Discord 작업 보드](../../ROADMAP.md)에서 관리한다. 다른 환경에는 해당 보드를 적용하지 않는다.

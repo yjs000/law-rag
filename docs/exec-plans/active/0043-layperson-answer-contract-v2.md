@@ -8,6 +8,22 @@
 
 **Tech Stack:** Python 3 / FastAPI / pytest(asyncio_mode=auto), Next.js(React) / TypeScript / vitest.
 
+## 원본 todo 배경
+
+이 실행 계획은 `docs/exec-plans/todo/0043-layperson-answer-contract-v2.md`(원본 제안, 이제 삭제됨)를 이동한 것이다. 원본의 목적·범위·의존성·승격 조건을 아래에 보존한다.
+
+**제안 출처:** 2026-08-09 사용자가 실제 태양광 사업 질문의 AI 답변을 검토한 뒤, 법률을 처음 접하는 사람도 바로 이해할 수 있도록 답변 생성 가이드를 주는 개선안 중 B안(일반인 답변 계약 v2 + 평가 기준)을 다음 작업으로 선택했다.
+
+**목적:** 현재 인용·근거 부족·구조 검증 계약은 유지하면서, AI 답변을 법률 조사 보고서 문체가 아니라 처음 보는 사용자가 "무엇을 확인하고 다음에 무엇을 해야 하는지" 바로 이해할 수 있는 안내문 문체로 생성한다. 저장소의 제품 디자인 원칙(`DESIGN.md`)에 있는 "전문 용어에는 원문 용어를 보존하면서 쉬운 설명을 제공한다"를 프롬프트와 검증 가능한 평가 기준에 실제로 연결한다.
+
+**범위 (원본):** 1) 필드별 일반인 답변 계약 v2(summary·sections·checklist·limitations 문체 규칙), 2) 새 생성 프로필(v1 SHA 보존, prompt/profile version 분리), 3) 가독성 평가 계약(결정적 테스트 + 사람 rubric 6기준), 4) 제한된 실제 비교(D-10 `lay-energy-0201` 포함 최대 3문항 v1·v2 hosted 비교, NVIDIA 실호출 승인 필요).
+
+**비범위:** 답변 화면의 점진적 공개·섹션 접기·API 응답 스키마 재설계, 검색·재순위·문맥 조립 변경 또는 근거 부족을 프롬프트로 보완, 인용 검증 완화·법률 기억 기반 보충·다른 corpus·외부 웹 근거 도입, 일반 가독성 위반을 즉시 Production fallback 사유로 만드는 runtime style gate, Vercel 함수 시간 제한과 Web 재요청 자체의 구현 변경.
+
+**의존성:** D-10 동결 질문·근거와 answerability 판정, 현재 `DraftAnswer`·`QuestionResponse`·citation 구조, 실제 비교 시 정상 동작하는 Production 또는 동등한 hosted 질문 경로. [0042](0042-wire-reranking-into-live-search-path.md)는 독립 작업이며 이 항목의 선행 조건이 아니다(다만 v2 평가에서 핵심 근거 누락이 발견되면 문체 실패와 검색 실패를 분리해 0042에 기록한다).
+
+**승격 조건 (원본):** 사용자가 이 항목의 착수를 명시한다 → 착수 시 실제 비교 문항 3개·NVIDIA 호출 상한·일반인 rubric의 합격 기준을 확정한다 → 실행 계획을 작성하면 저장소 규칙에 따라 같은 번호의 이 파일을 `active/`로 이동한다(본 문서가 그 결과물이다). 범위 1~3번은 이 계획에서 구현·검증했고, 범위 4번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수로 todo에 남아 있다.
+
 ## Global Constraints
 
 - `DraftAnswer`·`QuestionResponse`·`Citation` 스키마 필드는 추가·변경하지 않는다 (설계 문서 "결정" 1, 4).
