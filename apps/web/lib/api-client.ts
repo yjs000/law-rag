@@ -40,7 +40,13 @@ async function request<T>(path: string, init?: RequestInit, authToken?: string |
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new Error(body?.detail ?? "요청을 처리하지 못했습니다.");
+    const detail = body?.detail;
+    const message = typeof detail === "string"
+      ? detail
+      : typeof detail?.message === "string"
+        ? detail.message
+        : "요청을 처리하지 못했습니다.";
+    throw new Error(message);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

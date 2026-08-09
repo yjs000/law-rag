@@ -1,6 +1,6 @@
 # 0039: 구조화된 에러 detail이 "[object Object]"로 표출됨
 
-상태: `제안됨 · 미착수`
+상태: `완료 (2026-08-09)`
 
 제안 출처: 2026-08-08 사용자가 로컬 API(port 8000)로 미래 기준일(2026-09-03)을 테스트하다
 `unsupported_corpus_date` 422 응답을 받았는데, 실제 사람이 읽을 메시지 대신 객체 자체가
@@ -70,3 +70,12 @@ throw new Error(body?.detail ?? "요청을 처리하지 못했습니다.");
 - 기존처럼 문자열 `detail` 에러는 그대로 잘 표시된다(회귀 없음).
 - 회귀 테스트 추가(`api-client-flow.test.ts` 또는 동등한 위치에 객체/문자열 `detail` 둘 다
   검증).
+
+## 구현 결과 (2026-08-09)
+
+- 공용 `request()`가 문자열 `detail`은 그대로 사용하고, 객체 `detail`은 문자열
+  `detail.message`를 사용하도록 수정했다. 두 형식 모두 아니면 기존 일반 오류 문구로
+  안전하게 폴백한다.
+- 객체 `corpus_unready` 응답이 `[object Object]`가 아니라 한글 `message`를 표시하는
+  회귀 테스트와 문자열 `detail` 보존 테스트를 먼저 추가해 실패를 확인한 뒤 구현했다.
+- `npm test`(66 passed), `tsc --noEmit`, `npm run lint` 통과.

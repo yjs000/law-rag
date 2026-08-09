@@ -9,7 +9,6 @@
 - [0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 항목 5(agent context diet) 완료, 나머지(machine-readable rubric·conflict detector·통합 CLI) 미착수
 - [0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 제안됨, 미착수 · tier1 사전 확장 재검토 + 인증·비인증 사용자 이력 검토를 하나의 재검토 라운드로 묶음
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 제안됨, 미착수 · 테스트 선작성 후 통과하도록 구현, 기준(p50/p95/콜드스타트)은 착수 시 확정
-- [0039: 구조화된 에러 detail이 "[object Object]"로 표출됨](0039-error-detail-object-shown-as-object-object.md) — 제안됨, 미착수 · `unsupported_corpus_date`/`corpus_unready` 재현 확인, api-client.ts 공용 에러 처리 수정 필요
 - [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
 
 ## 등록 계약

@@ -4,6 +4,7 @@ import {
   deleteConversation,
   deleteQuestionHistory,
   downloadPdf,
+  getCorpusStatus,
   getStoredUser,
   listConversations,
   listConversationTurns,
@@ -94,5 +95,30 @@ describe("Supabase authenticated question workflow", () => {
     }
     const meHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(meHeaders.get("X-Terms-Version")).toBe("beta-2026-07-15");
+  });
+});
+
+describe("structured API error details (0039)", () => {
+  it("shows the message from an object detail", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      detail: {
+        code: "corpus_unready",
+        message: "법령 corpus를 갱신하는 동안 검색이 일시 중지됩니다.",
+      },
+    }, { status: 503 })));
+
+    await expect(getCorpusStatus()).rejects.toThrow(
+      "법령 corpus를 갱신하는 동안 검색이 일시 중지됩니다.",
+    );
+  });
+
+  it("keeps a string detail unchanged", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      detail: "유효하지 않은 인증 세션입니다.",
+    }, { status: 401 })));
+
+    await expect(getCorpusStatus()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
   });
 });
