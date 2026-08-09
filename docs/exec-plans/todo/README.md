@@ -14,6 +14,8 @@
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 제안됨, 미착수 · 테스트 선작성 후 통과하도록 구현, 기준(p50/p95/콜드스타트)은 착수 시 확정
 - [0039: 구조화된 에러 detail이 "[object Object]"로 표출됨](0039-error-detail-object-shown-as-object-object.md) — 제안됨, 미착수 · `unsupported_corpus_date`/`corpus_unready` 재현 확인, api-client.ts 공용 에러 처리 수정 필요
 - [0040: 탭 재포커스 시 /v1/auth/me 재호출 - 배포 후 검증](0040-verify-auth-rehydration-throttle-in-production.md) — 제안됨, 미착수 · 0034가 아직 미배포라 재현 환경부터 재확인 필요
+- [0041: 법제처 API의 법종구분코드를 실제로 파싱](0041-parse-law-type-classification-code.md) — 제안됨, 미착수 · API는 이미 내려주는데 파서가 안 읽음, 원 컬럼 그대로 저장 선호, Citation 응답에 실어 보낼 것
+- [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
 
 ## 등록 계약
 
