@@ -70,6 +70,7 @@ def search_only_answer(
             path=hit.path,
             quote=hit.content,
             source_url=hit.source_url,
+            law_type_code=hit.law_type_code,
         )
         for index, hit in enumerate(hits, 1)
     ]

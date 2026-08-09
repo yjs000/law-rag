@@ -275,3 +275,98 @@ def test_flat_subitem_groups_ignore_items_that_only_reference_other_subitems() -
         ("제5조/항①/호3./목나.", "제5조/항①/호3."),
         ("제5조/항①/호3./목다.", "제5조/항①/호3."),
     ]
+
+
+def _json_body_with_law_type(*, law_type: str, law_type_code: str) -> str:
+    return json.dumps(
+        {
+            "법령": {
+                "기본정보": {
+                    "법령ID": "001",
+                    "법령일련번호": "1001",
+                    "법령명_한글": "전기사업법",
+                    "시행일자": "20260201",
+                    "법종구분": {"content": law_type},
+                    "법종구분코드": law_type_code,
+                },
+                "조문": {
+                    "조문단위": {
+                        "조문번호": "1",
+                        "조문내용": "제1조(목적) 전기사업의 기본제도를 정한다.",
+                    }
+                },
+            }
+        },
+        ensure_ascii=False,
+    )
+
+
+def _xml_body_with_law_type(*, law_type: str, law_type_code: str) -> str:
+    return f"""\
+<법령><기본정보><법령ID>001</법령ID><법령일련번호>1001</법령일련번호>
+<법령명_한글>전기사업법</법령명_한글><시행일자>20260201</시행일자>
+<법종구분>{law_type}</법종구분><법종구분코드>{law_type_code}</법종구분코드></기본정보>
+<조문><조문단위><조문번호>1</조문번호>
+<조문내용>제1조(목적) 전기사업의 기본제도를 정한다.</조문내용>
+</조문단위></조문></법령>"""
+
+
+def test_json_and_xml_parsers_extract_law_type_classification() -> None:
+    json_document = parse_json(
+        _json_body_with_law_type(law_type="법률", law_type_code="01"),
+        expected_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/law-type-json",
+    )
+    xml_document = parse_xml(
+        _xml_body_with_law_type(law_type="법률", law_type_code="01"),
+        expected_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/law-type-xml",
+    )
+
+    assert json_document.law_type_name == "법률"
+    assert json_document.law_type_code == "01"
+    assert xml_document.law_type_name == "법률"
+    assert xml_document.law_type_code == "01"
+
+
+def _admrul_json_body(*, kind_name: str, kind_code: str) -> str:
+    return json.dumps(
+        {
+            "AdmRulService": {
+                "행정규칙ID": "900",
+                "행정규칙일련번호": "9001",
+                "행정규칙명": "전기설비 기술기준",
+                "시행일자": "20260201",
+                "행정규칙종류": kind_name,
+                "행정규칙종류코드": kind_code,
+                "조문내용": ["제1조(목적) 이 규칙은 안전을 위해 제정한다."],
+            }
+        },
+        ensure_ascii=False,
+    )
+
+
+def test_json_parser_extracts_administrative_rule_type_classification() -> None:
+    document = parse_json(
+        _admrul_json_body(kind_name="예규", kind_code="03"),
+        expected_title="전기설비 기술기준",
+        source_kind=SourceKind.ADMIN_RULE,
+        source_url="https://example.test/admrul-json",
+    )
+
+    assert document.law_type_name == "예규"
+    assert document.law_type_code == "03"
+
+
+def test_law_type_fields_are_none_when_absent() -> None:
+    document = parse_json(
+        _json_body(),
+        expected_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        source_url="https://example.test/no-law-type",
+    )
+
+    assert document.law_type_name is None
+    assert document.law_type_code is None

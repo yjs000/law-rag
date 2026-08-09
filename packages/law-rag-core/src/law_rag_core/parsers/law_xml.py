@@ -212,6 +212,11 @@ def parse_legal_document(
             f"허용 목록 제목 불일치: expected={expected_title!r}, actual={title!r}"
         )
 
+    law_type_name_field, law_type_code_field = (
+        ("법종구분", "법종구분코드")
+        if source_kind is SourceKind.LAW
+        else ("행정규칙종류", "행정규칙종류코드")
+    )
     source_id = first_text(root, "법령ID", "행정규칙ID") or ""
     mst = mst_override or first_text(root, "법령일련번호", "행정규칙일련번호") or source_id
     if not source_id or not mst:
@@ -297,5 +302,7 @@ def parse_legal_document(
         source_url=source_url,
         raw_format="XML",
         raw_sha256=hashlib.sha256(xml.encode("utf-8")).hexdigest(),
+        law_type_name=first_text(root, law_type_name_field),
+        law_type_code=first_text(root, law_type_code_field),
         provisions=provisions,
     )

@@ -1,6 +1,6 @@
 # 0041: 법제처 API의 법종구분코드를 실제로 파싱해 저장·응답에 반영
 
-상태: `제안됨 · 미착수`
+상태: `완료 (2026-08-09)`
 
 제안 출처: 2026-08-08 사용자가 "지금 source_kind가 law/administrative_rule 2단계뿐인데,
 법제처 API가 애초에 법률/시행령/시행규칙 구분을 안 내려주는 거냐"고 물어 조사한 결과,
@@ -62,3 +62,39 @@
 - `/v1/questions` 응답의 `Citation`에 이 값이 실려서 나간다.
 - 프론트가 (착수한다면) 이 실제 값 기반으로 문서 종류를 구분할 수 있는 상태가 된다 -
   다만 프론트 반영 자체는 이 항목의 범위인지 별도 결정 필요.
+
+## 구현 결과 (2026-08-09)
+
+- 확인: `admrul`(행정규칙) 응답에는 `법종구분`/`법종구분코드`가 아니라 별도 필드
+  `행정규칙종류`/`행정규칙종류코드`가 쓰인다(법제처 Open API 가이드 페이지 확인).
+- **파싱**: `law_json.py`/`law_xml.py`가 `source_kind`에 따라 `(법종구분, 법종구분코드)`
+  또는 `(행정규칙종류, 행정규칙종류코드)`를 읽어 `LegalDocumentRecord.law_type_name`/
+  `.law_type_code`에 채운다.
+- **저장 방식**: 결정대로 `SourceKind` enum은 2단계로 유지하고, API 원 컬럼 값을
+  `legal_documents.law_type_name`/`law_type_code`(신규 마이그레이션 `0012`)에 그대로
+  저장한다. 이 값은 corpus 발행 drift 감지 계약(`corpus-publish-base-v1` /
+  `_PUBLISH_BASE_FIELDS`)에는 포함하지 않기로 결정했다 - 이 계약은 여러 파일에 걸친
+  content-addressed 해시 계약이라 확장 시 blast radius가 크고, 법종구분은 사실상
+  불변에 가까운 값이라 매 upsert마다 최신 파싱값으로 덮어쓰는 것으로 충분하다고 판단했다
+  (collector `SupabaseCurrentCorpusRepository.upsert`의 `INSERT ... ON CONFLICT DO UPDATE`).
+- **API 응답 반영**: `Citation`/`SearchHit` 스키마에 `law_type_code: str | None`을
+  추가하고, `postgres_repository.py`의 검색·조문조회 SQL 4곳(직접경로/단일조문/dense
+  검색/키워드검색)과 `_hit()`, `memory_repository.py`의 두 `SearchHit(...)` 생성 지점,
+  `answering.py`/`main.py`의 두 `Citation(...)` 생성 지점을 모두 연결했다. `_hit()`는
+  `row.get("law_type_code")`로 방어적으로 읽어 아직 이 컬럼을 선택하지 않는 SQL 경로가
+  있어도 깨지지 않게 했다.
+- **검증**: law-rag-core(26), api(588+2 skipped), collector(95+5 skipped) 테스트 전체
+  통과, ruff 통과. 신규/확장 테스트: 파서 법종구분 추출(JSON/XML, LAW/ADMIN_RULE, 부재
+  시 None), `PreparedDocumentRecord` round-trip, `0012` 마이그레이션 계약, collector
+  upsert INSERT 파라미터, `MemoryLegalRepository` search hit, `search_only_answer`
+  Citation.
+- **운영 DB 검증 (2026-08-09, 사용자 승인)**: Supabase MCP로 운영 프로젝트(`law-rag`,
+  `ijoqcauleoobbxdbdhxg`)에 `0012` 마이그레이션을 직접 적용(`ALTER TABLE legal_documents
+  ADD COLUMN law_type_name text, ADD COLUMN law_type_code text`)하고 `alembic_version`을
+  `0012`로 갱신했다. `postgres_repository.py`에서 수정한 SQL 4곳(직접경로 검색·단일조문
+  조회·dense 검색 CTE·키워드검색 CTE)을 실제 운영 데이터(전기사업법 등 9개 문서,
+  3066개 조문)에 대해 그대로 실행해 문법 오류 없이 `law_type_code` 컬럼까지 반환됨을
+  확인했다. `get_advisors(security)`로 이 변경이 새 보안 advisory를 만들지 않았음도
+  확인(기존 RLS 미설정 등은 이 변경과 무관한 기존 상태). 운영 데이터 자체는 수정하지
+  않았다 - 신규·재수집 문서부터 실제 값이 채워진다.
+- `docs/generated/db-schema.md`를 `0012` 반영해 갱신했다.

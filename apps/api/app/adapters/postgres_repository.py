@@ -251,7 +251,7 @@ class PostgresLegalRepository:
                         await connection.execute(
                             text(
                                 f"""SELECT p.id provision_id,d.id document_id,
-                                d.exact_title document_title,d.source_kind,
+                                d.exact_title document_title,d.source_kind,d.law_type_code,
                                 'MST '||v.mst version_label,v.effective_from,v.effective_to,
                                 p.path,p.heading,p.content,v.source_url,2.0 score
                                 FROM provisions p
@@ -536,6 +536,7 @@ class PostgresLegalRepository:
                     await connection.execute(
                         text(
                             f"""SELECT p.id provision_id,d.id document_id,d.exact_title document_title,d.source_kind,
+                        d.law_type_code,
                         'MST '||v.mst version_label,v.effective_from,v.effective_to,p.path,p.heading,p.content,
                         v.source_url,1.0 score FROM provisions p JOIN document_versions v ON v.id=p.version_id
                         JOIN legal_documents d ON d.id=v.document_id WHERE p.id=:id AND
@@ -674,6 +675,7 @@ class PostgresLegalRepository:
             content=row["content"],
             source_url=row["source_url"],
             score=float(row["score"]),
+            law_type_code=row.get("law_type_code"),
         )
 
 
@@ -741,7 +743,7 @@ def _dense_search_statement(
     return text(
         f"""{explain_prefix}WITH exact_eligible_distances AS MATERIALIZED (
         SELECT p.id provision_id,p.ordinal,d.id document_id,
-        d.exact_title document_title,d.source_kind,
+        d.exact_title document_title,d.source_kind,d.law_type_code,
         'MST '||v.mst version_label,v.effective_from,v.effective_to,
         p.path,p.heading,p.content,v.source_url,
         e.embedding::vector(512) <=> CAST(:embedding AS vector(512)) distance
@@ -761,7 +763,7 @@ def _dense_search_statement(
           AND ep.text_template_version='legal-provision-v1'
           AND e.source_text_sha256={LEGAL_PROVISION_V1_SOURCE_SHA_SQL}
         )
-        SELECT provision_id,document_id,document_title,source_kind,
+        SELECT provision_id,document_id,document_title,source_kind,law_type_code,
         version_label,effective_from,effective_to,path,heading,content,source_url,
         1.0-distance score
         FROM exact_eligible_distances
@@ -973,7 +975,7 @@ async def _execute_keyword_search(
                 text(
                     f"""WITH valid AS (
                       SELECT p.*,v.document_id,v.mst,v.effective_from,v.effective_to,
-                             v.source_url,d.exact_title,d.source_kind,
+                             v.source_url,d.exact_title,d.source_kind,d.law_type_code,
                              p.tableoid provision_tableoid,p.ctid provision_ctid
                       FROM provisions p
                       JOIN document_versions v ON v.id=p.version_id
@@ -984,7 +986,7 @@ async def _execute_keyword_search(
                         AND {CORPUS_SEARCH_READY_SQL}
                     )
                     SELECT v.id provision_id,v.document_id,v.exact_title document_title,
-                           v.source_kind,'MST '||v.mst version_label,
+                           v.source_kind,v.law_type_code,'MST '||v.mst version_label,
                            v.effective_from,v.effective_to,v.path,v.heading,v.content,
                            v.source_url,
                            (CASE WHEN v.exact_title &@~ :query THEN 3.0 ELSE 0.0 END)+

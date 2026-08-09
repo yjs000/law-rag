@@ -88,6 +88,45 @@ def _write(root: Path, *, changed: bool = True):
     )
 
 
+def test_prepared_document_round_trips_law_type_classification() -> None:
+    domain = LegalDocumentRecord(
+        source_id="001",
+        mst="1000",
+        title="전기사업법",
+        source_kind=SourceKind.LAW,
+        promulgation_number="1",
+        promulgated_on=date(2020, 1, 1),
+        effective_from=date(2020, 2, 1),
+        ministry="산업통상자원부",
+        source_url="https://example.test/law",
+        raw_format="JSON",
+        raw_sha256=_RAW_SHA,
+        law_type_name="법률",
+        law_type_code="01",
+        provisions=[
+            ProvisionRecord(id=_PROVISION_ID, path="제1조", heading="목적", content="이 법의 목적")
+        ],
+    )
+    prepared = PreparedDocumentRecord.from_domain(
+        domain,
+        effective_to=None,
+        raw=PreparedRawRecord(
+            path=f"raw/law/001/1000-{_RAW_SHA}.json",
+            sha256=_RAW_SHA,
+            wire_format="JSON",
+            source_url=domain.source_url,
+        ),
+        changed=True,
+        preview={},
+    )
+
+    assert prepared.law_type_name == "법률"
+    assert prepared.law_type_code == "01"
+    round_tripped = prepared.to_legal_document_record()
+    assert round_tripped.law_type_name == "법률"
+    assert round_tripped.law_type_code == "01"
+
+
 def test_write_load_and_finalize_bundle(tmp_path: Path) -> None:
     prepared = _write(tmp_path / "bundle")
 

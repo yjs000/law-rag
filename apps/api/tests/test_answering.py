@@ -19,6 +19,7 @@ def test_search_only_answer_citations_are_existing_exact_evidence() -> None:
         content="원문 내용",
         source_url="https://example.test",
         score=1,
+        law_type_code="01",
     )
     response = search_only_answer(
         QuestionRequest(
@@ -30,6 +31,7 @@ def test_search_only_answer_citations_are_existing_exact_evidence() -> None:
     )
     assert response.mode == "search_only"
     assert response.citations[0].quote == hit.content
+    assert response.citations[0].law_type_code == "01"
     assert response.sections[0].citation_ids == [response.citations[0].id]
     assert response.sections[0].claim == "전기사업법 · 제1조"
     assert response.checklist[0].citation_ids == [response.citations[0].id]

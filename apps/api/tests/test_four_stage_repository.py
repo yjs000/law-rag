@@ -210,6 +210,19 @@ async def test_memory_natural_search_keeps_one_leaf_per_article() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_hit_carries_the_document_law_type_code() -> None:
+    repository = MemoryLegalRepository()
+    document = _document("전기사업법", "law-type", "제1조 전기사업 허가 서류")
+    document.law_type_code = "01"
+    await repository.upsert_document(document)
+
+    hits, _ = await repository.search_with_trace("전기사업 허가 서류", date(2026, 7, 18), 10)
+
+    assert hits
+    assert hits[0].law_type_code == "01"
+
+
+@pytest.mark.asyncio
 async def test_memory_temporal_state_uses_earliest_collected_date_and_content_identity() -> None:
     repository = MemoryLegalRepository()
     document = _document("전기사업법", "temporal", "제1조 전기사업 허가 기준")

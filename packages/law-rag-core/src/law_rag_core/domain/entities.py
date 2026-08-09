@@ -31,5 +31,7 @@ class LegalDocumentRecord:
     raw_sha256: str
     parser_schema_version: str = PARSER_SCHEMA_VERSION
     fallback_reason: str | None = None
+    law_type_name: str | None = None
+    law_type_code: str | None = None
     raw_storage_path: str | None = None
     provisions: list[ProvisionRecord] = field(default_factory=list)

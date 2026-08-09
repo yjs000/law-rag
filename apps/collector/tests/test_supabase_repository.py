@@ -439,6 +439,36 @@ async def test_unchanged_sync_preserves_provisions_and_embeddings() -> None:
 
 
 @pytest.mark.asyncio
+async def test_upsert_writes_law_type_classification_to_legal_documents() -> None:
+    document = _document()
+    document.law_type_name = "법률"
+    document.law_type_code = "01"
+    raw = RawResponse("{}", "JSON", document.source_url)
+    provision_rows = [_provision_row(item) for item in document.provisions]
+    connection = _FakeConnection(
+        existing_document={"id": _DOCUMENT_ID, "exact_title": document.title},
+        title_owners=[
+            {
+                "id": _DOCUMENT_ID,
+                "source_kind": document.source_kind.value,
+                "source_id": document.source_id,
+            }
+        ],
+        existing_versions=[_version_row(document, raw)],
+        existing_provisions=provision_rows,
+        persisted_provisions=provision_rows,
+    )
+
+    await _repository(connection).upsert(document, raw, effective_to=None)
+
+    insert_call = next(
+        params for sql, params in connection.calls if "INSERT INTO legal_documents" in sql
+    )
+    assert insert_call["law_type_name"] == "법률"
+    assert insert_call["law_type_code"] == "01"
+
+
+@pytest.mark.asyncio
 async def test_prepared_upsert_batches_more_than_one_hundred_provisions() -> None:
     document = _document()
     document.provisions = [

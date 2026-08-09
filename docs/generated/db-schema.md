@@ -1,12 +1,12 @@
 # 데이터베이스 스키마
 
-> 기준 시점: 2026-08-04
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0011_retrieval_catalog.py`
+> 기준 시점: 2026-08-08
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0012_law_type_classification.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
 |---|---|
-| `legal_documents` | 안정적인 법령 ID, 정확 명칭, 문서 종류 |
+| `legal_documents` | 안정적인 법령 ID, 정확 명칭, 문서 종류, 법제처 법종구분(명/코드) |
 | `document_versions` | 문서·MST·시행일별 버전, 법적 생명주기, 출처 가용성, 효력 기간, 부칙 여부, 원문 계보 |
 | `provisions` | 조·항·호·목 경로와 원문 |
 | `embedding_profiles` | provider·model·query/passage 입력·차원 축약·정규화·본문 템플릿 버전 |
@@ -32,6 +32,11 @@
 | `checklist_exports` | 질문 이력에서 생성한 내보내기 감사 메타데이터 |
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
+
+`0012`은 `legal_documents`에 `law_type_name`/`law_type_code` 컬럼을 추가한다. 법제처 Open API가 내려주는
+`법종구분`/`법종구분코드`(법령) 또는 `행정규칙종류`/`행정규칙종류코드`(행정규칙) 원 값을 코드 체계 재정의 없이
+그대로 저장하며, 신규·재수집 문서에만 채워진다. 이 값은 corpus 발행 drift 감지(`corpus-publish-base-v1`)
+대상이 아니라 매 upsert마다 최신 파싱 값으로 덮어써진다.
 
 `legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재하지만 운영·실험 dense SQL은 exhaustive exact cosine을 사용한다. 이 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물이며 새 HNSW 인덱스나 build도 만들지 않는다. 물리 제거는 별도 additive cleanup migration 대상이다.
 

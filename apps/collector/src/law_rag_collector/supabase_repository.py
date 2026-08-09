@@ -676,16 +676,21 @@ class SupabaseCurrentCorpusRepository:
             document_id = (
                 await connection.execute(
                     text(
-                        """INSERT INTO legal_documents(source_id,exact_title,source_kind)
-                        VALUES(:source_id,:title,:kind)
+                        """INSERT INTO legal_documents(
+                        source_id,exact_title,source_kind,law_type_name,law_type_code)
+                        VALUES(:source_id,:title,:kind,:law_type_name,:law_type_code)
                         ON CONFLICT(source_kind,source_id) DO UPDATE
-                        SET exact_title=excluded.exact_title
+                        SET exact_title=excluded.exact_title,
+                        law_type_name=excluded.law_type_name,
+                        law_type_code=excluded.law_type_code
                         RETURNING id"""
                     ),
                     {
                         "source_id": document.source_id,
                         "title": document.title,
                         "kind": document.source_kind.value,
+                        "law_type_name": document.law_type_name,
+                        "law_type_code": document.law_type_code,
                     },
                 )
             ).scalar_one()

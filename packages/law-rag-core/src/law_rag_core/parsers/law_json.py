@@ -194,6 +194,11 @@ def parse_legal_document(
     effective_from_override: date | None = None,
 ) -> LegalDocumentRecord:
     payload = load_json(body)
+    law_type_name_field, law_type_code_field = (
+        ("법종구분", "법종구분코드")
+        if source_kind is SourceKind.LAW
+        else ("행정규칙종류", "행정규칙종류코드")
+    )
     title = _first(payload, "법령명_한글", "법령명한글", "행정규칙명")
     if title != expected_title:
         raise LawJsonParseError(
@@ -327,5 +332,7 @@ def parse_legal_document(
         source_url=source_url,
         raw_format="JSON",
         raw_sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        law_type_name=_first(payload, law_type_name_field),
+        law_type_code=_first(payload, law_type_code_field),
         provisions=provisions,
     )

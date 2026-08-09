@@ -218,3 +218,27 @@ def test_retrieval_catalog_migration_tracks_independent_generations(monkeypatch)
     assert "USING hnsw" not in sql
     assert "bm25" not in sql.lower()
     assert "rrf" not in sql.lower()
+
+
+def test_law_type_classification_migration_adds_legal_documents_columns(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0012_law_type_classification.py"
+    )
+    spec = importlib.util.spec_from_file_location("law_type_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0012"
+    assert migration.down_revision == "0011"
+    assert "ALTER TABLE legal_documents" in sql
+    assert "ADD COLUMN law_type_name text" in sql
+    assert "ADD COLUMN law_type_code text" in sql

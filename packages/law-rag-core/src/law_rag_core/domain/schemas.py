@@ -107,6 +107,7 @@ class Citation(BaseModel):
     path: str
     quote: str
     source_url: str
+    law_type_code: str | None = None
 
 
 class SearchHit(BaseModel):
@@ -122,6 +123,7 @@ class SearchHit(BaseModel):
     content: str
     source_url: str
     score: float = 0
+    law_type_code: str | None = None
 
 
 class AnswerSection(BaseModel):

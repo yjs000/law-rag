@@ -124,6 +124,8 @@ class PreparedDocumentRecord(_Record):
     raw_sha256: Sha256
     parser_schema_version: str = Field(min_length=1)
     fallback_reason: str | None = None
+    law_type_name: str | None = None
+    law_type_code: str | None = None
     raw: PreparedRawRecord
     provisions: list[PreparedProvisionRecord]
     changed: bool
@@ -171,6 +173,8 @@ class PreparedDocumentRecord(_Record):
             raw_sha256=document.raw_sha256,
             parser_schema_version=document.parser_schema_version,
             fallback_reason=document.fallback_reason,
+            law_type_name=document.law_type_name,
+            law_type_code=document.law_type_code,
             raw=raw,
             provisions=[PreparedProvisionRecord.from_domain(item) for item in document.provisions],
             changed=changed,
@@ -192,6 +196,8 @@ class PreparedDocumentRecord(_Record):
             raw_sha256=self.raw_sha256,
             parser_schema_version=self.parser_schema_version,
             fallback_reason=self.fallback_reason,
+            law_type_name=self.law_type_name,
+            law_type_code=self.law_type_code,
             provisions=[item.to_domain() for item in self.provisions],
         )
 

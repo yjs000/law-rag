@@ -195,6 +195,7 @@ class MemoryLegalRepository:
                         content=provision.content,
                         source_url=document.source_url,
                         score=(10.0 if path_matched else 0.0) + matched_score,
+                        law_type_code=document.law_type_code,
                     )
                 )
         ranked = sorted(hits, key=lambda hit: (-hit.score, hit.document_title, hit.path))
@@ -350,6 +351,7 @@ class MemoryLegalRepository:
                         content=provision.content,
                         source_url=document.source_url,
                         score=1,
+                        law_type_code=document.law_type_code,
                     )
         return None
 
