@@ -10,6 +10,7 @@ from scripts.experiment_d_manual_review_contract import (
     DEFAULT_QUESTION_INPUT,
     DEFAULT_SOURCE_BANK,
     ManualPilotInputError,
+    _file_sha256,
     load_manual_pilot_artifacts,
 )
 
@@ -76,3 +77,7 @@ def test_d10_input_rejects_source_bank_byte_drift(tmp_path: Path) -> None:
             bank_path,
             DEFAULT_APPROVAL_MANIFEST,
         )
+
+
+def test_file_sha256_is_independent_of_json_line_endings() -> None:
+    assert _file_sha256(b'{"value": 1}\r\n') == _file_sha256(b'{"value": 1}\n')

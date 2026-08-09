@@ -12,9 +12,19 @@ from scripts.experiment_d_10_gold_review import (
     D10GoldReviewError,
     ProposedCase,
     UserAdjudication,
+    _sha256_file,
     load_workflow_contract,
     preflight_contract,
 )
+
+
+def test_gold_artifact_hash_is_independent_of_line_endings(tmp_path: Path) -> None:
+    crlf = tmp_path / "crlf.jsonl"
+    lf = tmp_path / "lf.jsonl"
+    crlf.write_bytes(b'{"value": 1}\r\n')
+    lf.write_bytes(b'{"value": 1}\n')
+
+    assert _sha256_file(crlf) == _sha256_file(lf)
 
 
 def test_tracked_contract_freezes_ten_by_3066_judgments() -> None:

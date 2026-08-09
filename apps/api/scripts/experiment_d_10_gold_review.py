@@ -247,7 +247,7 @@ def _sha256_bytes(value: bytes) -> str:
 
 def _sha256_file(path: Path) -> str:
     try:
-        return _sha256_bytes(path.read_bytes())
+        return _sha256_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
     except OSError as error:
         raise D10GoldReviewError(f"could not read artifact: {path}") from error
 

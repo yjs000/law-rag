@@ -127,7 +127,7 @@ class FrozenD10EvaluationContract(StrictModel):
 
 def _sha256(path: Path) -> str:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     except OSError as error:
         raise FrozenD10ContractError(f"could not read frozen artifact: {path}") from error
 

@@ -10,9 +10,19 @@ from scripts.experiment_d_10_frozen_contract import (
     DEFAULT_CONTRACT,
     FrozenCase,
     FrozenD10ContractError,
+    _sha256,
     load_frozen_contract,
     preflight_frozen_d10,
 )
+
+
+def test_frozen_artifact_hash_is_independent_of_line_endings(tmp_path: Path) -> None:
+    crlf = tmp_path / "crlf.json"
+    lf = tmp_path / "lf.json"
+    crlf.write_bytes(b'{"value": 1}\r\n')
+    lf.write_bytes(b'{"value": 1}\n')
+
+    assert _sha256(crlf) == _sha256(lf)
 
 
 def test_tracked_frozen_contract_seals_ten_user_confirmed_cases() -> None:

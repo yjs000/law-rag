@@ -65,7 +65,7 @@
   "source_bank": {
     "artifact": "apps/api/evaluation/experiment-d-lay-energy-query-bank-v1-draft.json",
     "bank_version": "experiment-d-lay-energy-query-bank-v1-draft",
-    "file_sha256": "00870a5dd25db27d7f444080abff705b9d6c1e63f69b20ada0d6eefbfd442dec",
+    "file_sha256": "e372c6200bacc8caf2303a82c60be4ba599669a3bdfcbe645f1df6baf6297da4",
     "question_scope_set_sha256": "a8340555919ceac96616984d5f39b59ee9f0019c092a60918f772ffec4796845",
     "question_set_sha256": "523325a6d86d2503492ff4dd8479f0a7e6045950dcef9288f970da0ae44d5a1a"
   },

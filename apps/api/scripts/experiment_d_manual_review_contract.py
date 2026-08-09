@@ -119,7 +119,9 @@ class ManualPilotArtifacts:
 
 
 def _file_sha256(encoded: bytes) -> str:
-    return hashlib.sha256(encoded).hexdigest()
+    # Git may check text files out with CRLF on Windows and LF in CI. Seal the
+    # JSON content independently of that transport-only line-ending difference.
+    return hashlib.sha256(encoded.replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _text_sha256(value: str) -> str:

@@ -16,7 +16,7 @@
       "path": ".data/experiments/d-manual/runs/d10-20260805t065001773007z-442bef4a327b/manual-review.json"
     },
     "question_input": {
-      "file_sha256": "0bb1e6a01c3a7b7f592cd4df907450afa5ad172d8a6dd7dcc7c79c9937bc9e1c",
+      "file_sha256": "89945f629ad6992c34fcd7adab43095a69d72f95a05cf87b45bfa6c64a168020",
       "path": "experiments/d_manual/experiment-d-10-questions.json"
     },
     "rerank_comparison": {
@@ -191,7 +191,7 @@
       "question_sha256": "2a474d15d48859775429fc0e16bac1393f41afc7c017dd7ee1072ea5bfa228c4"
     }
   ],
-  "contract_payload_sha256": "d25bcd2ab00428515797d34a301b13dd73acb5809833de89289093056ae1af2e",
+  "contract_payload_sha256": "895a26c8cee41c9f95a2daf1aefc550fe3d49c1c5aae4e6d00caa986408a35ac",
   "evaluation_scope": "user_confirmed_labels_within_original_raw_top10_only",
   "experiment": "D-10-M3",
   "prohibited_claims": [

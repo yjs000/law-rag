@@ -19,7 +19,7 @@
     "previous_judgment"
   ],
   "frozen_calibration_binding": {
-    "file_sha256": "4805a18437a9a7ba9542bc7269540641e9296fff88b8836ffc288f0bf053bfd6",
+    "file_sha256": "228b3a3bb93675a277401b2faa38ace36704dc159b8b7af634a4b0547aa9312a",
     "path": "experiments/d_manual/experiment-d-10-m3-frozen-contract.json"
   },
   "output_root": ".data/experiments/d-gold-10",
@@ -31,7 +31,7 @@
     "production_release_gate"
   ],
   "question_input_binding": {
-    "file_sha256": "0bb1e6a01c3a7b7f592cd4df907450afa5ad172d8a6dd7dcc7c79c9937bc9e1c",
+    "file_sha256": "89945f629ad6992c34fcd7adab43095a69d72f95a05cf87b45bfa6c64a168020",
     "path": "experiments/d_manual/experiment-d-10-questions.json"
   },
   "relevance_scale": {
@@ -41,5 +41,5 @@
   },
   "schema_version": 1,
   "status": "annotation_workflow_locked",
-  "workflow_contract_payload_sha256": "c517e16bf0c2e0c0c22e128201ebbcba323d8260124472e45bec2b6d8b10fb23"
+  "workflow_contract_payload_sha256": "8d06f0ee2b927a8b5ac6e9edb2ca1745b23150ad3d7fa616e8ac74e2121d0384"
 }
