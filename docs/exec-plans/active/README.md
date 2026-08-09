@@ -9,6 +9,5 @@
 - [0022: 검색 인덱스 재설계와 실험 D 평가](0022-retrieval-index-and-experiment-d-1000.md) — 검색 인프라·D-10 완료, D-full Gold는 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)로 보류
 - [0025: 승인 질문에서 근거 기반 AI 답변까지](0025-approved-questions-to-grounded-answer-roadmap.md) — M0~M4 완료(승자 R1+A), M4.5는 [0028](0028-pre-retrieval-question-routing.md)에서 진행 중
 - [0028: 검색 전 질문 라우팅과 조건부 query 보강](0028-pre-retrieval-question-routing.md) — 착수 2026-08-07, route schema(1단계) 전, 입력은 질문 text+법령 corpus만
-- [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md) — 로컬 16개 엔드포인트 개별 1초 게이트 완료, Vercel 콜드 스타트 측정 대기
 
 Discord thread `1528216345924337805`에서 시작한 작업의 착수 순서와 단일 `Picked Up` 상태는 [Discord 작업 보드](../../ROADMAP.md)에서 관리한다. 다른 환경에는 해당 보드를 적용하지 않는다.

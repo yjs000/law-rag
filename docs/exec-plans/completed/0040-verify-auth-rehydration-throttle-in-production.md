@@ -89,5 +89,10 @@ Vercel get_project(law-rag-web).latestDeployment:
   또는 `SIGNED_OUT` 처리 시 `false`로 되돌린다.
 - **검증**: `auth-page-state.test.ts`에 `authEventAction` 새 시그니처 테스트(실제 로그인 vs
   탭 재포커스 노이즈 구분) 추가. `npm test`(64 passed), `tsc --noEmit` 통과. 브라우저
-  preview로 페이지가 정상 렌더링됨을 확인. 배포된 사이트에서의 실제 탭 반복 전환
-  네트워크 재현은 이 세션에서 수행하지 않았다 - 다음 배포 후 확인 권장.
+  preview로 페이지가 정상 렌더링됨을 확인.
+- **운영 최종 확인**: 후행 커밋 `7d84c51`이 포함된 `law-rag-web.vercel.app` production을
+  로그인된 Chrome 세션으로 열었다. 최초 로드 후 60초가 지난 뒤 새 탭 생성·종료 방식으로
+  원래 탭을 5회 재포커스했다. 매회 로그인 상태와 질문 이력 8건이 그대로 유지됐으며,
+  브라우저가 관측한 fetch 자산에는 `/v1/auth/me`와 `/v1/conversations?limit=20`이 각각
+  최초 항목 1개만 존재했다. 따라서 60초 이내뿐 아니라 60초 이후 재포커스에서도 추가
+  인증·이력 재조회가 없는 완료 조건을 충족했다.

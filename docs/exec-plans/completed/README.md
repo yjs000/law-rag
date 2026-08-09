@@ -12,4 +12,5 @@
 - [0026: 실험 D-10 수동 검색·문맥 진단](0026-experiment-d-10-manual-review.md)
 - [0027: 실험 D-10-R1 부모 표제·직접성 로컬 재정렬](0027-experiment-d-10-local-rerank.md)
 - [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md)
+- [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md)
 - [0039: 구조화된 API 오류 메시지 표시](0039-error-detail-object-shown-as-object-object.md)
