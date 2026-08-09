@@ -78,7 +78,7 @@ Vercel의 기본 출구 IP를 국가법령정보 Open API 등록 IP로 사용하
 - transaction mode에서 prepared statement cache를 끄고 SQLAlchemy/driver 설정을 회귀 테스트한다.
 - migration, `pg_dump`, 복구 작업은 runtime pooler와 분리한 관리용 연결을 사용한다.
 - Supabase에서 `pgroonga`와 `vector` 확장을 활성화하고 실제 한국어 검색·512차원 벡터 쿼리를 검증한다.
-- Vercel Function은 Supabase 데이터베이스와 같거나 가장 가까운 리전에 둔다.
+- Vercel Function은 Supabase 데이터베이스와 같은 서울 `icn1` 단일 리전에 둔다.
 
 공식 참고: [Supabase 연결 방식](https://supabase.com/docs/guides/database/connecting-to-postgres), [prepared statement 비활성화](https://supabase.com/docs/guides/troubleshooting/disabling-prepared-statements-qL8lEL), [Postgres 확장 목록](https://supabase.com/docs/guides/database/extensions), [Vercel 리전](https://vercel.com/docs/regions)
 
@@ -214,3 +214,4 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 - 2026-07-15: Vercel Python 런타임은 `.python-version`의 마이너 버전 `3.14`로 선택한다. 패치 버전은 Vercel 관리형 런타임에 맡겨 지원되지 않는 정확한 패치 요구로 빌드가 중단되지 않게 한다.
 - 2026-07-15: collector `sync-current`는 session pooler와 `sb_secret_` API key를 사용해 private Storage와 PostgreSQL에 반영한다. opaque secret key는 JWT가 아니므로 Storage 요청의 `apikey` 헤더에만 둔다.
 - 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 로그인 계정 일일 quota는 삭제하지 않고 `ACCOUNT_QUOTA_ENABLED=false`로 현재 비활성화했다. 익명 일일 quota는 없으며, NVIDIA가 반환한 402/429는 계정 토글과 별도로 검색 전용 폴백 처리한다.
+- 2026-08-09: 운영 `/v1/corpus/status`가 Vercel 기본 `iad1`에서 서울 Supabase까지 연결하며 반복 3.03~3.21초, 첫 요청 5.26초가 걸린 것을 확인했다. DB 연결을 요청당 3회에서 1회로 줄인 뒤에도 1초 목표를 넘겨, API Function을 데이터베이스와 같은 서울 `icn1` 단일 리전으로 고정했다. 다중 리전은 도입하지 않는다.
