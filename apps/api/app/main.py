@@ -188,6 +188,7 @@ async def health() -> dict[str, str]:
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     await _require_supported_as_of_date(payload.as_of_date)
+    await _check_quota("search")
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
     except CorpusSearchUnavailableError as exc:
@@ -258,6 +259,7 @@ async def _answer_question(
         "routing": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
+    await _check_quota("ai" if use_ai else "search", user=user)
     await asyncio.sleep(0)
     # 0028 M4.5: 라우팅은 embedding보다 먼저 실행한다. 지금은 use_ai(terra) 경로에만
     # 적용한다 - search_only는 결과를 사용자가 직접 원문 대조하는 모드라 D-10에서 발견된
@@ -733,6 +735,18 @@ def _embedder() -> NvidiaNimEmbedder:
         dimensions=settings.embedding_dimensions,
         timeout_seconds=settings.embedding_timeout_seconds,
     )
+
+
+async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
+    if user is None or not postgres_identity or not settings.account_quota_enabled:
+        return
+    account_limit = (
+        settings.authenticated_ai_daily_limit
+        if kind == "ai"
+        else settings.authenticated_search_daily_limit
+    )
+    if not await postgres_identity.consume_quota(user.id, date.today(), kind, account_limit):
+        raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
 
 
 def _ai_available() -> bool:

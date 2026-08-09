@@ -45,7 +45,7 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 | `WEB_ORIGIN` | `http://localhost:3000` | 정확한 Preview Web origin | 정확한 Production Web origin | wildcard 금지 |
 | `SUPABASE_URL` | 선택 | staging 값 | 운영 값 | collector Storage endpoint |
 | `SUPABASE_SECRET_KEY` | 선택 | staging 서버 키 | 운영 서버 키 | `sb_secret_...`; collector Storage 전용; 브라우저 노출 금지 |
-| 모델·차원·timeout 변수 | 선택 | 필요 시 설정 | 필요 시 설정 | `.env.example` 기본값 참조 |
+| 모델·차원·timeout·계정 quota 토글 | 선택 | 필요 시 설정 | 필요 시 설정 | `ACCOUNT_QUOTA_ENABLED=false`가 현재 기본값; `.env.example` 참조 |
 
 `DATABASE_URL`은 SQLAlchemy 런타임이 Supavisor transaction mode(6543)에 연결하는 비밀이고, `DIRECT_URL`은 Alembic이 session mode(5432)에 연결할 때만 사용한다. IPv4-only 환경에서는 5432 session pooler가 direct endpoint를 대신한다. SQLAlchemy/asyncpg는 `NullPool`과 `statement_cache_size=0`으로 transaction mode 제약을 처리한다. `SUPABASE_SECRET_KEY`는 Auth 관리자 API나 Storage 서버 어댑터에서만 사용하며 `sb_secret_...` 형식의 서버 전용 키를 등록한다.
 
@@ -169,7 +169,7 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 
 플랫폼의 HTTPS, DDoS 완화, 배포 격리와 자동 확장은 위 애플리케이션 통제를 대체하지 않는다.
 
-애플리케이션의 요청 전 계정·익명 일일 quota 검사는 2026-08-09에 제거했다. `x-forwarded-for`는 질문 취소·중복 요청 소유권을 위한 비영속 HMAC 주체 계산에만 사용하며 IP 원문을 저장하지 않는다. 남용 방지는 Vercel/WAF 경계와 NVIDIA 사용량 관측으로 다룬다.
+로그인 계정 일일 quota 로직은 삭제하지 않고 `ACCOUNT_QUOTA_ENABLED` 환경 변수로 토글한다. 현재 기본값은 `false`라 `consume_quota`를 호출하지 않고 모든 로그인 요청을 통과시킨다. `true`로 켜면 기존 AI 10회/일·검색 100회/일 한도를 다시 적용한다. 익명 일일 quota는 제거된 상태다. `x-forwarded-for`는 질문 취소·중복 요청 소유권을 위한 비영속 HMAC 주체 계산에만 사용하며 IP 원문을 저장하지 않는다.
 
 ## 실행 순서
 
@@ -184,7 +184,7 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 
 ### Terra 준비 상태의 의미
 
-`ai_available=true`는 NVIDIA 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 provider 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 잔여 사용량을 선제 보증하지 않는다. NVIDIA 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`, 이후 같은 인스턴스는 `quota_exhausted`로 검색 전용 폴백한다. 이는 요청 전 사용자 quota가 아니라 provider 오류에 대한 안전 폴백이다.
+`ai_available=true`는 NVIDIA 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 provider 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 잔여 사용량을 선제 보증하지 않는다. NVIDIA 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`, 이후 같은 인스턴스는 `quota_exhausted`로 검색 전용 폴백한다. 이는 `ACCOUNT_QUOTA_ENABLED`로 제어하는 로그인 계정 일일 한도와 별개인 provider 오류 안전 폴백이다.
 
 ## 완료 조건
 
@@ -213,4 +213,4 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 - 2026-07-14: legacy `SUPABASE_SERVICE_ROLE_KEY` 대신 `sb_secret_...` 형식의 `SUPABASE_SECRET_KEY`를 서버 전용으로 사용한다. 현재 FastAPI의 DB 연결에는 `DATABASE_URL`만 사용하고, secret key는 Auth/Storage 서버 어댑터에서만 사용한다.
 - 2026-07-15: Vercel Python 런타임은 `.python-version`의 마이너 버전 `3.14`로 선택한다. 패치 버전은 Vercel 관리형 런타임에 맡겨 지원되지 않는 정확한 패치 요구로 빌드가 중단되지 않게 한다.
 - 2026-07-15: collector `sync-current`는 session pooler와 `sb_secret_` API key를 사용해 private Storage와 PostgreSQL에 반영한다. opaque secret key는 JWT가 아니므로 Storage 요청의 `apikey` 헤더에만 둔다.
-- 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 요청 전 계정·익명 일일 quota 검사도 제거했으며, NVIDIA가 실제 호출 결과로 반환한 402/429만 검색 전용 폴백으로 처리한다.
+- 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 로그인 계정 일일 quota는 삭제하지 않고 `ACCOUNT_QUOTA_ENABLED=false`로 현재 비활성화했다. 익명 일일 quota는 없으며, NVIDIA가 반환한 402/429는 계정 토글과 별도로 검색 전용 폴백 처리한다.

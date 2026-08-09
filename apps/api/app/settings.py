@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=512, ge=512, le=512)
     embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
+    authenticated_ai_daily_limit: int = Field(default=10, ge=1)
+    authenticated_search_daily_limit: int = Field(default=100, ge=1)
+    # 계정 quota 로직은 보존하되 현재는 끈다. 운영에서 다시 필요해지면 환경 변수
+    # ACCOUNT_QUOTA_ENABLED=true만으로 기존 일일 한도를 복구할 수 있다(0037).
+    account_quota_enabled: bool = False
     terms_version: str = "beta-2026-07-15"
     privacy_version: str = "beta-2026-07-15"
     # 2026-08-08: 콤마로 구분된 정확한 origin 목록을 지원한다(예: prod + 특정 preview

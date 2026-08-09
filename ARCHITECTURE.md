@@ -117,7 +117,7 @@ transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤�
 2. 위 사전 라우팅을 통과([legal_search]인 경우만)하면 direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
 3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID와 함께, 모델이 스스로 판단한 완결성 신호 `action`(`fully_answerable`/`partially_answerable`/`clarification_required`/`unanswerable`)과 `missing_information`을 받는다. 검증기는 이 명시적 신호로 요구 수준을 정하며 summary 텍스트에서 확신도를 추측하지 않는다.
 4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다. `action=unanswerable`이면 sections·checklist가 비어도 되지만 summary·limitations의 무근거 규범 주장(다른 법령·기관을 단정)은 계속 차단한다. `action=clarification_required`면 (사전 라우팅이 아니라 실제 검색·생성을 해본 뒤에야 드러난 부족함이므로) `missing_information`만 있으면 통과하고, 같은 재질문 응답 형식으로 사용자에게 반환한다.
-5. NVIDIA 생성 실패, provider가 반환한 결제·quota 402/429, 권한 오류, AI 비활성 시 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다. 요청 전 계정 일일 quota 검사는 없다.
+5. 로그인 계정 일일 quota 로직은 `account_quota_enabled`로 토글하며 현재 기본값은 `False`라 요청을 막지 않는다. 토글을 켰을 때만 AI 10회/일·검색 100회/일 한도를 적용한다. NVIDIA 생성 실패, provider가 반환한 결제·quota 402/429, 권한 오류, AI 비활성 시에는 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다.
 
 현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다. 검증 로직(`app/adapters/openai_answerer.py`의 `validate_draft`)은 근거 원문에서 조문 경로(`hit.path`)를 빠뜨려 정확한 조문 인용을 무근거 숫자로 오판하던 버그와, 한국어 겸양 표현("판단할 수 없다")이 법적 금지 주장과 표면 문법이 같아 오탐되던 버그를 2026-08-08에 고쳤다 — 상세 진단은 [0032](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)를 참고한다. 검증기 코드를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 낭비를 없애기 위해, 진단 스크립트(`scripts/diagnose_grounding_failures.py`)가 검색 근거(`SearchHit`) 원문을 통째로 저장하고, `scripts/replay_grounding_validation.py`가 그 저장분으로 `validate_draft()`만 새 API 호출 없이 재실행한다.
 
@@ -227,5 +227,5 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 | 2026-08-08 | grounding 검증기(`validate_draft`)의 evidence 문자열에 조문 경로(`hit.path`)를 포함하고, 메타인지 동사 뒤 겸양 표현("판단할 수 없다")을 신호에서 제외 | 정확히 인용된 조문 번호가 무근거 숫자로, 인식론적 겸양이 법적 금지 주장으로 오판되던 grounding_failed 오탐 두 근본 원인을 제거 |
 | 2026-08-08 | 진단 스크립트가 검색 근거(`SearchHit`) 원문 전체를 저장하고, 별도 replay 스크립트로 검증기 코드 변경을 새 API 호출 없이 재검증 | 검증기를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 반복 낭비를 제거 |
 | 2026-08-09 | 답변 생성 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·실행 분기를 제거 | 운영 비교·fallback에 OpenAI를 쓰지 않는다는 기존 결정을 기본값이 아니라 실행 가능한 코드 경계로 확정 |
-| 2026-08-09 | 요청 전 로그인·익명 일일 quota 검사를 제거 | 계정별 사전 차단을 없애되, NVIDIA가 실제 호출 결과로 반환한 402/429는 검색 전용 폴백으로 계속 처리 |
+| 2026-08-09 | 로그인 계정 일일 quota 로직을 삭제하지 않고 `account_quota_enabled=False` 토글로 비활성화 | 현재는 한도 없이 통과시키되, 추후 환경 변수로 토글만 켜면 기존 AI 10회/일·검색 100회/일 제한을 복구할 수 있게 함. 익명 일일 quota는 별도 결정으로 제거된 상태 |
 | 2026-08-09 | `Citation.source_kind`를 API 응답까지 전달 | DB·검색 결과에 있던 출처 종류를 제목 문자열 추측 없이 프런트가 사용하게 함 |
