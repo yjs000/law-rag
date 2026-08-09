@@ -14,6 +14,13 @@ const CONSENT_KEY = "law-rag-pending-consent";
 export const TERMS_VERSION = "beta-2026-07-15";
 export const PRIVACY_VERSION = "beta-2026-07-15";
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function accessToken(): Promise<string | null> {
   try {
     const { data } = await createClient().auth.getSession();
@@ -46,7 +53,7 @@ async function request<T>(path: string, init?: RequestInit, authToken?: string |
       : typeof detail?.message === "string"
         ? detail.message
         : "요청을 처리하지 못했습니다.";
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
