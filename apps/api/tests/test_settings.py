@@ -113,3 +113,40 @@ def test_web_origins_single_value_is_still_a_list() -> None:
     settings = Settings(web_origin="https://prod.example.com", _env_file=None)
 
     assert settings.web_origins == ["https://prod.example.com"]
+
+
+def test_request_budget_timeout_defaults() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.question_request_timeout_seconds == 52
+    assert settings.response_reserve_seconds == 3
+    assert settings.route_classifier_timeout_seconds == 8
+    assert settings.embedding_timeout_seconds == 5
+    assert settings.retrieval_timeout_seconds == 8
+    assert settings.answer_timeout_seconds == 40
+
+
+def test_request_timeout_seconds_separate_from_question_request_timeout() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.request_timeout_seconds == 30
+    assert settings.question_request_timeout_seconds == 52
+
+
+def test_response_reserve_must_be_smaller_than_question_timeout() -> None:
+    with pytest.raises(ValidationError, match="response reserve must be smaller"):
+        Settings(
+            question_request_timeout_seconds=1,
+            response_reserve_seconds=1,
+            _env_file=None,
+        )
+
+
+def test_answer_timeout_must_fit_before_response_reserve() -> None:
+    with pytest.raises(ValidationError, match="answer timeout must fit before"):
+        Settings(
+            question_request_timeout_seconds=52,
+            response_reserve_seconds=3,
+            answer_timeout_seconds=50,
+            _env_file=None,
+        )
