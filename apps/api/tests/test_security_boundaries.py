@@ -190,6 +190,40 @@ def test_stage_timing_event_is_closed_and_carries_no_secrets(caplog) -> None:
         emit_question_stage_timing("request-safe-id", "generation", "not_a_real_outcome", 1, 1)
 
 
+def test_request_stage_timing_event_fires_on_early_validation_failure(caplog) -> None:
+    # 0045: `_require_supported_as_of_date` fails before `_optional_user`, task
+    # registration, or any budgeted stage runs - this is the earliest possible early
+    # return in `/v1/questions`. The outer `finally` in the endpoint must still emit
+    # exactly one safe `stage="request"` event for it.
+    secret = "test-openai-secret-that-must-never-be-logged"
+    question = "개인 사건 질문 전문"
+    with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
+        response = client.post(
+            "/v1/questions",
+            json={
+                "question": question,
+                # ready_corpus_temporal_state only supports 1900-01-01..2099-12-31.
+                "as_of_date": "1899-12-31",
+                "project_stage": "planning",
+            },
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "unsupported_corpus_date"
+
+    stage_timing_records = [
+        record for record in caplog.records if record.name == "law_rag.question_stage_timing"
+    ]
+    assert len(stage_timing_records) == 1
+    payload = json.loads(stage_timing_records[0].message)
+    assert payload.keys() == {"request_id", "stage", "outcome", "elapsed_ms", "remaining_ms"}
+    assert payload["stage"] == "request"
+    assert payload["outcome"] == "failed"
+    assert isinstance(payload["elapsed_ms"], int) and payload["elapsed_ms"] >= 0
+    assert isinstance(payload["remaining_ms"], int) and payload["remaining_ms"] >= 0
+    assert secret not in caplog.text
+    assert question not in caplog.text
+
+
 def test_question_and_secret_bearing_failure_are_not_logged(monkeypatch, caplog) -> None:
     secret = "test-openai-secret-that-must-never-be-logged"
     question = "개인 사건 질문 전문"
