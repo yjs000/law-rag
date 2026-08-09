@@ -31,6 +31,7 @@ from app.application.answering import (
 )
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
 from app.application.question_tasks import QuestionTaskRegistry
+from app.application.request_budget import RequestBudget, StageTimeoutError
 from app.domain.answer_actions import derive_answer_action
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.corpus_temporal_contract import (
@@ -61,6 +62,7 @@ from app.domain.schemas import (
     SearchHit,
     SearchRequest,
 )
+from app.domain.search_queries import SearchTrace
 from app.domain.source_urls import is_allowed_source_url
 from app.observability import emit_question_outcome, emit_route_outcome
 from app.settings import get_settings
@@ -205,6 +207,10 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
 
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    budget = RequestBudget.start(
+        settings.question_request_timeout_seconds,
+        settings.response_reserve_seconds,
+    )
     await _require_supported_as_of_date(payload.as_of_date)
     user = await _optional_user(request.headers.get("authorization"))
     owner = _question_owner(request, user)
@@ -215,9 +221,15 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         raise HTTPException(status_code=409, detail="같은 요청이 이미 처리 중입니다.")
     try:
         await asyncio.sleep(0)
-        return await _answer_question(payload, request, user)
+        async with asyncio.timeout(budget.remaining_seconds()):
+            return await _answer_question(payload, request, user, budget)
     except asyncio.CancelledError as exc:
         raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="질문 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
     finally:
         await question_tasks.unregister(owner, payload.client_request_id, task)
 
@@ -230,8 +242,24 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
     return {"cancelled": True}
 
 
+async def _retrieve_question_evidence(
+    payload: QuestionRequest,
+    query_embedding: list[float] | None,
+) -> tuple[list[SearchHit], SearchTrace, datetime | None]:
+    """검색과 corpus 동기화 시각 조회를 하나의 retrieval budget stage로 묶는다 - 둘이
+    별도 stage였다면 각자 예산을 갖게 되어 전체 retrieval에 허용된 8초를 넘길 수 있다."""
+    hits, trace = await repository.search_with_trace(
+        payload.question,
+        payload.as_of_date,
+        10,
+        query_embedding,
+        NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
+    )
+    return hits, trace, await repository.last_sync()
+
+
 async def _answer_question(
-    payload: QuestionRequest, request: Request, user: MockUser | None
+    payload: QuestionRequest, request: Request, user: MockUser | None, budget: RequestBudget
 ) -> QuestionResponse:
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
@@ -272,11 +300,26 @@ async def _answer_question(
         assert isinstance(routing_stage, dict)
         routing_stage.update({"attempted": True, "status": "started"})
         route_decision = route_tier1(payload.question)
+        routing_timed_out = False
         if route_decision is None:
             try:
-                route_decision = await route_tier2(payload.question, _route_classifier())
+                route_decision = await budget.run(
+                    "routing",
+                    lambda: route_tier2(payload.question, _route_classifier()),
+                    cap_seconds=settings.route_classifier_timeout_seconds,
+                )
+            except StageTimeoutError:
+                # 라우팅 stage 예산을 다 썼다 - legal_search로 안전하게 진행한다(아래
+                # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다).
+                routing_timed_out = True
+                route_decision = RouteDecision(
+                    route="legal_search",
+                    reason_code="tier2_timeout",
+                    tier=2,
+                    confidence=0.0,
+                )
             except Exception:
-                # tier 2 실패(NVIDIA 오류·timeout 등)는 라우팅 실패로 전체 요청을 막지
+                # tier 2 실패(NVIDIA 오류 등)는 라우팅 실패로 전체 요청을 막지
                 # 않는다 - legal_search로 안전하게 진행한다(0028: 근거 없이 차단 쪽으로
                 # 기본값을 두면 답할 수 있는 질문을 막는 피해가 더 크다).
                 route_decision = RouteDecision(
@@ -296,7 +339,7 @@ async def _answer_question(
         )
         routing_stage.update(
             {
-                "status": "resolved",
+                "status": "timed_out" if routing_timed_out else "resolved",
                 "route": route_decision.route,
                 "tier": route_decision.tier,
                 "reason_code": route_decision.reason_code,
@@ -326,8 +369,17 @@ async def _answer_question(
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})
         try:
-            query_embedding = (await _embedder().embed([payload.question]))[0]
+            query_embedding = (
+                await budget.run(
+                    "embedding",
+                    lambda: _embedder().embed([payload.question]),
+                    cap_seconds=settings.embedding_timeout_seconds,
+                )
+            )[0]
             embedding_stage.update({"status": "succeeded", "dimensions": len(query_embedding)})
+        except StageTimeoutError:
+            embedding_failed = True
+            embedding_stage.update({"status": "timed_out", "dimensions": None})
         except Exception:
             embedding_failed = True
             embedding_stage.update({"status": "failed", "dimensions": None})
@@ -336,13 +388,19 @@ async def _answer_question(
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": False, "status": "skipped_provider_unavailable"})
     try:
-        hits, search_trace = await repository.search_with_trace(
-            payload.question,
-            payload.as_of_date,
-            10,
-            query_embedding,
-            NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
+        hits, search_trace, corpus_as_of = await budget.run(
+            "retrieval",
+            lambda: _retrieve_question_evidence(payload, query_embedding),
+            cap_seconds=settings.retrieval_timeout_seconds,
         )
+    except StageTimeoutError as exc:
+        # 검색 stage 예산을 다 썼다 - 아직 신뢰할 근거가 없으므로(부분 결과로 답을
+        # 만들지 않는다) 재시도를 유도하는 고정 503 메시지로 끝낸다. corpus 미준비·일반
+        # 검색 실패와는 원인이 다르므로 별도 분기로 유지한다.
+        raise HTTPException(
+            status_code=503,
+            detail="법령 검색 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+        ) from exc
     except CorpusSearchUnavailableError as exc:
         raise _corpus_unready_http_error() from exc
     except Exception as exc:
@@ -362,7 +420,6 @@ async def _answer_question(
         "reference_title": search_trace.reference_title,
         "reference_path": search_trace.reference_path,
     }
-    corpus_as_of = await repository.last_sync()
     if use_ai and not hits:
         fallback_reason = (
             AiFallbackReason.EMBEDDING_ERROR if embedding_failed else AiFallbackReason.NO_EVIDENCE
@@ -400,7 +457,18 @@ async def _answer_question(
         }
     )
     try:
-        draft = await _answerer().answer(payload, generation_hits)
+        draft = await budget.run(
+            "generation",
+            lambda: _answerer().answer(payload, generation_hits),
+            cap_seconds=settings.answer_timeout_seconds,
+        )
+    except StageTimeoutError:
+        # 생성 stage 예산을 다 썼다 - 이미 검증된 근거(fallback)가 있으니 에러가 아니라
+        # 200 + search_only로 끝낸다. 웹 클라이언트 재시도 로직이 이 응답 모양에
+        # 의존한다(에러 응답으로 바꾸면 안 된다).
+        fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
+        generation_stage["status"] = "timed_out"
+        return await _save_if_authenticated(user, payload, fallback, diagnostics)
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         if status_code in {402, 429}:
