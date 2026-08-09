@@ -557,23 +557,18 @@ class PostgresLegalRepository:
 
     async def corpus_items(self) -> list[CorpusItemStatus]:
         async with self.engine.connect() as connection:
-            rows = (
-                await connection.execute(
-                    text(
-                        "SELECT exact_title,MAX(effective_from) latest FROM legal_documents d JOIN document_versions v ON v.document_id=d.id GROUP BY exact_title"
-                    )
-                )
-            ).all()
-        ready = {row[0]: row[1] for row in rows}
-        return [
-            CorpusItemStatus(
-                title=e.title,
-                source_kind=e.source_kind,
-                state="ready" if e.title in ready else "missing",
-                latest_effective_date=ready.get(e.title),
-            )
-            for e in MVP_CATALOG
-        ]
+            return await _corpus_items(connection)
+
+    async def corpus_overview(
+        self, supported_through: date
+    ) -> tuple[list[CorpusItemStatus], CorpusTemporalState, datetime | None]:
+        """Load the status page through one Supavisor connection."""
+
+        async with self.engine.connect() as connection:
+            items = await _corpus_items(connection)
+            temporal_state = await _corpus_temporal_state(connection, supported_through)
+            last_sync = await _last_sync(connection)
+        return items, temporal_state, last_sync
 
     async def corpus_search_status(self) -> CorpusSearchStatus:
         async with self.engine.connect() as connection:
@@ -656,9 +651,7 @@ class PostgresLegalRepository:
 
     async def last_sync(self) -> datetime | None:
         async with self.engine.connect() as connection:
-            return (
-                await connection.execute(text("SELECT MAX(collected_at) FROM document_versions"))
-            ).scalar_one_or_none()
+            return await _last_sync(connection)
 
     @staticmethod
     def _hit(row) -> SearchHit:
@@ -830,6 +823,33 @@ async def _corpus_search_status(connection: AsyncConnection) -> CorpusSearchStat
         ready=bool(row["ready"]),
         reason=None if row["ready"] else str(row["reason"] or "corpus_unready"),
     )
+
+
+async def _corpus_items(connection: AsyncConnection) -> list[CorpusItemStatus]:
+    rows = (
+        await connection.execute(
+            text(
+                "SELECT exact_title,MAX(effective_from) latest FROM legal_documents d "
+                "JOIN document_versions v ON v.document_id=d.id GROUP BY exact_title"
+            )
+        )
+    ).all()
+    ready = {row[0]: row[1] for row in rows}
+    return [
+        CorpusItemStatus(
+            title=entry.title,
+            source_kind=entry.source_kind,
+            state="ready" if entry.title in ready else "missing",
+            latest_effective_date=ready.get(entry.title),
+        )
+        for entry in MVP_CATALOG
+    ]
+
+
+async def _last_sync(connection: AsyncConnection) -> datetime | None:
+    return (
+        await connection.execute(text("SELECT MAX(collected_at) FROM document_versions"))
+    ).scalar_one_or_none()
 
 
 async def _corpus_temporal_state(

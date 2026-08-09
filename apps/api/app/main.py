@@ -661,8 +661,14 @@ async def changes(document_id: UUID, from_date: date, to_date: date) -> Document
 
 @app.get("/v1/corpus/status", response_model=CorpusStatus)
 async def corpus_status() -> CorpusStatus:
-    items = await repository.corpus_items()
-    temporal_state = await _load_corpus_temporal_state()
+    if isinstance(repository, PostgresLegalRepository):
+        items, temporal_state, last_successful_sync = await repository.corpus_overview(
+            _current_korea_date()
+        )
+    else:
+        items = await repository.corpus_items()
+        temporal_state = await _load_corpus_temporal_state()
+        last_successful_sync = await repository.last_sync()
     warnings = []
     if not temporal_state.ready:
         warnings.append("법령 corpus를 갱신·검증하는 동안 검색이 일시 중지되었습니다.")
@@ -673,7 +679,7 @@ async def corpus_status() -> CorpusStatus:
     if collector_load_errors:
         warnings.append(f"collector 목업 원문 {len(collector_load_errors)}건을 읽지 못했습니다.")
     return CorpusStatus(
-        last_successful_sync=await repository.last_sync(),
+        last_successful_sync=last_successful_sync,
         corpus_snapshot_id=temporal_state.corpus_snapshot_id,
         supported_as_of_from=temporal_state.supported_as_of_from,
         supported_as_of_through=temporal_state.supported_as_of_through,

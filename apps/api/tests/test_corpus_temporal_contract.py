@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
+from app.adapters.postgres_repository import PostgresLegalRepository
 from app.domain.corpus_temporal_contract import (
     UnsupportedCorpusDateError,
     canonical_corpus_snapshot_id,
@@ -269,6 +270,37 @@ def test_corpus_status_exposes_dynamic_supported_date_window(
     assert payload["supported_as_of_from"] == SUPPORTED_FROM.isoformat()
     assert payload["supported_as_of_through"] == KOREA_TODAY.isoformat()
     assert payload["corpus_search_ready"] is True
+
+
+def test_corpus_status_uses_one_overview_call_for_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class OverviewRepository(PostgresLegalRepository):
+        def __init__(self) -> None:
+            self.overview_calls = 0
+
+        async def corpus_overview(self, supported_through: date):
+            self.overview_calls += 1
+            assert supported_through == KOREA_TODAY
+            return [], _ready_state(), None
+
+        async def corpus_items(self):
+            raise AssertionError("status must not open a separate corpus-items connection")
+
+        async def corpus_temporal_state(self, supported_through: date):
+            raise AssertionError("status must not open a separate temporal-state connection")
+
+        async def last_sync(self):
+            raise AssertionError("status must not open a separate last-sync connection")
+
+    repository = OverviewRepository()
+    monkeypatch.setattr(main_module, "repository", repository)
+    monkeypatch.setattr(main_module, "_current_korea_date", lambda: KOREA_TODAY)
+
+    response = TestClient(main_module.app).get("/v1/corpus/status")
+
+    assert response.status_code == 200
+    assert repository.overview_calls == 1
 
 
 def test_corpus_status_exposes_null_identity_when_current_population_is_unready(
