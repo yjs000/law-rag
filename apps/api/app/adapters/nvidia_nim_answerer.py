@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 from openai import AsyncOpenAI
 
@@ -12,6 +13,8 @@ from app.domain.schemas import QuestionRequest, SearchHit
 # it isn't worth starting.
 _MIN_RETRY_SECONDS = 3.0
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
+
+MessageBuilder = Callable[[QuestionRequest, list[SearchHit]], list[dict[str, str]]]
 
 
 class NvidiaNimAnswerer:
@@ -26,6 +29,7 @@ class NvidiaNimAnswerer:
         timeout_seconds: float,
         max_output_tokens: int,
         max_attempts: int = 3,
+        message_builder: MessageBuilder = build_messages,
     ) -> None:
         if not api_key:
             raise ValueError("NVIDIA API key is required")
@@ -41,6 +45,7 @@ class NvidiaNimAnswerer:
         self.max_output_tokens = max_output_tokens
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
+        self.message_builder = message_builder
 
     async def answer(self, request: QuestionRequest, hits: list[SearchHit]) -> DraftAnswer:
         deadline = time.monotonic() + self.timeout_seconds
@@ -63,7 +68,7 @@ class NvidiaNimAnswerer:
     ) -> DraftAnswer:
         response = await self.client.chat.completions.create(
             model=self.model,
-            messages=build_messages(request, hits),  # type: ignore[arg-type]
+            messages=self.message_builder(request, hits),  # type: ignore[arg-type]
             max_tokens=self.max_output_tokens,
             # TODO(2026-08-08, 0025 M5): 0.3은 잠정값이다. 원래 1.0이었는데 근거가 없었다
             # (git blame: 45edf43에서 설명 없이 하드코딩). 법률 답변처럼 재현성이 중요한
