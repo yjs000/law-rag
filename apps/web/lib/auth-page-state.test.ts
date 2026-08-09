@@ -78,3 +78,36 @@ describe("nextAuthUser (0034)", () => {
     expect(nextAuthUser(userA, null)).toBe(null);
   });
 });
+
+describe("koreaTodayIsoDate (0035)", () => {
+  it("returns the KST calendar date even when UTC has already rolled to the next day", () => {
+    // 2026-08-08 23:30 UTC = 2026-08-09 08:30 KST
+    const utcLateNight = new Date("2026-08-08T23:30:00Z");
+    expect(koreaTodayIsoDate(utcLateNight)).toBe("2026-08-09");
+  });
+
+  it("returns the KST calendar date when UTC hasn't rolled over yet", () => {
+    // 2026-08-08 10:00 UTC = 2026-08-08 19:00 KST
+    const utcMorning = new Date("2026-08-08T10:00:00Z");
+    expect(koreaTodayIsoDate(utcMorning)).toBe("2026-08-08");
+  });
+});
+
+describe("clampAsOfDate (0035)", () => {
+  const today = "2026-08-08";
+
+  it("passes through a date on or before today", () => {
+    expect(clampAsOfDate("2026-08-08", today)).toBe("2026-08-08");
+    expect(clampAsOfDate("2026-01-01", today)).toBe("2026-01-01");
+  });
+
+  it("clamps a future date down to today", () => {
+    expect(clampAsOfDate("2026-08-09", today)).toBe(today);
+    expect(clampAsOfDate("2099-12-31", today)).toBe(today);
+  });
+
+  it("passes through an empty or malformed value unchanged", () => {
+    expect(clampAsOfDate("", today)).toBe("");
+    expect(clampAsOfDate("not-a-date", today)).toBe("not-a-date");
+  });
+});

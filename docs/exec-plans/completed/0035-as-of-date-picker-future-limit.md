@@ -1,6 +1,6 @@
 # 0035: 기준일 선택 범위를 오늘까지로 제한
 
-상태: `제안됨 · 미착수`
+상태: `완료 (2026-08-09)`
 
 제안 출처: 2026-08-08 사용자가 웹 UI의 기준일(법령 as_of_date) 날짜 선택기에서 미래 날짜를
 고를 수 있는 걸 지적하고, 오늘까지만 선택 가능하도록 바꿔야 한다고 지시했다.
@@ -42,3 +42,14 @@
 - 기준일 달력에서 오늘 이후 날짜를 선택할 수 없다(키보드 직접 입력 포함).
 - 오늘 날짜는 여전히 선택 가능하다.
 - 회귀 테스트 추가(달력 `max` 값 계산 로직이 순수 함수로 분리 가능하면 유닛 테스트로).
+
+## 구현 결과 (2026-08-09)
+
+- 서버 `_current_korea_date()`가 KST(`korea_today()`) 기준임을 확인하고, 프론트에도
+  `koreaTodayIsoDate()`(Intl.DateTimeFormat, Asia/Seoul)를 추가해 `asOf` 초기값과 date
+  input의 `max` 양쪽에 동일하게 적용했다([page.tsx](../../../apps/web/app/page.tsx)).
+- `clampAsOfDate()`를 추가해 `onChange`에서 키보드 직접 입력으로 들어온 미래 날짜도
+  오늘로 클램프한다.
+- `apps/web/lib/auth-page-state.test.ts`에 `koreaTodayIsoDate`/`clampAsOfDate` 유닛
+  테스트 추가. `npm test`(vitest) 전체 통과, `tsc --noEmit` 통과.
+- 브라우저 preview로 `input[type=date].max`가 KST 오늘 날짜와 일치함을 확인.
