@@ -35,19 +35,19 @@
 3. **API 응답에 실어 보내기**: 최종적으로 결정된 값(`source_kind` 또는
    `법종구분코드` 원값)을 `Citation` 스키마에 새 필드로 추가해 `/v1/questions` 응답에
    포함시킨다 - 지금은 `SearchHit`까지만 오고 `Citation`엔 필드 자체가 없어서 프론트가
-   못 받는다([main.py:442-450](../../../apps/api/app/main.py:442) 참고).
+   못 받는다([main.py](../../../apps/api/app/main.py) 참고).
 4. **검색 쿼리 필터는 만들지 않는다**: "법률만 검색"류 `WHERE d.source_kind='law'` 필터는
    착수 대상이 아니다 - 사용자가 명시: 지금 MVP 코퍼스 범위에서 이 구분으로 걸러야 할
    실사용 요구가 없다는 판단.
 5. **생성용 근거 선정 우선순위는 별도 작업 아님**: `select_generation_hits`가
-   source_kind를 고려해 우선순위를 매기는 건 별도로 안 한다 - [0033](0033-traffic-based-routing-calibration-review.md)류
+   source_kind를 고려해 우선순위를 매기는 건 별도로 안 한다 - [0033](../todo/0033-traffic-based-routing-calibration-review.md)류
    재순위가 붙으면 검색 순서 자체가 이미 우선순위를 반영하게 돼 자동으로 해결될
    것으로 본다(사용자 판단, 근거 실측은 재순위 작업 때 확인).
 
 ## 비범위
 
 - 검색 쿼리 필터(`WHERE source_kind=...`)는 이번 항목에 포함하지 않는다(위 4번).
-- 재순위 신호로 source_kind를 쓰는 것은 이 항목이 아니라 [0042](0042-wire-reranking-into-live-search-path.md)의
+- 재순위 신호로 source_kind를 쓰는 것은 이 항목이 아니라 [0042](../todo/0042-wire-reranking-into-live-search-path.md)의
   세부 항목으로 다룬다.
 - `admrul`(행정규칙) 쪽에 동등한 분류 필드가 있는지, 있다면 어떻게 다룰지는 착수 시 조사
   범위에 포함한다(미확인 상태).

@@ -29,15 +29,15 @@ const body = await response.json().catch(() => null);
 throw new Error(body?.detail ?? "요청을 처리하지 못했습니다.");
 ```
 
-([api-client.ts:41-43](../../../apps/web/lib/api-client.ts:41) 부근)
+([api-client.ts](../../../apps/web/lib/api-client.ts) 부근)
 
 백엔드가 `detail`을 **문자열**로 보내는 경로(대부분의 `HTTPException(detail="...")`)는
 문제없지만, 아래 두 경로는 `detail`을 **객체**로 보낸다:
 
 - `_require_supported_as_of_date`의 `unsupported_corpus_date`(422) —
-  [main.py:724-733](../../../apps/api/app/main.py:724)
+  [main.py](../../../apps/api/app/main.py)
 - `_corpus_unready_http_error`의 `corpus_unready`(503) —
-  [main.py:696-703](../../../apps/api/app/main.py:696)
+  [main.py](../../../apps/api/app/main.py)
 
 `new Error(object)`는 `object`를 문자열로 강제 변환해 `"[object Object]"`가 되고, 이게
 그대로 `error` state에 담겨 화면에 표시된다. 실제 사람이 읽을 문구는

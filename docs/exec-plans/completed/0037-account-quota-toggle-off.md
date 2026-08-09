@@ -7,7 +7,7 @@
 가능한 모듈로 만들고, 지금은 "한도 없음" 상태로 두라고 명시했다. 서버 쪽 구현도 지금
 하지 말고 이 항목으로만 남긴다.
 
-[0034](../active/0034-web-auth-rehydration-throttle.md)와 마찬가지로 `apps/api/app/main.py`가
+[0034](0034-web-auth-rehydration-throttle.md)와 마찬가지로 `apps/api/app/main.py`가
 대상이지만, 이번엔 익명 한도를 없앤 [feat(api): remove anonymous daily quota limits](../../../apps/api/app/main.py)
 커밋과 짝을 이루는 후속 작업이다 - 그때는 익명만 없앴고, 계정(로그인) 한도는
 `authenticated_ai_daily_limit`/`authenticated_search_daily_limit`로 남겨뒀다.
@@ -29,11 +29,11 @@ async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
         raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
 ```
 
-([main.py:747-756](../../../apps/api/app/main.py:747) 부근, `settings.py`의
+([main.py](../../../apps/api/app/main.py) 부근, `settings.py`의
 `authenticated_ai_daily_limit`/`authenticated_search_daily_limit` 참조)
 
 프론트 계정 모달에도 이 값이 하드코딩된 문구로 노출된다: `계정 사용 한도: AI 10회/일 ·
-검색 100회/일 (베타)` ([page.tsx:225](../../../apps/web/app/page.tsx:225)) - 이 문구도 같이
+검색 100회/일 (베타)` ([page.tsx](../../../apps/web/app/page.tsx)) - 이 문구도 같이
 정리 대상이다.
 
 ## 설계 (미착수, 방향만)

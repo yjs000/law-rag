@@ -13,9 +13,9 @@
 <input aria-label="법령 기준일" onChange={(event) => setAsOf(event.target.value)} type="date" value={asOf} />
 ```
 
-(현재 [page.tsx:784](../../../apps/web/app/page.tsx:784) 부근)
+(현재 [page.tsx](../../../apps/web/app/page.tsx) 부근)
 
-`asOf`의 초기값은 `new Date().toISOString().slice(0, 10)`([page.tsx:274](../../../apps/web/app/page.tsx:274))로 오늘이지만, 사용자가 달력에서 임의로 미래 날짜를 골라도 막는 로직이 없다.
+`asOf`의 초기값은 `new Date().toISOString().slice(0, 10)`([page.tsx](../../../apps/web/app/page.tsx))로 오늘이지만, 사용자가 달력에서 임의로 미래 날짜를 골라도 막는 로직이 없다.
 
 ## 설계 (미착수, 방향만)
 

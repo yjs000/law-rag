@@ -4,7 +4,7 @@
 
 제안 출처: 2026-08-08 파이프라인 실측 지도 작업 중 확인 - `experiment_d_local_rerank.py`에
 재순위 로직이 있지만 `/v1/questions`가 이걸 전혀 안 거친다(검색이 반환한 순서를 그대로
-씀). "검증게이트는 구조만 확인한다"는 같은 날 결정([openai_answerer.py:226](../../../apps/api/app/adapters/openai_answerer.py:226)
+씀). "검증게이트는 구조만 확인한다"는 같은 날 결정([openai_answerer.py](../../../apps/api/app/adapters/openai_answerer.py)
 변경 기록)과 맞물려, 근거 품질을 지키는 책임이 검색·재순위 쪽으로 넘어가야 하는데
 그 연결이 비어 있는 상태다. 사용자가 "근거 품질을 높이는 앞단 작업은 별도 승인 전까지
 추후로 미룬다"고 명시했으므로 미착수 상태로 등록만 한다.
@@ -12,10 +12,10 @@
 ## 원인
 
 - `apps/api/scripts/experiment_d_local_rerank.py:158` `rerank_case`(heading 일치·직접성
-  점수 기반, [:205-233](../../../apps/api/scripts/experiment_d_local_rerank.py:205) `rerank_score`)가
+  점수 기반, [rerank_score](../../../apps/api/scripts/experiment_d_local_rerank.py)가
   오프라인 실험에서만 호출된다.
 - 라이브 경로(`postgres_repository.py:220` `search_with_trace` → `main.py:339`)는 검색
-  단계가 반환한 순서를 그대로 `select_generation_hits`([openai_answerer.py:32](../../../apps/api/app/adapters/openai_answerer.py:32))에
+  단계가 반환한 순서를 그대로 `select_generation_hits`([openai_answerer.py](../../../apps/api/app/adapters/openai_answerer.py))에
   넘긴다 - 재순위 지점이 아예 없다.
 
 ## 세부 항목 (착수 시 검토)
@@ -25,7 +25,7 @@
 2. **재순위 신호로 무엇을 쓸지**:
    - 기존 `rerank_score`(heading 일치·직접성)를 그대로 가져올지, 라이브 경로 특성(응답
      시간 예산)에 맞게 단순화할지.
-   - **source_kind(법종구분) 신호** (2026-08-08 사용자 지시, [0041](0041-parse-law-type-classification-code.md)에서
+   - **source_kind(법종구분) 신호** (2026-08-08 사용자 지시, [0041](../completed/0041-parse-law-type-classification-code.md)에서
      분류가 먼저 확정돼야 함): 질문 성격에 따라 법률(원칙적 근거)과 행정규칙(세부
      기술기준) 중 어느 쪽을 우선할지 가중치를 줄 수 있는지 검토. 0041이 법종구분코드를
      실제로 저장하기 전까지는 이 신호 자체를 쓸 수 없으므로 0041에 의존한다.
@@ -46,7 +46,7 @@
 ## 승격 조건
 
 - 사용자가 착수를 명시한다.
-- (source_kind 신호를 쓰려면) [0041](0041-parse-law-type-classification-code.md)이 먼저
+- (source_kind 신호를 쓰려면) [0041](../completed/0041-parse-law-type-classification-code.md)이 먼저
   완료돼 있어야 한다.
 
 ## 완료 조건

@@ -8,7 +8,7 @@
 
 ## 원인
 
-`apps/web/app/page.tsx`의 `AccountModal`(위치는 [page.tsx:222](../../../apps/web/app/page.tsx:222) 부근)에 다음처럼 하드코딩돼 있다:
+`apps/web/app/page.tsx`의 `AccountModal`(위치는 [page.tsx](../../../apps/web/app/page.tsx) 부근)에 다음처럼 하드코딩돼 있다:
 
 ```jsx
 <div><dt>생성 모델</dt><dd>gpt-5.6-terra 전용</dd></div>
@@ -17,7 +17,7 @@
 
 - `gpt-5.6-terra`는 `OpenAIAnswerer`가 쓰는 모델 리터럴(`settings.py`의 `openai_answer_model`)이다.
   운영은 `answer_provider=nvidia_nim`이 기본값이고 OpenAI는 "운영 비교·fallback으로
-  쓰지 않기로 확정"([settings.py:29-31](../../../apps/api/app/settings.py:29))된 상태라, 이 문구는 실제로
+  쓰지 않기로 확정"([settings.py](../../../apps/api/app/settings.py))된 상태라, 이 문구는 실제로
   지금 쓰는 모델과 다르다.
 - 바로 아래 `현재 상태` 줄이 이미 AI 사용 가능/검색 전용을 보여주고 있어 두 줄이 사실상
   중복된 정보를 다른 정확도로 보여주는 상태다.

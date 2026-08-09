@@ -3,7 +3,7 @@
 상태: `완료 (2026-08-09)`
 
 제안 출처: 2026-08-08 사용자가 배포된 `law-rag-web.vercel.app`에서 탭을 왔다갔다 할 때
-`/v1/auth/me`가 여전히 계속 호출된다고 보고했다. [0034](../active/0034-web-auth-rehydration-throttle.md)
+`/v1/auth/me`가 여전히 계속 호출된다고 보고했다. [0034](0034-web-auth-rehydration-throttle.md)
 (같은 날 구현·커밋됨)가 정확히 이 문제를 다루는데, 처음엔 "아직 배포 안 됐을 것"으로
 추정했으나 **Vercel API로 직접 확인한 결과 이미 배포돼 있었다** — 아래 "배포 확인" 참고.
 즉 배포 문제가 아니라 **진짜 버그이거나 설계값(60초 throttle) 자체가 사용자 기대와 안
@@ -27,13 +27,13 @@ Vercel get_project(law-rag-web).latestDeployment:
 ## 원인 후보 (우선순위순, 배포 확인 후 재정렬)
 
 1. **(유력) 60초 throttle 자체가 사용자 기대와 다름.** 0034는 재호출을 완전히 막은 게
-   아니라 `HYDRATE_THROTTLE_MS = 60_000`([page.tsx:85](../../../apps/web/app/page.tsx:85))
+   아니라 `HYDRATE_THROTTLE_MS = 60_000`([page.tsx](../../../apps/web/app/page.tsx))
    안에서만 억제한다 - 60초 넘게 텀을 두고 탭을 오가면 다시 호출되는 게 **의도된
    동작**이다. 사용자가 "여전히 계속 호출된다"고 느낀 게 60초 이내 재호출(진짜 버그)인지,
    60초 넘겨서마다 한 번씩(설계상 정상이지만 사용자는 "탭 전환으로는 아예 재호출 안
    해야 한다"고 기대)인지 아직 구분이 안 됐다.
 2. **(가능성 있음) throttle 로직 자체의 버그.** `lastHydrateAt`이 `useEffect` 내부의
-   일반 `let` 변수([page.tsx:333](../../../apps/web/app/page.tsx:333))인데, 이 effect의
+   일반 `let` 변수([page.tsx](../../../apps/web/app/page.tsx))인데, 이 effect의
    의존성 배열이 `[clearAuthenticatedWorkspace]`뿐이라 정상적으로는 마운트 시 한 번만
    실행돼야 한다. 만약 React 18 Strict Mode(개발 모드에서 effect 이중 실행) 또는 다른
    이유로 이 effect가 재실행되면 `lastHydrateAt`이 리셋돼 throttle이 무력화될 수 있다 -
