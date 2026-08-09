@@ -68,3 +68,10 @@
   production 화면 및 전체 사용자 노출 copy를 검사하지 않았다.
 - 공급자 중립 UI copy를 실제 함수로 분리하고 TDD로 계정 제목·상태·답변 배지를 함께
   검증한 뒤 production을 재확인한다.
+- `provider-neutral-copy.test.ts`를 먼저 추가해 모듈 부재 실패를 확인한 뒤, 계정 제목·AI
+  상태·답변 결과 배지를 만드는 `provider-neutral-copy.ts`를 구현했다.
+  `AccountDialog`, 사이드바 계정 버튼과 `AnswerView`가 이 중립 copy를
+  사용한다. 제품 명세의 현재 사용자 여정과 완료 기준도 같은 용어로 갱신했다.
+- 로컬 검증: Web 15개 파일·70개 테스트, ESLint, TypeScript, production build 및 126개
+  문서 링크 검사 통과. 남은 완료 조건은 branch 통합·production 배포 후 계정 화면과 AI
+  답변 결과 화면의 실제 문구 확인이다.

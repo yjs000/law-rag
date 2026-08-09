@@ -55,6 +55,11 @@ import type {
   MockUser,
   QuestionResponse,
 } from "../lib/contracts";
+import {
+  ACCOUNT_SETTINGS_TITLE,
+  accountDialogCopy,
+  answerModeBadgeLabel,
+} from "../lib/provider-neutral-copy";
 import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
 import { createClient } from "../lib/supabase/client";
 import { SafeText } from "./safe-text";
@@ -228,10 +233,11 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
   onLogout: () => Promise<void>;
   user: MockUser;
 }) {
+  const copy = accountDialogCopy(corpus?.ai_available === true);
   return (
     <Dialog onClose={onClose} titleId="account-title">
       <p className="eyebrow">Account dashboard</p>
-      <h2 id="account-title">계정 및 모델 정책</h2>
+      <h2 id="account-title">{copy.title}</h2>
       <div className="account-profile">
         <div className="avatar">{user.display_name.slice(0, 1)}</div>
         <div><strong>{user.display_name}</strong><span>{user.email}</span></div>
@@ -239,7 +245,7 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
       <dl className="policy-grid">
         <div><dt>로그인</dt><dd>Google</dd></div>
         <div><dt>질문 보존</dt><dd>생성일로부터 1년</dd></div>
-        <div><dt>AI 모드</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{corpus?.ai_available ? "사용 가능" : "검색 전용"}</dd></div>
+        <div><dt>AI 모드</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{copy.status}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
         <div><dt>계정 사용 한도</dt><dd>제한 없음</dd></div>
       </dl>
@@ -278,7 +284,7 @@ function AnswerView({
   const emptyResult = getEmptyResultMessage(response, question);
   const citations = filterCitations(response.citations, documentKinds);
   return <>
-    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{response.mode === "ai" ? "NVIDIA Nemotron · 인용 검증" : "검색 전용"}</span><span>기준일 {asOf}</span></div>
+    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{answerModeBadgeLabel(response.mode)}</span><span>기준일 {asOf}</span></div>
     {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={onRefine}>질문 구체화하기</button></section>}
     {!emptyResult && <p className="summary"><SafeText>{response.summary}</SafeText></p>}
     {response.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === `${messageId}:${id}` ? "selected" : ""} key={id} onClick={() => onCitation(messageId, response, id)}>{id} 원문</button>)}</div></section>)}
@@ -757,7 +763,7 @@ export default function Home() {
           {user && historyHasMore && <div className="history-sentinel" ref={historySentinel}>{historyLoadingMore ? "불러오는 중…" : <button className="history-more" onClick={() => refreshHistory(true)}>더 보기</button>}</div>}
         </nav>
         <div className="sidebar-footer">
-          {user ? <button className="account-button" onClick={() => setShowAccount(true)}><div className="avatar small">{user.display_name.slice(0, 1)}</div><span><strong>{user.display_name}</strong><small>계정 및 모델 정책</small></span></button>
+          {user ? <button className="account-button" onClick={() => setShowAccount(true)}><div className="avatar small">{user.display_name.slice(0, 1)}</div><span><strong>{user.display_name}</strong><small>{ACCOUNT_SETTINGS_TITLE}</small></span></button>
             : authStatus === "checking"
               ? <button aria-label="로그인 상태 확인 중" className="account-button" disabled><Icon name="account" /><span><strong>확인 중…</strong><small>로그인 상태 복원</small></span></button>
               : <button className="account-button" onClick={() => openAuth("login")}><Icon name="account" /><span><strong>로그인</strong><small>질문 기록 저장</small></span></button>}
