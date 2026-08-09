@@ -70,6 +70,19 @@ def test_v2_system_prompt_still_has_v1_citation_safety_rules() -> None:
     assert "존재하는 C번호" in text
 
 
+def test_v2_system_prompt_still_forbids_guessing_applicability() -> None:
+    """v1 has "적용 여부를 추정하지 않는다" right after the summary/결론 guidance;
+    v2 must carry the same substance even though it phrases summary rules differently."""
+    assert "적용 여부를 추정하지 않는다" in _v2_system_text()
+
+
+def test_v2_system_prompt_still_forbids_new_claims_via_limitations() -> None:
+    """v1 ends its limitations guidance with "limitations에 새로운 법률 주장을
+    추가하지 않는다." v2 lets limitations do more work (capped at 3, confirmed vs
+    unconfirmed split) so it especially needs this guardrail preserved."""
+    assert "limitations에도 새로운 법률 주장을 추가하지 않는다" in _v2_system_text()
+
+
 def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:
     v1_text = build_messages(_request(), _hits())[0]["content"]
     assert "최대 3문장" not in v1_text

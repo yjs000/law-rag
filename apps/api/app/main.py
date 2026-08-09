@@ -395,6 +395,9 @@ async def _answer_question(
             "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
             # 0025 M5 item 4: 어떤 model/prompt/schema/context/sampling 조합이 이 답변을
             # 만들었는지 SHA로 남긴다. 생성 경로는 NVIDIA NIM 하나로 고정돼 있다.
+            # 0043, 2026-08-09: 이 프로필 참조는 _answerer()가 실제로 쓰는 message_builder와
+            # 짝을 맞춰야 한다. 나중에 build_messages_v2로 바꾸면서 이 줄을 안 바꾸면 v2
+            # 출력이 v1 프로필로 잘못 기록된다.
             "generation_profile_key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
             "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
         }

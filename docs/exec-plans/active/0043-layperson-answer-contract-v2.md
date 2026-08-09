@@ -28,7 +28,7 @@
 
 - `DraftAnswer`·`QuestionResponse`·`Citation` 스키마 필드는 추가·변경하지 않는다 (설계 문서 "결정" 1, 4).
 - 기존 `build_messages()`, `NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE`(v1), `answer-system-prompt-v1` 텍스트는 한 글자도 수정하지 않는다.
-- 새 v2 코드는 어디서도 기본 경로로 자동 호출되지 않는다 — `main.py`의 `_answerer()`는 이번 계획에서 변경하지 않는다(실제 v1/v2 비교 배선은 [0043 todo](../todo/0043-layperson-answer-contract-v2.md) 후속 항목).
+- 새 v2 코드는 어디서도 기본 경로로 자동 호출되지 않는다 — `main.py`의 `_answerer()`는 이번 계획에서 변경하지 않는다(실제 v1/v2 비교 배선은 0043 후속 항목).
 - 근거 카드 접힌 상태에서는 지금처럼 조·항 헤더(`citation.id`, `document_title`, `path`, `version_label`)만 보인다 — 새 접기/펼치기 메커니즘을 추가하지 않고 기존 `<details>`를 재사용한다.
 - 커밋은 마일스톤(작업 1개 = 테스트 작성 → 구현 → 테스트 통과) 단위로 분리해서 만든다.
 

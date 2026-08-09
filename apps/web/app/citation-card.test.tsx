@@ -39,7 +39,7 @@ describe("CitationCard", () => {
 
   it("marks the card open and selected when the caller says so", () => {
     const html = renderToStaticMarkup(<CitationCard citation={citation} htmlId="citation-1-C1" open={true} />);
-    expect(html).toContain("selected");
+    expect(html).toContain('class="source selected"');
     expect(html).toContain("open=\"\"");
   });
 });
