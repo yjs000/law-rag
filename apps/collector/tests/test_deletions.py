@@ -47,3 +47,32 @@ def test_wrong_kind_or_missing_page_fields_are_rejected() -> None:
         parse_deletions_json('{"target": "delHst", "law": []}', 1)
     with pytest.raises(ValueError, match="페이지 번호"):
         parse_deletions_json(body, 1, expected_page=2)
+
+
+def test_empty_result_page_mismatch_is_tolerated() -> None:
+    """Live Open API quirk: totalCnt=0 responses always echo page="0",
+    regardless of the requested page - expected_page must not be enforced then."""
+    json_page = parse_deletions_json(
+        '{"LawSearch": {"target": "delHst", "totalCnt": "0", "page": "0"}}',
+        1,
+        expected_page=1,
+    )
+    assert json_page.total_count == 0
+    assert json_page.records == []
+
+    xml_page = parse_deletions_xml(
+        "<LawSearch><target>delHst</target><totalCnt>0</totalCnt><page>0</page></LawSearch>",
+        1,
+        expected_page=1,
+    )
+    assert xml_page.total_count == 0
+    assert xml_page.records == []
+
+
+def test_nonzero_total_page_mismatch_still_rejected() -> None:
+    body = (FIXTURES / "deletions.json").read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="페이지 번호"):
+        parse_deletions_json(body, 1, expected_page=2)
+    xml_body = (FIXTURES / "deletions.xml").read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="페이지 번호"):
+        parse_deletions_xml(xml_body, 1, expected_page=2)

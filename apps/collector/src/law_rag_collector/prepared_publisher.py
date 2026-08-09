@@ -365,7 +365,7 @@ async def _verify_publish_state(
                     WHERE source_record_state='available'
                       AND (lifecycle_state IN ('active','scheduled')
                            OR (lifecycle_state='abolished' AND effective_to IS NOT NULL))
-                    ), overlaps AS (
+                    ), overlap_pairs AS (
                     SELECT COUNT(*)::bigint overlap_count
                     FROM candidate_versions left_version
                     JOIN candidate_versions right_version
@@ -394,7 +394,7 @@ async def _verify_publish_state(
                       SELECT document_id FROM candidate_versions
                       WHERE effective_to IS NULL GROUP BY document_id HAVING COUNT(*)>1
                     ) duplicate_open)::bigint duplicate_open_count,
-                    (SELECT overlap_count FROM overlaps)::bigint overlap_count
+                    (SELECT overlap_count FROM overlap_pairs)::bigint overlap_count
                     ,(SELECT provision_count FROM current_population)::bigint
                       current_eligible_provision_count
                     ,(SELECT supported_from FROM current_population) supported_from

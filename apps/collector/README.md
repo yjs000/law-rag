@@ -90,15 +90,23 @@ checksum을 검증한 것이 아니다. 이 명령은 한 시점의 검사이므
 
 ## 예약 실행
 
-`.github/workflows/sync-corpus.yml`은 self-hosted Windows runner에서 매일 03:00 KST와 수동 실행을 지원한다.
-기존 `legal-corpus-sync` concurrency group이 workflow 중복을 막고 다음 순서를 고정한다.
+자동 예약 실행은 없다. `law-rag-ingestion` self-hosted GitHub Actions runner로 자동화하려던 초기 계획은
+2026-07-13에 폐기됐다(등록 러너가 존재한 적 없음 — [기술 스택 결정 기록](../../docs/design-docs/technology-stack.md)
+참고). 대체안이었던 Windows Task Scheduler도 등록되지 않았다. 지금까지의 모든 운영 반영은 Open API에
+등록한 고정 공인 출구 IP를 가진 머신에서 사람 또는 에이전트가 다음 순서를 그 자리에서 수동 실행해 왔다:
 
 1. `prepare-current --output <run 전용 bundle>`
 2. `generate-cache --bundle <같은 bundle>`
 3. `apply-prepared --bundle <같은 bundle>`
 
-Open API에 등록한 고정 공인 출구 IP를 사용하는 runner에서만 실행한다. 외부 API·NIM·Storage 호출과 65초
-대기는 transaction B 밖에서 실행된다.
+`apps/collector/ops/Sync-Corpus.ps1`은 이 3단계를 타임스탬프 bundle 경로로 한 번에 묶어 실행하는
+수동 편의 스크립트다. 예약 실행을 대체하지 않는다 - 여전히 사람이 그 자리에서 실행해야 한다.
+
+```powershell
+apps\collector\ops\Sync-Corpus.ps1
+```
+
+외부 API·NIM·Storage 호출과 65초 대기는 transaction B 밖에서 실행된다.
 
 ## 실패 복구
 

@@ -40,7 +40,7 @@ def parse_deletions_json(
         raise ValueError("삭제 목록 JSON의 target이 올바르지 않습니다")
     if total is None or page is None:
         raise ValueError("삭제 목록 JSON의 페이지 필드가 없습니다")
-    if expected_page is not None and int(page) != expected_page:
+    if int(total) > 0 and expected_page is not None and int(page) != expected_page:
         raise ValueError("삭제 목록 JSON의 페이지 번호가 요청과 다릅니다")
     records = _json_records(payload, expected_kind)
     if int(total) > 0 and not records:
@@ -62,7 +62,7 @@ def parse_deletions_xml(
         raise ValueError("삭제 목록 XML의 target이 올바르지 않습니다")
     if total is None or page is None:
         raise ValueError("삭제 목록 XML의 페이지 필드가 없습니다")
-    if expected_page is not None and int(page) != expected_page:
+    if int(total) > 0 and expected_page is not None and int(page) != expected_page:
         raise ValueError("삭제 목록 XML의 페이지 번호가 요청과 다릅니다")
     records: list[DeletionRecord] = []
     for node in root.iter():

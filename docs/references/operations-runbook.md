@@ -6,16 +6,18 @@
 
 1. 저장소 루트에서 `pnpm.cmd verify`를 실행한다.
 2. `LAW_OPEN_API_OC`는 OS 비밀 저장소나 현재 프로세스 환경변수로만 주입한다.
-3. `sync-corpus` workflow는 일 1회 03:00 KST와 수동 실행만 허용하고 기존 concurrency group으로 겹친
-   예약 실행을 직렬화한다.
+3. 자동 예약 실행은 없다. `law-rag-ingestion` self-hosted GitHub Actions runner로 자동화하려던 초기
+   계획은 2026-07-13에 폐기됐고(등록 러너가 존재한 적 없음), 대체안이었던 Windows Task Scheduler도
+   등록된 적이 없다 - [기술 스택 결정 기록](../design-docs/technology-stack.md) 참고. 지금까지의 모든
+   반영은 등록된 고정 공인 출구 IP 머신에서 사람 또는 에이전트가 아래 순서를 그 자리에서 수동 실행해
+   왔다.
 4. `/v1/corpus/status`에서 9개 대상, 현재 snapshot, 지원 날짜와 `corpus_search_ready`를 확인한다.
 5. NVIDIA 임베딩 검색을 배포할 때는 API 코드보다 먼저 migration `0007`을 적용하고, Preview와
    Production에 `NVIDIA_API_KEY`, `NVIDIA_EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`,
    `EMBEDDING_TIMEOUT_SECONDS`를 환경별로 등록한다.
 
-## 일일 준비와 점검 반영
+## 수동 준비와 점검 반영
 
-- 기본 일정은 매일 03:00 KST다.
 - `prepare-current`가 JSON 우선/XML 폴백 정규화, 정확 명칭, 버전 키, 조문과 삭제 목록을 로컬 bundle로
   준비한다. 이 단계는 DB lock·DB write·Storage write를 하지 않는다.
 - 변화가 없고 vector coverage가 정상이면 NIM과 반영 단계를 생략하고 서비스도 닫지 않는다.

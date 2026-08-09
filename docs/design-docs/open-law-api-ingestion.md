@@ -144,7 +144,11 @@ mutation lock, history-retention lock과 재현 가능한 고정 평가를 위�
 
 ## 정기 운영 순서
 
-1. 일 1회 03:00 KST 또는 수동 `sync-corpus` workflow가 `prepare-current --output <bundle>`을 실행한다.
+자동 예약 실행 경로는 없다(초기에 계획했던 `law-rag-ingestion` self-hosted runner는 2026-07-13에
+폐기됐고 등록된 적이 없다 - [기술 스택 결정 기록](technology-stack.md) 참고). 지금까지의 모든 반영은
+등록된 고정 공인 출구 IP 머신에서 사람 또는 에이전트가 아래 순서를 수동 실행해 왔다.
+
+1. `prepare-current --output <bundle>`을 실행한다.
 2. 변경이 없고 DB vector coverage가 정상이면 NIM·Storage·점검 모드·DB 쓰기 없이 종료한다.
 3. 변경이 있으면 `generate-cache --bundle <bundle>`이 동일 ID·SHA 또는 동일 SHA 벡터를 재사용하고 새
    본문만 임베딩한다.
