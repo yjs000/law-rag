@@ -10,6 +10,7 @@
 - [0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 제안됨, 미착수 · tier1 사전 확장 재검토 + 인증·비인증 사용자 이력 검토를 하나의 재검토 라운드로 묶음
 - [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
 - [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md) — 제안됨, 미착수 · 기존 인용 안전성을 유지하면서 초보자용 필드별 생성 가이드와 D-10 실제 비교 rubric을 추가
+- [0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 제안됨, 미착수 · 기존 `terra` 호환을 유지하며 provider/model을 설정으로 교체 가능한 계약으로 전환
 
 ## 등록 계약
 
