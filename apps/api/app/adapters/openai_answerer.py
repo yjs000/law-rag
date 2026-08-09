@@ -224,59 +224,33 @@ _PARTICLE_SUFFIXES = (
 
 
 def validate_draft(draft: DraftAnswer, hits: list[SearchHit]) -> bool:
-    """설명 가능한 보수적 핵심용어 게이트. 의미 추론이나 모델 호출은 하지 않는다.
+    """구조 검증만 한다: 인용 ID가 실제 제공된 근거를 가리키는지, action별로 요구되는
+    필드가 채워졌는지. 문장 내용이 근거와 의미적으로 겹치는지는 검사하지 않는다.
 
-    2026-08-08부터 draft.action에 따라 요구 수준이 다르다:
-    - clarification_required: 실질적 법적 주장이 아니라 missing_information만 있으면 된다
-      (sections·checklist가 비어도 됨 - 검색 자체는 성공했어도 어떤 조문을 인용할지는 사용자
-      사실을 알아야 정해지는 경우다).
-    - unanswerable: 근거를 못 찾았다는 정직한 진술이라 sections·checklist가 비어도 된다.
-      summary·limitations는 여전히 검증한다(무근거 규범 주장은 계속 차단) - 다만
-      `_strip_epistemic_hedges`가 "판단할 수 없다" 같은 겸양 표현은 신호로 안 본다.
-    - fully_answerable/partially_answerable: 기존과 동일하게 전부 엄격히 검증한다.
+    2026-08-08 결정 사항: 이전에는 이 함수가 정규식으로 "이 문장이 근거와 겹치나·
+    규범적 주장처럼 들리나"까지 추측했는데, 표면 문법만으로는 겸양 표현과 실제 금지,
+    법적 예외와 시스템의 커버리지 고백을 구분할 수 없어 정상적으로 생성된 답변을
+    반복적으로 오탐 거부했다(docs/design-docs/answer-grounding-validation.md 참고).
+    내용 충분성(근거가 질문에 정말 관련 있고 충분한지)은 검색·재순위 단계의 책임으로
+    옮기기로 했다 - 이 게이트는 그때까지 구조적 무결성(인용 참조가 유효한지)만 지킨다.
     """
     if not hits:
         return False
     if draft.action == "clarification_required":
         return bool(draft.missing_information)
-    hit_by_id = {f"C{index}": hit for index, hit in enumerate(hits, 1)}
-    # 2026-08-08: path(조문 경로, 예: "제44조의4")를 evidence 문자열에서 빼먹고 있었다 -
-    # 모델이 실제 인용된 조문 번호를 정확히 언급해도 무근거 숫자로 오판됐다.
-    all_evidence = " ".join(
-        f"{hit.document_title} {hit.path} {hit.heading or ''} {hit.content}" for hit in hits
-    )
-    if not _text_matches_evidence(
-        draft.summary, all_evidence, require_topic_overlap=draft.action != "unanswerable"
-    ):
-        return False
-    if _contains_normative_assertion(draft.scope):
-        return False
-    if any(
-        _contains_normative_assertion(limitation)
-        and not _text_matches_evidence(limitation, all_evidence)
-        for limitation in draft.limitations
-    ):
-        return False
-    if draft.action == "unanswerable" and not draft.sections and not draft.checklist:
-        return True
+    hit_ids = {f"C{index}" for index in range(1, len(hits) + 1)}
+    if not draft.sections and not draft.checklist:
+        return draft.action == "unanswerable"
     if not draft.sections or not draft.checklist:
         return False
     for section in draft.sections:
-        if not _texts_match_citations(
-            (section.claim, section.explanation), section.citation_ids, hit_by_id
+        if not section.citation_ids or any(
+            citation_id not in hit_ids for citation_id in section.citation_ids
         ):
             return False
     for item in draft.checklist:
-        if not _texts_match_citations((item.label,), item.citation_ids, hit_by_id):
-            return False
-        item_evidence = _evidence_for_citations(item.citation_ids, hit_by_id)
-        if item.status == "required" and not _NORMATIVE_SIGNAL_PATTERNS[
-            "obligation"
-        ].search(item_evidence):
-            return False
-        if item.status == "not_applicable" and not (
-            _NORMATIVE_SIGNAL_PATTERNS["exemption"].search(item_evidence)
-            or _NORMATIVE_SIGNAL_PATTERNS["negation"].search(item_evidence)
+        if not item.citation_ids or any(
+            citation_id not in hit_ids for citation_id in item.citation_ids
         ):
             return False
     return True
