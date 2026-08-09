@@ -1,7 +1,7 @@
 # Vercel·Supabase 운영 전환 설계
 
 상태: 승인
-최종 갱신: 2026-07-14
+최종 갱신: 2026-08-09
 
 ## 목적
 
@@ -10,7 +10,7 @@
 ```text
 Browser -> Vercel Next.js -- same-origin /api proxy -> Vercel FastAPI
                                                      |-> Supabase PostgreSQL/Auth/Storage
-                                                     `-> OpenAI
+                                                     `-> NVIDIA hosted NIM
 
 Windows Task Scheduler -> collector -> 국가법령정보 Open API
                                    `-> Supabase PostgreSQL/Storage
@@ -24,7 +24,7 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 - `apps/api`: 별도 Vercel Project의 Python 3.14 FastAPI Function
 - `apps/collector`: 등록된 고정 공인 IPv4 Windows PC의 OS 스케줄러 작업
 - Supabase: PostgreSQL, Auth, Storage와 모든 영속 운영 상태
-- OpenAI: FastAPI 서버 계층에서만 호출
+- NVIDIA hosted NIM: FastAPI 서버 계층에서만 호출
 
 ## 환경변수와 Git 브랜치
 
@@ -39,13 +39,13 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 | `ENVIRONMENT` | `development` | `test` | `production` | Production에서 mock auth 경로 차단 |
 | `DATABASE_URL` | 선택 | staging/격리 DB | 운영 DB | Vercel은 Supavisor transaction URL 사용 |
 | `DIRECT_URL` | 선택 | staging session pooler | 운영 session pooler | Alembic migration 전용; Vercel runtime에는 불필요 |
-| `OPENAI_API_KEY` | 선택 | 별도 제한 키 또는 미설정 | 운영 서버 키 | 미설정 시 검색 전용 |
+| `NVIDIA_API_KEY` | 선택 | 별도 제한 키 또는 미설정 | 운영 서버 키 | 미설정 시 검색 전용 |
 | `AI_MODE` | `auto`/`off` | 기본 `off` | `auto` | Preview 비용·오용 방지 |
 | `RATE_LIMIT_SECRET` | 개발용 난수 | Preview 전용 난수 | 운영 전용 난수 | 환경마다 다른 16자 이상 값 |
 | `WEB_ORIGIN` | `http://localhost:3000` | 정확한 Preview Web origin | 정확한 Production Web origin | wildcard 금지 |
 | `SUPABASE_URL` | 선택 | staging 값 | 운영 값 | collector Storage endpoint |
 | `SUPABASE_SECRET_KEY` | 선택 | staging 서버 키 | 운영 서버 키 | `sb_secret_...`; collector Storage 전용; 브라우저 노출 금지 |
-| 모델·차원·quota 변수 | 선택 | 필요 시 설정 | 필요 시 설정 | `.env.example` 기본값 참조 |
+| 모델·차원·timeout 변수 | 선택 | 필요 시 설정 | 필요 시 설정 | `.env.example` 기본값 참조 |
 
 `DATABASE_URL`은 SQLAlchemy 런타임이 Supavisor transaction mode(6543)에 연결하는 비밀이고, `DIRECT_URL`은 Alembic이 session mode(5432)에 연결할 때만 사용한다. IPv4-only 환경에서는 5432 session pooler가 direct endpoint를 대신한다. SQLAlchemy/asyncpg는 `NullPool`과 `statement_cache_size=0`으로 transaction mode 제약을 처리한다. `SUPABASE_SECRET_KEY`는 Auth 관리자 API나 Storage 서버 어댑터에서만 사용하며 `sb_secret_...` 형식의 서버 전용 키를 등록한다.
 
@@ -102,13 +102,13 @@ Preview에서는 선택지 2인 **동일 출처 프록시**를 사용한다.
 - 브라우저가 FastAPI의 가변 Preview 도메인을 직접 호출하지 않게 한다.
 - FastAPI CORS는 임의의 `*.vercel.app` wildcard를 허용하지 않는다. 직접 접근이 필요한 Production origin만 정확히 허용한다.
 - Web Preview와 API Preview를 연결할 때는 Vercel의 환경별 변수 또는 Related Projects 값을 사용하고 운영 API를 기본값으로 두지 않는다.
-- 인증 헤더와 요청 ID만 전달하며 service role·OpenAI 키는 브라우저나 프록시 응답에 노출하지 않는다.
+- 인증 헤더와 요청 ID만 전달하며 service role·NVIDIA 키는 브라우저나 프록시 응답에 노출하지 않는다.
 
 ### 함수와 배포 계약
 
 - `apps/api/vercel.json`의 함수 경로, Python 버전, 번들 제외 목록을 실제 모노레포 Root Directory에서 검증한다.
 - FastAPI backend framework는 `pyproject.toml`의 `[tool.vercel].entrypoint`로 ASGI 앱을 지정한다. 모든 요청을 Python 파일 경로로 바꾸는 catch-all rewrite는 애플리케이션이 원래 `/health`, `/v1/*` 경로 대신 파일 경로를 보게 만들 수 있으므로 사용하지 않는다.
-- 응답 시간과 OpenAI 스트리밍을 측정해 `maxDuration`을 정한다. 현재 60초 값은 운영 확정값이 아니다.
+- 응답 시간과 NVIDIA 생성을 측정해 `maxDuration`을 정한다. 현재 60초 값은 운영 확정값이 아니다.
 - 함수 번들 크기와 cold start를 측정하고 collector 데이터·테스트 fixture를 번들에 포함하지 않는다.
 - startup은 짧고 멱등적으로 유지한다. shutdown 완료에 의존해 데이터 무결성을 보장하지 않는다.
 - Preview에는 목업 또는 격리된 staging 자원만 연결하고 Production 비밀을 복사하지 않는다.
@@ -123,10 +123,10 @@ Preview에서는 선택지 2인 **동일 출처 프록시**를 사용한다.
 - Supabase 프로젝트, 프로젝트 리전, DB 비밀번호, Project URL, anon key, service role key
 - Supabase Storage bucket과 백업·복구에 사용할 요금제/보존 선택
 - Google Cloud OAuth 동의 화면, Web client ID/secret, Supabase callback URL 등록
-- OpenAI API key와 `gpt-5.6-terra`, embedding 모델 사용 권한·예산
+- NVIDIA API key와 Nemotron 답변·embedding 모델 사용 권한
 - collector PC가 사용하는 **고정 공인 IPv4**, 국가법령정보 Open API 등록 정보와 OC
 - Windows 예약 실행 시 PC·네트워크·Docker 또는 Python 런타임이 사용 가능하도록 하는 운영 조건
-- Vercel·Supabase·OpenAI의 비용 한도와 알림을 설정할 계정 권한
+- Vercel·Supabase·NVIDIA의 사용량·오류 알림을 설정할 계정 권한
 
 비밀값은 채팅이나 Git으로 전달하지 않고 각 서비스 Dashboard 또는 OS 비밀 저장소에 사용자가 직접 등록한다.
 
@@ -158,7 +158,7 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 | 인증·인가 | JWT 검증, 서버 자원 단위 소유권 검사, RLS, 관리자 경로 최소 권한 |
 | 비밀 | 환경별 최소 권한 키, service role 브라우저 노출 금지, 회전·폐기 절차 |
 | 네트워크 | 동일 출처 프록시, 정확한 CORS, 허용 URL, 요청 크기·시간 제한 |
-| 남용 방지 | 사용자·익명 경계별 영속 rate limit, OpenAI 비용 상한, WAF 규칙과 우회 테스트 |
+| 남용 방지 | Vercel/WAF rate limit, NVIDIA 사용량 관측과 우회 테스트 |
 | 입력·출력 | Pydantic 검증, XSS·SSRF·프롬프트 주입 방어, 허용 출처 URL만 반환 |
 | 법률 안전 | 출처·버전 추적, 주장별 인용 검증, 근거 부족·AI 장애 시 검색 전용 전환 |
 | 개인정보 | 익명 질문 미저장, 로그인 이력 1년 삭제, 계정 삭제 전파, 최소 로그 |
@@ -169,7 +169,7 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 
 플랫폼의 HTTPS, DDoS 완화, 배포 격리와 자동 확장은 위 애플리케이션 통제를 대체하지 않는다.
 
-익명 quota는 Production API가 Vercel Edge에서 받은 단일 `x-forwarded-for` 공개 IP를 날짜별 HMAC 주체로 변환해 집계한다. Vercel은 이 헤더를 덮어써 클라이언트 위조를 막으므로 애플리케이션은 Production Vercel 경계에서만 신뢰한다. 개발·테스트는 소켓 peer만 사용하며, 임의 프록시 체인을 첫 IP 기준으로 해석하지 않는다. 향후 Vercel 앞에 별도 프록시를 추가하려면 일반 전달 헤더를 그대로 신뢰하지 말고 Vercel Trusted Proxy 지원과 신뢰 경계를 다시 설계한다.
+애플리케이션의 요청 전 계정·익명 일일 quota 검사는 2026-08-09에 제거했다. `x-forwarded-for`는 질문 취소·중복 요청 소유권을 위한 비영속 HMAC 주체 계산에만 사용하며 IP 원문을 저장하지 않는다. 남용 방지는 Vercel/WAF 경계와 NVIDIA 사용량 관측으로 다룬다.
 
 ## 실행 순서
 
@@ -184,13 +184,11 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 
 ### Terra 준비 상태의 의미
 
-`ai_available=true`는 OpenAI 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 크레딧 잔액을 선제 보증하지 않는다. Responses 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`, 이후 같은 인스턴스는 `quota_exhausted`로 검색 전용 폴백한다. Vercel 인스턴스 전체에 공유되는 차단은 Supabase `runtime_flags` 영속화 후에 보장한다.
-
-2026-07-15 실제 최소 호출에서 `429 insufficient_quota`를 확인했으므로 Production과 Preview의 `AI_MODE`는 `off`로 운영한다. OpenAI API Billing과 비용 상한을 설정한 뒤 운영자가 `AI_MODE=auto`로 변경하고 재배포해야 Terra를 다시 활성화할 수 있다.
+`ai_available=true`는 NVIDIA 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 provider 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 잔여 사용량을 선제 보증하지 않는다. NVIDIA 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`, 이후 같은 인스턴스는 `quota_exhausted`로 검색 전용 폴백한다. 이는 요청 전 사용자 quota가 아니라 provider 오류에 대한 안전 폴백이다.
 
 ## 완료 조건
 
-- 재배포·동시 함수 인스턴스 후에도 인증·질문·quota·코퍼스 상태가 일치한다.
+- 재배포·동시 함수 인스턴스 후에도 인증·질문·코퍼스 상태가 일치한다.
 - Preview 브라우저 요청은 상대 `/api/*`만 사용하며 운영 API나 wildcard CORS에 의존하지 않는다.
 - 다른 사용자의 질문·내보내기·이력을 API와 직접 DB 접근 모두에서 읽을 수 없다.
 - 질문 원문, 이메일, IP 원문, 법령 원문 전문, 비밀 패턴이 로그에 없다.
@@ -215,3 +213,4 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 - 2026-07-14: legacy `SUPABASE_SERVICE_ROLE_KEY` 대신 `sb_secret_...` 형식의 `SUPABASE_SECRET_KEY`를 서버 전용으로 사용한다. 현재 FastAPI의 DB 연결에는 `DATABASE_URL`만 사용하고, secret key는 Auth/Storage 서버 어댑터에서만 사용한다.
 - 2026-07-15: Vercel Python 런타임은 `.python-version`의 마이너 버전 `3.14`로 선택한다. 패치 버전은 Vercel 관리형 런타임에 맡겨 지원되지 않는 정확한 패치 요구로 빌드가 중단되지 않게 한다.
 - 2026-07-15: collector `sync-current`는 session pooler와 `sb_secret_` API key를 사용해 private Storage와 PostgreSQL에 반영한다. opaque secret key는 JWT가 아니므로 Storage 요청의 `apikey` 헤더에만 둔다.
+- 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 요청 전 계정·익명 일일 quota 검사도 제거했으며, NVIDIA가 실제 호출 결과로 반환한 402/429만 검색 전용 폴백으로 처리한다.

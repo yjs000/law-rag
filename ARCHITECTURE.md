@@ -1,7 +1,7 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-08-08
+최종 갱신: 2026-08-09
 
 ## 목적
 
@@ -36,7 +36,7 @@
                                                   v
 Browser ──> Vercel Next.js ── 동일 출처 /api 프록시 ──> Vercel FastAPI
                                                         ├─ Supabase 검색·Auth·Storage
-                                                        └─ NVIDIA hosted NIM 또는 OpenAI + Structured Outputs
+                                                        └─ NVIDIA hosted NIM + Structured Outputs
 ```
 
 Web과 stateless FastAPI는 Vercel, 영속 상태는 Supabase에 배치한다. collector는 국가법령정보 Open API에 등록된 고정 공인 IPv4 Windows PC에서 실행하고 검증된 현재 버전을 Supabase private Storage와 PostgreSQL에 반영한다. 로컬 파일 저장소는 외부 자격정보가 없는 개발·테스트 fallback이다. 집 PC는 공개 인바운드 요청을 받지 않는다. API는 Python 3.14 런타임, 웹은 Node 24/pnpm 11을 사용한다. Supabase DB 연결 시에는 Supavisor transaction pooler를 전제로 prepared statement cache를 끈다.
@@ -55,10 +55,10 @@ Python 실행 단위는 같은 저장소 안에서 두 프로젝트로 분리한
 - `domain`: 법령 버전, 조문, 공개 API 계약과 순수 검증 규칙
 - `application`: 수집, 검색, 답변 조립, 인용 검증 유스케이스
 - `ports`: 법령 저장소·임베딩·답변 모델·원문 저장소 계약
-- `adapters`: 국가법령 API, Supabase/PostgreSQL/Storage, NVIDIA NIM 등 외부 생성·임베딩 provider 구현
+- `adapters`: 국가법령 API, Supabase/PostgreSQL/Storage, NVIDIA NIM 외부 생성·임베딩 provider 구현
 - `delivery`: FastAPI 엔드포인트, collector CLI·OS 스케줄러, Next.js 워크벤치
 
-도메인 계층은 FastAPI, SQLAlchemy, OpenAI SDK를 import하지 않는다. 브라우저는 OpenAI와 Supabase service role에 직접 접근하지 않는다.
+도메인 계층은 FastAPI, SQLAlchemy, 외부 모델 SDK를 import하지 않는다. 브라우저는 NVIDIA NIM과 Supabase service role에 직접 접근하지 않는다.
 
 ## 수집 계약
 
@@ -87,7 +87,7 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 
 검색은 먼저 corpus 전체 준비 게이트와 동적으로 계산한 기준일 지원 범위를 검사한 뒤 기준일 유효 버전을 제한한다. 지원 시작일은 오늘 이하인 수집 완료·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값이고, 지원 종료일은 UTC+9 한국 날짜의 오늘이며 양끝을 포함한다. 이는 저장된 버전 전체의 법률별 연속성·중복 여부를 검증한 공통 timeline이라는 뜻이 아니다. 오늘 유효한 provision population의 개수와 검색 콘텐츠 지문으로 `corpus-sha256:*` ID를 계산하며, 달력 날짜·`effective_to`·임베딩 프로필은 content ID 입력에 넣지 않는다. 따라서 시행·개정·폐지 경계와 검색 콘텐츠 변경이 없으면 날짜가 지나도 같은 ID를 유지한다.
 
-전체 검색 준비 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 시간 identity를 완성할 수 없으면 검색 엔드포인트는 HTTP `503`, 코드 `corpus_unready`로 닫힌다. 준비되지 않은 `/v1/corpus/status`에서는 지원 시작일과 snapshot ID가 `null`일 수 있다. 준비된 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 quota·임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 코퍼스 변경이 있으면 publisher는 `corpus.search_ready=false`를 먼저 커밋하고 65초 동안 기존 요청을 drain한 뒤 변경분을 단일 transaction으로 반영·검증한다. 이때 새 요청과 실제 PostgreSQL 검색 직전의 재검사는 lock을 기다리지 않고 즉시 `503 corpus_unready`로 닫히며, 검색 SQL 안의 준비 게이트도 점검 전환과 겹친 요청이 부분 결과를 반환하지 않게 한다. 성공한 publisher만 같은 반영 transaction 끝에서 게이트를 다시 열고, 실패하면 변경분을 전부 rollback한 채 게이트를 닫아 둔다. `/v1/corpus/status`는 계산된 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`, 준비 상태와 사유를 노출한다. 요청에서 날짜를 생략하면 API는 서버 시간대가 아니라 한국 날짜의 오늘을 사용한다.
+전체 검색 준비 게이트가 닫혔거나 오늘 유효한 provision이 0개이거나 시간 identity를 완성할 수 없으면 검색 엔드포인트는 HTTP `503`, 코드 `corpus_unready`로 닫힌다. 준비되지 않은 `/v1/corpus/status`에서는 지원 시작일과 snapshot ID가 `null`일 수 있다. 준비된 범위 밖 날짜는 일부 문서만 남은 결과를 근거 부족처럼 반환하지 않고 임베딩·저장소 검색 전에 HTTP `422`, 코드 `unsupported_corpus_date`로 거부한다. 코퍼스 변경이 있으면 publisher는 `corpus.search_ready=false`를 먼저 커밋하고 65초 동안 기존 요청을 drain한 뒤 변경분을 단일 transaction으로 반영·검증한다. 이때 새 요청과 실제 PostgreSQL 검색 직전의 재검사는 lock을 기다리지 않고 즉시 `503 corpus_unready`로 닫히며, 검색 SQL 안의 준비 게이트도 점검 전환과 겹친 요청이 부분 결과를 반환하지 않게 한다. 성공한 publisher만 같은 반영 transaction 끝에서 게이트를 다시 열고, 실패하면 변경분을 전부 rollback한 채 게이트를 닫아 둔다. `/v1/corpus/status`는 계산된 `corpus_snapshot_id`, `supported_as_of_from`, `supported_as_of_through`, 준비 상태와 사유를 노출한다. 요청에서 날짜를 생략하면 API는 서버 시간대가 아니라 한국 날짜의 오늘을 사용한다.
 
 법률명·조문 경로를 명시한 질문은 direct-path로 조회한다. 일반 질문은 query embedding이 준비됐을 때 pgvector dense-only 검색을 실행하고, 후보가 있으면 그 dense 순위만 반환한다. 운영 dense와 실험 D는 기준일 유효 population을 먼저 `MATERIALIZED`한 exhaustive exact cosine을 사용한다. HNSW는 현재와 미래의 검색·평가 경로에서 사용하지 않으며 새 인덱스·build·release도 만들지 않는다. dense 결과가 0건이거나 embedding 경로가 없을 때에만 PGroonga 4단계 keyword 검색을 독립 fallback으로 실행한다. dense와 keyword 점수는 합치지 않으며 hybrid와 RRF는 현재 검색 경로에 없다.
 
@@ -117,7 +117,7 @@ transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤�
 2. 위 사전 라우팅을 통과([legal_search]인 경우만)하면 direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
 3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID와 함께, 모델이 스스로 판단한 완결성 신호 `action`(`fully_answerable`/`partially_answerable`/`clarification_required`/`unanswerable`)과 `missing_information`을 받는다. 검증기는 이 명시적 신호로 요구 수준을 정하며 summary 텍스트에서 확신도를 추측하지 않는다.
 4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다. `action=unanswerable`이면 sections·checklist가 비어도 되지만 summary·limitations의 무근거 규범 주장(다른 법령·기관을 단정)은 계속 차단한다. `action=clarification_required`면 (사전 라우팅이 아니라 실제 검색·생성을 해본 뒤에야 드러난 부족함이므로) `missing_information`만 있으면 통과하고, 같은 재질문 응답 형식으로 사용자에게 반환한다.
-5. 선택된 생성 provider 실패, quota 402/429, 권한 오류, AI 비활성 시 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다.
+5. NVIDIA 생성 실패, provider가 반환한 결제·quota 402/429, 권한 오류, AI 비활성 시 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다. 요청 전 계정 일일 quota 검사는 없다.
 
 현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다. 검증 로직(`app/adapters/openai_answerer.py`의 `validate_draft`)은 근거 원문에서 조문 경로(`hit.path`)를 빠뜨려 정확한 조문 인용을 무근거 숫자로 오판하던 버그와, 한국어 겸양 표현("판단할 수 없다")이 법적 금지 주장과 표면 문법이 같아 오탐되던 버그를 2026-08-08에 고쳤다 — 상세 진단은 [0032](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)를 참고한다. 검증기 코드를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 낭비를 없애기 위해, 진단 스크립트(`scripts/diagnose_grounding_failures.py`)가 검색 근거(`SearchHit`) 원문을 통째로 저장하고, `scripts/replay_grounding_validation.py`가 그 저장분으로 `validate_draft()`만 새 API 호출 없이 재실행한다.
 
@@ -172,7 +172,7 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 
 연혁 본문 경로가 XML/JSON 계약 테스트를 통과하기 전 변경 API는 `supported=false`를 반환한다. HTML로 기능을 가장하지 않는다.
 
-`POST /v1/questions`, `POST /v1/search`, `GET /v1/provisions/{id}`는 현재 corpus가 준비되지 않았으면 `503 corpus_unready`로 닫고, 동적 지원 범위 밖 `as_of_date`는 quota·provider·실제 검색 호출 전에 같은 `422 unsupported_corpus_date` 계약으로 차단한다. 날짜 기본값은 UTC+9 한국 날짜의 오늘이다.
+`POST /v1/questions`, `POST /v1/search`, `GET /v1/provisions/{id}`는 현재 corpus가 준비되지 않았으면 `503 corpus_unready`로 닫고, 동적 지원 범위 밖 `as_of_date`는 provider·실제 검색 호출 전에 같은 `422 unsupported_corpus_date` 계약으로 차단한다. 날짜 기본값은 UTC+9 한국 날짜의 오늘이다.
 
 ## 운영 원칙
 
@@ -226,3 +226,6 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 | 2026-08-08 | `unanswerable` 응답도 정형화된 "법령 corpus로 답할 수 없습니다"로 끝내지 않고, 모델이 생성한 근거 설명을 노출하되 다른 법령·기관 지목은 단정형이 아닌 권유형만 허용 | 사용자가 왜 답이 안 되는지 알 수 있게 하면서도, 근거 없는 다른 법령·기관에 대한 단정적 주장(오탐 위험)은 계속 차단 |
 | 2026-08-08 | grounding 검증기(`validate_draft`)의 evidence 문자열에 조문 경로(`hit.path`)를 포함하고, 메타인지 동사 뒤 겸양 표현("판단할 수 없다")을 신호에서 제외 | 정확히 인용된 조문 번호가 무근거 숫자로, 인식론적 겸양이 법적 금지 주장으로 오판되던 grounding_failed 오탐 두 근본 원인을 제거 |
 | 2026-08-08 | 진단 스크립트가 검색 근거(`SearchHit`) 원문 전체를 저장하고, 별도 replay 스크립트로 검증기 코드 변경을 새 API 호출 없이 재검증 | 검증기를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 반복 낭비를 제거 |
+| 2026-08-09 | 답변 생성 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·실행 분기를 제거 | 운영 비교·fallback에 OpenAI를 쓰지 않는다는 기존 결정을 기본값이 아니라 실행 가능한 코드 경계로 확정 |
+| 2026-08-09 | 요청 전 로그인·익명 일일 quota 검사를 제거 | 계정별 사전 차단을 없애되, NVIDIA가 실제 호출 결과로 반환한 402/429는 검색 전용 폴백으로 계속 처리 |
+| 2026-08-09 | `Citation.source_kind`를 API 응답까지 전달 | DB·검색 결과에 있던 출처 종류를 제목 문자열 추측 없이 프런트가 사용하게 함 |

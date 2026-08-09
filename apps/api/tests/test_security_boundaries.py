@@ -181,7 +181,7 @@ def test_question_and_secret_bearing_failure_are_not_logged(monkeypatch, caplog)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: SecretFailEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     with caplog.at_level(logging.INFO):

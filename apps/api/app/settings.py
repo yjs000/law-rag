@@ -24,13 +24,9 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_secret_key: str | None = None
     supabase_raw_bucket: str = "law-raw"
-    openai_api_key: str | None = None
     ai_mode: Literal["auto", "off"] = "auto"
-    # 2026-08-08 (0025 M5 항목 3): OpenAI는 운영 비교·fallback으로 쓰지 않기로 확정해
-    # 기본값을 nvidia_nim으로 바꿨다. 여전히 M6 실험 E를 통과하기 전에는 ai_mode/quota 등
-    # 다른 gate로 Production AI 자체가 기본 비활성 상태를 유지한다.
-    answer_provider: Literal["openai", "nvidia_nim"] = "nvidia_nim"
-    openai_answer_model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
+    # 2026-08-09: OpenAI 생성 설정과 선택 분기를 제거했다. 답변·임베딩·tier 2 라우팅은
+    # NVIDIA NIM만 사용하며, ai_mode=off 또는 NVIDIA_API_KEY 부재 시 검색 전용으로 동작한다.
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
@@ -61,9 +57,6 @@ class Settings(BaseSettings):
     embedding_dimensions: int = Field(default=512, ge=512, le=512)
     embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
-    authenticated_ai_daily_limit: int = Field(default=10, ge=1)
-    authenticated_search_daily_limit: int = Field(default=100, ge=1)
-    account_quota_enabled: bool = False
     terms_version: str = "beta-2026-07-15"
     privacy_version: str = "beta-2026-07-15"
     # 2026-08-08: 콤마로 구분된 정확한 origin 목록을 지원한다(예: prod + 특정 preview
@@ -106,12 +99,7 @@ class Settings(BaseSettings):
 
     @property
     def ai_enabled(self) -> bool:
-        provider_key = (
-            self.openai_api_key
-            if self.answer_provider == "openai"
-            else self.nvidia_api_key
-        )
-        return self.ai_mode == "auto" and bool(provider_key)
+        return self.ai_mode == "auto" and bool(self.nvidia_api_key)
 
     @property
     def embedding_enabled(self) -> bool:

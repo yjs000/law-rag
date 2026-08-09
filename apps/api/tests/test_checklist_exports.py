@@ -4,6 +4,7 @@ from datetime import date
 from uuid import uuid4
 
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
+from app.domain.catalog import SourceKind
 from app.domain.schemas import (
     ChecklistDocument,
     ChecklistItem,
@@ -21,6 +22,7 @@ def _document() -> ChecklistDocument:
         path="제1조제1항",
         quote="허가를 받아야 한다.",
         source_url="https://www.law.go.kr",
+        source_kind=SourceKind.LAW,
     )
     return ChecklistDocument(
         title="에너지 법령 체크리스트",

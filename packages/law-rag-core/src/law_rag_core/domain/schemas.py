@@ -107,6 +107,7 @@ class Citation(BaseModel):
     path: str
     quote: str
     source_url: str
+    source_kind: SourceKind
     law_type_code: str | None = None
 
 

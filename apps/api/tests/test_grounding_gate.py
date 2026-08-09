@@ -231,9 +231,13 @@ def test_structurally_invalid_citation_falls_back_to_search_only(
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", BadCitationAnswerer)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: BadCitationAnswerer(api_key="test-key", model="nvidia-test"),
+    )
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     response = TestClient(main_module.app).post(
@@ -282,9 +286,13 @@ def test_content_unrelated_to_evidence_now_served_as_ai_answer(monkeypatch, hit:
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", UnrelatedAnswerer)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: UnrelatedAnswerer(api_key="test-key", model="nvidia-test"),
+    )
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     response = TestClient(main_module.app).post(

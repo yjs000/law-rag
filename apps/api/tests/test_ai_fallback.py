@@ -92,10 +92,13 @@ def test_all_generation_failures_fall_back_without_another_model(
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: FailingAnswerer(api_key="test-key", model="nvidia/nemotron-3-ultra-550b-a55b"),
+    )
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
-    monkeypatch.setattr(main_module.settings, "answer_provider", "openai")
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     response = TestClient(main_module.app).post(
@@ -110,7 +113,7 @@ def test_all_generation_failures_fall_back_without_another_model(
     assert response.json()["mode"] == "search_only"
     assert response.json()["requested_answer_mode"] == "terra"
     assert response.json()["fallback_reason"] == expected_reason
-    assert FailingAnswerer.models == ["gpt-5.6-terra"]
+    assert FailingAnswerer.models == ["nvidia/nemotron-3-ultra-550b-a55b"]
 
 
 @pytest.mark.parametrize("error", [BillingFailure("billing"), QuotaFailure("quota")])
@@ -151,10 +154,13 @@ def test_billing_or_quota_failure_disables_terra_for_later_requests(monkeypatch,
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module.repository, "corpus_items", corpus_items)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: FailingAnswerer(api_key="test-key", model="nvidia/nemotron-3-ultra-550b-a55b"),
+    )
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
-    monkeypatch.setattr(main_module.settings, "answer_provider", "openai")
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
     client = TestClient(main_module.app)
@@ -169,7 +175,7 @@ def test_billing_or_quota_failure_disables_terra_for_later_requests(monkeypatch,
     assert second.json()["requested_answer_mode"] == "terra"
     assert status.json()["ai_available"] is False
     assert status.json()["ai_unavailable_reason"] == "quota_exhausted"
-    assert FailingAnswerer.models == ["gpt-5.6-terra"]
+    assert FailingAnswerer.models == ["nvidia/nemotron-3-ultra-550b-a55b"]
 
 
 def test_disabled_ai_reports_safe_reason_without_calling_openai(monkeypatch) -> None:
@@ -186,7 +192,6 @@ def test_disabled_ai_reports_safe_reason_without_calling_openai(monkeypatch) -> 
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
     monkeypatch.setattr(main_module.settings, "ai_mode", "off")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
@@ -217,7 +222,6 @@ def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) ->
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: FailingEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "openai-generation-test")
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
@@ -249,9 +253,7 @@ def test_explicit_search_only_mode_never_calls_generation_model(monkeypatch) -> 
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
-    monkeypatch.setattr(main_module, "OpenAIAnswerer", FailingAnswerer)
     monkeypatch.setattr(main_module, "_embedder", lambda: ForbiddenEmbedder())
-    monkeypatch.setattr(main_module.settings, "openai_api_key", "test-key")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     response = TestClient(main_module.app).post(
@@ -322,9 +324,7 @@ def test_nvidia_generation_uses_nvidia_embedding_without_openai_key(monkeypatch)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
     monkeypatch.setattr(main_module, "_answerer", lambda: FailedNvidiaAnswerer())
-    monkeypatch.setattr(main_module.settings, "answer_provider", "nvidia_nim")
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
-    monkeypatch.setattr(main_module.settings, "openai_api_key", None)
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
     response = TestClient(main_module.app).post(

@@ -16,7 +16,7 @@ from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
-from app.adapters.openai_answerer import OpenAIAnswerer, select_generation_hits, validate_draft
+from app.adapters.openai_answerer import select_generation_hits, validate_draft
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
@@ -188,7 +188,6 @@ async def health() -> dict[str, str]:
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     await _require_supported_as_of_date(payload.as_of_date)
-    await _check_quota("search")
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
     except CorpusSearchUnavailableError as exc:
@@ -259,7 +258,6 @@ async def _answer_question(
         "routing": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
-    await _check_quota("ai" if use_ai else "search", user=user)
     await asyncio.sleep(0)
     # 0028 M4.5: 라우팅은 embedding보다 먼저 실행한다. 지금은 use_ai(terra) 경로에만
     # 적용한다 - search_only는 결과를 사용자가 직접 원문 대조하는 모드라 D-10에서 발견된
@@ -394,18 +392,9 @@ async def _answer_question(
             "dropped_evidence_count": len(hits) - len(generation_hits),
             "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
             # 0025 M5 item 4: 어떤 model/prompt/schema/context/sampling 조합이 이 답변을
-            # 만들었는지 SHA로 남긴다. NVIDIA 프로필만 기록한다 - OpenAI 프로필은 sampling
-            # 값이 MOCK(미확인)이라 provenance로 쓰기엔 아직 부정확하다.
-            "generation_profile_key": (
-                NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key
-                if settings.answer_provider == "nvidia_nim"
-                else None
-            ),
-            "generation_profile_sha256": (
-                NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256
-                if settings.answer_provider == "nvidia_nim"
-                else None
-            ),
+            # 만들었는지 SHA로 남긴다. 생성 경로는 NVIDIA NIM 하나로 고정돼 있다.
+            "generation_profile_key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
+            "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
         }
     )
     try:
@@ -447,6 +436,7 @@ async def _answer_question(
             path=hit.path,
             quote=hit.content,
             source_url=hit.source_url,
+            source_kind=hit.source_kind,
             law_type_code=hit.law_type_code,
         )
         for index, hit in enumerate(generation_hits, 1)
@@ -745,18 +735,6 @@ def _embedder() -> NvidiaNimEmbedder:
     )
 
 
-async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
-    if user is None or not postgres_identity or not settings.account_quota_enabled:
-        return
-    account_limit = (
-        settings.authenticated_ai_daily_limit
-        if kind == "ai"
-        else settings.authenticated_search_daily_limit
-    )
-    if not await postgres_identity.consume_quota(user.id, date.today(), kind, account_limit):
-        raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
-
-
 def _ai_available() -> bool:
     return settings.ai_enabled and not ai_quota_exhausted
 
@@ -772,17 +750,17 @@ def _question_owner(request: Request, user: MockUser | None) -> str:
     return "anonymous:" + daily_subject_hash(subject, settings.rate_limit_secret, date.today())
 
 
-def _answerer() -> OpenAIAnswerer | NvidiaNimAnswerer:
-    if settings.answer_provider == "nvidia_nim":
-        return NvidiaNimAnswerer(
-            api_key=settings.nvidia_api_key or "",
-            base_url=settings.nvidia_base_url,
-            model=settings.nvidia_answer_model,
-            timeout_seconds=settings.answer_timeout_seconds,
-            max_output_tokens=settings.answer_max_output_tokens,
-            max_attempts=settings.answer_generation_max_attempts,
-        )
-    return OpenAIAnswerer(api_key=settings.openai_api_key or "", model=settings.openai_answer_model)
+def _answerer() -> NvidiaNimAnswerer:
+    # 2026-08-09: OpenAI 생성 분기와 어댑터는 운영 비교·fallback으로 사용하지 않기로 한
+    # 결정을 코드에도 반영해 비활성화했다. 복구가 필요하면 Git 이력에서 별도 결정으로 되살린다.
+    return NvidiaNimAnswerer(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_answer_model,
+        timeout_seconds=settings.answer_timeout_seconds,
+        max_output_tokens=settings.answer_max_output_tokens,
+        max_attempts=settings.answer_generation_max_attempts,
+    )
 
 
 # 2026-08-08: NVIDIA API key가 배선되면 실제 NvidiaNimRouteClassifier를 쓴다. key가 없는

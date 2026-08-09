@@ -59,24 +59,8 @@ def select_generation_hits(
     return selected
 
 
-class OpenAIAnswerer:
-    def __init__(self, *, api_key: str, model: str) -> None:
-        if model != "gpt-5.6-terra":
-            raise ValueError("답변 생성 모델은 gpt-5.6-terra만 허용됩니다")
-        from openai import AsyncOpenAI
-
-        self.client = AsyncOpenAI(api_key=api_key)
-        self.model = model
-
-    async def answer(self, request: QuestionRequest, hits: list[SearchHit]) -> DraftAnswer:
-        response = await self.client.responses.parse(
-            model=self.model,
-            input=build_messages(request, hits),
-            text_format=DraftAnswer,
-        )
-        if response.output_parsed is None:
-            raise ValueError("구조화 답변이 없습니다")
-        return response.output_parsed
+# 2026-08-09: OpenAIAnswerer 실행 코드는 의도적으로 비활성화했다. 이 모듈에는 NVIDIA
+# 어댑터도 공유하는 구조화 답변 스키마·prompt·검증기만 남긴다. 이전 구현은 Git 이력에 있다.
 
 
 def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict[str, str]]:

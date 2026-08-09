@@ -7,19 +7,19 @@ from app.settings import Settings
 def test_env_local_is_loaded_and_overrides_env(tmp_path, monkeypatch) -> None:
     (tmp_path / ".env").write_text("AI_MODE=off\n", encoding="utf-8")
     (tmp_path / ".env.local").write_text(
-        "AI_MODE=auto\nOPENAI_API_KEY=local-key\n"
+        "AI_MODE=auto\nNVIDIA_API_KEY=local-key\n"
         "SUPABASE_SECRET_KEY=sb_secret_local\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("AI_MODE", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
     monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
 
     settings = Settings()
 
     assert settings.ai_mode == "auto"
-    assert settings.openai_api_key == "local-key"
+    assert settings.nvidia_api_key == "local-key"
     assert settings.supabase_secret_key == "sb_secret_local"
 
 
@@ -74,11 +74,9 @@ def test_production_accepts_explicit_dependencies_and_rate_limit_secret() -> Non
     assert settings.environment == "production"
 
 
-def test_nvidia_provider_uses_its_own_key_without_enabling_openai_embedding() -> None:
+def test_nvidia_key_enables_generation_and_embedding() -> None:
     settings = Settings(
-        answer_provider="nvidia_nim",
         nvidia_api_key="nvapi-test",
-        openai_api_key=None,
         _env_file=None,
     )
 
@@ -89,11 +87,9 @@ def test_nvidia_provider_uses_its_own_key_without_enabling_openai_embedding() ->
     assert settings.answer_max_output_tokens == 4096
 
 
-def test_nvidia_provider_without_key_keeps_ai_disabled() -> None:
+def test_missing_nvidia_key_keeps_ai_disabled() -> None:
     settings = Settings(
-        answer_provider="nvidia_nim",
         nvidia_api_key=None,
-        openai_api_key="openai-embedding-only",
         _env_file=None,
     )
 
@@ -117,15 +113,3 @@ def test_web_origins_single_value_is_still_a_list() -> None:
     settings = Settings(web_origin="https://prod.example.com", _env_file=None)
 
     assert settings.web_origins == ["https://prod.example.com"]
-
-
-def test_openai_generation_key_does_not_enable_nvidia_embedding() -> None:
-    settings = Settings(
-        answer_provider="openai",
-        openai_api_key="openai-generation",
-        nvidia_api_key=None,
-        _env_file=None,
-    )
-
-    assert settings.ai_enabled
-    assert not settings.embedding_enabled

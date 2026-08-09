@@ -197,7 +197,7 @@ async def main() -> None:
             "key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
             "sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
         },
-        "answer_provider": main_module.settings.answer_provider,
+        "answer_provider": "nvidia_nim",
         "answer_model": main_module.settings.nvidia_answer_model,
         "route_classifier_model": main_module.settings.nvidia_route_classifier_model,
         "answer_timeout_seconds": main_module.settings.answer_timeout_seconds,

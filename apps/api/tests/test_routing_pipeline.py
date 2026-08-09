@@ -108,9 +108,7 @@ def _patch_ai_ready(monkeypatch, *, embedding_calls: list[int], search_calls: li
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
-    monkeypatch.setattr(main_module.settings, "answer_provider", "nvidia_nim")
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
-    monkeypatch.setattr(main_module.settings, "openai_api_key", None)
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
 
