@@ -204,7 +204,92 @@ def test_disabled_ai_reports_safe_reason_without_calling_openai(monkeypatch) -> 
     assert FailingAnswerer.models == []
 
 
-def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) -> None:
+def test_no_hits_but_use_ai_now_reaches_generation_and_returns_ai_mode(monkeypatch) -> None:
+    async def search(*args, **kwargs):
+        return []
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    class NoopEmbedder:
+        async def embed(self, texts):
+            return [[0.0] * 512]
+
+    class UnanswerableAnswerer:
+        async def answer(self, payload, hits):
+            assert hits == []
+            from app.adapters.openai_answerer import DraftAnswer
+
+            return DraftAnswer(
+                summary="질문과 일치하는 근거를 기준일 유효 MVP 법령에서 찾지 못했습니다.",
+                scope="기준일 현재 검색 범위",
+                sections=[],
+                checklist=[],
+                action="unanswerable",
+            )
+
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module, "_answerer", lambda: UnanswerableAnswerer())
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "집앞에 원전을 세우고싶어", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "ai"
+    assert body["action"] == "unanswerable"
+    assert body["citations"] == []
+    assert body["fallback_reason"] is None
+
+
+def test_no_hits_generation_failure_still_falls_back_to_search_only(monkeypatch) -> None:
+    async def search(*args, **kwargs):
+        return []
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    class NoopEmbedder:
+        async def embed(self, texts):
+            return [[0.0] * 512]
+
+    class RaisingAnswerer:
+        async def answer(self, payload, hits):
+            raise RuntimeError("NVIDIA mock outage")
+
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module, "_answerer", lambda: RaisingAnswerer())
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "집앞에 원전을 세우고싶어", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "search_only"
+    assert body["fallback_reason"] == "generation_error"
+
+
+def test_embedding_failure_with_no_keyword_evidence_still_generates(monkeypatch) -> None:
     async def search(*args, **kwargs):
         return []
 
@@ -218,10 +303,23 @@ def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) ->
         async def embed(self, texts):
             raise RuntimeError("must not be returned to clients")
 
+    class UnanswerableAnswerer:
+        async def answer(self, payload, hits):
+            from app.adapters.openai_answerer import DraftAnswer
+
+            return DraftAnswer(
+                summary="근거를 찾지 못했습니다.",
+                scope="기준일 현재 검색 범위",
+                sections=[],
+                checklist=[],
+                action="unanswerable",
+            )
+
     monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: FailingEmbedder())
+    monkeypatch.setattr(main_module, "_answerer", lambda: UnanswerableAnswerer())
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
@@ -230,7 +328,7 @@ def test_embedding_failure_with_no_keyword_evidence_is_explained(monkeypatch) ->
         "/v1/questions", json={"question": "전기사업 근거", "answer_mode": "terra"}
     )
 
-    assert response.json()["fallback_reason"] == "embedding_error"
+    assert response.json()["mode"] == "ai"
     assert "must not be returned" not in response.text
 
 

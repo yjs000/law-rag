@@ -520,13 +520,11 @@ async def _answer_question(
     fallback.request_id = str(payload.client_request_id)
     if route_decision is not None:
         fallback.route = route_decision.route
-    if not use_ai or not hits:
+    if not use_ai:
         generation_stage = diagnostics["generation"]
         assert isinstance(generation_stage, dict)
         generation_stage["status"] = (
-            "skipped_no_evidence"
-            if use_ai
-            else "skipped_search_only"
+            "skipped_search_only"
             if payload.answer_mode == "search_only"
             else "skipped_ai_disabled"
         )
