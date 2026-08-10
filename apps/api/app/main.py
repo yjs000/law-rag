@@ -26,6 +26,7 @@ from app.adapters.supabase_auth import (
     SupabaseAuthUnavailableError,
 )
 from app.application.answering import (
+    clarification_resubmission_summary,
     post_generation_clarification_answer,
     route_blocked_answer,
     search_only_answer,
@@ -330,6 +331,7 @@ async def _answer_question(
         "retrieval": {},
         "generation": {"attempted": False, "status": "not_attempted"},
         "routing": {"attempted": False, "status": "not_attempted"},
+        "blocked_route_generation": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
     await _check_quota("ai" if use_ai else "search", user=user)
@@ -415,14 +417,17 @@ async def _answer_question(
         )
         emit_route_outcome(str(payload.client_request_id), route_decision)
         if route_decision.route != "legal_search":
-            user_facing_explanation = real_explanation
-            blocked = route_blocked_answer(
+            blocked_fallback = route_blocked_answer(
                 payload,
                 route_decision.route,
                 missing_fields=route_decision.missing_fields,
-                explanation=user_facing_explanation,
+                explanation=real_explanation,
             )
-            return await _save_if_authenticated(user, payload, blocked, diagnostics)
+            blocked_fallback.request_id = str(payload.client_request_id)
+            blocked_answer = await _generate_blocked_route_answer(
+                payload, route_decision, real_explanation, blocked_fallback, diagnostics, budget
+            )
+            return await _save_if_authenticated(user, payload, blocked_answer, diagnostics)
     query_embedding = None
     embedding_failed = False
     if use_ai and settings.embedding_enabled:
@@ -635,6 +640,74 @@ async def _answer_question(
     )
     generation_stage["status"] = "succeeded"
     return await _save_if_authenticated(user, payload, answer, diagnostics)
+
+
+async def _generate_blocked_route_answer(
+    payload: QuestionRequest,
+    route_decision: RouteDecision,
+    explanation: str | None,
+    blocked_fallback: QuestionResponse,
+    diagnostics: dict[str, object],
+    budget: RequestBudget,
+) -> QuestionResponse:
+    """0046: route_decision.route != legal_search일 때 고정 템플릿(blocked_fallback) 대신
+    LLM이 질문에 맞춘 답을 생성한다. 실패(timeout/예외/grounding 거부)하면 blocked_fallback
+    으로 떨어진다 - 기존 generation 예외 처리와 같은 원칙으로 새 실패 모드를 만들지 않는다."""
+    stage = diagnostics["blocked_route_generation"]
+    assert isinstance(stage, dict)
+    stage.update({"attempted": True, "status": "started"})
+    started = time.monotonic()
+    outcome: QuestionStageTimingOutcome = "failed"
+    try:
+        draft = await budget.run(
+            "blocked_route_generation",
+            lambda: _answerer().answer_blocked_route(
+                payload, route_decision.route, explanation
+            ),
+            cap_seconds=settings.answer_timeout_seconds,
+        )
+        outcome = "succeeded"
+    except StageTimeoutError:
+        outcome = "timed_out"
+        stage["status"] = "timed_out"
+        return blocked_fallback
+    except Exception as exc:
+        outcome = "failed"
+        status_code = getattr(exc, "status_code", None)
+        if status_code in {402, 429}:
+            global ai_quota_exhausted
+            ai_quota_exhausted = True
+        stage["status"] = "billing_or_quota_error" if status_code in {402, 429} else "failed"
+        return blocked_fallback
+    finally:
+        emit_question_stage_timing(
+            str(payload.client_request_id),
+            "blocked_route_generation",
+            outcome,
+            _elapsed_ms(started),
+            _remaining_ms(budget),
+        )
+    if not validate_draft(draft, []):
+        stage["status"] = "grounding_failed"
+        return blocked_fallback
+    stage["status"] = "succeeded"
+    if draft.action == "clarification_required":
+        summary = clarification_resubmission_summary(payload.question, draft.missing_information)
+    else:
+        summary = draft.summary
+    return QuestionResponse(
+        request_id=str(payload.client_request_id),
+        mode="ai",
+        summary=summary,
+        scope=f"라우팅: {route_decision.route} (검색 미실행)",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
+        requested_answer_mode=payload.answer_mode,
+        action=draft.action,
+        route=route_decision.route,
+    )
 
 
 @app.post("/v1/auth/mock/google", response_model=MockLoginResponse)

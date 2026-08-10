@@ -13,7 +13,9 @@ logger = logging.getLogger("law_rag.question_outcome")
 route_logger = logging.getLogger("law_rag.route_outcome")
 stage_timing_logger = logging.getLogger("law_rag.question_stage_timing")
 
-QuestionStageTimingStage = Literal["routing", "embedding", "retrieval", "generation", "request"]
+QuestionStageTimingStage = Literal[
+    "routing", "embedding", "retrieval", "generation", "blocked_route_generation", "request"
+]
 QuestionStageTimingOutcome = Literal["succeeded", "failed", "timed_out", "degraded"]
 _served_by_mode: Counter[str] = Counter()
 _route_by_route_tier: Counter[tuple[str, int]] = Counter()

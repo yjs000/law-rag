@@ -112,10 +112,52 @@ def _patch_ai_ready(monkeypatch, *, embedding_calls: list[int], search_calls: li
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
 
 
+class _StubBlockedAnswerer:
+    def __init__(self, draft, *, captured: dict[str, object] | None = None):
+        self._draft = draft
+        self._captured = captured
+
+    async def answer_blocked_route(self, request, route, reason):
+        if self._captured is not None:
+            self._captured["route"] = route
+            self._captured["reason"] = reason
+        return self._draft
+
+
+def _unanswerable_draft(summary: str):
+    from app.adapters.openai_answerer import DraftAnswer
+
+    return DraftAnswer(
+        summary=summary, scope="검색 미실행", sections=[], checklist=[], action="unanswerable"
+    )
+
+
+def _clarification_draft(missing: list[str]):
+    from app.adapters.openai_answerer import DraftAnswer
+
+    return DraftAnswer(
+        summary="부족한 사실을 확인해야 합니다.",
+        scope="검색 미실행",
+        sections=[],
+        checklist=[],
+        action="clarification_required",
+        missing_information=missing,
+    )
+
+
 def test_realtime_question_is_blocked_before_embedding_or_search(monkeypatch) -> None:
     embedding_calls: list[int] = []
     search_calls: list[int] = []
     _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: _StubBlockedAnswerer(
+            _unanswerable_draft(
+                "이 시스템은 실시간 가격 정보에 연결되어 있지 않아 답할 수 없습니다."
+            )
+        ),
+    )
 
     response = TestClient(main_module.app).post(
         "/v1/questions",
@@ -124,9 +166,10 @@ def test_realtime_question_is_blocked_before_embedding_or_search(monkeypatch) ->
 
     assert response.status_code == 200
     body = response.json()
-    assert body["mode"] == "search_only"
+    assert body["mode"] == "ai"
     assert body["route"] == "realtime_required"
-    assert "시점에 따라 달라지는 정보" in body["summary"]
+    assert body["action"] == "unanswerable"
+    assert "실시간 가격 정보" in body["summary"]
     assert embedding_calls == []
     assert search_calls == []
 
@@ -135,6 +178,13 @@ def test_external_document_question_is_blocked_before_embedding_or_search(monkey
     embedding_calls: list[int] = []
     search_calls: list[int] = []
     _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: _StubBlockedAnswerer(
+            _unanswerable_draft("이 시스템은 해당 문서에 연결되어 있지 않아 답할 수 없습니다.")
+        ),
+    )
 
     response = TestClient(main_module.app).post(
         "/v1/questions",
@@ -146,9 +196,10 @@ def test_external_document_question_is_blocked_before_embedding_or_search(monkey
 
     assert response.status_code == 200
     body = response.json()
-    assert body["mode"] == "search_only"
+    assert body["mode"] == "ai"
     assert body["route"] == "external_document_required"
-    assert "문서 확인이 필요합니다" in body["summary"]
+    assert body["action"] == "unanswerable"
+    assert "해당 문서에 연결되어 있지 않아" in body["summary"]
     assert embedding_calls == []
     assert search_calls == []
 
@@ -157,6 +208,11 @@ def test_conditional_variance_question_gets_resubmission_template(monkeypatch) -
     embedding_calls: list[int] = []
     search_calls: list[int] = []
     _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: _StubBlockedAnswerer(_clarification_draft(["전기 사용 방식"])),
+    )
     question = "전기 사용 방식에 따라 신고 절차가 다릅니다 어떻게 다른가요?"
 
     response = TestClient(main_module.app).post(
@@ -166,10 +222,12 @@ def test_conditional_variance_question_gets_resubmission_template(monkeypatch) -
 
     assert response.status_code == 200
     body = response.json()
-    assert body["mode"] == "search_only"
+    assert body["mode"] == "ai"
     assert body["route"] == "clarification_required"
+    assert body["action"] == "clarification_required"
     assert "추가 정보만 따로 보내지 마세요" in body["summary"]
     assert question in body["summary"]
+    assert "전기 사용 방식" in body["summary"]
     assert embedding_calls == []
     assert search_calls == []
 
@@ -218,9 +276,10 @@ def test_search_only_mode_is_not_gated_by_routing(monkeypatch) -> None:
     assert search_calls == [1]
 
 
-def test_tier2_llm_explanation_is_appended_to_blocked_message(monkeypatch) -> None:
+def test_tier2_llm_explanation_is_passed_to_blocked_route_generation(monkeypatch) -> None:
     """2026-08-08 (user proposal): tier 2's own reasoning, already produced for free,
-    should make blocked-route messages question-specific instead of purely canned."""
+    should make blocked-route messages question-specific instead of purely canned. 0046:
+    the reasoning now flows into the LLM generation call as its `reason` argument."""
     embedding_calls: list[int] = []
     search_calls: list[int] = []
     _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
@@ -236,6 +295,15 @@ def test_tier2_llm_explanation_is_appended_to_blocked_message(monkeypatch) -> No
             )
 
     monkeypatch.setattr(main_module, "_route_classifier", lambda: ExplainingClassifier())
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: _StubBlockedAnswerer(
+            _unanswerable_draft("이 시스템은 해당 문서에 연결되어 있지 않아 답할 수 없습니다."),
+            captured=captured,
+        ),
+    )
 
     response = TestClient(main_module.app).post(
         "/v1/questions",
@@ -243,9 +311,8 @@ def test_tier2_llm_explanation_is_appended_to_blocked_message(monkeypatch) -> No
     )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["route"] == "external_document_required"
-    assert "보증서 내용을 직접 대조" in body["summary"]
+    assert response.json()["route"] == "external_document_required"
+    assert captured["reason"] == "사용자가 보유한 보증서 내용을 직접 대조해야 판단할 수 있다."
     assert embedding_calls == []
     assert search_calls == []
 
@@ -262,6 +329,12 @@ def test_mock_classifier_explanation_never_reaches_the_user(monkeypatch) -> None
             return await MockRouteClassifier().classify(question, hint_arg)
 
     monkeypatch.setattr(main_module, "_route_classifier", lambda: HintedClassifier())
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        main_module,
+        "_answerer",
+        lambda: _StubBlockedAnswerer(_unanswerable_draft("답할 수 없습니다."), captured=captured),
+    )
 
     with_hint_result = None
 
@@ -289,3 +362,27 @@ def test_mock_classifier_explanation_never_reaches_the_user(monkeypatch) -> None
 
     assert response.status_code == 200
     assert "mock_classifier" not in response.json()["summary"]
+    assert captured["reason"] is None
+
+
+def test_blocked_route_generation_failure_falls_back_to_canned_message(monkeypatch) -> None:
+    embedding_calls: list[int] = []
+    search_calls: list[int] = []
+    _patch_ai_ready(monkeypatch, embedding_calls=embedding_calls, search_calls=search_calls)
+
+    class RaisingAnswerer:
+        async def answer_blocked_route(self, request, route, reason):
+            raise RuntimeError("NVIDIA mock outage")
+
+    monkeypatch.setattr(main_module, "_answerer", lambda: RaisingAnswerer())
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={"question": "지금 시세로 전기를 팔면 얼마나 받을 수 있나요?", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "search_only"
+    assert body["route"] == "realtime_required"
+    assert "시점에 따라 달라지는 정보" in body["summary"]
