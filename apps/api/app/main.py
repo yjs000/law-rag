@@ -17,7 +17,7 @@ from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
-from app.adapters.openai_answerer import select_generation_hits, validate_draft
+from app.adapters.openai_answerer import build_messages_v2, select_generation_hits, validate_draft
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
@@ -42,7 +42,7 @@ from app.domain.corpus_temporal_contract import (
 )
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
-from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE
+from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.routing import RouteDecision, route_tier1, route_tier2
 from app.domain.schemas import (
@@ -544,11 +544,11 @@ async def _answer_question(
             "selected_evidence_characters": sum(len(hit.content) for hit in generation_hits),
             # 0025 M5 item 4: 어떤 model/prompt/schema/context/sampling 조합이 이 답변을
             # 만들었는지 SHA로 남긴다. 생성 경로는 NVIDIA NIM 하나로 고정돼 있다.
-            # 0043, 2026-08-09: 이 프로필 참조는 _answerer()가 실제로 쓰는 message_builder와
-            # 짝을 맞춰야 한다. 나중에 build_messages_v2로 바꾸면서 이 줄을 안 바꾸면 v2
-            # 출력이 v1 프로필로 잘못 기록된다.
-            "generation_profile_key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
-            "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
+            # 0043, 2026-08-10: _answerer()가 build_messages_v2를 기본으로 쓰도록 전환하며
+            # 이 프로필 참조도 V2로 맞췄다 - 프로필과 message_builder가 항상 짝을 이뤄야
+            # generation_profile_sha256가 실제 생성에 쓰인 프롬프트를 정확히 가리킨다.
+            "generation_profile_key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.key,
+            "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.sha256,
         }
     )
     generation_started = time.monotonic()
@@ -951,6 +951,9 @@ def _question_owner(request: Request, user: MockUser | None) -> str:
 def _answerer() -> NvidiaNimAnswerer:
     # 2026-08-09: OpenAI 생성 분기와 어댑터는 운영 비교·fallback으로 사용하지 않기로 한
     # 결정을 코드에도 반영해 비활성화했다. 복구가 필요하면 Git 이력에서 별도 결정으로 되살린다.
+    # 2026-08-10 (0043): hosted v1/v2 비교(experiment-0043-v1-v2-compare-results.json)에서
+    # v2가 근거 없는 주장을 추가하지 않으면서(action 판정 v1=v2) 안내문 문체·행동형
+    # 체크리스트로 더 나은 결과를 보여 기본 경로를 v2로 전환했다.
     return NvidiaNimAnswerer(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
@@ -958,6 +961,7 @@ def _answerer() -> NvidiaNimAnswerer:
         timeout_seconds=settings.answer_timeout_seconds,
         max_output_tokens=settings.answer_max_output_tokens,
         max_attempts=settings.answer_generation_max_attempts,
+        message_builder=build_messages_v2,
     )
 
 
