@@ -327,6 +327,13 @@ async def test_answer_blocked_route_uses_dedicated_prompt_without_evidence() -> 
     assert "근거:" not in captured["messages"][0]["content"]
 
 
+def test_build_blocked_route_messages_rejects_unsupported_route() -> None:
+    request = QuestionRequest(question="아무 질문")
+
+    with pytest.raises(ValueError, match="legal_search"):
+        build_blocked_route_messages(request, "legal_search", None)
+
+
 @pytest.mark.asyncio
 async def test_answer_blocked_route_passes_reason_as_untrusted_hint() -> None:
     answerer = _answerer()
