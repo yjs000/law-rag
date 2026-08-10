@@ -89,6 +89,13 @@ def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:
     assert "제공된 근거만 사용" in v1_text
 
 
+def test_v2_system_prompt_requires_unanswerable_when_evidence_is_empty() -> None:
+    messages = build_messages_v2(_request(), [])
+    text = messages[0]["content"]
+    assert "근거가 비어 있으면" in text
+    assert "unanswerable" in text
+
+
 def test_v2_user_message_carries_same_evidence_block_as_v1() -> None:
     v1_user = build_messages(_request(), _hits())[-1]["content"]
     v2_user = build_messages_v2(_request(), _hits())[-1]["content"]
