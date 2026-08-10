@@ -44,6 +44,8 @@ LLM을 호출할 수 없는 상태이므로 이번 변경의 대상이 아니다
 
 ```python
 if not hits:
+    if draft.action == "clarification_required":
+        return bool(draft.missing_information)
     return (
         draft.action == "unanswerable"
         and not draft.sections
@@ -51,9 +53,13 @@ if not hits:
     )
 ```
 
-근거가 하나도 없을 때는 `unanswerable`이고 섹션·체크리스트가 완전히 비어 있을 때만 통과한다.
-그 외 action이거나 섹션·체크리스트에 뭔가 채워져 있으면 여전히 거부된다 — "근거 없이 만든
-법적 주장"은 계속 막는다. `hits`가 있을 때의 기존 검증(인용 ID 존재 여부 등)은 변경하지 않는다.
+근거가 하나도 없을 때 통과하는 경우는 둘뿐이다 — ① `unanswerable`이고 섹션·체크리스트가
+완전히 비어 있을 때, ② `clarification_required`이고 `missing_information`이 채워져 있을 때.
+검색이 정말 근거를 못 찾았으면 ①로, 근거가 없어도 질문 자체에 사용자 사실이 더 필요하다고
+판단되면 ②로 정직하게 답한다 — 어느 쪽이든 LLM이 반드시 응답을 만들고, `search_only` 고정
+문구로 대신 끝나는 경우가 없다. 그 외 action이거나 섹션·체크리스트에 뭔가 채워져 있으면
+여전히 거부된다 — "근거 없이 만든 법적 주장"은 계속 막는다. `hits`가 있을 때의 기존 검증
+(인용 ID 존재 여부 등)은 변경하지 않는다.
 
 ### 2. 검색 후 0건 경로 ([main.py:515-533](../../apps/api/app/main.py:515))
 
