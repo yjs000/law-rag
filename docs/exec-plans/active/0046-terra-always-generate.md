@@ -1158,6 +1158,79 @@ git commit -m "feat(api): generate LLM answers for pre-retrieval routing blocks"
 
 ---
 
+## Task 7: 0046 파이프라인 지도와 활성 계획 목록 정합성
+
+**Files:**
+- Modify: `docs/generated/law-rag-question-pipeline-map.html`
+- Modify: `docs/exec-plans/active/README.md`
+
+**Interfaces:**
+- Consumes: 0046의 `NvidiaNimAnswerer.answer_blocked_route`, 빈 근거
+  `validate_draft`, `_generate_blocked_route_answer` 계약과 기존 HTML 단계·근거 링크 구조
+- Produces: 0045 시간 예산을 언급하지 않고 0046 Terra always-generate 분기를 보이는 정적
+  파이프라인 지도, 활성 0046 계획 링크
+
+- [ ] **Step 1: 지도에서 교체할 0045·0046 관련 설명을 식별한다**
+
+Run: `rg -n -i "0045|timeout|time.?budget|search_only|blocked|zero.?hit|근거 0" docs/generated/law-rag-question-pipeline-map.html`
+
+Expected: 시간 예산·재시도 수치가 든 0045 설명과, 근거 0건 또는 사전 차단이 즉시
+`search_only`로 끝난다는 이전 설명을 교체 대상으로 확인한다. 검색 2~4단계의 설명과
+평가 지표 설명은 새 설명으로 늘리지 않는다.
+
+- [ ] **Step 2: 0046 흐름으로 HTML을 갱신한다**
+
+`docs/generated/law-rag-question-pipeline-map.html`의 기존 단계형 레이아웃과 근거 링크는
+유지하며 다음 문구·관계를 반영한다.
+
+```text
+answer_mode=terra
+  ├─ legal_search → retrieval → hits(0건 포함) → LLM 생성
+  └─ 사전 차단 route → embedding/search 생략 → answer_blocked_route LLM 생성
+
+빈 근거: unanswerable 또는 missing_information이 있는 clarification_required만 허용
+생성 예외·구조 검증 실패·AI 미가용: 기존 search_only/차단 안내문 폴백
+```
+
+0045의 52/40/55/170초, 시간 예산, client 재시도 설명과 그 결정 링크를 제거한다. 0046의
+근거 링크는 `openai_answerer.py`, `nvidia_nim_answerer.py`, `main.py`,
+`test_routing_pipeline.py`의 always-generate 구현을 가리킨다.
+
+- [ ] **Step 3: 활성 계획 목록에 0046을 추가한다**
+
+`docs/exec-plans/active/README.md`의 기존 번호순 목록에서 0043 뒤에 다음 항목을 추가한다.
+
+```markdown
+- [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md) — 근거 0건·사전 라우팅 차단 요청도 Terra 생성 경로로 응답하고, 실패 시 기존 안전 폴백 유지
+```
+
+- [ ] **Step 4: 정적 검증을 실행한다**
+
+Run:
+
+```powershell
+rg -n -i "0045|52초|40초|55초|170초|time.?budget" docs/generated/law-rag-question-pipeline-map.html
+rg -n "0046-terra-always-generate.md" docs/exec-plans/active/README.md
+git diff --check
+```
+
+Expected: 첫 명령은 결과가 없고, 두 번째 명령은 새 활성 계획 링크 한 건을 반환하며,
+`git diff --check`는 출력 없이 성공한다.
+
+- [ ] **Step 5: 브라우저로 렌더링을 확인한다**
+
+로컬 HTML을 열어 단계 번호, 분기 레이블, 근거 링크와 폴백 문구가 잘리지 않고 읽히는지
+확인한다. 깨진 레이아웃이 있으면 같은 HTML 안에서만 고친 뒤 재확인한다.
+
+- [ ] **Step 6: 커밋한다**
+
+```bash
+git add docs/generated/law-rag-question-pipeline-map.html docs/exec-plans/active/README.md docs/exec-plans/active/0046-terra-always-generate.md
+git commit -m "docs: update pipeline map for 0046"
+```
+
+---
+
 ## 완료 조건
 
 - Task 1~6 전부 완료, `cd apps/api; uv run pytest tests/ -q`와
@@ -1168,3 +1241,5 @@ git commit -m "feat(api): generate LLM answers for pre-retrieval routing blocks"
 - 배포 후 실측 항목(diagnostics 기준 호출량 증가율, `blocked_route_generation` 성공률)은
   이 계획의 범위가 아니다 - `docs/design-docs/always-generate-answer.md`의 "검증" 절에 따라
   별도로 후속 조치한다.
+- Task 7에서 0045를 제외한 0046 분기와 활성 계획 링크를 지도·목록에 반영하고 정적·렌더링
+  검증을 마친다.
