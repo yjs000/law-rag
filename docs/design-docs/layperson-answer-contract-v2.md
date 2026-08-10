@@ -94,11 +94,15 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2 = GenerationProfile(
 ### 5. 후속 todo로 분리: 실제(hosted) v1·v2 비교 실행
 
 D-10 `lay-energy-0201` 포함 최대 3문항 v1·v2 비교(0043 범위 4번)는 이 설계에서 확정하지 않는다.
-NVIDIA 실제 호출 횟수·재시도 상한·hosted 경로(Web 59초 재요청, Vercel 함수 종료 전 fallback)
-계약은 사용자가 별도로 설계 중이다. 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,
+NVIDIA 실제 호출 횟수·재시도 상한은 실행 전에 다시 명시하고 사용자의 외부 호출 승인을 받는다.
+hosted 경로(Web 재요청, Vercel 함수 종료 전 fallback) 계약은 더 이상 별도로 설계 중이 아니다 —
+[0045 조정된 질문 timeout 예산](../exec-plans/active/0045-coordinated-question-timeout-budget.md)이
+API 서버측 전체 예산 52초·Web attempt 55초·최초 시도 포함 최대 3회·UX 전체 170초 상한 계약으로
+이미 전달했다(계약 요약은 [RELIABILITY.md](../RELIABILITY.md) "조정된 질문 timeout 예산 (0045)"
+참고). 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,
 결정적 테스트, 원문 링크 UI)까지만 구현·검증**하고, "실제 비교를 무엇으로·몇 번·어떤 승인으로
 실행할지"는 [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md)에 후속 항목으로
-남긴다 — 호출 제한 설계가 끝난 뒤 별도로 착수한다.
+남긴다 — 0045가 전달한 timeout 계약 위에서, 호출 제한 설계가 끝난 뒤 별도로 착수한다.
 
 ## 비범위 (재확인)
 

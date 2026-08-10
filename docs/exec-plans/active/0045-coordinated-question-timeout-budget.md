@@ -619,3 +619,13 @@ git commit -m "docs: complete coordinated timeout rollout"
 - 2026-08-09: Recommended balance is API 52 seconds, Web 55 seconds, Vercel 60 seconds, three total Web attempts, 170-second overall cap.
 - 2026-08-09: Queue/background execution is excluded because current observed latency fits the simpler serverless request model and added infrastructure is not approved.
 - 2026-08-09: `generation_error` is retryable and retained; `grounding_failed` and `no_evidence` are correctness outcomes and are not retried.
+- 2026-08-09: Final whole-branch review found `embedding_timeout_seconds` (Task 1's literal field name) collides with 5 unrelated batch/offline embedding scripts that need the original 30s HTTP timeout, not the new 5s per-question budget value. Resolved (human-approved deviation from the plan's literal Task 1 field name) by splitting into `question_embedding_timeout_seconds` (5s, live request-budget path only) and restoring `embedding_timeout_seconds` (30s, batch/offline scripts + `_embedder()` factory's own client timeout). The non-secret Vercel timeout variable count is therefore seven, not six.
+
+## Task 5 evidence — local verification (2026-08-09)
+
+- Tasks 1-4 implemented via superpowers:subagent-driven-development: each task had an independent implementer + task-level reviewer (spec ✅ + quality Approved on all four; Task 4 required one fix round for a missing regression test, re-review confirmed addressed).
+- Final whole-branch review (commit range 564a04e..7fec52c) found 0 Critical, 3 Important, 8 Minor findings. All 3 Important findings fixed in one fix wave (commit 2921354), scoped re-review confirmed all addressed with no new breakage. The 8 Minor findings were triaged by the reviewer as safe to defer (not blocking merge); see `.superpowers/sdd/0045-coordinated-question-timeout-budget/` review artifacts for full text.
+- `scripts/verify.ps1` (Python unit tests for `packages/law-rag-core`, `apps/api`, `apps/collector`; ruff for all three; `scripts/check_docs.py`; web lint/typecheck/test/build) exits 0 at HEAD (5a3eb2c).
+- `git diff --check`: no whitespace errors. `git status --short --branch`: clean, only plan-scoped commits since branch point.
+- Stale-value grep (`59_000|ANSWER_TIMEOUT_SECONDS=45|ROUTE_CLASSIFIER_TIMEOUT_SECONDS=20|EMBEDDING_TIMEOUT_SECONDS=30`) has one expected match: `apps/api/.env.example:33 EMBEDDING_TIMEOUT_SECONDS=30`, which is the correct restored batch-script default from the embedding-timeout split above, not a superseded value.
+- Hosted verification (Task 5 Steps 4-6) not yet run — awaiting explicit user approval to align Vercel env vars, deploy, and run the D-10 hosted check.

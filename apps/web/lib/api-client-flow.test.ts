@@ -122,3 +122,31 @@ describe("structured API error details (0039)", () => {
     await expect(getCorpusStatus()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
   });
 });
+
+describe("typed HTTP status on ApiError (0045)", () => {
+  it("preserves a 503 retrieval-timeout status alongside its fixed message", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      detail: "법령 검색을 일시적으로 사용할 수 없습니다.",
+    }, { status: 503 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      message: "법령 검색을 일시적으로 사용할 수 없습니다.",
+    });
+  });
+
+  it("preserves a 429 quota status", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      detail: "오늘의 계정 사용 한도를 초과했습니다.",
+    }, { status: 429 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 429,
+      message: "오늘의 계정 사용 한도를 초과했습니다.",
+    });
+  });
+});

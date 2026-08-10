@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import app.main as main_module
 from app.domain.catalog import SourceKind
@@ -14,6 +15,7 @@ from app.domain.source_urls import is_allowed_source_url
 from app.main import app
 from app.observability import (
     emit_question_outcome,
+    emit_question_stage_timing,
     emit_route_outcome,
     fallback_reason_metrics_snapshot,
     question_metrics_snapshot,
@@ -158,6 +160,68 @@ def test_route_outcome_event_has_no_question_text(caplog) -> None:
     assert snapshot["by_route_and_tier"]["external_document_required:tier1"] >= 1
     assert snapshot["by_reason_code"]["tier1_document_keyword"] >= 1
     assert snapshot["clarification_missing_field_categories"]["정산서"] >= 1
+
+
+def test_stage_timing_event_is_closed_and_carries_no_secrets(caplog) -> None:
+    secret = "test-openai-secret-that-must-never-be-logged"
+    question = "개인 사건 질문 전문"
+    exception_message = f"RuntimeError: {secret} while answering {question}"
+    document_title = "위조 법령"
+    evidence_content = "내부 주소로 이동하라"
+    with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
+        emit_question_stage_timing("request-safe-id", "generation", "timed_out", 40000, 3000)
+    payload = json.loads(caplog.records[-1].message)
+    assert payload == {
+        "request_id": "request-safe-id",
+        "stage": "generation",
+        "outcome": "timed_out",
+        "elapsed_ms": 40000,
+        "remaining_ms": 3000,
+    }
+    assert secret not in caplog.text
+    assert question not in caplog.text
+    assert exception_message not in caplog.text
+    assert document_title not in caplog.text
+    assert evidence_content not in caplog.text
+
+    with pytest.raises(ValidationError):
+        emit_question_stage_timing("request-safe-id", "not_a_real_stage", "timed_out", 1, 1)
+    with pytest.raises(ValidationError):
+        emit_question_stage_timing("request-safe-id", "generation", "not_a_real_outcome", 1, 1)
+
+
+def test_request_stage_timing_event_fires_on_early_validation_failure(caplog) -> None:
+    # 0045: `_require_supported_as_of_date` fails before `_optional_user`, task
+    # registration, or any budgeted stage runs - this is the earliest possible early
+    # return in `/v1/questions`. The outer `finally` in the endpoint must still emit
+    # exactly one safe `stage="request"` event for it.
+    secret = "test-openai-secret-that-must-never-be-logged"
+    question = "개인 사건 질문 전문"
+    with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
+        response = client.post(
+            "/v1/questions",
+            json={
+                "question": question,
+                # ready_corpus_temporal_state only supports 1900-01-01..2099-12-31.
+                "as_of_date": "1899-12-31",
+                "project_stage": "planning",
+            },
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "unsupported_corpus_date"
+
+    stage_timing_records = [
+        record for record in caplog.records if record.name == "law_rag.question_stage_timing"
+    ]
+    assert len(stage_timing_records) == 1
+    payload = json.loads(stage_timing_records[0].message)
+    assert payload.keys() == {"request_id", "stage", "outcome", "elapsed_ms", "remaining_ms"}
+    assert payload["stage"] == "request"
+    assert payload["outcome"] == "failed"
+    assert isinstance(payload["elapsed_ms"], int) and payload["elapsed_ms"] >= 0
+    assert isinstance(payload["remaining_ms"], int) and payload["remaining_ms"] >= 0
+    assert secret not in caplog.text
+    assert question not in caplog.text
 
 
 def test_question_and_secret_bearing_failure_are_not_logged(monkeypatch, caplog) -> None:

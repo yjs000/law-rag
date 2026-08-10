@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from datetime import date
 from uuid import uuid4
 
@@ -139,6 +141,91 @@ async def test_active_generation_is_cancelled(monkeypatch) -> None:
     assert exc_info.value.status_code == 499
     assert cancelled.is_set()
     assert await main_module.question_tasks.active_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_cancelled_generation_stage_is_not_logged_as_succeeded(monkeypatch, caplog) -> None:
+    # 0045 final review Finding 2 regression test: the `*_outcome` variables used to
+    # default to "succeeded" before their `try` block, so a manual cancellation (which
+    # raises `asyncio.CancelledError` - a `BaseException` that neither `except
+    # StageTimeoutError` nor `except Exception` catches) fell straight through to the
+    # `finally` and logged the stage as "succeeded" even though it never completed. The
+    # fix defaults each `*_outcome` to "failed" and only flips it to "succeeded"
+    # immediately after `budget.run(...)` returns. This test cancels an in-flight
+    # generation stage and asserts the emitted stage-timing event for it is never
+    # "succeeded".
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+    hit = SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        path="제1조",
+        content="전기사업에 관한 근거",
+        source_url="https://www.law.go.kr",
+    )
+
+    async def search(*args, **kwargs):
+        return [hit], _trace(1)
+
+    async def last_sync():
+        return None
+
+    class Embedder:
+        async def embed(self, texts):
+            return [[0.0] * 512]
+
+    class Answerer:
+        def __init__(self, **kwargs):
+            pass
+
+        async def answer(self, payload, hits):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+    monkeypatch.setattr(main_module.repository, "search_with_trace", search)
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module, "_answerer", lambda: Answerer())
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
+    monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+    payload = QuestionRequest(client_request_id=uuid4(), question="전기사업 근거")
+    request = _request()
+
+    with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
+        running = asyncio.create_task(main_module.question(payload, request))
+        await entered.wait()
+        await main_module.cancel_question(payload.client_request_id, request)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await running
+        assert exc_info.value.status_code == 499
+    assert cancelled.is_set()
+
+    request_id = str(payload.client_request_id)
+    stage_events = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "law_rag.question_stage_timing"
+    ]
+    generation_events = [
+        event
+        for event in stage_events
+        if event["request_id"] == request_id and event["stage"] == "generation"
+    ]
+    assert len(generation_events) == 1
+    assert generation_events[0]["outcome"] == "failed"
+    assert not any(event["outcome"] == "succeeded" for event in generation_events)
 
 
 @pytest.mark.asyncio

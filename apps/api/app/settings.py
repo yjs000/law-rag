@@ -35,27 +35,24 @@ class Settings(BaseSettings):
     # 같은 모델을 재사용한다 - 더 작은 모델(nemotron-super-49b 등)이 이 카탈로그에서 실제로
     # 무료인지 아직 확인 전이라, 확인되지 않은 모델로 바꾸는 대신 검증된 모델을 그대로 쓴다.
     nvidia_route_classifier_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
-    route_classifier_timeout_seconds: float = Field(default=20, gt=0, le=60)
+    question_request_timeout_seconds: float = Field(default=52, gt=0, le=55)
+    response_reserve_seconds: float = Field(default=3, ge=1, le=10)
+    route_classifier_timeout_seconds: float = Field(default=8, gt=0, le=20)
+    question_embedding_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    retrieval_timeout_seconds: float = Field(default=8, gt=0, le=20)
+    answer_timeout_seconds: float = Field(default=40, gt=0, le=52)
+    # 배치/오프라인 스크립트가 32개 passage를 한 번에 임베딩할 때 쓰는 HTTP 타임아웃
+    # (원래 값). 질문 하나를 라이브 요청 예산 안에서 임베딩할 때는
+    # question_embedding_timeout_seconds(5초)를 대신 쓴다 - 두 용도가 다른 시간
+    # 예산이 필요해서 분리했다(Finding 1, 0045 최종 리뷰).
+    embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
     answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
-    # 2026-08-08 (0025 M5 항목 6 bounded smoke): 원래 기본값 30초는 근거 없이 골라둔
-    # 값이었는데, scripts/hosted_answer_smoke_test.py로 실제 D-10 질문을 돌려보니
-    # nemotron-3-ultra-550b-a55b 정상 생성 자체가 ~30초 걸려 APITimeoutError로 자주
-    # generation_error fallback이 났다(재현: gen_hits 5개·876자 근거로 30.1초).
-    # 2026-08-08 (production 503/timeout 재발 조사): 이 값을 60초까지 올렸던 게 문제였다
-    # - apps/api/vercel.json의 maxDuration도 60초라, 인증·쿼터·라우팅·임베딩까지 끝낸
-    # 뒤 생성 호출에 60초를 다 쓰면 Vercel 함수 자체가 재시도 한 번 못 해보고 강제
-    # 종료된다(실제로 12:03:37 요청이 이렇게 504로 죽었다). 45초로 낮춰 그 오버헤드분
-    # 여유를 남기고, 대신 answer_generation_max_attempts로 재시도를 준다 - 관찰된 503은
-    # 대부분 빠르게 실패해서 남은 예산 안에서 재시도가 실제로 들어간다(순수 타임아웃은
-    # 예산을 다 쓰므로 1회로 끝난다 - NvidiaNimAnswerer.answer의 deadline 로직 참고).
-    answer_timeout_seconds: float = Field(default=45, gt=0, le=120)
     answer_generation_max_attempts: int = Field(default=3, ge=1, le=5)
     nvidia_embedding_model: Literal["nvidia/nemotron-3-embed-1b"] = (
         "nvidia/nemotron-3-embed-1b"
     )
     embedding_dimensions: int = Field(default=512, ge=512, le=512)
-    embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     rate_limit_secret: str = Field(default="development-only-secret", min_length=16)
     authenticated_ai_daily_limit: int = Field(default=10, ge=1)
     authenticated_search_daily_limit: int = Field(default=100, ge=1)
@@ -85,6 +82,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_dependencies(self) -> Settings:
+        if self.response_reserve_seconds >= self.question_request_timeout_seconds:
+            raise ValueError("response reserve must be smaller than question request timeout")
+        if self.answer_timeout_seconds > (
+            self.question_request_timeout_seconds - self.response_reserve_seconds
+        ):
+            raise ValueError("answer timeout must fit before the response reserve")
         if self.environment != "production":
             return self
         missing = [

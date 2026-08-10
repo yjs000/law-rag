@@ -11,7 +11,6 @@
 - [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
 - [0043: 일반인 답변 계약 v2와 가독성 평가](../active/0043-layperson-answer-contract-v2.md) — active로 이동, 1~4번(프롬프트 v2·프로필·결정적 테스트·원문 링크 UI) 구현 완료, 5번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수
 - [0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 제안됨, 미착수 · 기존 `terra` 호환을 유지하며 provider/model을 설정으로 교체 가능한 계약으로 전환
-- [0045: Web/API 질문 timeout 예산 정렬](0045-coordinated-question-timeout-budget.md) — 제안됨, 미착수 · API 52초, Web 55초, Vercel 60초와 최대 3회 재요청을 하나의 검증 가능한 계약으로 정렬
 
 ## 등록 계약
 
