@@ -44,8 +44,9 @@ Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`
 명시한다. 둘 중 하나라도 생략하여 부모 세션의 모델이나 reasoning effort를 암묵적으로 상속하게 해서는
 안 된다.
 
-- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `high`
-- 일반 구현, 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-luna`, `high`
+- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `extra-high`
+- 일반 구현 : `gpt-5.6-luna`, `extra-high`
+- 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `medium`
 - 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-terra`, `high`
 - fix-loop escalation은 필요한 경우에만 한 단계 올리며, 최종 review가 아니라는 이유만으로
   `gpt-5.6-terra`를 선택하지 않는다.
