@@ -296,9 +296,17 @@ def validate_draft(draft: DraftAnswer, hits: list[SearchHit]) -> bool:
     반복적으로 오탐 거부했다(docs/design-docs/answer-grounding-validation.md 참고).
     내용 충분성(근거가 질문에 정말 관련 있고 충분한지)은 검색·재순위 단계의 책임으로
     옮기기로 했다 - 이 게이트는 그때까지 구조적 무결성(인용 참조가 유효한지)만 지킨다.
+
+    2026-08-10 (0046): 근거가 0건이어도 무조건 거부하지 않는다 - `unanswerable`
+    (sections·checklist 완전히 빈 경우만) 또는 `clarification_required`
+    (missing_information이 있는 경우만)는 통과시킨다. 그 외 action이거나
+    sections·checklist에 뭔가 채워져 있으면 여전히 거부한다 - "근거 없이 만든 법적
+    주장"은 계속 막는다.
     """
     if not hits:
-        return False
+        if draft.action == "clarification_required":
+            return bool(draft.missing_information)
+        return draft.action == "unanswerable" and not draft.sections and not draft.checklist
     if draft.action == "clarification_required":
         return bool(draft.missing_information)
     hit_ids = {f"C{index}" for index in range(1, len(hits) + 1)}

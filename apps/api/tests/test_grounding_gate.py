@@ -130,6 +130,57 @@ def test_empty_evidence_fails(hit: SearchHit) -> None:
     assert not validate_draft(_draft(), [])
 
 
+def test_unanswerable_with_empty_sections_passes_with_no_hits() -> None:
+    draft = DraftAnswer(
+        summary="제공된 근거가 전혀 없어 판단할 수 없습니다.",
+        scope="기준일 현재 제공된 원문 없음",
+        sections=[],
+        checklist=[],
+        action="unanswerable",
+    )
+    assert validate_draft(draft, [])
+
+
+def test_unanswerable_with_populated_sections_fails_with_no_hits() -> None:
+    draft = _draft().model_copy(update={"action": "unanswerable"})
+    assert not validate_draft(draft, [])
+
+
+def test_fully_answerable_fails_with_no_hits() -> None:
+    draft = DraftAnswer(
+        summary="요약",
+        scope="범위",
+        sections=[],
+        checklist=[],
+        action="fully_answerable",
+    )
+    assert not validate_draft(draft, [])
+
+
+def test_clarification_required_with_missing_information_passes_with_no_hits() -> None:
+    draft = DraftAnswer(
+        summary="사업장 조건에 따라 답이 달라집니다.",
+        scope="기준일 현재 제공된 원문 없음",
+        sections=[],
+        checklist=[],
+        action="clarification_required",
+        missing_information=["발전설비용량"],
+    )
+    assert validate_draft(draft, [])
+
+
+def test_clarification_required_without_missing_information_fails_with_no_hits() -> None:
+    draft = DraftAnswer(
+        summary="사업장 조건에 따라 답이 달라집니다.",
+        scope="기준일 현재 제공된 원문 없음",
+        sections=[],
+        checklist=[],
+        action="clarification_required",
+        missing_information=[],
+    )
+    assert not validate_draft(draft, [])
+
+
 def test_empty_sections_with_nonempty_checklist_fails(hit: SearchHit) -> None:
     draft = _draft().model_copy(update={"sections": []})
     assert not validate_draft(draft, [hit])
