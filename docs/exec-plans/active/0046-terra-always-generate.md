@@ -1170,7 +1170,7 @@ git commit -m "feat(api): generate LLM answers for pre-retrieval routing blocks"
 - Produces: 0045 시간 예산을 언급하지 않고 0046 Terra always-generate 분기를 보이는 정적
   파이프라인 지도, 활성 0046 계획 링크
 
-- [ ] **Step 1: 지도에서 교체할 0045·0046 관련 설명을 식별한다**
+- [x] **Step 1: 지도에서 교체할 0045·0046 관련 설명을 식별한다**
 
 Run: `rg -n -i "0045|timeout|time.?budget|search_only|blocked|zero.?hit|근거 0" docs/generated/law-rag-question-pipeline-map.html`
 
@@ -1178,7 +1178,7 @@ Expected: 시간 예산·재시도 수치가 든 0045 설명과, 근거 0건 또
 `search_only`로 끝난다는 이전 설명을 교체 대상으로 확인한다. 검색 2~4단계의 설명과
 평가 지표 설명은 새 설명으로 늘리지 않는다.
 
-- [ ] **Step 2: 0046 흐름으로 HTML을 갱신한다**
+- [x] **Step 2: 0046 흐름으로 HTML을 갱신한다**
 
 `docs/generated/law-rag-question-pipeline-map.html`의 기존 단계형 레이아웃과 근거 링크는
 유지하며 다음 문구·관계를 반영한다.
@@ -1196,7 +1196,7 @@ answer_mode=terra
 근거 링크는 `openai_answerer.py`, `nvidia_nim_answerer.py`, `main.py`,
 `test_routing_pipeline.py`의 always-generate 구현을 가리킨다.
 
-- [ ] **Step 3: 활성 계획 목록에 0046을 추가한다**
+- [x] **Step 3: 활성 계획 목록에 0046을 추가한다**
 
 `docs/exec-plans/active/README.md`의 기존 번호순 목록에서 0043 뒤에 다음 항목을 추가한다.
 
@@ -1204,7 +1204,7 @@ answer_mode=terra
 - [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md) — 근거 0건·사전 라우팅 차단 요청도 Terra 생성 경로로 응답하고, 실패 시 기존 안전 폴백 유지
 ```
 
-- [ ] **Step 4: 정적 검증을 실행한다**
+- [x] **Step 4: 정적 검증을 실행한다**
 
 Run:
 
@@ -1217,12 +1217,13 @@ git diff --check
 Expected: 첫 명령은 결과가 없고, 두 번째 명령은 새 활성 계획 링크 한 건을 반환하며,
 `git diff --check`는 출력 없이 성공한다.
 
-- [ ] **Step 5: 브라우저로 렌더링을 확인한다**
+- [x] **Step 5: 브라우저로 렌더링을 확인한다**
 
 로컬 HTML을 열어 단계 번호, 분기 레이블, 근거 링크와 폴백 문구가 잘리지 않고 읽히는지
-확인한다. 깨진 레이아웃이 있으면 같은 HTML 안에서만 고친 뒤 재확인한다.
+확인한다. 깨진 레이아웃이 있으면 같은 HTML 안에서만 고친 뒤 재확인한다. 2026-08-10에는
+자동 브라우저가 local `file:` URL을 열 수 없어 정적 검증 뒤 사용자가 직접 렌더링을 확인했다.
 
-- [ ] **Step 6: 커밋한다**
+- [x] **Step 6: 커밋한다**
 
 ```bash
 git add docs/generated/law-rag-question-pipeline-map.html docs/exec-plans/active/README.md docs/exec-plans/active/0046-terra-always-generate.md
