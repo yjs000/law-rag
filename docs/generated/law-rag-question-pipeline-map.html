@@ -275,7 +275,7 @@
   </div>
 
   <figure class="diagram-wrap" role="group" aria-label="파이프라인 흐름도">
-    <svg class="flow" viewBox="0 0 960 2020" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="질문 요청이 계정 quota 토글 확인과 사전 라우팅을 거쳐, 법령 검색 경로 또는 0046의 검색 없는 차단 경로에서 NVIDIA 생성과 구조 검증을 거쳐 응답으로 조립되는 흐름.">
+    <svg class="flow" viewBox="0 0 960 1820" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="질문 요청이 계정 quota 토글 확인과 사전 라우팅을 거쳐, 조문경로 직접 조회 또는 벡터 검색과 0046의 검색 없는 차단 경로에서 NVIDIA 생성과 구조 검증을 거쳐 응답으로 조립되는 흐름.">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
@@ -330,11 +330,11 @@
         <a class="svg-source-link" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/nvidia_nim_embedder.py#L47" target="_blank" rel="noreferrer" aria-label="GitHub 원문: nvidia_nim_embedder.py:47"><text x="480" y="424" text-anchor="middle" fill="var(--muted)">nvidia_nim_embedder.py:47</text></a>
         <line x1="480" y1="438" x2="480" y2="466" stroke="currentColor" marker-end="url(#arrow)"></line>
 
-        <!-- SEARCH CLUSTER: 5 sub-stages, each returns immediately on match -->
-        <text x="480" y="460" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12.5" fill="var(--accent)">검색 — 5단계, 매칭되면 그 자리에서 즉시 반환</text>
-        <line x1="308" y1="470" x2="308" y2="792" stroke="var(--accent)" stroke-width="1.4"></line>
+        <!-- SEARCH CLUSTER: direct path and dense retrieval -->
+        <text x="480" y="460" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12.5" fill="var(--accent)">검색 — 2단계, 매칭되면 그 자리에서 즉시 반환</text>
+        <line x1="308" y1="470" x2="308" y2="580" stroke="var(--accent)" stroke-width="1.4"></line>
         <line x1="308" y1="470" x2="322" y2="470" stroke="var(--accent)" stroke-width="1.4"></line>
-        <line x1="308" y1="792" x2="322" y2="792" stroke="var(--accent)" stroke-width="1.4"></line>
+        <line x1="308" y1="580" x2="322" y2="580" stroke="var(--accent)" stroke-width="1.4"></line>
 
         <rect x="330" y="470" width="300" height="52" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
         <text x="480" y="489" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12">0. 조문경로 직접 조회</text>
@@ -345,32 +345,14 @@
         <rect x="330" y="536" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
         <text x="480" y="554" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12">1. 벡터(밀집) 검색</text>
         <text x="480" y="570" text-anchor="middle" fill="var(--muted)" font-size="10.5">임베딩 있을 때만 · 후보 있으면 즉시 반환</text>
-        <line x1="480" y1="580" x2="480" y2="594" stroke="currentColor" marker-end="url(#arrow)"></line>
-
-        <rect x="330" y="594" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
-        <text x="480" y="612" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12">2. 키워드 · 전체어 일치</text>
-        <text x="480" y="628" text-anchor="middle" fill="var(--muted)" font-size="10.5">질문어 전부 매칭된 행만</text>
-        <line x1="480" y1="638" x2="480" y2="652" stroke="currentColor" marker-end="url(#arrow)"></line>
-
-        <rect x="330" y="652" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
-        <text x="480" y="670" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12">3. 키워드 · 최소 2어 일치</text>
-        <text x="480" y="686" text-anchor="middle" fill="var(--muted)" font-size="10.5">완화된 후보 풀 — 다음 단계가 이 안에서 거른다</text>
-        <line x1="480" y1="696" x2="480" y2="710" stroke="currentColor" marker-end="url(#arrow)"></line>
-
-        <rect x="330" y="710" width="300" height="44" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"></rect>
-        <text x="480" y="728" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12">4. 앵커어 필수 검색</text>
-        <text x="480" y="744" text-anchor="middle" fill="var(--muted)" font-size="10.5">2어 후보 중 핵심어 포함분만 · 없으면 재조회</text>
-
-        <text x="480" y="768" text-anchor="middle" fill="var(--good)" font-size="10">단계 0~4 전부 자체 SQL의 WHERE절에서</text>
-        <text x="480" y="780" text-anchor="middle" fill="var(--good)" font-size="10">기준일 유효 버전만 이미 걸러서 조회함</text>
-        <a class="svg-source-link" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L220" target="_blank" rel="noreferrer" aria-label="GitHub 원문: search_with_trace · postgres_repository.py:220"><text x="480" y="795" text-anchor="middle" fill="var(--muted)" font-size="10">search_with_trace · postgres_repository.py:220</text></a>
-
         <!-- ghost: rerank -->
         <rect x="700" y="546" width="230" height="52" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.4" stroke-dasharray="5 4"></rect>
         <text x="815" y="566" text-anchor="middle" font-family="ui-sans-serif, sans-serif" font-weight="600" font-size="12" fill="var(--warn)">재순위 — 미연결</text>
         <a class="svg-source-link" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/scripts/experiment_d_local_rerank.py#L158" target="_blank" rel="noreferrer" aria-label="GitHub 원문: experiment_d_local_rerank.py:158"><text x="815" y="582" text-anchor="middle" fill="var(--warn)" font-size="10.5">experiment_d_local_rerank.py:158</text></a>
         <line x1="630" y1="572" x2="695" y2="572" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow)"></line>
 
+        <line x1="480" y1="580" x2="480" y2="598" stroke="currentColor"></line>
+        <g transform="translate(0 -200)">
         <line x1="480" y1="798" x2="480" y2="826" stroke="currentColor" marker-end="url(#arrow)"></line>
 
         <!-- 7 filter -->
@@ -454,8 +436,10 @@
         <line x1="815" y1="1268" x2="815" y2="1523" stroke="currentColor"></line>
         <line x1="815" y1="1523" x2="635" y2="1523" stroke="currentColor" marker-end="url(#arrow)"></line>
 
+        </g>
+
         <!-- legend -->
-        <g transform="translate(30,1590)">
+        <g transform="translate(30,1390)">
           <line x1="0" y1="0" x2="30" y2="0" stroke="currentColor" stroke-width="1.4"></line>
           <text x="38" y="4" font-size="11" fill="var(--muted)">실제 서비스 경로</text>
           <line x1="200" y1="0" x2="230" y2="0" stroke="var(--warn)" stroke-width="1.4" stroke-dasharray="5 4"></line>
@@ -472,29 +456,6 @@
   <p class="section-note">"지금 무엇이 일어나는가"는 아래 단계별 상세에 있다. 여기는 "왜 지금 이 모양인가"만 시간순으로 모았다 — 사소한 파라미터 조정은 빼고, 현재 동작을 바꾼 결정만 남겼다.</p>
 
   <div class="stage-list">
-    <div class="stage" id="decision-2026-07-18">
-      <div class="num">2026-07-18</div>
-      <div>
-        <h3>키워드 검색에 최소 2어 + 앵커어 완화 도입</h3>
-        <p class="desc">전체어 일치가 0건이어도 표현 차이만으로 관련 조문을 놓치지 않게 하면서, 무관 결과가 쏟아지는 것도 막아야 했다. 그래서 최소 2어 일치로 후보 폭을 넓히되 앵커어(법령명·에너지 도메인 핵심어) 포함을 반드시 요구했다. 그 전에 쓰던 "질문어 중 아무거나 하나"(전체 <code style="font-family:var(--font-mono)">OR</code>) 완화는 노이즈가 너무 커서 폐기했다.</p>
-        <div class="refs">
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/design-docs/rag-pipeline.md#L97-L103" target="_blank" rel="noreferrer" title="GitHub 원문 열기">rag-pipeline.md:97-103 결정 기록</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/completed/0007-production-retrieval-observability.md#L20" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0007 완료 조건: 최소 2어+앵커</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="stage" id="decision-2026-08-03">
-      <div class="num">2026-08-03</div>
-      <div>
-        <h3>임베딩 검색을 dense-only로 고정, 키워드는 독립 fallback으로 강등</h3>
-        <p class="desc">임베딩이 있을 때 벡터 결과와 키워드 결과를 자동 결합하던 hybrid/RRF 경로를 제거했다. 이제 벡터 검색을 dense-only로 한 번 실행하고, 그 결과가 0건일 때만 키워드 3단 체인이 독립적으로 도는 안전 폴백이 된다. 두 순위는 어떤 경우에도 결합하지 않는다.</p>
-        <div class="refs">
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/completed/0021-align-production-with-evidence-first-design.md" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0021: dense-only 운영 계약</a>
-        </div>
-      </div>
-    </div>
-
     <div class="stage" id="decision-2026-08-07">
       <div class="num">2026-08-07</div>
       <div>
@@ -558,7 +519,7 @@
   </div>
 
   <h2>단계별 상세</h2>
-  <p class="section-note">위 도표의 각 상자를 실제 함수·파일로 펼친 목록. 파일명은 <code style="font-family:var(--font-mono)">apps/api/</code> 기준 상대 경로. "왜 이렇게 됐는지"는 각 단계에서 위 <a class="inline-source-link" href="#decision-2026-07-18">결정 기록</a>으로 되짚어간다.</p>
+  <p class="section-note">위 도표의 각 상자를 실제 함수·파일로 펼친 목록. 파일명은 <code style="font-family:var(--font-mono)">apps/api/</code> 기준 상대 경로이며, 각 항목의 출처 링크에서 현재 구현을 확인할 수 있다.</p>
 
   <div class="stage-list">
     <div class="stage">
@@ -595,21 +556,16 @@
     <div class="stage">
       <div class="num">02</div>
       <div>
-        <h3>검색 — 5단계, 매칭되면 즉시 반환</h3>
+        <h3>검색 — 2단계, 매칭되면 즉시 반환</h3>
         <p class="desc">각 단계는 자체 SQL의 WHERE절에서 기준일 유효 버전만 이미 걸러서 조회한다(효력 시작일 이전·종료일 이후 버전은 애초에 후보에 안 들어옴) — 전체 코퍼스를 긁은 뒤 나중에 자르는 게 아니다.</p>
-        <p class="desc"><b>0. 조문경로 직접 조회</b> — 질문 텍스트에 "제N조" 류 패턴이 있을 때만(법령명 없어도 트리거됨). 한번 이 분기를 타면 조회 결과가 비어도 <b>절대 아래 1~4단계로 안 내려간다</b> — 그 질문은 그대로 근거 0건으로 끝난다.</p>
+        <p class="desc"><b>0. 조문경로 직접 조회</b> — 질문 텍스트에 "제N조" 류 패턴이 있을 때만(법령명 없어도 트리거됨). 한번 이 분기를 타면 조회 결과가 비어도 <b>벡터 검색으로 내려가지 않는다</b> — 그 질문은 그대로 근거 0건으로 끝난다.</p>
         <p class="desc"><b>1. 벡터(밀집) 검색</b> — 임베딩이 있을 때만 시도, 후보가 하나라도 있으면 즉시 반환.</p>
-        <p class="desc"><b>2~4. 키워드 검색, 3단 완화</b> — 전체어 일치(질문어 전부 매칭) → 실패 시 최소 2어 일치로 후보 풀을 넓힘 → 그 풀 안에서 앵커어(법령명·에너지 도메인 핵심어) 포함분만 최종 채택, 없으면 앵커 쿼리를 새로 실행. 각 단계는 이전 단계가 빈손일 때만 실행되고, 벡터(dense) 결과가 이미 있으면 이 체인 전체를 건너뛴다. 도입 배경·dense-only 제한 배경은 <a class="inline-source-link" href="#decision-2026-07-18">결정 기록(2026-07-18, 2026-08-03)</a> 참고.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L220" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/adapters/postgres_repository.py:220 search_with_trace</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L237" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:237 parse_provision_references</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L284-L314" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:284-314 직접조회 분기(실패해도 반환)</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L319-L350" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:319-350 벡터</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L362-L495" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:362-495 키워드 3단</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L1079" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:1079 _unique_article_rows(조문당 1행)</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/design-docs/rag-pipeline.md#L32-L37" target="_blank" rel="noreferrer" title="GitHub 원문 열기">rag-pipeline.md:32-37 검색 계약</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/design-docs/rag-pipeline.md#L97-L103" target="_blank" rel="noreferrer" title="GitHub 원문 열기">rag-pipeline.md:97-103 결정 기록</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/completed/0007-production-retrieval-observability.md#L20" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0007 완료 조건: 최소 2어+앵커</a>
         </div>
       </div>
     </div>
