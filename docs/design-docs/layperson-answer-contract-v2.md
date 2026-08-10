@@ -102,7 +102,8 @@ API 서버측 전체 예산 52초·Web attempt 55초·최초 시도 포함 최�
 참고). 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,
 결정적 테스트, 원문 링크 UI)까지만 구현·검증**하고, "실제 비교를 무엇으로·몇 번·어떤 승인으로
 실행할지"는 [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md)에 후속 항목으로
-남긴다 — 0045가 전달한 timeout 계약 위에서, 호출 제한 설계가 끝난 뒤 별도로 착수한다.
+남긴다 — 0045가 전달한 timeout 계약 위에서, 호출 제한 설계가 끝난 뒤 별도로 착수한다. 실행 결과는
+아래 "결정 기록" 2026-08-10 항목에 기록한다.
 
 ## 비범위 (재확인)
 
@@ -127,9 +128,10 @@ API 서버측 전체 예산 52초·Web attempt 55초·최초 시도 포함 최�
 - 결정적 테스트(3번)가 v2 프롬프트에서 통과하고, 기존 v1 대상 테스트가 회귀 없이 통과한다.
 - 원문 링크가 근거 카드에서 렌더링되고 `source_url`로 정상 이동하는지 프론트 테스트 또는 수동
   확인으로 검증한다.
-- 재검토 시점: 5번(실제 비교) 설계가 확정되어 착수할 때 이 문서의 "결과"를 실제 비교 결과로 갱신한다.
+- 재검토 완료(2026-08-10): 5번(실제 비교)을 실행했다. 결과는 위 "결정 기록" 참고.
 
 ## 결정 기록
 
 - 2026-08-09: `NvidiaNimAnswerer`에 `message_builder` 주입 파라미터(기본값 `build_messages`)를 추가해 v1 동작을 바꾸지 않으면서 v2를 나중에 배선할 수 있게 했다.
 - 2026-08-09: 근거 카드를 `apps/web/app/citation-card.tsx`로 분리해 `renderToStaticMarkup` 기반 단위 테스트(기존 `safe-text.test.tsx` 패턴)로 원문 링크 위치를 검증할 수 있게 했다.
+- 2026-08-10: 범위 4번(실제 hosted v1/v2 비교)을 [0045](../exec-plans/completed/0045-coordinated-question-timeout-budget.md) hosted 검증 통과 후 실행했다. `apps/api/scripts/run_experiment_0043_v1_v2_compare.py`로 D-10 문항 3개(`lay-energy-0201`, `lay-energy-0251`, `lay-energy-0521`) 중 실제 생성까지 간 2개(`0251`은 라우팅에서 `clarification_required`로 빠져 생성 미실행)에 대해 같은 검색 결과(hits) 위에서 v1·v2 답변을 각각 실제 NVIDIA 호출로 생성해 비교했다. 결과: `action` 판정은 두 문항 모두 v1=v2로 동일(근거 없는 주장을 추가하지 않음), 문체는 v2가 뚜렷이 개선됨 — summary가 조문 번호 나열형에서 서술형 안내문으로, checklist 항목이 "-하기" 행동형으로 통일되고 중복이 줄었으며(`lay-energy-0521`에서 v1 7개 → v2 4개), `lay-energy-0521`에서는 v2만 질문자가 밝힌 상황("발전량은 기록되나 REC가 미발급")을 요약 첫 문장에서 직접 짚었다. 원자료는 `apps/api/evaluation/experiment-0043-v1-v2-compare-results.json`에 보존한다. v2를 production 기본 경로로 전환하는 배선(`main.py`의 `_answerer()` 변경)은 이 결정과 별도로 사용자 승인이 필요한 후속 항목으로 남긴다.
