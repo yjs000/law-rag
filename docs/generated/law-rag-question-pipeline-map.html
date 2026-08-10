@@ -466,16 +466,105 @@
     <figcaption>main.py:232 <code style="font-family:var(--font-mono)">_answer_question</code>이 호출하는 순서 그대로. 점선 상자는 오프라인에서 평가했지만 라이브에는 채택하지 않은 코드다.</figcaption>
   </figure>
 
-  <h2 class="first">단계별 상세</h2>
-  <p class="section-note">위 도표의 각 상자를 실제 함수·파일로 펼친 목록. 파일명은 <code style="font-family:var(--font-mono)">apps/api/</code> 기준 상대 경로.</p>
+  <h2 class="first">결정 기록</h2>
+  <p class="section-note">"지금 무엇이 일어나는가"는 아래 단계별 상세에 있다. 여기는 "왜 지금 이 모양인가"만 시간순으로 모았다 — 사소한 파라미터 조정은 빼고, 현재 동작을 바꾼 결정만 남겼다.</p>
+
+  <div class="stage-list">
+    <div class="stage" id="decision-2026-07-18">
+      <div class="num">2026-07-18</div>
+      <div>
+        <h3>키워드 검색에 최소 2어 + 앵커어 완화 도입</h3>
+        <p class="desc">전체어 일치가 0건이어도 표현 차이만으로 관련 조문을 놓치지 않게 하면서, 무관 결과가 쏟아지는 것도 막아야 했다. 그래서 최소 2어 일치로 후보 폭을 넓히되 앵커어(법령명·에너지 도메인 핵심어) 포함을 반드시 요구했다. 그 전에 쓰던 "질문어 중 아무거나 하나"(전체 <code style="font-family:var(--font-mono)">OR</code>) 완화는 노이즈가 너무 커서 폐기했다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/design-docs/rag-pipeline.md#L97-L103" target="_blank" rel="noreferrer" title="GitHub 원문 열기">rag-pipeline.md:97-103 결정 기록</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/completed/0007-production-retrieval-observability.md#L20" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0007 완료 조건: 최소 2어+앵커</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-03">
+      <div class="num">2026-08-03</div>
+      <div>
+        <h3>임베딩 검색을 dense-only로 고정, 키워드는 독립 fallback으로 강등</h3>
+        <p class="desc">임베딩이 있을 때 벡터 결과와 키워드 결과를 자동 결합하던 hybrid/RRF 경로를 제거했다. 이제 벡터 검색을 dense-only로 한 번 실행하고, 그 결과가 0건일 때만 키워드 3단 체인이 독립적으로 도는 안전 폴백이 된다. 두 순위는 어떤 경우에도 결합하지 않는다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/completed/0021-align-production-with-evidence-first-design.md" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0021: dense-only 운영 계약</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-07">
+      <div class="num">2026-08-07</div>
+      <div>
+        <h3>문맥보강(부모 조문 확장)을 실측 후 미채택</h3>
+        <p class="desc">조립 A(조문별 최고 leaf 1개)와 계층 복원 B(부모·형제 포함)를 raw/R1 순위와 교차한 10개 조합을 전부 계산했다. B의 4개 변형(3·5조문 × 30,000·60,000자) 모두 A보다 적중을 늘리지 못했고 토큰만 2~3배 더 썼다. 승자는 <b>R1 재순위 + 조립 A, 최대 5조문·60,000자</b>로 확정했다. 라이브에 부모 확장이 없는 것은 반영 누락이 아니라 이 비교 결과에 따른 의도적 미채택이다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/active/0025-approved-questions-to-grounded-answer-roadmap.md#L375-L399" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0025 M4: A/B 정의·10개 조합 결과</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/active/0025-approved-questions-to-grounded-answer-roadmap.md#L409-L423" target="_blank" rel="noreferrer" title="GitHub 원문 열기">search-context-contract-v1 동결값</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-08-quota">
+      <div class="num">2026-08-08</div>
+      <div>
+        <h3>계정 quota 로직은 삭제 대신 토글로 보존</h3>
+        <p class="desc">로그인 계정의 일일 한도(AI 10회·검색 100회) 로직을 삭제하지 않고, 서버 환경변수 <code style="font-family:var(--font-mono)">ACCOUNT_QUOTA_ENABLED</code>로 켜고 끌 수 있게 남겼다. 지금 기본값은 <code style="font-family:var(--font-mono)">false</code>다 — 코드 변경 없이 값만 바꾸면 원래 제한이 다시 걸린다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/docs/exec-plans/completed/0037-account-quota-toggle-off.md" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0037 결정: 삭제하지 않고 현재 OFF</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-08-structural">
+      <div class="num">2026-08-08</div>
+      <div>
+        <h3>구조 검증에서 의미 중복 판단 제거</h3>
+        <p class="desc">인용 ID가 실제 제공된 근거를 가리키는지, action별 필수 필드가 채워졌는지만 확인하도록 좁혔다. 문장 내용이 근거와 의미적으로 겹치는지는 더 이상 이 검증기가 판단하지 않는다 — 관련 근거를 고르는 책임은 검색·재순위 쪽에 있다는 판단이다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/adapters/openai_answerer.py#L210-L228" target="_blank" rel="noreferrer" title="GitHub 원문 열기">validate_draft 구조 검사</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-09-nvidia">
+      <div class="num">2026-08-09</div>
+      <div>
+        <h3>답변 생성 provider를 NVIDIA NIM 하나로 단일화</h3>
+        <p class="desc">OpenAI 설정, <code style="font-family:var(--font-mono)">OpenAIAnswerer</code> 실행 코드, <code style="font-family:var(--font-mono)">_answerer()</code>의 provider 분기를 제거했다. 이름이 남은 <code style="font-family:var(--font-mono)">openai_answerer.py</code>에는 두 provider가 공유하던 schema·prompt·검증기만 남아 있고 OpenAI API 호출 코드는 없다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/main.py#L753-L763" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/main.py:753-763 NVIDIA 단일 _answerer</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/adapters/openai_answerer.py#L62-L66" target="_blank" rel="noreferrer" title="GitHub 원문 열기">openai_answerer.py:62-66 비활성화 주석</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="decision-2026-08-09-timeout">
+      <div class="num">2026-08-09</div>
+      <div>
+        <h3>API·Web 요청 timeout 예산 재조정 (0045)</h3>
+        <p class="desc">실측상 Nemotron 정상 생성 자체가 약 29.2~36.0초 걸려 기존 30초 timeout을 자주 넘겼다. timeout을 60초로 올리자 Vercel 함수 상한(<code style="font-family:var(--font-mono)">maxDuration=60</code>)과 같아져, 인증·라우팅·임베딩 뒤 생성에 쓸 여유가 전혀 없었고 실제 요청이 504로 강제 종료됐다.</p>
+        <p class="desc">그래서 API 서버측 전체 예산을 Vercel 60초보다 8초 먼저 끝나는 <b>52초</b>로 고정했다. 그 안에서 라우팅 8초·임베딩 5초·검색 8초를 나눠 쓰고, 생성에 <b>40초</b> slice를 배정하고, 응답 마무리에 3초를 남긴다. provider 재시도(최대 3회)는 이 40초 slice 안에 갇힌다 — 별도 예산을 받지 않는다. Web은 서버 요청이 <b>55초</b> 붙잡히면 새 <code style="font-family:var(--font-mono)">client_request_id</code>로 재요청하고, 최초 시도를 포함해 <b>최대 3회</b>, 전체 UX 상한은 <b>170초</b>다.</p>
+        <p class="desc">이 질문 예산 안의 임베딩 5초 timeout은 별도 필드(<code style="font-family:var(--font-mono)">question_embedding_timeout_seconds</code>)로 분리했다 — 32개 passage를 한 번에 임베딩하는 배치·오프라인 스크립트는 여전히 원래 값(<code style="font-family:var(--font-mono)">embedding_timeout_seconds</code>, 30초)을 쓴다. 최초 리뷰에서 두 용도가 같은 설정을 공유해 배치 timeout이 조용히 6배 짧아지는 위험이 발견돼 분리했다.</p>
+        <div class="refs">
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/078a43a/apps/api/app/application/request_budget.py" target="_blank" rel="noreferrer" title="GitHub 원문 열기">request_budget.py RequestBudget</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/078a43a/apps/api/app/settings.py#L38-L48" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/settings.py:38-48 예산·timeout 7개 값</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/078a43a/apps/web/lib/generation-retry.ts" target="_blank" rel="noreferrer" title="GitHub 원문 열기">generation-retry.ts 55초·3회·170초</a>
+          <a class="ref" href="../exec-plans/active/0045-coordinated-question-timeout-budget.md" title="저장소 내 문서 열기">0045 실행 계획</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>단계별 상세</h2>
+  <p class="section-note">위 도표의 각 상자를 실제 함수·파일로 펼친 목록. 파일명은 <code style="font-family:var(--font-mono)">apps/api/</code> 기준 상대 경로. "왜 이렇게 됐는지"는 각 단계에서 위 <a class="inline-source-link" href="#decision-2026-07-18">결정 기록</a>으로 되짚어간다.</p>
 
   <div class="stage-list">
     <div class="stage">
       <div class="num">00</div>
       <div>
         <h3>로그인 계정 quota 토글 — 현재 OFF</h3>
-        <p class="desc"><code style="font-family:var(--font-mono)">_check_quota()</code>와 기존 일일 한도 로직은 <b>삭제하지 않고 보존</b>한다. 서버 설정 <code style="font-family:var(--font-mono)">ACCOUNT_QUOTA_ENABLED</code>의 기본값이 <code style="font-family:var(--font-mono)">false</code>라 현재는 로그인 사용자도 <code style="font-family:var(--font-mono)">consume_quota</code>를 호출하지 않고 바로 통과한다. 익명 사용자는 사용자 계정이 없으므로 이 계정 quota의 적용 대상이 아니다.</p>
-        <p class="desc">나중에 환경 변수를 <code style="font-family:var(--font-mono)">true</code>로 켜면 코드 변경 없이 기존 AI 10회/일·검색 100회/일 제한이 다시 동작하고, 초과 시 429를 반환한다. 관리자 UI 토글이 아니라 서버 환경 변수 토글이다. NVIDIA가 외부 호출 결과로 반환하는 402/429는 이 계정 일일 한도와 별개의 provider 결제·quota 오류이며 검색 전용 폴백으로 처리한다.</p>
+        <p class="desc"><code style="font-family:var(--font-mono)">ACCOUNT_QUOTA_ENABLED</code>가 기본 <code style="font-family:var(--font-mono)">false</code>라 로그인 사용자도 <code style="font-family:var(--font-mono)">consume_quota</code>를 호출하지 않고 바로 통과한다. 관리자 UI 토글이 아니라 서버 환경 변수 토글이며, 켜면 코드 변경 없이 AI 10회/일·검색 100회/일 제한이 다시 동작한다(초과 시 429). 익명 사용자는 계정이 없으므로 대상이 아니다. NVIDIA가 반환하는 402/429는 이 계정 한도와 무관한 provider 결제·quota 오류이며 검색 전용 폴백으로 처리한다. 로직을 지운 게 아니라 토글로 남긴 이유는 <a class="inline-source-link" href="#decision-2026-08-08-quota">결정 기록(2026-08-08)</a> 참고.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/app/settings.py#L60-L64" target="_blank" rel="noreferrer" title="GitHub 원문 열기">settings.py:60-64 한도·토글 기본값</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/a4effe7fa54d003ae0ab4b63410f3de0d0f514de/apps/api/app/main.py#L740-L749" target="_blank" rel="noreferrer" title="GitHub 원문 열기">main.py:740-749 _check_quota</a>
@@ -507,8 +596,7 @@
         <p class="desc">각 단계는 자체 SQL의 WHERE절에서 기준일 유효 버전만 이미 걸러서 조회한다(효력 시작일 이전·종료일 이후 버전은 애초에 후보에 안 들어옴) — 전체 코퍼스를 긁은 뒤 나중에 자르는 게 아니다.</p>
         <p class="desc"><b>0. 조문경로 직접 조회</b> — 질문 텍스트에 "제N조" 류 패턴이 있을 때만(법령명 없어도 트리거됨). 한번 이 분기를 타면 조회 결과가 비어도 <b>절대 아래 1~4단계로 안 내려간다</b> — 그 질문은 그대로 근거 0건으로 끝난다.</p>
         <p class="desc"><b>1. 벡터(밀집) 검색</b> — 임베딩이 있을 때만 시도, 후보가 하나라도 있으면 즉시 반환.</p>
-        <p class="desc"><b>2~4. 키워드 검색, 3단 완화</b> — 전체어 일치(질문어 전부 매칭) → 실패 시 최소 2어 일치로 후보 풀을 넓힘 → 그 풀 안에서 앵커어(법령명·에너지 도메인 핵심어) 포함분만 최종 채택, 없으면 앵커 쿼리를 새로 실행. 각 단계는 이전 단계가 빈손일 때만 실행된다.</p>
-        <p class="desc"><b>왜 들어갔나</b>: 2026-07-18 관측 가능한 검색 작업에서 “전체어 일치가 0건이어도 표현 차이 때문에 관련 조문을 놓치지 말 것”과 “단일어 전체 OR로 무관 결과를 쏟지 말 것”을 동시에 만족시키려고 도입했다. 실제 결정 기록은 전체 <code style="font-family:var(--font-mono)">OR</code> 완화가 노이즈를 크게 만들어 제거됐다고 명시한다. 그래서 최소 2어로 recall을 회복하되, 앵커를 반드시 요구해 precision 붕괴를 막고, 끝까지 근거가 없으면 부족 상태로 끝낸다. 이후 2026-08-03 dense-only 운영 계약에서는 이 키워드 체인을 <b>dense 결과가 0건일 때만</b> 쓰는 독립 fallback으로 제한했다.</p>
+        <p class="desc"><b>2~4. 키워드 검색, 3단 완화</b> — 전체어 일치(질문어 전부 매칭) → 실패 시 최소 2어 일치로 후보 풀을 넓힘 → 그 풀 안에서 앵커어(법령명·에너지 도메인 핵심어) 포함분만 최종 채택, 없으면 앵커 쿼리를 새로 실행. 각 단계는 이전 단계가 빈손일 때만 실행되고, 벡터(dense) 결과가 이미 있으면 이 체인 전체를 건너뛴다. 도입 배경·dense-only 제한 배경은 <a class="inline-source-link" href="#decision-2026-07-18">결정 기록(2026-07-18, 2026-08-03)</a> 참고.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L220" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/adapters/postgres_repository.py:220 search_with_trace</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/adapters/postgres_repository.py#L237" target="_blank" rel="noreferrer" title="GitHub 원문 열기">:237 parse_provision_references</a>
@@ -554,7 +642,7 @@
         <p class="desc">이 시점에 근거가 있든 없든, AI를 쓰든 안 쓰든 <b>항상</b> "검색 결과만으로 된 응답"을 하나 미리 만들어 둔다. 근거가 있으면 각 hit을 사건·체크리스트로 그대로 나열하고, 근거가 0건이면 <code style="font-family:var(--font-mono)">parse_provision_references</code>로 왜 없는지(조문 범위가 내림차순이다, 범위가 20개 조 넘는다, 법령명을 못 알아봤다 등) 구체적인 사유 문구까지 골라 넣는다. 이렇게 미리 만들어 둔 객체가 이후 AI 경로가 실패하는 모든 지점(생성 자체 실패, 구조 검증 실패)에서 <b>그대로 재사용</b>된다 — 실패 시점마다 새로 조립하지 않는다.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/application/answering.py#L16" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/application/answering.py:16 search_only_answer</a>
-          <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/app/main.py#L370" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/main.py:370 fallback 변수로 미리 생성</a>
+          <a class="ref" href="https://github.com/yjs000/law-rag/blob/078a43a/apps/api/app/main.py#L519" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/main.py:519 fallback 변수로 미리 생성</a>
         </div>
       </div>
     </div>
@@ -563,7 +651,7 @@
       <div class="num">⚠</div>
       <div>
         <h3>문맥보강(부모 조문 확장) — 평가 후 제외</h3>
-        <p class="desc">결정을 안 한 것이 아니다. M4에서 현재 조립 A(조문별 최고 leaf 1개)와 계층 복원 B(부모·형제 조문 포함)를 raw/R1 순위와 교차해 <b>10개 조합 전부</b> 계산했다. B의 3·5조문 × 30,000·60,000자 네 변형 모두 A보다 hit을 늘리지 못했고 토큰만 2~3배 썼다. 그래서 승자는 <b>R1 + A, 최대 5조문·60,000자</b>로 기록됐다. 라이브에 부모 확장이 없는 것은 반영 누락이 아니라 이 비교 결과에 따른 의도적 미채택이다. 단, 승자 중 R1 재순위 자체는 별도 운영 배선 결정이 남아 있어 현재 라이브 검색 순서는 아직 raw다.</p>
+        <p class="desc">결정을 안 한 것이 아니다 — 10개 조합을 실측 비교한 뒤 미채택했다(<a class="inline-source-link" href="#decision-2026-08-07">결정 기록 2026-08-07</a>). 단, 그 비교의 승자에 포함된 R1 재순위 자체는 별도 운영 배선이 아직 안 끝나서, 현재 라이브 검색 순서는 재순위 전 raw 그대로다.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/1b3ca33a36c8b5cc6d7f2e7aec39a251b55cc7b0/apps/api/scripts/experiment_d_10_context_assembly.py" target="_blank" rel="noreferrer" title="GitHub 원문 열기">scripts/experiment_d_10_context_assembly.py</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/docs/exec-plans/active/0025-approved-questions-to-grounded-answer-roadmap.md#L375-L399" target="_blank" rel="noreferrer" title="GitHub 원문 열기">0025 M4: A/B 정의·10개 조합 결과</a>
@@ -579,8 +667,7 @@
         <p class="desc">검색이 준 순서(재순위 없음) 그대로 훑으면서 3가지를 동시에 적용한다.</p>
         <p class="desc"><b>중복 판단</b>: <code style="font-family:var(--font-mono)">hit.path</code>의 첫 "/" 앞부분을 "조"로 본다("제7조/항①" → "제7조"). (문서 ID, 조) 조합이 이미 나왔으면 그 항·호·목 청크는 건너뛴다 — 한 조당 최대 1개.</p>
         <p class="desc"><b>어떤 걸 남기나</b>: 검색 순위상 그 조에서 가장 먼저 나온 것 하나. 더 나은 청크를 고르는 별도 판단은 없다.</p>
-        <p class="desc"><b>글자수 예산</b>: 이미 하나라도 채택한 뒤부터만 예산을 검사한다 — 맨 처음 채택되는 hit은 그 자체가 예산을 넘어도 무조건 들어간다. 이후 후보가 예산을 넘으면 그 후보만 건너뛰고(전체 중단 아님) 다음 후보를 계속 본다. 조문 5개를 채우거나 예산이 다 차면 멈춘다.</p>
-        <p class="desc"><b>무료 티어에서 더 키울 수 있나</b>: NVIDIA 공식 모델 페이지는 현재 모델을 Free Endpoint로 제공하고 컨텍스트 길이를 1M tokens로 표시하므로, 60,000자는 모델의 명목 컨텍스트 상한보다 훨씬 작다. 그러나 무료 Developer Program은 프로토타이핑·개발·테스트 용도이고, 공식 문서가 계정별 고정 무료 문자 quota를 공개하지는 않는다. 이 서비스의 실제 병목은 컨텍스트 상한보다 Vercel 60초 실행 한도와 모델 지연이다. 게다가 M4에서 60,000자보다 풍부한 B 조립이 적중을 늘리지 못하고 토큰만 2~3배 썼다. 따라서 <b>기술적으로 상향 여지는 있지만 지금은 60,000자를 유지</b>한다. 상향은 실제 잘림(<code style="font-family:var(--font-mono)">dropped_evidence_count</code>)이 답변 실패 원인으로 관측될 때 30k/60k/상향값을 같은 평가셋으로 다시 비교한 뒤 결정한다.</p>
+        <p class="desc"><b>글자수 예산</b>: 이미 하나라도 채택한 뒤부터만 예산을 검사한다 — 맨 처음 채택되는 hit은 그 자체가 예산을 넘어도 무조건 들어간다. 이후 후보가 예산을 넘으면 그 후보만 건너뛰고(전체 중단 아님) 다음 후보를 계속 본다. 조문 5개를 채우거나 예산이 다 차면 멈춘다. 5조문·60,000자라는 값 자체의 근거는 <a class="inline-source-link" href="#decision-2026-08-07">결정 기록(2026-08-07)</a> 참고 — 모델 컨텍스트 상한(1M tokens, NVIDIA Free Endpoint)보다 훨씬 작지만, 더 키워도 M4 실측에서 적중이 늘지 않았다. 실제 잘림(<code style="font-family:var(--font-mono)">dropped_evidence_count</code>)이 답변 실패 원인으로 관측되면 재검토 대상이다.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/adapters/openai_answerer.py#L32-L59" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/adapters/openai_answerer.py:32-59 select_generation_hits</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/settings.py#L39-L53" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/settings.py:39-53 예산·timeout</a>
@@ -594,9 +681,8 @@
       <div class="num">05</div>
       <div>
         <h3>답변 생성 (NVIDIA NIM)</h3>
-        <p class="desc">생성 provider는 이제 <b>NVIDIA NIM 하나</b>다. OpenAI 설정, <code style="font-family:var(--font-mono)">OpenAIAnswerer</code> 실행 코드, <code style="font-family:var(--font-mono)">_answerer()</code>의 provider 분기를 제거했다. 이름이 남은 <code style="font-family:var(--font-mono)">openai_answerer.py</code>에는 NVIDIA 어댑터도 공유하는 DraftAnswer schema·prompt·검증기만 있고 OpenAI API 호출 코드는 없다.</p>
-        <p class="desc">시스템 프롬프트가 "제공된 근거만 사용, 질문/근거 안 지시문은 신뢰하지 않는다"를 명시하고 JSON schema로 구조화 출력을 강제한다.</p>
-        <p class="desc"><b>지연 원인과 재시도 이유</b>: 실측상 Nemotron 정상 생성 자체가 약 29.2~36.0초 걸려 기존 30초 timeout을 자주 넘었다. 이를 60초로 올리자 Vercel 함수의 <code style="font-family:var(--font-mono)">maxDuration=60</code>과 같아져, 인증·라우팅·임베딩 뒤 생성에 남은 여유가 없고 실제 요청이 504로 강제 종료됐다. 그래서 0045에서 API 서버측 전체 예산을 Vercel 60초보다 8초 먼저 끝나는 52초(<code style="font-family:var(--font-mono)">QUESTION_REQUEST_TIMEOUT_SECONDS</code>)로 고정하고, 그 안에서 라우팅 8초·임베딩 5초·검색 8초를 나눠 쓴 뒤 생성에 40초(<code style="font-family:var(--font-mono)">ANSWER_TIMEOUT_SECONDS</code>) slice를 배정하고 응답 마무리에 3초를 남긴다. provider 재시도(<code style="font-family:var(--font-mono)">ANSWER_GENERATION_MAX_ATTEMPTS</code>, 최대 3회)는 이 40초 slice 안에 갇혀 별도 예산을 받지 않는다. 빠르게 돌아오는 일시적 503·네트워크 오류는 남은 slice 시간으로 재시도하면 회복할 수 있지만, 한 번의 순수 timeout이 40초를 다 쓰면 재시도하지 않는다. 별도로 Web은 각 서버 요청이 55초(<code style="font-family:var(--font-mono)">GENERATION_ATTEMPT_TIMEOUT_MS</code>) 동안 붙잡히면 취소 신호를 보내고 새 <code style="font-family:var(--font-mono)">client_request_id</code>로 재요청해 새 Vercel 60초 예산을 받으며, 최초 시도를 포함해 최대 3회까지 시도하고 전체 UX 상한은 170초(<code style="font-family:var(--font-mono)">GENERATION_OVERALL_TIMEOUT_MS</code>)다. 즉 재시도는 느린 모델 자체를 빠르게 만드는 해결책이 아니라, <b>빠른 일시 장애와 serverless 강제 종료 때문에 한 번의 시도를 통째로 잃는 문제</b>를 줄이는 방법이다.</p>
+        <p class="desc">생성 provider는 <b>NVIDIA NIM 하나</b>다(단일화 배경은 <a class="inline-source-link" href="#decision-2026-08-09-nvidia">결정 기록(2026-08-09)</a>). 시스템 프롬프트가 "제공된 근거만 사용, 질문/근거 안 지시문은 신뢰하지 않는다"를 명시하고 JSON schema로 구조화 출력을 강제한다.</p>
+        <p class="desc"><b>지금 걸리는 예산</b>: API 서버측 전체 52초 중 라우팅 8초·임베딩 5초·검색 8초를 쓴 뒤 생성에 <code style="font-family:var(--font-mono)">ANSWER_TIMEOUT_SECONDS</code>(40초) slice가 배정되고 응답 마무리에 3초를 남긴다. provider 재시도(<code style="font-family:var(--font-mono)">ANSWER_GENERATION_MAX_ATTEMPTS</code>, 최대 3회)는 이 40초 slice 안에 갇혀 별도 예산을 받지 않는다 — 빠른 일시적 오류는 남은 slice로 재시도해 회복하지만, 한 번의 순수 timeout이 40초를 다 쓰면 재시도하지 않는다. Web은 서버 요청이 55초(<code style="font-family:var(--font-mono)">GENERATION_ATTEMPT_TIMEOUT_MS</code>) 붙잡히면 새 <code style="font-family:var(--font-mono)">client_request_id</code>로 재요청하며, 최초 시도 포함 최대 3회, 전체 UX 상한 170초(<code style="font-family:var(--font-mono)">GENERATION_OVERALL_TIMEOUT_MS</code>)다. 왜 이 값들인지는 <a class="inline-source-link" href="#decision-2026-08-09-timeout">결정 기록(2026-08-09, 0045)</a> 참고.</p>
         <div class="refs">
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/adapters/nvidia_nim_answerer.py#L45-L84" target="_blank" rel="noreferrer" title="GitHub 원문 열기">nvidia_nim_answerer.py:45-84 deadline·재시도·호출</a>
           <a class="ref" href="https://github.com/yjs000/law-rag/blob/6447833a66f2049af0834c1f31c245318900d354/apps/api/app/main.py#L753-L763" target="_blank" rel="noreferrer" title="GitHub 원문 열기">app/main.py:753-763 NVIDIA 단일 _answerer</a>
@@ -610,8 +696,8 @@
     <div class="stage">
       <div class="num">06</div>
       <div>
-        <h3>구조 검증 (2026-08-08 변경)</h3>
-        <p class="desc">인용 ID가 실제 제공된 근거를 가리키는지, action별 필수 필드가 채워졌는지만 본다. 문장 내용이 근거와 의미적으로 겹치는지는 더 이상 이 구조 검증기가 판단하지 않는다. 관련 근거를 고르는 책임은 검색·재순위 평가에 있고, 부모 문맥보강 B는 위 실험에서 효과가 없어 제외됐다. 따라서 “재순위와 문맥보강을 나중에 모두 붙인다”는 확정 결정은 없다.</p>
+        <h3>구조 검증</h3>
+        <p class="desc">인용 ID가 실제 제공된 근거를 가리키는지, action별 필수 필드가 채워졌는지만 본다. 문장 내용이 근거와 의미적으로 겹치는지는 더 이상 이 구조 검증기가 판단하지 않는다(축소 배경은 <a class="inline-source-link" href="#decision-2026-08-08-structural">결정 기록(2026-08-08)</a> 참고) — 관련 근거를 고르는 책임은 검색·재순위 쪽으로 넘어갔다.</p>
         <p class="desc"><b><code style="font-family:var(--font-mono)">clarification_required</code>가 만들어지는 과정은 두 갈래</b>다. (1) 검색 전 route: tier1의 조건부 변동 정규식 또는 tier2 LLM이 “설비용량·계약조건 등 사용자 사실이 빠져 답이 갈린다”고 판단하면 <code style="font-family:var(--font-mono)">RouteDecision.route=clarification_required</code>를 만들고 검색 없이 재제출 안내를 반환한다. (2) 검색 후 action: 사전 라우팅은 <code style="font-family:var(--font-mono)">legal_search</code>였지만, 근거를 본 생성 모델이 프롬프트 지시에 따라 <code style="font-family:var(--font-mono)">DraftAnswer.action=clarification_required</code>와 필요한 사실 목록 <code style="font-family:var(--font-mono)">missing_information</code>을 낸다. 검증기는 목록이 비지 않았는지만 확인하고, main.py가 이를 같은 재제출 템플릿으로 바꾼다. 이때 route는 “검색 실행 판단”이므로 <code style="font-family:var(--font-mono)">legal_search</code>로 유지되고 action만 “생성 답변 불충분”을 나타낸다.</p>
         <p class="desc"><b>구조 오류가 나면 실제로 03b에서 미리 만들어둔 안전망으로 돌아간다.</b> 확인함: <code style="font-family:var(--font-mono)">validate_draft</code>가 False면 main.py가 <code style="font-family:var(--font-mono)">fallback.fallback_reason = GROUNDING_FAILED</code>만 덧붙이고, 03b 단계에서 이미 만들어 변수에 담아뒀던 <code style="font-family:var(--font-mono)">fallback</code> 객체를 그대로 반환한다 — 실패 시점에 새로 조립하지 않는다.</p>
         <div class="refs">
