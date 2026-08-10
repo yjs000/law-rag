@@ -36,11 +36,13 @@ export function resolveResponseAnswerMode(
   response: Pick<QuestionResponse, "fallback_reason" | "mode" | "requested_answer_mode">,
 ): AnswerModeResolution {
   if (response.mode === "ai") return { preference: "terra", notice: null };
+  if (requested === "search_only") return { preference: "search_only", notice: null };
 
   const terraWasRequested = response.requested_answer_mode === "terra"
     || (response.requested_answer_mode === undefined && requested === "terra");
-  return {
-    preference: "search_only",
-    notice: terraWasRequested || response.fallback_reason ? TERRA_FALLBACK_NOTICE : null,
-  };
+  const notice = terraWasRequested || response.fallback_reason ? TERRA_FALLBACK_NOTICE : null;
+
+  return isTerraAvailabilityFailure(response.fallback_reason)
+    ? { preference: "search_only", notice }
+    : { preference: "terra", notice };
 }

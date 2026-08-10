@@ -55,8 +55,41 @@ describe("answer mode synchronization", () => {
     })).toEqual({ preference: "search_only", notice: null });
   });
 
-  it("detects a Terra fallback from a legacy API response without new fields", () => {
+  it("notices a Terra fallback from a legacy API response without new fields but keeps Terra selected", () => {
     expect(resolveResponseAnswerMode("terra", { mode: "search_only" })).toEqual({
+      preference: "terra",
+      notice: TERRA_FALLBACK_NOTICE,
+    });
+  });
+
+  it("keeps Terra selected after a one-off generation error so the next question retries AI", () => {
+    expect(resolveResponseAnswerMode("terra", {
+      mode: "search_only",
+      requested_answer_mode: "terra",
+      fallback_reason: "generation_error",
+    })).toEqual({
+      preference: "terra",
+      notice: TERRA_FALLBACK_NOTICE,
+    });
+  });
+
+  it("keeps Terra selected after a grounding rejection so the next question retries AI", () => {
+    expect(resolveResponseAnswerMode("terra", {
+      mode: "search_only",
+      requested_answer_mode: "terra",
+      fallback_reason: "grounding_failed",
+    })).toEqual({
+      preference: "terra",
+      notice: TERRA_FALLBACK_NOTICE,
+    });
+  });
+
+  it("still locks to search-only for a real availability failure like billing_or_quota_error", () => {
+    expect(resolveResponseAnswerMode("terra", {
+      mode: "search_only",
+      requested_answer_mode: "terra",
+      fallback_reason: "billing_or_quota_error",
+    })).toEqual({
       preference: "search_only",
       notice: TERRA_FALLBACK_NOTICE,
     });
