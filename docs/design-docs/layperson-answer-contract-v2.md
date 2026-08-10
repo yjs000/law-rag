@@ -96,7 +96,7 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2 = GenerationProfile(
 D-10 `lay-energy-0201` 포함 최대 3문항 v1·v2 비교(0043 범위 4번)는 이 설계에서 확정하지 않는다.
 NVIDIA 실제 호출 횟수·재시도 상한은 실행 전에 다시 명시하고 사용자의 외부 호출 승인을 받는다.
 hosted 경로(Web 재요청, Vercel 함수 종료 전 fallback) 계약은 더 이상 별도로 설계 중이 아니다 —
-[0045 조정된 질문 timeout 예산](../exec-plans/active/0045-coordinated-question-timeout-budget.md)이
+[0045 조정된 질문 timeout 예산](../exec-plans/completed/0045-coordinated-question-timeout-budget.md)이
 API 서버측 전체 예산 52초·Web attempt 55초·최초 시도 포함 최대 3회·UX 전체 170초 상한 계약으로
 이미 전달했다(계약 요약은 [RELIABILITY.md](../RELIABILITY.md) "조정된 질문 timeout 예산 (0045)"
 참고). 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,

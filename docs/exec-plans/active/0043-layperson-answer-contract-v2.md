@@ -754,7 +754,7 @@ git commit -m "docs: complete 0043 layperson answer contract v2 milestone 1-4"
 - [ ] 근거 카드 원문 링크가 인용문 아래에 렌더링되고 `source_url`로 연결된다 (Task 4).
 - [ ] 모든 신규·기존 pytest/vitest가 통과한다.
 - [ ] 실제 hosted v1/v2 비교(0043 범위 4번, NVIDIA 실호출)는 이번 계획에서 실행하지 않고 todo 후속 항목으로 남는다.
-- [ ] hosted D-10 v1/v2 비교는 [0045 조정된 질문 timeout 예산](0045-coordinated-question-timeout-budget.md)이
+- [x] hosted D-10 v1/v2 비교는 [0045 조정된 질문 timeout 예산](../completed/0045-coordinated-question-timeout-budget.md)이
       통과한 뒤에만 시작한다 — 통과 전에 비교하면 Vercel 60초 강제 종료로 인한 504가 답변 품질
       실패로 오인될 수 있다. 0045는 전송·재시도 타이밍을, 0043은 그 위에서 생성되는 답변의
       일반인 가독성과 평가 기준만 소유한다.

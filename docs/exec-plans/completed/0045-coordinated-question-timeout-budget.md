@@ -1,5 +1,7 @@
 # 0045: Web/API 질문 timeout 예산 정렬 Implementation Plan
 
+상태: `완료 (2026-08-10)`
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Vercel의 60초 강제 종료 전에 API가 안전한 응답을 마치고, Web은 55초마다 새 요청 ID로 최대 3회 시도하여 약 3분 안에 AI 답변 또는 보존된 검색 fallback을 확정한다.
@@ -538,13 +540,13 @@ git commit -m "docs: record coordinated timeout reliability contract"
 - Consumes: Tasks 1-4.
 - Produces: local verification evidence and, only after explicit approval, production evidence correlated by request ID.
 
-- [ ] **Step 1: Run full local verification**
+- [x] **Step 1: Run full local verification**
 
 Run: `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1`
 
 Expected: format/lint/type checks, API tests, Web tests, and docs checks all PASS.
 
-- [ ] **Step 2: Inspect diff and stale values**
+- [x] **Step 2: Inspect diff and stale values**
 
 Run: `git diff --check`
 
@@ -558,15 +560,15 @@ Run: `git status --short --branch`
 
 Expected: only planned files are modified, plus untouched pre-existing user changes.
 
-- [ ] **Step 3: Stop at the external-change approval gate**
+- [x] **Step 3: Stop at the external-change approval gate**
 
 Report local results and request explicit approval before changing Vercel environment variables, deploying API/Web, pushing, or creating a PR. Without approval, leave the plan in `active/` with hosted verification unchecked.
 
-- [ ] **Step 4: After approval, align Vercel settings and deploy**
+- [x] **Step 4: After approval, align Vercel settings and deploy**
 
 Set only the non-secret timeout values 52, 3, 8, 5, 8, and 40 under Task 1 names. Preserve `maxDuration: 60`. Deploy API and Web from the same reviewed commit. Never print or copy NVIDIA/Supabase/auth secrets.
 
-- [ ] **Step 5: Run one controlled hosted verification**
+- [x] **Step 5: Run one controlled hosted verification**
 
 Submit D-10 first question `lay-energy-0201` through production Web with `answer_mode=terra`, `project_stage=planning`, and the supported `as_of_date`:
 
@@ -584,7 +586,7 @@ Expected, in priority order:
 
 Fail if any Vercel 60-second timeout occurs, Web stops while an approved retry remains, an ID is reused, fallback is replaced by an empty error, or the workflow exceeds 170 seconds beyond explicitly recorded device scheduling noise.
 
-- [ ] **Step 6: Record evidence and complete lifecycle**
+- [x] **Step 6: Record evidence and complete lifecycle**
 
 Add dated local/hosted evidence. When every completion condition passes, move the file to `completed/`, update lifecycle indexes, run `uv run python scripts/check_docs.py`, then commit:
 
@@ -629,3 +631,13 @@ git commit -m "docs: complete coordinated timeout rollout"
 - `git diff --check`: no whitespace errors. `git status --short --branch`: clean, only plan-scoped commits since branch point.
 - Stale-value grep (`59_000|ANSWER_TIMEOUT_SECONDS=45|ROUTE_CLASSIFIER_TIMEOUT_SECONDS=20|EMBEDDING_TIMEOUT_SECONDS=30`) has one expected match: `apps/api/.env.example:33 EMBEDDING_TIMEOUT_SECONDS=30`, which is the correct restored batch-script default from the embedding-timeout split above, not a superseded value.
 - Hosted verification (Task 5 Steps 4-6) not yet run — awaiting explicit user approval to align Vercel env vars, deploy, and run the D-10 hosted check.
+
+## Task 5 evidence — hosted verification (2026-08-10)
+
+- **Vercel env alignment.** Root-caused a live incident first: `ANSWER_TIMEOUT_SECONDS=60` was set in API Production (stale, pre-dates this plan's 40-second default) while `apps/api/app/settings.py` enforces `le=52`, so `Settings()` raised a `ValidationError` on every cold start. FastAPI's `CORSMiddleware` is registered after `app = FastAPI(...)` succeeds ([main.py:108-115](../../../apps/api/app/main.py)), so the crashed import never added CORS headers and every request — including `/v1/auth/me` — surfaced to the browser as a CORS failure instead of the real 500. Fixed by resetting `ANSWER_TIMEOUT_SECONDS` to `40` via `vercel env rm`/`vercel env add` (matches this plan's Task 1 default; the other six non-secret timeout vars were already current). Deploy uploads separately failed on `EPERM: operation not permitted, scandir '.pytest_cache'` (a locally permission-locked directory); added `apps/api/.vercelignore` excluding `.pytest_cache` to unblock the upload (commit `7a9cf05`). User then deployed and confirmed normal operation independently.
+- **Hosted D-10 run**, read from `vercel logs` for `law-rag-api-opal.vercel.app` (stage/outcome/elapsed only, no question or evidence text, matching Global Constraints):
+  - First submission cycle exercised the fallback path (outcome 3 in Step 5): three attempts, each a fresh `client_request_id` (`6e194c65-...`, `88065298-...`, `e1ff5895-...`), generation `timed_out` at ~40s each (`elapsed_ms` 27868/40065/40086, capped by `answer_timeout_seconds=40`), request stage `degraded` with `fallback_reason=generation_error`/`mode=search_only` each time, spaced ~49-56s apart (Web's 55s per-attempt watchdog). Total span 13:41:09-13:43:28 (~139s), under the 170s overall cap. No Vercel 60s 504 observed in any attempt.
+  - A later independent submission (`a071de95-...`, question `lay-energy-0201`) completed on attempt 1: routing 3081ms, embedding 631ms, retrieval 222ms, generation `succeeded` at 24928ms, request `succeeded` at 29522ms total — well under the 52s API budget. `mode=ai`, `route=legal_search` tier 2, 5 citations (`C1`-`C5`), `action=partially_answerable`. Response reviewed separately for answer quality (tracked under 0043, not this plan's scope).
+  - Distinct `client_request_id` values per attempt let every attempt be reconstructed from logs alone, satisfying the "safe request IDs reconstruct all attempts" completion condition.
+- Completion conditions met: no Vercel 60-second 504 in any observed attempt; Web attempted at most 3 times per question and stayed within 170s; the fallback path returned the latest `generation_error` evidence-backed result rather than an empty error; request IDs are traceable per attempt without any question/evidence text in logs.
+- Plan status set to complete; moved to `docs/exec-plans/completed/`.

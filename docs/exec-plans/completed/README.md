@@ -14,3 +14,4 @@
 - [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md)
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md)
 - [0039: 구조화된 API 오류 메시지 표시](0039-error-detail-object-shown-as-object-object.md)
+- [0045: Web/API 질문 timeout 예산 정렬](0045-coordinated-question-timeout-budget.md)
