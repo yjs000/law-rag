@@ -776,7 +776,6 @@ export default function Home() {
           <button aria-label="메뉴 열기" className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
           <label className="model-picker"><span className="sr-only">응답 모델</span><select aria-label="응답 모델" value={answerPreference} onChange={(event) => { setAnswerPreference(event.target.value as AnswerPreference); setModeNotice(""); }}>
             <option disabled={terraUnavailable} value="terra">{MODEL_LABELS.terra}{terraUnavailable ? " · 현재 사용 불가" : ""}</option>
-            <option value="search_only">{MODEL_LABELS.search_only}</option>
           </select></label>
           <div className="header-actions">{user ? <button className="avatar-button" aria-label="계정 대시보드" onClick={() => setShowAccount(true)}>{user.display_name.slice(0, 1)}</button> : authStatus === "checking" ? <button aria-label="로그인 상태 확인 중" className="login-button" disabled>확인 중…</button> : <button className="login-button" onClick={() => openAuth("login")}>로그인</button>}</div>
         </header>
