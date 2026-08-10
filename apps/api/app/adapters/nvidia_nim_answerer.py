@@ -5,7 +5,12 @@ from collections.abc import Callable
 
 from openai import AsyncOpenAI
 
-from app.adapters.openai_answerer import DraftAnswer, build_messages
+from app.adapters.openai_answerer import (
+    DraftAnswer,
+    build_blocked_route_messages,
+    build_messages,
+)
+from app.domain.routing import QuestionRoute
 from app.domain.schemas import QuestionRequest, SearchHit
 
 # Below this many remaining seconds, a retry can't realistically get a response
@@ -48,6 +53,17 @@ class NvidiaNimAnswerer:
         self.message_builder = message_builder
 
     async def answer(self, request: QuestionRequest, hits: list[SearchHit]) -> DraftAnswer:
+        return await self._generate(self.message_builder(request, hits))
+
+    async def answer_blocked_route(
+        self, request: QuestionRequest, route: QuestionRoute, reason: str | None
+    ) -> DraftAnswer:
+        """0046: 사전 라우팅이 legal_search 밖으로 걸러낸 질문(embedding·검색 없음)에
+        근거 없이 LLM을 호출한다 - `answer()`와 같은 재시도·타임아웃 정책을 그대로
+        쓰되 프롬프트만 `build_blocked_route_messages`로 다르다."""
+        return await self._generate(build_blocked_route_messages(request, route, reason))
+
+    async def _generate(self, messages: list[dict[str, str]]) -> DraftAnswer:
         deadline = time.monotonic() + self.timeout_seconds
         last_error: Exception
         for attempt in range(self.max_attempts):
@@ -56,7 +72,7 @@ class NvidiaNimAnswerer:
                 break
             try:
                 attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
-                return await self._attempt(request, hits, attempt_timeout=attempt_timeout)
+                return await self._attempt(messages, attempt_timeout=attempt_timeout)
             except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
                 last_error = exc
                 if getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES:
@@ -64,11 +80,11 @@ class NvidiaNimAnswerer:
         raise last_error
 
     async def _attempt(
-        self, request: QuestionRequest, hits: list[SearchHit], *, attempt_timeout: float
+        self, messages: list[dict[str, str]], *, attempt_timeout: float
     ) -> DraftAnswer:
         response = await self.client.chat.completions.create(
             model=self.model,
-            messages=self.message_builder(request, hits),  # type: ignore[arg-type]
+            messages=messages,  # type: ignore[arg-type]
             max_tokens=self.max_output_tokens,
             # TODO(2026-08-08, 0025 M5): 0.3은 잠정값이다. 원래 1.0이었는데 근거가 없었다
             # (git blame: 45edf43에서 설명 없이 하드코딩). 법률 답변처럼 재현성이 중요한

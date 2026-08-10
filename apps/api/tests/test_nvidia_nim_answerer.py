@@ -9,7 +9,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
-from app.adapters.openai_answerer import build_messages, build_messages_v2
+from app.adapters.openai_answerer import (
+    build_blocked_route_messages,
+    build_messages,
+    build_messages_v2,
+)
 from app.domain.catalog import SourceKind
 from app.domain.schemas import QuestionRequest, SearchHit
 
@@ -289,3 +293,102 @@ async def test_nvidia_nim_uses_injected_message_builder() -> None:
 
     assert captured["messages"] == build_messages_v2(request, hits)
     assert captured["messages"] != build_messages(request, hits)
+
+
+@pytest.mark.asyncio
+async def test_answer_blocked_route_uses_dedicated_prompt_without_evidence() -> None:
+    answerer = _answerer()
+    captured: dict[str, object] = {}
+    payload = {
+        "summary": "이 시스템은 실시간 가격 정보에 연결되어 있지 않아 답할 수 없습니다.",
+        "scope": "검색 미실행",
+        "sections": [],
+        "checklist": [],
+        "limitations": [],
+        "action": "unanswerable",
+    }
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    request = QuestionRequest(question="지금 시세로 전기를 팔면 얼마나 받을 수 있나요?")
+    draft = await answerer.answer_blocked_route(request, "realtime_required", None)
+
+    assert draft.action == "unanswerable"
+    assert captured["messages"] == build_blocked_route_messages(
+        request, "realtime_required", None
+    )
+    assert "근거:" not in captured["messages"][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_answer_blocked_route_passes_reason_as_untrusted_hint() -> None:
+    answerer = _answerer()
+    payload = {
+        "summary": "부족한 사실을 확인해야 합니다.",
+        "scope": "검색 미실행",
+        "sections": [],
+        "checklist": [],
+        "limitations": [],
+        "action": "clarification_required",
+        "missing_information": ["설비용량"],
+    }
+
+    async def create(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    request = QuestionRequest(question="이거 애매한 질문인데 확인해줄래요?")
+    draft = await answerer.answer_blocked_route(
+        request, "clarification_required", "설비용량에 따라 절차가 갈린다"
+    )
+
+    assert draft.action == "clarification_required"
+    assert draft.missing_information == ["설비용량"]
+
+
+@pytest.mark.asyncio
+async def test_answer_blocked_route_retries_transient_failures() -> None:
+    answerer = _answerer()
+    payload = {
+        "summary": "이 시스템은 해당 문서에 연결되어 있지 않아 답할 수 없습니다.",
+        "scope": "검색 미실행",
+        "sections": [],
+        "checklist": [],
+        "limitations": [],
+        "action": "unanswerable",
+    }
+    calls = 0
+
+    async def create(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls < 2:
+            error = Exception("Service Unavailable")
+            error.status_code = 503  # type: ignore[attr-defined]
+            raise error
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    draft = await answerer.answer_blocked_route(
+        QuestionRequest(question="정산서를 보니 금액이 안 맞는데 어떻게 확인하나요?"),
+        "external_document_required",
+        None,
+    )
+
+    assert draft.action == "unanswerable"
+    assert calls == 2
