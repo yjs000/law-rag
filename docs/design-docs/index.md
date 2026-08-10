@@ -30,6 +30,7 @@
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
+| [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 승인 | 근거 0건·라우팅 차단·clarification 경로 전부 LLM 생성으로 전환, 호출량·비용 영향 |
 
 ## 상태 정의
 
