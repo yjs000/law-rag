@@ -44,14 +44,15 @@ Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`
 명시한다. 둘 중 하나라도 생략하여 부모 세션의 모델이나 reasoning effort를 암묵적으로 상속하게 해서는
 안 된다.
 
-- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-terra`, `low`
-- 일반 구현, 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `medium`
-- 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-sol`, `high`
+- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `high`
+- 일반 구현, 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-luna`, `high`
+- 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-terra`, `high`
 - fix-loop escalation은 필요한 경우에만 한 단계 올리며, 최종 review가 아니라는 이유만으로
-  `gpt-5.6-sol`을 선택하지 않는다.
+  `gpt-5.6-terra`를 선택하지 않는다.
+- `gpt-5.6-sol`은 어떠한 경우에도 사용하지 않는다.
 
 명시적 모델 override와 호환되도록 subagent의 `fork_turns`는 `none` 또는 필요한 최근 turn 수로
-제한한다. 요청한 모델이나 effort를 사용할 수 없으면 부모의 `gpt-5.6-sol`로 조용히 fallback하지 말고
+제한한다. 요청한 모델이나 effort를 사용할 수 없으면 다른 모델로 조용히 fallback하지 말고
 dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하는 guardian 등 모델을 직접 지정할 수 없는
 내부 agent는 이 정책의 적용 대상에서 제외한다.
 
