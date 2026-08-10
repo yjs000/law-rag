@@ -38,9 +38,14 @@ class Settings(BaseSettings):
     question_request_timeout_seconds: float = Field(default=52, gt=0, le=55)
     response_reserve_seconds: float = Field(default=3, ge=1, le=10)
     route_classifier_timeout_seconds: float = Field(default=8, gt=0, le=20)
-    embedding_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    question_embedding_timeout_seconds: float = Field(default=5, gt=0, le=30)
     retrieval_timeout_seconds: float = Field(default=8, gt=0, le=20)
     answer_timeout_seconds: float = Field(default=40, gt=0, le=52)
+    # 배치/오프라인 스크립트가 32개 passage를 한 번에 임베딩할 때 쓰는 HTTP 타임아웃
+    # (원래 값). 질문 하나를 라이브 요청 예산 안에서 임베딩할 때는
+    # question_embedding_timeout_seconds(5초)를 대신 쓴다 - 두 용도가 다른 시간
+    # 예산이 필요해서 분리했다(Finding 1, 0045 최종 리뷰).
+    embedding_timeout_seconds: float = Field(default=30, gt=0, le=120)
     answer_max_output_tokens: int = Field(default=4096, ge=256, le=16384)
     answer_evidence_max_characters: int = Field(default=60000, ge=4000, le=250000)
     answer_generation_max_attempts: int = Field(default=3, ge=1, le=5)

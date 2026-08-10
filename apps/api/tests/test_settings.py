@@ -121,9 +121,12 @@ def test_request_budget_timeout_defaults() -> None:
     assert settings.question_request_timeout_seconds == 52
     assert settings.response_reserve_seconds == 3
     assert settings.route_classifier_timeout_seconds == 8
-    assert settings.embedding_timeout_seconds == 5
+    assert settings.question_embedding_timeout_seconds == 5
     assert settings.retrieval_timeout_seconds == 8
     assert settings.answer_timeout_seconds == 40
+    # 배치/오프라인 스크립트가 쓰는 일반 임베딩 타임아웃 - 라이브 질문 예산의
+    # question_embedding_timeout_seconds와는 별개 필드다(Finding 1, 0045 최종 리뷰).
+    assert settings.embedding_timeout_seconds == 30
 
 
 def test_request_timeout_seconds_separate_from_question_request_timeout() -> None:

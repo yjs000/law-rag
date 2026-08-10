@@ -348,13 +348,17 @@ async def _answer_question(
         routing_timed_out = False
         if route_decision is None:
             routing_started = time.monotonic()
-            routing_outcome: QuestionStageTimingOutcome = "succeeded"
+            # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError
+            # (BaseException이라 아래 except 어느 쪽에도 걸리지 않는다)가 stage를 죽여도
+            # finally가 "succeeded"를 그대로 로깅해버린다(Finding 2, 0045 최종 리뷰).
+            routing_outcome: QuestionStageTimingOutcome = "failed"
             try:
                 route_decision = await budget.run(
                     "routing",
                     lambda: route_tier2(payload.question, _route_classifier()),
                     cap_seconds=settings.route_classifier_timeout_seconds,
                 )
+                routing_outcome = "succeeded"
             except StageTimeoutError:
                 # 라우팅 stage 예산을 다 썼다 - legal_search로 안전하게 진행한다(아래
                 # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다).
@@ -426,15 +430,18 @@ async def _answer_question(
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})
         embedding_started = time.monotonic()
-        embedding_outcome: QuestionStageTimingOutcome = "succeeded"
+        # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
+        # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
+        embedding_outcome: QuestionStageTimingOutcome = "failed"
         try:
             query_embedding = (
                 await budget.run(
                     "embedding",
                     lambda: _embedder().embed([payload.question]),
-                    cap_seconds=settings.embedding_timeout_seconds,
+                    cap_seconds=settings.question_embedding_timeout_seconds,
                 )
             )[0]
+            embedding_outcome = "succeeded"
             embedding_stage.update({"status": "succeeded", "dimensions": len(query_embedding)})
         except StageTimeoutError:
             embedding_failed = True
@@ -457,13 +464,16 @@ async def _answer_question(
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": False, "status": "skipped_provider_unavailable"})
     retrieval_started = time.monotonic()
-    retrieval_outcome: QuestionStageTimingOutcome = "succeeded"
+    # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
+    # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
+    retrieval_outcome: QuestionStageTimingOutcome = "failed"
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
             lambda: _retrieve_question_evidence(payload, query_embedding),
             cap_seconds=settings.retrieval_timeout_seconds,
         )
+        retrieval_outcome = "succeeded"
     except StageTimeoutError as exc:
         # 검색 stage 예산을 다 썼다 - 아직 신뢰할 근거가 없으므로(부분 결과로 답을
         # 만들지 않는다) 재시도를 유도하는 고정 503 메시지로 끝낸다. corpus 미준비·일반
@@ -539,13 +549,16 @@ async def _answer_question(
         }
     )
     generation_started = time.monotonic()
-    generation_outcome: QuestionStageTimingOutcome = "succeeded"
+    # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
+    # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
+    generation_outcome: QuestionStageTimingOutcome = "failed"
     try:
         draft = await budget.run(
             "generation",
             lambda: _answerer().answer(payload, generation_hits),
             cap_seconds=settings.answer_timeout_seconds,
         )
+        generation_outcome = "succeeded"
     except StageTimeoutError:
         # 생성 stage 예산을 다 썼다 - 이미 검증된 근거(fallback)가 있으니 에러가 아니라
         # 200 + search_only로 끝낸다. 웹 클라이언트 재시도 로직이 이 응답 모양에

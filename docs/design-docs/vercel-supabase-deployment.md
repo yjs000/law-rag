@@ -51,16 +51,17 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 
 ### 질문 요청 timeout 변수 (0045)
 
-`/v1/questions` 조정된 예산과 직접 연결된 여섯 개 비밀 아님 timeout 변수는 아래와 같다. 값의 원본은 `apps/api/.env.example`이며 이 표는 각 변수의 역할만 옮긴다.
+`/v1/questions` 조정된 예산과 직접 연결된 일곱 개 비밀 아님 timeout 변수는 아래와 같다. 값의 원본은 `apps/api/.env.example`이며 이 표는 각 변수의 역할만 옮긴다.
 
 | 변수 | 기본값 | 역할 |
 |---|---:|---|
 | `QUESTION_REQUEST_TIMEOUT_SECONDS` | 52 | `/v1/questions` 서버측 전체 예산. Vercel 60초 강제 종료보다 먼저 끝낸다 |
 | `RESPONSE_RESERVE_SECONDS` | 3 | 마지막 stage가 끝난 뒤 응답 직렬화·저장에 남겨두는 여유 |
 | `ROUTE_CLASSIFIER_TIMEOUT_SECONDS` | 8 | tier2 LLM 라우팅 판단 stage 상한 |
-| `EMBEDDING_TIMEOUT_SECONDS` | 5 | 질문 임베딩 stage 상한 |
+| `QUESTION_EMBEDDING_TIMEOUT_SECONDS` | 5 | 라이브 질문 1건을 예산 안에서 임베딩하는 stage 상한 |
 | `RETRIEVAL_TIMEOUT_SECONDS` | 8 | 검색 stage 상한 |
 | `ANSWER_TIMEOUT_SECONDS` | 40 | 생성 stage 상한. provider 재시도(`ANSWER_GENERATION_MAX_ATTEMPTS`)까지 이 slice 안에서 공유한다 |
+| `EMBEDDING_TIMEOUT_SECONDS` | 30 | 배치/오프라인 스크립트가 32개 passage를 한 번에 임베딩할 때 쓰는 일반 HTTP 타임아웃(질문 요청 예산과 무관) |
 
 Web 상수(`apps/web/lib/generation-retry.ts`)는 이 API 예산과 맞물려 있으며 별도 환경변수가 아니라 코드 상수다: `GENERATION_ATTEMPT_TIMEOUT_MS`(55,000ms - API 52초보다 항상 늦고 Vercel 60초보다 항상 먼저 끊는다), `GENERATION_MAX_ATTEMPTS`(3 - 최초 시도를 포함한 총 Web 시도 횟수), `GENERATION_OVERALL_TIMEOUT_MS`(170,000ms - 사용자 체감 UX 상한), `GENERATION_CANCEL_TIMEOUT_MS`(1,000ms - 다음 시도를 지연시키지 않는 best-effort 서버측 취소 상한).
 

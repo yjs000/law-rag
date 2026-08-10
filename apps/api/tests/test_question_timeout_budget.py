@@ -220,7 +220,7 @@ def test_embedding_timeout_falls_back_to_lexical_retrieval(
             await asyncio.sleep(0.1)
             return [[0.0] * 512]
 
-    monkeypatch.setattr(main_module.settings, "embedding_timeout_seconds", 0.01)
+    monkeypatch.setattr(main_module.settings, "question_embedding_timeout_seconds", 0.01)
     monkeypatch.setattr(main_module, "route_tier1", lambda question: _legal_search_decision())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
