@@ -106,9 +106,10 @@ class _LifecycleResult:
 
 
 class _LifecycleConnection(_ConnectionContext):
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, events: list[str], *, failed_update_error: Exception | None = None) -> None:
         self.events = events
         self.statements: list[tuple[str, dict | None]] = []
+        self.failed_update_error = failed_update_error
 
     async def run_sync(self, _sync_operation):
         return True
@@ -123,6 +124,8 @@ class _LifecycleConnection(_ConnectionContext):
             return []
         if "status = :status" in sql:
             self.events.append(parameters["status"])
+            if parameters["status"] == "failed" and self.failed_update_error is not None:
+                raise self.failed_update_error
             return None
         raise AssertionError(f"unexpected query: {sql}")
 
@@ -217,6 +220,30 @@ async def test_run_ingestion_records_failed_and_reraises_original_error(monkeypa
         parameters and parameters.get("status") == "completed"
         for _, parameters in lifecycle_statements
     )
+    assert raised.value is original_error
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_preserves_original_error_when_failed_update_fails(monkeypatch):
+    events: list[str] = []
+    connection = _LifecycleConnection(
+        events, failed_update_error=RuntimeError("failed marker write failed")
+    )
+    engine = _LifecycleEngine(connection)
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+    original_error = RuntimeError("vector write failed")
+
+    with pytest.raises(RuntimeError, match="vector write failed") as raised:
+        await run_ingestion(
+            engine,
+            _VectorStore(events, error=original_error),
+            _Embedder(),
+            "law_rag_llamaindex",
+        )
+
+    assert events.index("vector-write") < events.index("failed")
     assert raised.value is original_error
 
 
