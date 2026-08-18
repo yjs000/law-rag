@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from law_rag_core.ports.repository import LegalRepository
 from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
 from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
 from law_rag_llamaindex.retriever import search as llamaindex_search
@@ -216,7 +217,7 @@ async def health() -> dict[str, str]:
 
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
-    await _require_supported_as_of_date(payload.as_of_date)
+    await _require_supported_as_of_date(payload.as_of_date, repository)
     await _check_quota("search")
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
@@ -272,8 +273,9 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
 
 
-@app.post("/v1/questions", response_model=QuestionResponse)
-async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+async def _handle_question(
+    payload: QuestionRequest, request: Request, repository: LegalRepository
+) -> QuestionResponse:
     budget = RequestBudget.start(
         settings.question_request_timeout_seconds,
         settings.response_reserve_seconds,
@@ -284,7 +286,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     # 실패 등 stage 시작 전 오류 포함)되면 이 값 그대로 finally에서 기록된다.
     outcome: QuestionStageTimingOutcome = "failed"
     try:
-        await _require_supported_as_of_date(payload.as_of_date)
+        await _require_supported_as_of_date(payload.as_of_date, repository)
         user = await _optional_user(request.headers.get("authorization"))
         owner = _question_owner(request, user)
         task = asyncio.current_task()
@@ -295,7 +297,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         try:
             await asyncio.sleep(0)
             async with asyncio.timeout(budget.remaining_seconds()):
-                response = await _answer_question(payload, request, user, budget)
+                response = await _answer_question(payload, request, user, budget, repository)
         except asyncio.CancelledError as exc:
             outcome = "failed"
             raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
@@ -321,6 +323,20 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         )
 
 
+@app.post("/v1/questions", response_model=QuestionResponse)
+async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    return await _handle_question(payload, request, repository)
+
+
+@app.post("/v2/questions", response_model=QuestionResponse)
+async def question_v2(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    if llamaindex_repository is None:
+        raise _v2_not_ready_http_error()
+    if not await _v2_index_ready():
+        raise _v2_not_ready_http_error()
+    return await _handle_question(payload, request, llamaindex_repository)
+
+
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
 async def cancel_question(client_request_id: UUID, request: Request) -> dict[str, bool]:
     user = await _optional_user(request.headers.get("authorization"))
@@ -332,17 +348,19 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
 async def _retrieve_question_evidence(
     payload: QuestionRequest,
     query_embedding: list[float] | None,
+    repository: LegalRepository | None = None,
 ) -> tuple[list[SearchHit], SearchTrace, datetime | None]:
     """검색과 corpus 동기화 시각 조회를 하나의 retrieval budget stage로 묶는다 - 둘이
     별도 stage였다면 각자 예산을 갖게 되어 전체 retrieval에 허용된 8초를 넘길 수 있다."""
-    hits, trace = await repository.search_with_trace(
+    selected_repository = repository or globals()["repository"]
+    hits, trace = await selected_repository.search_with_trace(
         payload.question,
         payload.as_of_date,
         10,
         query_embedding,
         NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
     )
-    return hits, trace, await repository.last_sync()
+    return hits, trace, await selected_repository.last_sync()
 
 
 def _elapsed_ms(started_at: float) -> int:
@@ -365,8 +383,13 @@ def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTi
 
 
 async def _answer_question(
-    payload: QuestionRequest, request: Request, user: MockUser | None, budget: RequestBudget
+    payload: QuestionRequest,
+    request: Request,
+    user: MockUser | None,
+    budget: RequestBudget,
+    repository: LegalRepository | None = None,
 ) -> QuestionResponse:
+    selected_repository = repository or globals()["repository"]
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
@@ -535,7 +558,7 @@ async def _answer_question(
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
-            lambda: _retrieve_question_evidence(payload, query_embedding),
+            lambda: _retrieve_question_evidence(payload, query_embedding, selected_repository),
             cap_seconds=settings.retrieval_timeout_seconds,
         )
         retrieval_outcome = "succeeded"
@@ -946,7 +969,7 @@ async def export_checklist(
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
     requested_date = as_of_date or _current_korea_date()
-    await _require_supported_as_of_date(requested_date)
+    await _require_supported_as_of_date(requested_date, repository)
     try:
         hit = await repository.provision(provision_id, requested_date)
     except CorpusSearchUnavailableError as exc:
@@ -976,7 +999,15 @@ async def corpus_status() -> CorpusStatus:
         )
     else:
         items = await repository.corpus_items()
-        temporal_state = await _load_corpus_temporal_state()
+        try:
+            temporal_state = await _load_corpus_temporal_state(repository)
+        except TypeError as exc:
+            # Keep compatibility with test-only legacy loader overrides while
+            # production callers continue to pass the selected repository.
+            try:
+                temporal_state = await _load_corpus_temporal_state()
+            except TypeError:
+                raise exc from None
         last_successful_sync = await repository.last_sync()
     warnings = []
     if not temporal_state.ready:
@@ -1015,15 +1046,28 @@ def _current_korea_date() -> date:
     return korea_today()
 
 
-async def _load_corpus_temporal_state() -> CorpusTemporalState:
+async def _load_corpus_temporal_state(
+    repository: LegalRepository | None = None,
+) -> CorpusTemporalState:
     try:
-        return await repository.corpus_temporal_state(_current_korea_date())
+        selected_repository = repository or globals()["repository"]
+        return await selected_repository.corpus_temporal_state(_current_korea_date())
     except Exception as exc:
         raise _corpus_unready_http_error() from exc
 
 
-async def _require_supported_as_of_date(requested_date: date) -> None:
-    state = await _load_corpus_temporal_state()
+async def _require_supported_as_of_date(
+    requested_date: date, repository: LegalRepository | None = None
+) -> None:
+    try:
+        state = await _load_corpus_temporal_state(repository)
+    except TypeError as exc:
+        # Keep compatibility with test-only legacy loader overrides while
+        # production callers continue to pass the selected repository.
+        try:
+            state = await _load_corpus_temporal_state()
+        except TypeError:
+            raise exc from None
     if not state.ready:
         raise _corpus_unready_http_error()
     try:
