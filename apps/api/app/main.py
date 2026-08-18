@@ -101,9 +101,13 @@ def _build_llamaindex_resources(
     if not database_url or not nvidia_api_key:
         return None
 
-    vector_store = build_llamaindex_vector_store(llamaindex_settings)
-    embedder = build_llamaindex_embedder(llamaindex_settings)
-    return vector_store, embedder, LlamaIndexLegalRepository(repository, vector_store, embedder)
+    try:
+        vector_store = build_llamaindex_vector_store(llamaindex_settings)
+        embedder = build_llamaindex_embedder(llamaindex_settings)
+        v2_repository = LlamaIndexLegalRepository(repository, vector_store, embedder)
+    except Exception:
+        return None
+    return vector_store, embedder, v2_repository
 
 
 def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:

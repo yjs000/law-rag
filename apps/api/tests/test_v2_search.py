@@ -85,3 +85,30 @@ def test_v2_search_returns_503_with_stable_code_when_not_configured(
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "v2_search_not_ready"
+
+
+def test_v2_search_returns_503_when_resource_factory_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://db.example/law")
+    monkeypatch.setattr(main_module, "llamaindex_settings", type("Settings", (), {
+        "nvidia_api_key": "nvidia-test-key",
+    })())
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", None)
+    monkeypatch.setattr(main_module, "llamaindex_embedder", None)
+    monkeypatch.setattr(main_module, "llamaindex_repository", None)
+
+    def fail_build(settings) -> object:
+        raise RuntimeError("database credentials and DDL details must stay private")
+
+    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", fail_build)
+    main_module._build_llamaindex_resources.cache_clear()
+    response = TestClient(main_module.app).post(
+        "/v2/search", json={"query": "태양광", "as_of_date": "2026-01-01", "limit": 5}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "v2_search_not_ready"
+    assert "database credentials" not in response.text

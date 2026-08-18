@@ -34,3 +34,19 @@
   - 통과했다. 줄바꿈 형식 경고만 출력되었다.
 
 기본 pytest 임시 디렉터리로 전체 suite를 실행했을 때는 Windows 임시 경로 쓰기 권한으로 77개 setup 오류가 발생했지만, workspace 전용 `--basetemp` 재실행에서는 코드 오류 없이 전체 suite가 통과했다. 테스트 중 실제 DB, DDL, 외부 ingestion은 실행하지 않았다.
+
+## Fix round 1: 리소스 factory 초기화 실패의 stable 503 변환
+
+### 원인
+
+`_build_llamaindex_resources()`가 PGVectorStore·embedder·repository 생성 예외를 그대로 전파하고 있어, DB 접속·권한·DDL 오류가 `/v2/search`와 `/v2/questions`의 `v2_search_not_ready` 분기에 도달하기 전에 500으로 노출될 수 있었다.
+
+### TDD 및 수정
+
+1. 각 v2 route에서 vector-store builder가 민감한 예외 메시지를 발생시키는 테스트를 먼저 추가했다.
+   - RED: `7 passed, 2 failed`
+2. factory의 세 리소스 생성 경계를 `try/except Exception`으로 감싸고 실패 시 로그·예외 메시지 없이 `None`을 반환하도록 수정했다.
+3. 두 route가 기존 stable 503 응답을 반환하고 민감한 예외 문자열을 응답에 포함하지 않는지 확인했다.
+   - GREEN focused: `9 passed`
+
+Fix round에서도 v1 startup 경로와 `_v2_index_ready` readiness-query 예외 처리는 변경하지 않았으며, 실제 DB 연결·DDL·ingestion은 실행하지 않았다.
