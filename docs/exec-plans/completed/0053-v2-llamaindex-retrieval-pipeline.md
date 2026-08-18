@@ -1883,3 +1883,17 @@ Task 1~14 전부 구현·태스크별 리뷰·전체 브랜치 통합 리뷰를 
 
 **남은 부채:** `/v2/search`/`/v2/questions`가 v1의 `_require_supported_as_of_date`(corpus가 지원하는 기준일 범위 밖 요청을 `422 unsupported_corpus_date`로 차단)에 해당하는 v2 전용 게이트를 아직 갖고 있지 않다 — 범위 밖 날짜에 조용히 빈 결과를 반환할 수 있다. `docs/exec-plans/tech-debt-tracker.md`의 TD-027로 기록.
 
+## Staging 가동 검증 (2026-08-18, 사용자 승인 하에 실제 운영 DB 대상 실행)
+
+Task 7 self-review에서 "의도적으로 제외"했던 ingestion CLI 진입점(`python -m law_rag_llamaindex.ingest`)을 이때 추가하고(`27d2ad6`), 실제로 돌려서 검증했다.
+
+- `alembic upgrade head`(apps/api): `0012 → 0013` 적용 성공, DB가 `0013 (head)`.
+- 첫 실제 ingestion 실행에서 `create_async_engine`이 `postgresql://`(비-async 드라이버 기본값)로 실패 — apps/api의 URL 정규화(`postgresql+asyncpg://`)를 안 거쳤던 CLI의 버그였다. `_async_database_url` 헬퍼를 추가해 수정(`86034e6`).
+- 재실행 성공: `total=3066 embedded=3066 skipped=0`(첫 실행이라 전량 신규).
+- `/v2/search` smoke test: 실제 질의("태양광 발전 설비는 법에서 어떻게 정의하나요?")에 조·항·호·목 경로·법령명·원문 URL이 포함된 결과 반환 확인.
+- 기준일 필터 smoke test: `as_of_date=2025-01-01`로 질의하면 2026년 시행 조문들이 결과에서 빠지고 2024-07-01 시행 조문만 나오는 것을 확인 — `effective_from`/`effective_to` 필터가 실제로 동작.
+- `/v2/questions` smoke test: v1의 라우팅·생성·검증 파이프라인이 실제로 도는 것을 확인. 이번 질의는 `mode:"search_only"`, `fallback_reason:"grounding_failed"`로 안전 폴백됐다 — 이건 v2 배선 문제가 아니라 v1의 기존 인용 검증 게이트가 원래 하는 동작이 그대로 나타난 것(이 질의의 생성 품질 자체는 별도 이슈).
+
+이 절 이후 새로 생긴 커밋은 `27d2ad6`(CLI 추가), `86034e6`(URL 정규화 수정)이며 둘 다 `main`에 병합·push됐다.
+
+
