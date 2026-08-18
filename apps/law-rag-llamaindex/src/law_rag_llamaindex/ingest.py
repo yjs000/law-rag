@@ -1,11 +1,15 @@
 from dataclasses import dataclass
 
 from llama_index.core.schema import TextNode
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from law_rag_llamaindex.passage import ProvisionRecord, build_node_metadata, build_passage_text, compute_source_text_sha256
+from law_rag_llamaindex.passage import (
+    ProvisionRecord,
+    build_node_metadata,
+    build_passage_text,
+    compute_source_text_sha256,
+)
 
 
 @dataclass(frozen=True)
@@ -43,14 +47,17 @@ def build_nodes(provisions: list[ProvisionRecord]) -> list[TextNode]:
 
 async def existing_hashes(engine: AsyncEngine, table_name: str) -> dict[str, str]:
     physical_table = f"data_{table_name}"
-    query = text(f'SELECT node_id, metadata_->>\'source_text_sha256\' AS sha FROM "{physical_table}"')
-    try:
-        async with engine.connect() as connection:
-            result = await connection.execute(query)
-            return {row.node_id: row.sha for row in result}
-    except DBAPIError:
-        # First run: the table hasn't been created by the vector store yet.
-        return {}
+    async with engine.connect() as connection:
+        table_exists = await connection.run_sync(
+            lambda sync_conn: inspect(sync_conn).has_table(physical_table)
+        )
+        if not table_exists:
+            return {}
+        query = text(
+            f'SELECT node_id, metadata_->>\'source_text_sha256\' AS sha FROM "{physical_table}"'
+        )
+        result = await connection.execute(query)
+        return {row.node_id: row.sha for row in result}
 
 
 async def delete_nodes(engine: AsyncEngine, table_name: str, node_ids: set[str]) -> None:

@@ -1,9 +1,12 @@
 import os
+from typing import cast
 
 import pytest
 from llama_index.core.schema import TextNode
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from law_rag_llamaindex.ingest import build_nodes, changed_provision_ids
+from law_rag_llamaindex.ingest import build_nodes, changed_provision_ids, existing_hashes
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
 
 
@@ -48,6 +51,55 @@ def test_build_nodes_sets_id_text_and_metadata():
     assert node.text == build_passage_text(provisions[0])
     assert node.metadata["content"] == "본문 A"
     assert "source_text_sha256" in node.metadata
+
+
+class _ConnectionContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return None
+
+
+class _MissingTableConnection(_ConnectionContext):
+    def __init__(self) -> None:
+        self.execute_called = False
+
+    async def run_sync(self, _sync_operation):
+        return False
+
+    async def execute(self, _query):
+        self.execute_called = True
+        raise AssertionError("missing table must not be queried")
+
+
+class _ExistingTableFailingQueryConnection(_ConnectionContext):
+    async def run_sync(self, _sync_operation):
+        return True
+
+    async def execute(self, _query):
+        raise OperationalError("SELECT 1", {}, RuntimeError("connection lost"))
+
+
+class _Engine:
+    def __init__(self, connection: _ConnectionContext) -> None:
+        self._connection = connection
+
+    def connect(self):
+        return self._connection
+
+
+@pytest.mark.asyncio
+async def test_existing_hashes_distinguishes_missing_table_from_query_failure():
+    missing_table_connection = _MissingTableConnection()
+    missing_table_engine = cast(AsyncEngine, _Engine(missing_table_connection))
+
+    assert await existing_hashes(missing_table_engine, "law_rag_llamaindex") == {}
+    assert not missing_table_connection.execute_called
+
+    failing_query_engine = cast(AsyncEngine, _Engine(_ExistingTableFailingQueryConnection()))
+    with pytest.raises(OperationalError, match="connection lost"):
+        await existing_hashes(failing_query_engine, "law_rag_llamaindex")
 
 
 pytestmark_db = pytest.mark.skipif(
