@@ -101,12 +101,9 @@ def _build_llamaindex_resources(
     if not database_url or not nvidia_api_key:
         return None
 
-    try:
-        vector_store = build_llamaindex_vector_store(llamaindex_settings)
-        embedder = build_llamaindex_embedder(llamaindex_settings)
-        v2_repository = LlamaIndexLegalRepository(repository, vector_store, embedder)
-    except Exception:
-        return None
+    vector_store = build_llamaindex_vector_store(llamaindex_settings)
+    embedder = build_llamaindex_embedder(llamaindex_settings)
+    v2_repository = LlamaIndexLegalRepository(repository, vector_store, embedder)
     return vector_store, embedder, v2_repository
 
 
@@ -120,9 +117,12 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
     ):
         return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
 
-    resources = _build_llamaindex_resources(
-        settings.database_url, llamaindex_settings.nvidia_api_key
-    )
+    try:
+        resources = _build_llamaindex_resources(
+            settings.database_url, llamaindex_settings.nvidia_api_key
+        )
+    except Exception:
+        return None
     if resources is None:
         return None
 
@@ -270,16 +270,27 @@ def _v2_not_ready_http_error() -> HTTPException:
 async def _v2_index_ready() -> bool:
     if not settings.database_url:
         return False
-    async with repository.engine.connect() as connection:  # type: ignore[union-attr]
-        row = (
-            await connection.execute(
-                text(
-                    "SELECT 1 FROM law_rag_llamaindex_ingestion_runs "
-                    "WHERE status='completed' LIMIT 1"
+    try:
+        async with repository.engine.connect() as connection:  # type: ignore[union-attr]
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT status FROM law_rag_llamaindex_ingestion_runs "
+                        "ORDER BY started_at DESC, id DESC LIMIT 1"
+                    )
                 )
-            )
-        ).first()
-    return row is not None
+            ).first()
+    except Exception:
+        return False
+    return row is not None and row[0] == "completed"
+
+
+async def _v2_ready() -> bool:
+    """Fail closed when readiness-marker access is unavailable."""
+    try:
+        return await _v2_index_ready()
+    except Exception:
+        return False
 
 
 @app.post("/v2/search", response_model=list[SearchHit])
@@ -290,7 +301,7 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
     vector_store, embedder, _ = resources
     if vector_store is None or embedder is None:
         raise _v2_not_ready_http_error()
-    if not await _v2_index_ready():
+    if not await _v2_ready():
         raise _v2_not_ready_http_error()
     hits = await llamaindex_search(
         vector_store,
@@ -367,7 +378,7 @@ async def question_v2(payload: QuestionRequest, request: Request) -> QuestionRes
     _, _, v2_repository = resources
     if v2_repository is None:
         raise _v2_not_ready_http_error()
-    if not await _v2_index_ready():
+    if not await _v2_ready():
         raise _v2_not_ready_http_error()
     return await _handle_question(payload, request, v2_repository)
 

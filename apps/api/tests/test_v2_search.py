@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -112,3 +113,75 @@ def test_v2_search_returns_503_when_resource_factory_fails(
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "v2_search_not_ready"
     assert "database credentials" not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("latest_status", "expected_ready"),
+    [("completed", True), ("running", False), ("failed", False)],
+)
+async def test_v2_readiness_depends_on_the_latest_ingestion_run(
+    monkeypatch: pytest.MonkeyPatch, latest_status: str, expected_ready: bool
+) -> None:
+    import app.main as main_module
+
+    class Result:
+        def first(self):
+            return (latest_status,)
+
+    class Connection:
+        async def execute(self, statement):
+            sql = str(statement)
+            assert "ORDER BY started_at DESC" in sql
+            assert "WHERE status='completed'" not in sql
+            return Result()
+
+    class Engine:
+        @asynccontextmanager
+        async def connect(self):
+            yield Connection()
+
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://db.example/law")
+    monkeypatch.setattr(main_module.repository, "engine", Engine(), raising=False)
+
+    assert await main_module._v2_index_ready() is expected_ready
+
+
+@pytest.mark.asyncio
+async def test_v2_readiness_closes_when_marker_connection_or_migration_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    class Engine:
+        @asynccontextmanager
+        async def connect(self):
+            raise RuntimeError("migration state and database credentials must stay private")
+            yield
+
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://db.example/law")
+    monkeypatch.setattr(main_module.repository, "engine", Engine(), raising=False)
+
+    assert await main_module._v2_index_ready() is False
+
+
+def test_v2_search_returns_stable_503_when_readiness_marker_query_fails(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", object())
+    monkeypatch.setattr(main_module, "llamaindex_embedder", object())
+
+    async def failed_readiness_check() -> bool:
+        raise RuntimeError("migration state and database credentials must stay private")
+
+    monkeypatch.setattr(main_module, "_v2_index_ready", failed_readiness_check)
+    response = TestClient(main_module.app).post(
+        "/v2/search", json={"query": "태양광", "as_of_date": "2026-01-01", "limit": 5}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "v2_search_not_ready"
+    assert "database credentials" not in response.text
+    assert "database credentials" not in caplog.text

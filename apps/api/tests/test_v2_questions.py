@@ -61,6 +61,46 @@ def test_v2_resources_factory_builds_each_resource_once(
     main_module._build_llamaindex_resources.cache_clear()
 
 
+def test_v2_resources_factory_retries_after_transient_initialization_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://factory.example/law")
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", None)
+    monkeypatch.setattr(main_module, "llamaindex_embedder", None)
+    monkeypatch.setattr(main_module, "llamaindex_repository", None)
+
+    class LlamaIndexSettings:
+        nvidia_api_key = "nvidia-test-key"
+
+    monkeypatch.setattr(main_module, "llamaindex_settings", LlamaIndexSettings())
+    attempts = 0
+    store = object()
+    embedder = object()
+
+    def build_store(settings) -> object:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary initialization failure")
+        return store
+
+    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", build_store)
+    monkeypatch.setattr(main_module, "build_llamaindex_embedder", lambda settings: embedder)
+    monkeypatch.setattr(
+        main_module,
+        "LlamaIndexLegalRepository",
+        lambda delegate, vector_store, repository_embedder: object(),
+    )
+    main_module._build_llamaindex_resources.cache_clear()
+
+    assert main_module._llamaindex_resources() is None
+    assert main_module._llamaindex_resources() is not None
+    assert attempts == 2
+    main_module._build_llamaindex_resources.cache_clear()
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     import app.main as main_module
@@ -155,6 +195,34 @@ def test_v2_questions_returns_503_when_index_is_not_ready(
     )
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "v2_search_not_ready"
+
+
+def test_v2_questions_returns_stable_503_when_readiness_marker_connection_fails(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "llamaindex_repository", object())
+
+    async def failed_readiness_check() -> bool:
+        raise RuntimeError("migration state and database credentials must stay private")
+
+    monkeypatch.setattr(main_module, "_v2_index_ready", failed_readiness_check)
+    response = TestClient(main_module.app).post(
+        "/v2/questions",
+        json={
+            "client_request_id": "11111111-1111-1111-1111-111111111111",
+            "question": "태양광 설비 인허가 요건이 뭐야",
+            "as_of_date": "2026-01-01",
+            "project_stage": "planning",
+            "answer_mode": "search_only",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "v2_search_not_ready"
+    assert "database credentials" not in response.text
+    assert "database credentials" not in caplog.text
 
 
 def test_v2_questions_uses_llamaindex_repository_for_evidence(

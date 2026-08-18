@@ -1,7 +1,7 @@
 # 데이터베이스 스키마
 
-> 기준 시점: 2026-08-08
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0012_law_type_classification.py`
+> 기준 시점: 2026-08-18
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0013_llamaindex_ingestion_runs.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
@@ -32,13 +32,16 @@
 | `checklist_exports` | 질문 이력에서 생성한 내보내기 감사 메타데이터 |
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
+| `law_rag_llamaindex_ingestion_runs` | v2 LlamaIndex ingestion의 시작·완료 시각, node 수, running/completed/failed 준비 상태 |
 
 `0012`은 `legal_documents`에 `law_type_name`/`law_type_code` 컬럼을 추가한다. 법제처 Open API가 내려주는
 `법종구분`/`법종구분코드`(법령) 또는 `행정규칙종류`/`행정규칙종류코드`(행정규칙) 원 값을 코드 체계 재정의 없이
 그대로 저장하며, 신규·재수집 문서에만 채워진다. 이 값은 corpus 발행 drift 감지(`corpus-publish-base-v1`)
 대상이 아니라 매 upsert마다 최신 파싱 값으로 덮어써진다.
 
-`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재하지만 운영·실험 dense SQL은 exhaustive exact cosine을 사용한다. 이 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물이며 새 HNSW 인덱스나 build도 만들지 않는다. 물리 제거는 별도 additive cleanup migration 대상이다.
+`0013`은 `law_rag_llamaindex_ingestion_runs`를 추가한다. v2 ingestion은 시작 시 `running`을 기록하고 완료 시에만 `completed`로 바꾸며, 실패 시 `failed`를 기록한다. v2 API는 가장 최신 run이 `completed`일 때만 열리고, 마커 조회·연결·migration 오류는 준비되지 않은 상태로 닫는다.
+
+`legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재하지만 v1 운영·실험 dense SQL은 exhaustive exact cosine을 사용한다. 이 v1 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물이며 새 v1 HNSW 인덱스나 build도 만들지 않는다. 물리 제거는 별도 additive cleanup migration 대상이다. 이 제한은 별도 `data_law_rag_llamaindex` v2 테이블에는 적용되지 않는다. v2 HNSW는 사용자 승인된 운영자 `HnswIndexManager`만 명시적으로 관리하며 ingestion과 API 요청은 생성·삭제·변경하지 않는다.
 
 `0009`부터 `document_versions`의 자연키는 `(document_id, mst, effective_from)`이고 `effective_from`은 필수다. `effective_to`는 `NULL`이거나 `effective_from`보다 뒤여야 한다. `document_versions_one_open_per_document` partial unique index는 `effective_to IS NULL`인 open version을 문서마다 하나로 제한한다. 동일 시행일의 복수 MST는 수집기의 연혁 검증에서 거부하므로 exclusion constraint는 두지 않는다.
 
