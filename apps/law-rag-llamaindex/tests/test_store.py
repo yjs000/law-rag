@@ -1,3 +1,5 @@
+import pytest
+
 from law_rag_llamaindex.config import Settings
 from law_rag_llamaindex.store import build_vector_store
 
@@ -26,3 +28,9 @@ def test_build_vector_store_passes_through_hnsw_kwargs_when_set():
     )
     store = build_vector_store(settings)
     assert store.hnsw_kwargs == {"hnsw_m": 16, "hnsw_ef_construction": 64}
+
+
+def test_build_vector_store_raises_without_database_url():
+    settings = Settings(_env_file=None, database_url=None)
+    with pytest.raises(ValueError, match="database_url"):
+        build_vector_store(settings)

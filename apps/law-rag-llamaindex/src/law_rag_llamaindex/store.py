@@ -10,7 +10,7 @@ def build_vector_store(settings: Settings) -> PGVectorStore:
     url = make_url(settings.database_url)
     return PGVectorStore.from_params(
         host=url.host,
-        port=str(url.port or 5432),
+        port=url.port or 5432,
         database=url.database,
         user=url.username,
         password=url.password,
