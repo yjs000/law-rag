@@ -24,4 +24,5 @@
 - [0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리](0036-account-modal-model-label.md)
 - [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md)
 - [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md)
+- [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md)
 - [0054: V2 준비 상태와 HNSW 운영](0054-v2-readiness-and-hnsw.md)

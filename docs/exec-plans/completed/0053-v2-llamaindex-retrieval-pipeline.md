@@ -663,7 +663,7 @@ git commit -m "feat(law-rag-llamaindex): add PGVectorStore factory"
 
 해시 스킵 로직(`changed_provision_ids`, `build_nodes`)은 순수 함수이며 fake를 사용한 완전한 단위 테스트 커버리지를 갖는다. `existing_hashes`/`delete_nodes`/`run_ingestion`은 살아있는 Postgres를 필요로 하며 Task 4와 동일하게 skip 가드된다.
 
-- [ ] **1단계: 순수 로직에 대한 실패하는 테스트 작성**
+- [x] **1단계: 순수 로직에 대한 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_ingest.py
@@ -749,12 +749,12 @@ async def test_run_ingestion_skips_unchanged_rows_on_second_run():
     assert second.skipped_count == second.total_provisions
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_ingest.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.ingest'`로 FAIL
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py
@@ -848,12 +848,12 @@ async def run_ingestion(engine, vector_store, embedder, table_name: str) -> Inge
     )
 ```
 
-- [ ] **4단계: 테스트가 통과하는지(또는 깔끔하게 건너뛰는지) 확인**
+- [x] **4단계: 테스트가 통과하는지(또는 깔끔하게 건너뛰는지) 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_ingest.py -v`
 기대 결과: 3 passed, 1 skipped(`DATABASE_URL`이 없을 때) — 또는, `DATABASE_URL`이 `law_rag_llamaindex_ingestion_runs` 마이그레이션(Task 8)이 적용되고 provisions 데이터가 이미 존재하는 실제 개발용 Postgres를 가리키고 있다면 4 passed.
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py apps/law-rag-llamaindex/tests/test_ingest.py
@@ -874,7 +874,7 @@ git commit -m "feat(law-rag-llamaindex): add ingestion pipeline with hash-skip u
 
 시간적 유효성(temporal validity)은 두 개의 레이어에서 강제된다: `effective_from <= as_of_date`는 `MetadataFilter`(서버 측, 저렴함)로 밀어넣고, `effective_to IS NULL OR effective_to > as_of_date` 절반은 초과 조회(over-fetch)된 배치(`limit * 4`, 최대 100으로 제한)를 가져온 후 Python에서 적용한다 — LlamaIndex의 `FilterOperator` 집합(`EQ`/`GT`/`LT`/`NE`/`GTE`/`LTE`/`IN`/`NIN`)에는 확인된 null-check 연산자가 없으므로, 존재하지 않을 수도 있는 연산자를 추측하는 것을 피하기 위함이다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_retriever.py
@@ -974,12 +974,12 @@ async def test_search_respects_limit_after_temporal_post_filter():
 
 참고: `SearchHit`의 `provision_id`/`document_id`는 `law_rag_core`에서 `UUID` 타입이지만, 이 테스트 스위트는 가독성을 위해 `"current"` 같은 일반 문자열을 노드 id로 사용한다. `SearchHit` 검증이 UUID가 아닌 문자열을 거부한다면, 구현을 작성하기 전에 픽스처 id를 실제 UUID 문자열(예: `"11111111-1111-1111-1111-111111111111"`)로 바꿀 것. 이는 3단계에서 먼저 `law_rag_core/domain/schemas.py`의 `SearchHit` 정의를 읽어 확인한다.
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_retriever.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.retriever'`로 FAIL
 
-- [ ] **3단계: `SearchHit`의 필드 타입을 확인한 뒤 구현 작성**
+- [x] **3단계: `SearchHit`의 필드 타입을 확인한 뒤 구현 작성**
 
 `packages/law-rag-core/src/law_rag_core/domain/schemas.py`의 `SearchHit` 클래스를 읽을 것(이 프로젝트에서 이미 이전에 확인됨: `provision_id: UUID`, `document_id: UUID`, 나머지는 `str`/`date | None`/`float`). 이 태스크의 테스트에서 노드 id가 유효한 UUID가 아니라면, 4단계를 실행하기 전에 테스트 픽스처를 UUID 문자열로 고칠 것.
 
@@ -1048,13 +1048,13 @@ async def search(vector_store, embedder, query: str, as_of_date: date, limit: in
     return hits
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_retriever.py -v`
 기대 결과: 4 passed
 (설치된 버전에서 `MetadataFilter`/`FilterOperator`/`MetadataFilters`/`VectorStoreQuery`의 임포트 경로가 `llama_index.core.vector_stores.types`와 다르다면, 실제 설치된 패키지 구조에 맞춰 임포트를 수정할 것 — 먼저 `uv run --directory apps/law-rag-llamaindex python -c "from llama_index.core.vector_stores.types import MetadataFilter"`로 확인할 것.)
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/retriever.py apps/law-rag-llamaindex/tests/test_retriever.py
@@ -1072,7 +1072,7 @@ git commit -m "feat(law-rag-llamaindex): add retriever with temporal validity fi
 - 산출물: 테이블 `law_rag_llamaindex_ingestion_runs(id uuid pk, started_at timestamptz, finished_at timestamptz null, node_count integer, status text)`.
 - 소비: 새로운 것 없음(이 테이블은 오직 `law-rag-llamaindex`의 ingestion CLI와 `apps/api`의 준비 상태 확인 로직에서만 읽고 쓴다).
 
-- [ ] **1단계: 마이그레이션 작성**
+- [x] **1단계: 마이그레이션 작성**
 
 ```python
 # apps/api/migrations/versions/0013_llamaindex_ingestion_runs.py
@@ -1105,12 +1105,12 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS law_rag_llamaindex_ingestion_runs")
 ```
 
-- [ ] **2단계: 마이그레이션이 로컬/개발용 데이터베이스에 정상 적용되는지 확인**
+- [x] **2단계: 마이그레이션이 로컬/개발용 데이터베이스에 정상 적용되는지 확인**
 
 실행: `uv run --directory apps/api alembic upgrade head`
 기대 결과: 에러 없음; `alembic_version`이 `0013`으로 올라감. 로컬에 `DATABASE_URL`이 구성되어 있지 않다면 이 검증 단계는 건너뛰고 계획의 진행 기록에 미검증으로 남길 것 — 이 마이그레이션은 병합 전에 CI/스테이징에서 검증될 것임.
 
-- [ ] **3단계: 커밋**
+- [x] **3단계: 커밋**
 
 ```bash
 git add apps/api/migrations/versions/0013_llamaindex_ingestion_runs.py
@@ -1130,7 +1130,7 @@ git commit -m "feat(api): add law_rag_llamaindex_ingestion_runs migration"
 - 소비: `law_rag_core.ports.repository.LegalRepository` Protocol; `law_rag_llamaindex.retriever.search`(Task 8); 기존 `PostgresLegalRepository` 또는 그와 호환되는 `delegate`.
 - 산출물: `LegalRepository`의 모든 메서드를 구현하는 `LlamaIndexLegalRepository(delegate, vector_store, embedder)` — `search`/`search_with_trace`는 v2를 통해, 나머지 전부는 `delegate`로 위임.
 
-- [ ] **1단계: 워크스페이스 의존성 추가**
+- [x] **1단계: 워크스페이스 의존성 추가**
 
 `apps/api/pyproject.toml`의 `dependencies` 목록에 `"law-rag-llamaindex"`를 추가하고, `[tool.uv.sources]` 테이블에 다음을 추가:
 
@@ -1143,7 +1143,7 @@ law-rag-llamaindex = { workspace = true }
 실행: `uv sync --all-packages`(공유 venv 워크스페이스 — Task 1의 안내 참고)
 기대 결과: 충돌 없이 해석됨.
 
-- [ ] **2단계: 실패하는 테스트 작성**
+- [x] **2단계: 실패하는 테스트 작성**
 
 ```python
 # apps/api/tests/test_llamaindex_repository.py
@@ -1226,12 +1226,12 @@ async def test_non_search_methods_delegate_to_v1_repository():
     delegate.corpus_temporal_state.assert_awaited_once()
 ```
 
-- [ ] **3단계: 테스트가 실패하는지 확인**
+- [x] **3단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_llamaindex_repository.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'app.adapters.llamaindex_repository'`로 FAIL
 
-- [ ] **4단계: 구현 작성**
+- [x] **4단계: 구현 작성**
 
 ```python
 # apps/api/app/adapters/llamaindex_repository.py
@@ -1325,12 +1325,12 @@ class LlamaIndexLegalRepository:
         return await self._delegate.last_sync()
 ```
 
-- [ ] **5단계: 테스트가 통과하는지 확인**
+- [x] **5단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_llamaindex_repository.py -v`
 기대 결과: 3 passed
 
-- [ ] **6단계: 커밋**
+- [x] **6단계: 커밋**
 
 ```bash
 git add apps/api/pyproject.toml apps/api/app/adapters/llamaindex_repository.py apps/api/tests/test_llamaindex_repository.py
@@ -1349,7 +1349,7 @@ git commit -m "feat(api): add LlamaIndexLegalRepository adapter"
 - 소비: `law_rag_llamaindex.config.get_settings`, `law_rag_llamaindex.store.build_vector_store`, `law_rag_llamaindex.embedding.build_embedder`, `law_rag_llamaindex.retriever.search`(Task 2, 5, 6, 8).
 - 산출물: `list[SearchHit]`을 반환하는 `POST /v2/search`; 모듈 전역 변수 `llamaindex_vector_store: PGVectorStore | None`, `llamaindex_embedder: NVIDIAEmbedding | None`.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/api/tests/test_v2_search.py
@@ -1397,12 +1397,12 @@ def test_v2_search_returns_503_with_stable_code_when_not_configured(monkeypatch)
     assert response.json()["detail"]["code"] == "v2_search_not_ready"
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_v2_search.py -v`
 기대 결과: FAIL — `/v2/search` 라우트가 존재하지 않음(404), 또는 `main_module.llamaindex_vector_store`가 아직 없어서 `AttributeError`.
 
-- [ ] **3단계: 모듈 레벨 연결 코드와 라우트 추가**
+- [x] **3단계: 모듈 레벨 연결 코드와 라우트 추가**
 
 `apps/api/app/main.py`에서, 기존 임포트 근처(`from app.adapters.postgres_repository import PostgresLegalRepository` 줄 다음)에:
 
@@ -1476,17 +1476,17 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_v2_search.py -v`
 기대 결과: 2 passed
 
-- [ ] **5단계: 회귀를 확인하기 위해 `apps/api` 전체 테스트 스위트 실행**
+- [x] **5단계: 회귀를 확인하기 위해 `apps/api` 전체 테스트 스위트 실행**
 
 실행: `uv run --directory apps/api python -m pytest -v`
 기대 결과: 기존에 통과하던 테스트가 모두 계속 통과함(새로운 임포트/전역 변수가 `TestClient(main_module.app)`을 생성하는 기존 테스트의 앱 시작을 깨뜨려서는 안 됨).
 
-- [ ] **6단계: 커밋**
+- [x] **6단계: 커밋**
 
 ```bash
 git add apps/api/app/main.py apps/api/tests/test_v2_search.py
@@ -1507,7 +1507,7 @@ git commit -m "feat(api): add /v2/search endpoint backed by law-rag-llamaindex"
 
 이것은 이 계획에서 가장 위험도가 높은 태스크다 — `_answer_question`은 여러 내부 단계를 가진 큰 함수다. 이 리팩터링은 의도적으로 범위를 좁혔다: 새 파라미터 하나를 네 개의 함수에 통과시킬 뿐, 다른 로직은 건드리지 않는다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/api/tests/test_v2_questions.py
@@ -1585,12 +1585,12 @@ def test_v2_questions_uses_llamaindex_repository_for_evidence(client, monkeypatc
 
 참고: `QuestionResponse`의 정확한 필수 필드는 `app/domain/schemas.py`와 일치해야 한다 — 라우팅 로직과 무관한 검증 에러로 테스트가 실패하면, 이 픽스처를 확정하기 전에 해당 클래스를 먼저 읽을 것.
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_v2_questions.py -v`
 기대 결과: FAIL — `/v2/questions` 라우트가 존재하지 않음(404)
 
-- [ ] **3단계: `_answer_question`과 그 헬퍼가 `repository`를 받도록 리팩터링**
+- [x] **3단계: `_answer_question`과 그 헬퍼가 `repository`를 받도록 리팩터링**
 
 `apps/api/app/main.py`에서, 네 개의 시그니처와 그 내부의 repository 참조를 변경:
 
@@ -1656,7 +1656,7 @@ async def _answer_question(
 
 `main.py`의 임포트에 아직 없다면 `from law_rag_core.ports.repository import LegalRepository`를 추가할 것(현재 `repository`는 이 Protocol로 타입 표기되지 않고 구조적으로만 타입되어 있으므로, 먼저 `grep -n "LegalRepository" apps/api/app/main.py`로 확인할 것 — 이 임포트는 새로 추가될 가능성이 높음).
 
-- [ ] **4단계: 영향받지 않는 세 개의 v1 호출부가 `repository`를 명시적으로 전달하도록 업데이트**
+- [x] **4단계: 영향받지 않는 세 개의 v1 호출부가 `repository`를 명시적으로 전달하도록 업데이트**
 
 `/v1/search` 핸들러(199번째 줄 근처):
 ```python
@@ -1673,7 +1673,7 @@ async def _answer_question(
         temporal_state = await _load_corpus_temporal_state(repository)
 ```
 
-- [ ] **5단계: `/v1/questions` 라우트에서 `_handle_question`을 추출하고 `/v2/questions` 추가**
+- [x] **5단계: `/v1/questions` 라우트에서 `_handle_question`을 추출하고 `/v2/questions` 추가**
 
 기존 `question()` 핸들러 본문(현재 `@app.post("/v1/questions", ...)`로 데코레이트된 함수 전체)을 추출된 헬퍼와 두 개의 얇은 라우트로 교체:
 
@@ -1738,17 +1738,17 @@ async def question_v2(payload: QuestionRequest, request: Request) -> QuestionRes
     return await _handle_question(payload, request, llamaindex_repository)
 ```
 
-- [ ] **6단계: 새 테스트가 통과하는지 확인**
+- [x] **6단계: 새 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/api python -m pytest tests/test_v2_questions.py -v`
 기대 결과: 2 passed
 
-- [ ] **7단계: 회귀를 확인하기 위해 `apps/api` 전체 테스트 스위트 실행**
+- [x] **7단계: 회귀를 확인하기 위해 `apps/api` 전체 테스트 스위트 실행**
 
 실행: `uv run --directory apps/api python -m pytest -v`
 기대 결과: 모든 테스트가 통과함. 기존의 모든 `/v1/questions` 테스트(`test_api.py`, `test_answering.py`, `test_distributed_question_cancellation.py` 등)도 포함 — 이들은 `_answer_question`/`_retrieve_question_evidence`를 실행하며, 이제 명시적(모듈 전역값을 가진) `repository` 인자를 받게 되어도 동일하게 동작해야 한다. 실패하는 것이 있다면 리팩터링이 v1 동작을 변경한 것이므로 — 테스트가 아니라 리팩터링을 고칠 것.
 
-- [ ] **8단계: 커밋**
+- [x] **8단계: 커밋**
 
 ```bash
 git add apps/api/app/main.py apps/api/tests/test_v2_questions.py
@@ -1766,11 +1766,11 @@ git commit -m "feat(api): add /v2/questions reusing v1 answering pipeline with v
 **인터페이스:**
 - 소비: `/v2/questions`(Task 12), `/v1/questions`와 동일한 요청/응답 형태 — 다른 web 코드 변경 없음.
 
-- [ ] **1단계: 현재 호출부 확인**
+- [x] **1단계: 현재 호출부 확인**
 
 실행: `sed -n '104,115p' apps/web/lib/api-client.ts`(또는 파일을 열어서) 수정하기 전에 정확한 함수 이름과 주변 코드를 확인할 것 — 이 계획은 108번째 줄의 URL 문자열 `"/v1/questions"`을 기준으로 작성되었다. 만약 그 사이 주변 코드가 바뀌었다면, 다른 호출부가 아니라 동일한 호출부에 맞춰 수정을 조정할 것.
 
-- [ ] **2단계: 실패하는 테스트를 먼저 업데이트**
+- [x] **2단계: 실패하는 테스트를 먼저 업데이트**
 
 `apps/web/lib/api-client-flow.test.ts`에서 다음을:
 ```ts
@@ -1789,26 +1789,26 @@ git commit -m "feat(api): add /v2/questions reusing v1 answering pipeline with v
     const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/questions"));
 ```
 
-- [ ] **3단계: 테스트가 실패하는지 확인**
+- [x] **3단계: 테스트가 실패하는지 확인**
 
 실행: `pnpm --filter web test -- api-client-flow`
 기대 결과: FAIL — 모킹은 이제 `/v2/questions`를 기대하지만 `api-client.ts`는 여전히 `/v1/questions`를 호출하므로, 모킹된 fetch 핸들러가 매치되지 않고 요청이 처리되지 않은 채로 통과함.
 
-- [ ] **4단계: 구현 업데이트**
+- [x] **4단계: 구현 업데이트**
 
 `apps/web/lib/api-client.ts`에서, `/v1/questions` 호출부의 요청 URL을 `"/v1/questions"`에서 `"/v2/questions"`로 변경(스키마가 동일하므로 method, body, headers 등 나머지 인자는 모두 그대로 유지).
 
-- [ ] **5단계: 테스트가 통과하는지 확인**
+- [x] **5단계: 테스트가 통과하는지 확인**
 
 실행: `pnpm --filter web test -- api-client-flow`
 기대 결과: PASS
 
-- [ ] **6단계: 회귀를 확인하기 위해 web 전체 테스트 스위트 실행**
+- [x] **6단계: 회귀를 확인하기 위해 web 전체 테스트 스위트 실행**
 
 실행: `pnpm --filter web test`
 기대 결과: 모든 테스트가 통과함 — `/v1/questions/history`, `/v1/auth/me`, `/v1/conversations` 등은 건드리지 않았으므로 여전히 정상 동작해야 함. 질문 답변 호출만 v2로 이동했기 때문.
 
-- [ ] **7단계: 커밋**
+- [x] **7단계: 커밋**
 
 ```bash
 git add apps/web/lib/api-client.ts apps/web/lib/api-client-flow.test.ts
@@ -1824,14 +1824,14 @@ git commit -m "feat(web): call /v2/questions instead of /v1/questions"
 - 수정: `docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md`(상태 줄: `제안됨` → `구현 중` 또는 `승인`, AGENTS.md의 상태 정의에 따름)
 - 수정: `docs/PLANS.md` — 변경 불필요(이미 active/todo/completed 생명주기를 일반적으로 문서화하고 있음)
 
-- [ ] **1단계: 활성 인덱스에 계획 추가**
+- [x] **1단계: 활성 인덱스에 계획 추가**
 
 `docs/exec-plans/active/README.md`에 기존 형식을 따라 다음 줄을 추가:
 ```markdown
 - [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md) — `law-rag-llamaindex` 워크스페이스, `/v2/search`·`/v2/questions`, web 전환
 ```
 
-- [ ] **2단계: 설계 문서 상태 업데이트**
+- [x] **2단계: 설계 문서 상태 업데이트**
 
 `docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md:3`에서 다음을:
 ```markdown
@@ -1842,7 +1842,7 @@ git commit -m "feat(web): call /v2/questions instead of /v1/questions"
 상태: 구현 중 (2026-08-18)
 ```
 
-- [ ] **3단계: 세 프로젝트 전체에 걸친 전체 검증 스위트 실행**
+- [x] **3단계: 세 프로젝트 전체에 걸친 전체 검증 스위트 실행**
 
 ```bash
 uv run --directory apps/law-rag-llamaindex python -m pytest
@@ -1851,7 +1851,7 @@ pnpm --filter web test
 ```
 기대 결과: 모두 통과.
 
-- [ ] **4단계: 커밋**
+- [x] **4단계: 커밋**
 
 ```bash
 git add docs/exec-plans/active/README.md docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md
@@ -1865,4 +1865,21 @@ git commit -m "docs: link 0053 plan and mark v2 design doc as in progress"
 - **명세 커버리지:** 목표(v2 pipeline, `/v2/search`, `/v2/questions`, 인용+시간적 요구사항) → Tasks 1–12. 비범위(새로운 AI 생성 코드 없음, v2에 search_only 없음, direct-path/keyword fallback 없음, v2 quota 없음) → 구성상 준수됨(Task 12는 `_answer_question`을 그대로 재사용하며, 이 계획 어디에도 새로운 생성 코드는 작성되지 않음). 데이터 모델/Ingestion → Tasks 3, 4, 7. 조회 인터페이스 → Task 8. API → Tasks 11, 12. 인증과 이력 → Task 12(`_optional_user`/`save_question`을 그대로 재사용, 변경 없음). Web → Task 13. 테스트 → 모든 태스크가 자체 테스트를 가짐. 결정 기록 항목들(HNSW는 미루되 플러그 가능하도록, 네이티브 임베딩 차원, 패스지 템플릿 재사용, 테이블 네이밍) → 각각 Tasks 6, 5, 3, 6에 대응.
 - **알려진 위험:** Task 12의 `_answer_question` 리팩터링은 이 계획이 공유되는 v1 코드를 건드리는 유일한 지점이다. 7단계의 전체 스위트 회귀 실행이 안전망이다 — 만약 이것이 green이 아니라면, Task 13으로 진행하지 말 것.
 - **구현 시점까지 미해결로 남은 항목(설계 문서의 미결정 섹션에서 이어짐):** 정확한 ingestion CLI 진입점/플래그는 이 계획의 태스크에서 의도적으로 제외되었다 — Task 7은 `run_ingestion`을 라이브러리 함수로 노출할 뿐이며, `python -m law_rag_llamaindex.ingest` CLI 진입점을 연결하는 것은 Tasks 1–9가 병합되고 실제 corpus를 대상으로 ingestion할 수 있게 된 이후의 작은 후속 작업이며, `/v2/search`/`/v2/questions`가 mock으로 존재하고 테스트 가능한 상태가 되는 데는 걸림돌이 아니다.
+
+## 완료 결과 (2026-08-18)
+
+Task 1~14 전부 구현·태스크별 리뷰·전체 브랜치 통합 리뷰를 통과했다. subagent-driven-development로 격리 worktree(`worktree-0053-v2-llamaindex`)에서 진행했고, main에 병합·push 완료(병합 커밋 `2edd9c7`, 최종 tip `9c9e312`).
+
+**검증 증거:**
+- `uv run --directory apps/law-rag-llamaindex python -m pytest`: 40 passed, 2 skipped
+- `uv run --directory apps/api python -m pytest`: 657 passed, 3 skipped
+- `pnpm --filter web test`: 16 test files / 88 tests passed
+- 전체 브랜치 diff(`296e0d8..9c9e312`, 43 files) 최종 리뷰: Critical 0건, Important 1건(계획 문서 lifecycle 정리 누락 — 이 커밋으로 해결), Minor 1건(아래 잔여 작업 참고)
+
+**계획 대비 실제 결과:**
+- Task 1~13은 계획 그대로 구현됐다(design doc 결정 기록과 100% 일치 확인).
+- 계획에는 없던 후속 확장이 별도 계획 [0054](../completed/0054-v2-readiness-and-hnsw.md)로 분리되어 같은 브랜치에서 함께 진행·완료됐다: ingestion lifecycle 상태 추적(running/completed/failed), v2 전용 관리형 HNSW 인덱스(운영자 CLI로만 on/off, ingestion·API가 자동으로 건드리지 않음), API의 v2 리소스 지연 초기화. 이 확장은 사용자 승인 하에 진행됐으며 실제 DB migration·ingestion·HNSW DDL은 아직 실행하지 않았다(0054 문서 참고).
+- `AGENTS.md`의 HNSW 관련 전역 규칙 문장은 사용자 지시로 삭제됐다(v1 세부 규칙은 `docs/design-docs/retrieval-index-storage.md`에 그대로 남아 있음) — 이건 계획 이탈이 아니라 사용자의 명시적 결정이다.
+
+**남은 부채:** `/v2/search`/`/v2/questions`가 v1의 `_require_supported_as_of_date`(corpus가 지원하는 기준일 범위 밖 요청을 `422 unsupported_corpus_date`로 차단)에 해당하는 v2 전용 게이트를 아직 갖고 있지 않다 — 범위 밖 날짜에 조용히 빈 결과를 반환할 수 있다. `docs/exec-plans/tech-debt-tracker.md`의 TD-027로 기록.
 
