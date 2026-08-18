@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
+import sqlalchemy.ext.asyncio
 
 from law_rag_llamaindex.hnsw import HnswIndexManager
 
@@ -113,8 +116,30 @@ async def test_ensure_only_enables_missing_index(present: bool, expected: bool) 
 
 
 @pytest.mark.parametrize(
-    "table_name", ["", "Law", "law-rag", "law.rag", "law rag", "law;drop", None, 42]
+    "table_name",
+    [
+        "",
+        "Law",
+        "law-rag",
+        "law.rag",
+        "law rag",
+        "law;drop",
+        "other_table",
+        None,
+        42,
+    ],
 )
 def test_rejects_invalid_table_name(table_name: object) -> None:
     with pytest.raises(ValueError):
         HnswIndexManager(FakeEngine(FakeConnection()), table_name)  # type: ignore[arg-type]
+
+
+def test_import_does_not_create_engine_or_run_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_engine_created(*args: object, **kwargs: object) -> None:
+        raise AssertionError("module import must not create a database engine")
+
+    module = importlib.import_module("law_rag_llamaindex.hnsw")
+    original_engine_factory = module.create_async_engine
+    monkeypatch.setattr(sqlalchemy.ext.asyncio, "create_async_engine", fail_if_engine_created)
+    importlib.reload(module)
+    monkeypatch.setattr(module, "create_async_engine", original_engine_factory)

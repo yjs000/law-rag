@@ -41,3 +41,13 @@
 - `git diff --check`는 커밋 직전에 대상 파일 기준으로 재실행한다.
 
 pytest 실행 중 기존 환경의 `.pytest_cache` 쓰기 권한 경고와 NVIDIA 임베딩 모델 유효성 경고가 출력되었으나, 테스트 결과에는 영향을 주지 않았다. 실제 DB·DDL 검증은 요청 범위에 따라 수행하지 않았다.
+
+## Fix round 1: P1 v2 테이블 경계 및 import 안전성
+
+- 검토에서 지적된 v2 전용 경계를 반영해 `table_name`이 정확히 `law_rag_llamaindex`일 때만 생성자를 통과하도록 강화했다. 기존 `[a-z0-9_]+` 검증은 유지하되, `other_table`처럼 문법상 안전한 다른 테이블명도 `ValueError`로 거부한다.
+- `sqlalchemy.ext.asyncio.create_async_engine`를 감시한 뒤 모듈을 reload하는 회귀 테스트를 추가했다. import 시 engine 생성, DB 연결, DDL 실행 또는 CLI 진입이 발생하면 테스트가 실패한다.
+- RED: `other_table` 케이스에서 `1 failed, 15 passed`를 확인했다.
+- GREEN focused: `16 passed`
+- GREEN full v2: `40 passed, 2 skipped`
+- Ruff: 수정 대상 파일 `All checks passed!`
+- `git diff --check`: 통과(줄바꿈 형식 경고만 출력)

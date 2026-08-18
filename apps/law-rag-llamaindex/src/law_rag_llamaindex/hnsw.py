@@ -13,12 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from law_rag_llamaindex.config import get_settings
 
 _TABLE_NAME_PATTERN = re.compile(r"[a-z0-9_]+")
+_V2_TABLE_NAME = "law_rag_llamaindex"
 _COMMANDS = ("enable", "disable", "status", "ensure")
 
 
 def _validate_table_name(table_name: str) -> str:
-    if not isinstance(table_name, str) or _TABLE_NAME_PATTERN.fullmatch(table_name) is None:
-        raise ValueError("table_name은 영문 소문자·숫자·밑줄만 사용할 수 있습니다.")
+    if (
+        not isinstance(table_name, str)
+        or _TABLE_NAME_PATTERN.fullmatch(table_name) is None
+        or table_name != _V2_TABLE_NAME
+    ):
+        raise ValueError("v2 table_name은 정확히 law_rag_llamaindex여야 합니다.")
     return table_name
 
 
