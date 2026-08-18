@@ -1,8 +1,9 @@
+import asyncio
 from dataclasses import dataclass
 
 from llama_index.core.schema import TextNode
 from sqlalchemy import inspect, text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from law_rag_llamaindex.passage import (
     ProvisionRecord,
@@ -146,3 +147,37 @@ async def run_ingestion(engine, vector_store, embedder, table_name: str) -> Inge
         except Exception:
             pass
         raise
+
+
+async def main() -> None:
+    """CLI entrypoint: `python -m law_rag_llamaindex.ingest`.
+
+    Reads DATABASE_URL/NVIDIA_API_KEY the same way apps/api does (via
+    Settings' .env/.env.local lookup), so it must be run with a working
+    directory that has those configured (apps/api's .env.local in this repo).
+    """
+    from law_rag_llamaindex.config import get_settings
+    from law_rag_llamaindex.embedding import build_embedder
+    from law_rag_llamaindex.store import build_vector_store
+
+    settings = get_settings()
+    if not settings.database_url:
+        raise SystemExit("DATABASE_URL is not configured")
+    if not settings.nvidia_api_key:
+        raise SystemExit("NVIDIA_API_KEY is not configured")
+
+    engine = create_async_engine(settings.database_url)
+    try:
+        vector_store = build_vector_store(settings)
+        embedder = build_embedder(settings)
+        result = await run_ingestion(engine, vector_store, embedder, settings.vector_table_name)
+        print(
+            f"ingestion complete: total={result.total_provisions} "
+            f"embedded={result.embedded_count} skipped={result.skipped_count}"
+        )
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

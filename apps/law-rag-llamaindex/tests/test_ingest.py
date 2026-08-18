@@ -10,6 +10,7 @@ from law_rag_llamaindex.ingest import (
     build_nodes,
     changed_provision_ids,
     existing_hashes,
+    main,
     run_ingestion,
 )
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
@@ -288,3 +289,29 @@ async def test_run_ingestion_skips_unchanged_rows_on_second_run():
     assert first.embedded_count >= 0
     assert second.embedded_count == 0
     assert second.skipped_count == second.total_provisions
+
+
+@pytest.mark.asyncio
+async def test_main_raises_without_database_url(monkeypatch):
+    from law_rag_llamaindex.config import Settings
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.config.get_settings",
+        lambda: Settings(_env_file=None, database_url=None, nvidia_api_key="key"),
+    )
+    with pytest.raises(SystemExit, match="DATABASE_URL"):
+        await main()
+
+
+@pytest.mark.asyncio
+async def test_main_raises_without_nvidia_api_key(monkeypatch):
+    from law_rag_llamaindex.config import Settings
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.config.get_settings",
+        lambda: Settings(
+            _env_file=None, database_url="postgresql+asyncpg://u:p@h:5432/d", nvidia_api_key=None
+        ),
+    )
+    with pytest.raises(SystemExit, match="NVIDIA_API_KEY"):
+        await main()
