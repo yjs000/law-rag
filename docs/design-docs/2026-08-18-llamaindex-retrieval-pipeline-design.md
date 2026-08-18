@@ -5,53 +5,59 @@
 
 ## 배경
 
-기존 검색 파이프라인(`apps/api`의 NVIDIA NIM embedder + `provision_embeddings` +
-`embedding_profiles` 계약 + dense/keyword fallback SQL)은 [검색 인덱스·임베딩 계보
-설계](retrieval-index-storage.md)에 정의된 매우 엄격한 불변조건(HNSW 영구 금지, exact
-cosine, 동적 `corpus_snapshot` 게이트, A/B 트랜잭션 무중단 반영 프로토콜 등) 위에서
-동작한다.
+법령 검색 시스템에는 이제 v1(기존 운영 파이프라인)과 v2(이 문서에서 새로 만드는
+파이프라인) 두 버전이 병행 존재한다. 각 버전은 독립적으로 설계·운영되며, 다른 버전의
+규칙·계약에 구속되지 않는다. 서로를 참고하는 건 실제로 공유하는 지점(같은 입력
+테이블, 같은 임베딩 모델, 같은 응답 스키마처럼 재사용을 택한 부분)에 한정한다.
 
-사용자는 LangChain/LangGraph 기반 에이전트로 서비스를 확장하려 하며, 그 첫 단계로
-"클린하고 이미 완성된" 임베딩·검색 코드를 쓰기 위해 LlamaIndex로 검색 파이프라인을
-새로 만들기로 했다. 기존 파이프라인의 세부 불변조건(계약 테이블, 게이트 프로토콜,
-direct-path·keyword fallback)은 이번 신규 파이프라인에 그대로 이식하지 않고, 기존
-코드는 손대지 않은 채 legacy로 유지한다. 병행 운영하며 신규 파이프라인을 검증한다.
+v2를 만드는 이유: LangChain/LangGraph 기반 에이전트로 서비스를 확장하기 위해,
+"클린하고 이미 완성된" 임베딩·검색 코드를 LlamaIndex로 새로 짠다. v1은 손대지 않고
+그대로 legacy로 남는다.
 
 ## 전체 로드맵 (참고용 — 각 단계는 별도 브레인스토밍·spec)
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| **1** | LlamaIndex 기반 검색 파이프라인 교체 (`law-rag-llamaindex` + `/v2/search`) | **이 문서의 범위** |
+| **1** | v2 검색 파이프라인 구축 (`law-rag-llamaindex` + `/v2/search`) | **이 문서의 범위** |
 | 2 | LangGraph 워크플로우 설계 — 대화 컨텍스트 영속화(Supabase 체크포인터), `clarification_required` interrupt 처리, realtime 웹검색 도구 | 별도 spec ([0047](../exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md)과 연계) |
-| 3 | 1+2 통합 테스트 — LangGraph 에이전트가 phase 1 산출물을 검색 도구로 호출하는 end-to-end 검증 | 별도 spec |
+| 3 | 1+2 통합 테스트 — LangGraph 에이전트가 v2를 검색 도구로 호출하는 end-to-end 검증 | 별도 spec |
 | 4 | UI/UX 연결 및 세부 오류 케이스 테스트 — web이 실제로 v2/에이전트 경로를 사용하도록 전환 | 별도 spec |
-| 5 | RAG 성능 평가 및 BM25 등 검색기 도입 검토 — phase 1의 dense-only 결과를 실측한 뒤 필요성이 입증되면 추가 | 별도 spec |
+| 5 | RAG 성능 평가 및 BM25 등 검색기 도입 검토 — v2의 dense-only 결과를 실측한 뒤 필요성이 입증되면 추가 | 별도 spec |
 
-이 문서는 로드맵의 1단계만 확정 설계한다. 2~5단계는 이 문서가 끝난 뒤 각각 새 브레인스토밍
-세션에서 별도로 다룬다.
+이 문서는 로드맵의 1단계, 즉 v2만 확정 설계한다. 2~5단계는 이 문서가 끝난 뒤 각각 새
+브레인스토밍 세션에서 별도로 다룬다.
 
-## 목표
+## v1 요약 (참고용, 변경 없음)
 
-- 기존 `provisions` 테이블을 입력으로 하는 LlamaIndex 기반 검색 파이프라인을 새 uv
-  workspace 프로젝트(`law-rag-llamaindex`)로 만든다.
+이 절은 v2 설계자가 필요할 때만 찾아보는 배경 정보다. v1은 이 작업으로 전혀 수정하지
+않으며, v2는 아래 내용을 따를 의무가 없다.
+
+- 위치: `apps/api`(NVIDIA NIM embedder, `/v1/search`, `/v1/questions`), collector
+- 저장: Postgres `provision_embeddings` + `embedding_profiles` 계약 테이블
+- 검색: dense-only exact cosine(HNSW 영구 금지) + PGroonga keyword fallback +
+  direct-path 조문 조회
+- 반영: `corpus.search_ready` 게이트, A/B 트랜잭션 + 65초 drain 무중단 반영 프로토콜
+- 전체 설계는 [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) 참고
+
+## v2 설계
+
+### 목표
+
+- `provisions` 테이블(v1과 공유하는 입력 데이터)을 읽어 LlamaIndex 기반 검색
+  파이프라인을 새 uv workspace 프로젝트(`law-rag-llamaindex`)로 만든다.
 - `apps/api`에 `/v2/search` 엔드포인트를 추가해 이 파이프라인을 노출한다.
-- 기존 `/v1/*` 경로, `provision_embeddings`, `embedding_profiles`, collector는 전혀
-  수정하지 않는다(legacy로 완전 보존, 병행 운영).
-- 인용 위치(조·항·호·목 경로 + 법령명)와 기준일 시간 유효성 필터링은 새 파이프라인에서도
-  기능 요구사항으로 유지한다(구현 메커니즘은 새로 설계).
+- 인용 위치(조·항·호·목 경로 + 법령명)와 기준일 시간 유효성 필터링을 기능 요구사항으로
+  갖는다(법률 도메인 불변조건 — 구현 메커니즘은 v2가 독자적으로 설계).
 
-## 비범위
+### 비범위
 
 - AI 답변 생성·인용 검증(로드맵 2~3단계에서 LangGraph 에이전트가 담당)
-- direct-path 법령명+조문 직접 조회, PGroonga keyword fallback(이번 spec은 dense-only)
-- 레거시의 계약 테이블(`embedding_profiles`) 방식 재현, A/B 65초 drain 무중단 반영
-  프로토콜 재현
-- `/v2/search`의 로그인·quota 적용(v1 현재 기본값과 동일하게 미적용 — `account_quota_enabled`
-  기본 `False`인 현재 상태를 따름)
+- direct-path 법령명+조문 직접 조회, keyword fallback(이번 spec은 dense-only)
+- `/v2/search`의 로그인·quota 적용(적용하지 않음 — 별도 인증 요구가 생기면 후속 spec)
 - BM25 등 다른 검색기 도입(로드맵 5단계)
-- collector·수집 로직 변경
+- collector·수집 로직 변경, v1 코드 변경
 
-## 아키텍처
+### 아키텍처
 
 ```text
 apps/law-rag-llamaindex/  (신규 uv workspace 앱, 독립 pyproject.toml)
@@ -69,21 +75,21 @@ apps/web/
 
 새 워크스페이스는 `apps/api`, `apps/collector`, `packages/law-rag-core`와 별개의 uv
 workspace 멤버로 `pyproject.toml`의 `[tool.uv.workspace] members`에 추가한다. 의존성은
-`apps/api`와 완전히 분리되어 있어 LlamaIndex·LangChain 계열 패키지가 legacy 서비스에
+`apps/api`와 완전히 분리되어 있어 LlamaIndex·LangChain 계열 패키지가 v1 서비스에
 영향을 주지 않는다.
 
-## 데이터 모델과 Ingestion
+### 데이터 모델과 Ingestion
 
 **입력**: `provisions` + `document_versions` + `legal_documents` JOIN으로 다음 필드를
-읽기 전용으로 조회한다(기존 스키마 변경 없음).
+읽기 전용으로 조회한다(v1과 같은 테이블을 공유 입력으로 재사용 — 스키마 변경 없음).
 
 ```text
 provision_id, document_id, document_title, source_kind, version_label,
 effective_from, effective_to, path, heading, content, source_url, law_type_code
 ```
 
-**Passage 템플릿**: 기존 `legal-provision-v1`과 동일하게 빈 값을 제외하고 다음을
-줄바꿈으로 결합한다.
+**Passage 템플릿**: 빈 값을 제외하고 다음을 줄바꿈으로 결합한다(검색 품질을 위해 v1과
+같은 조합을 v2가 독자적으로 채택).
 
 ```text
 법령명
@@ -93,26 +99,24 @@ effective_from, effective_to, path, heading, content, source_url, law_type_code
 ```
 
 **임베딩**: LlamaIndex의 NVIDIA embedding 통합으로 `nvidia/nemotron-3-embed-1b`를
-호출한다. ingestion 시 `input_type=passage`, 질의 시 `input_type=query`. 저장 차원은
-NIM이 반환하는 네이티브 차원을 그대로 쓴다(레거시의 2048→512 축약 + L2 재정규화는
-가져오지 않는다 — 더 단순하며, 성능·비용 문제가 실측되면 후속 spec에서 축약을 추가한다).
+호출한다(같은 provider·모델을 v2가 독자적으로 채택). ingestion 시
+`input_type=passage`, 질의 시 `input_type=query`. 저장 차원은 NIM이 반환하는 네이티브
+차원을 그대로 쓴다(축약·재정규화 없음 — 단순한 기본값이며, 성능·비용 문제가 실측되면
+후속 spec에서 조정한다).
 
 **저장**: LlamaIndex `PGVectorStore`를 같은 Supabase Postgres 인스턴스에 연결한다.
 `hnsw_kwargs`를 지정하지 않아 인덱스 없는 테이블로 생성되며, 결과적으로 exact
-brute-force cosine 검색이 된다(레거시의 "HNSW 금지" 규칙을 따른 것이 아니라 새로 고른
-구현이 우연히 같은 특성을 갖는 것 — 이 신규 파이프라인은 레거시 규칙에 구속되지 않는다).
+brute-force cosine 검색이 된다.
 
 **재실행 최적화**: 노드 id로 `provision_id`를 쓰고, 메타데이터에 `source_text_sha256`
 (passage 템플릿 전체의 SHA-256)을 저장한다. 재실행 시 해시가 같은 조문은 재임베딩을
-건너뛴다(레거시와 같은 절약 아이디어를 새 코드로 재구현).
+건너뛴다.
 
 **준비 상태**: `law_rag_llamaindex_ingestion_runs` 테이블(id, started_at, finished_at,
-node_count, status)에 완료 여부만 기록하는 단순 완료 마커. 레거시의 A/B 트랜잭션·65초
-drain 프로토콜은 재현하지 않는다 — 이 파이프라인은 아직 답변 생성에 쓰이지 않아
-무중단 반영의 긴급성이 낮다. 완료된 run이 하나도 없으면 `/v2/search`는 검색을 수행하지
-않고 HTTP 503을 반환한다.
+node_count, status)에 완료 여부만 기록하는 단순 완료 마커. 완료된 run이 하나도 없으면
+`/v2/search`는 검색을 수행하지 않고 HTTP 503을 반환한다.
 
-## 조회 인터페이스
+### 조회 인터페이스
 
 `law_rag_llamaindex.retriever.search(query: str, as_of_date: date, limit: int) ->
 list[SearchHit]`:
@@ -124,10 +128,10 @@ list[SearchHit]`:
 4. 각 노드의 메타데이터를 `law_rag_core.domain.schemas.SearchHit`으로 매핑한다
    (`score`는 노드 유사도 점수).
 
-`SearchHit`, `SearchRequest`는 `law_rag_core`(기존 공유 패키지)의 정의를 그대로
+`SearchHit`, `SearchRequest`는 `law_rag_core`(v1·v2 공유 패키지)의 정의를 그대로
 재사용한다 — 새 스키마를 따로 만들지 않는다.
 
-## API (`apps/api`)
+### API (`apps/api`)
 
 ```text
 POST /v2/search
@@ -137,20 +141,19 @@ POST /v2/search
 
 - `law-rag-llamaindex`를 `apps/api`의 uv workspace 의존성으로 추가하고, 새 라우트
   핸들러가 `retriever.search(...)`를 직접 호출한다.
-- 로그인·quota 검사는 하지 않는다(v1의 현재 기본 동작 — `account_quota_enabled=False`
-  — 과 동일).
+- 로그인·quota 검사는 하지 않는다.
 - 준비 마커가 없으면 안정 코드로 HTTP 503을 반환한다(코드명은 구현 시 확정, 예:
   `llamaindex_index_not_ready`).
 - `/v1/*`는 이 작업으로 전혀 수정하지 않는다.
 
-## Web (`apps/web`)
+### Web (`apps/web`)
 
-기존 검색 결과 렌더링 컴포넌트는 변경하지 않는다(`SearchHit` 스키마가 동일하므로).
-`/v2/search`를 호출할 수 있는 개발자용 토글(예: 쿼리 파라미터 또는 로컬 설정)만
-추가한다 — 사용자에게 노출되는 신규 기능이 아니라 phase 1 산출물을 수동으로
+기존 검색 결과 렌더링 컴포넌트는 변경하지 않는다(`SearchHit` 스키마를 v1·v2가
+공유하므로). `/v2/search`를 호출할 수 있는 개발자용 토글(예: 쿼리 파라미터 또는 로컬
+설정)만 추가한다 — 사용자에게 노출되는 신규 기능이 아니라 v2 산출물을 수동으로
 확인·비교하기 위한 것이다.
 
-## 테스트
+### 테스트
 
 - `law-rag-llamaindex`:
   - ingestion 매핑 단위 테스트(provisions row → Document/Node, passage 템플릿 결합
@@ -167,24 +170,21 @@ POST /v2/search
 
 ## 결정 기록
 
-- 2026-08-18: LlamaIndex는 인터페이스·인터그레이션(문서 로딩, 임베딩 호출, 벡터스토어)
-  용도로 채택하고, 레거시의 계약 테이블·게이트 프로토콜·direct-path·keyword fallback은
-  이식하지 않기로 했다. 새 파이프라인은 레거시 불변조건에 구속되지 않는 독립 시스템으로
-  취급한다.
-- 2026-08-18: 입력은 collector가 이미 정규화한 `provisions` 테이블을 재사용한다(수집·파싱
+- 2026-08-18: v1과 v2는 각각 독립적으로 설계·운영하며, 서로 다른 버전의 규칙에
+  구속되지 않는다. 참고는 실제로 공유하는 지점(입력 테이블, 임베딩 모델, 응답
+  스키마)에서만 한다.
+- 2026-08-18: v2의 입력은 v1과 같은 `provisions` 테이블을 재사용한다(수집·파싱
   재구축 안 함).
-- 2026-08-18: 인용 경로(조·항·호·목)와 기준일 시간 유효성 필터링은 구현 메커니즘과
-  무관하게 기능 요구사항으로 유지한다(법률 도메인 불변조건).
-- 2026-08-18: 임베딩 passage 템플릿(`법령명\n경로\n표제\n원문`)은 레거시와 동일하게
-  유지해 검색 품질 저하를 방지한다.
-- 2026-08-18: 임베딩 저장 차원은 네이티브 차원 그대로 쓰고 512 축약은 하지 않는다
-  (단순화, 필요시 후속 추가).
-- 2026-08-18: `/v2/search`는 dense-only이며 direct-path·keyword fallback은 이번 spec
-  범위 밖이다.
-- 2026-08-18: `/v2/search`는 v1의 현재 기본 동작과 동일하게 로그인·quota를 적용하지
-  않는다.
-- 2026-08-18: 새 파이프라인은 `apps/api`와 독립된 uv workspace 앱
-  (`apps/law-rag-llamaindex`, 패키지명 `law-rag-llamaindex`)으로 만든다.
+- 2026-08-18: 인용 경로(조·항·호·목)와 기준일 시간 유효성 필터링은 v1·v2 공통으로
+  기능 요구사항이다(구현 메커니즘은 각자 독자적).
+- 2026-08-18: v2의 임베딩 passage 템플릿(`법령명\n경로\n표제\n원문`)은 검색 품질을
+  위해 v1과 같은 조합을 채택한다.
+- 2026-08-18: v2의 임베딩 저장 차원은 네이티브 차원 그대로 쓰고 축약하지 않는다.
+- 2026-08-18: v2의 `/v2/search`는 dense-only이며 direct-path·keyword fallback은 이번
+  spec 범위 밖이다.
+- 2026-08-18: v2의 `/v2/search`는 로그인·quota를 적용하지 않는다.
+- 2026-08-18: v2는 `apps/api`와 독립된 uv workspace 앱(`apps/law-rag-llamaindex`,
+  패키지명 `law-rag-llamaindex`)으로 만든다.
 
 ## 미결정
 
