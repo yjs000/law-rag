@@ -110,8 +110,12 @@ effective_from, effective_to, path, heading, content, source_url, law_type_code
 후속 spec에서 조정한다).
 
 **저장**: LlamaIndex `PGVectorStore`를 같은 Supabase Postgres 인스턴스에 연결한다.
-인덱스 설정은 라이브러리 기본값을 그대로 따른다 — 즉 LlamaIndex가 기본으로 지원하는
-HNSW 인덱스를 사용한다(v1의 HNSW 영구 금지 규칙은 v2에 적용되지 않는다).
+LlamaIndex 소스 확인 결과 `hnsw_kwargs`의 실제 라이브러리 기본값은 `None`이며, 이
+경우 HNSW 인덱스를 만들지 않고 brute-force exact 검색을 한다. 이번 spec은 이 기본값
+그대로 `hnsw_kwargs`를 넘기지 않는다(HNSW 미사용). 다만 vector store 생성 함수는
+`hnsw_kwargs` 파라미터를 받아들이는 형태로 만들어, 값을 필요할 때(로드맵 5단계 성능
+평가 이후) 한 줄만 바꿔 HNSW를 켤 수 있게 준비해 둔다. v1의 "HNSW 영구 금지" 규칙은
+v2에 적용되지 않는다 — v2가 HNSW를 미사용하는 건 규칙이 아니라 현재 선택일 뿐이다.
 
 **재실행 최적화**: 노드 id로 `provision_id`를 쓰고, 메타데이터에 `source_text_sha256`
 (passage 템플릿 전체의 SHA-256)을 저장한다. 재실행 시 해시가 같은 조문은 재임베딩을
@@ -206,8 +210,11 @@ POST /v2/search
   spec 범위 밖이다.
 - 2026-08-18: v2는 `apps/api`와 독립된 uv workspace 앱(`apps/law-rag-llamaindex`,
   패키지명 `law-rag-llamaindex`)으로 만든다.
-- 2026-08-18: v2 벡터 저장은 LlamaIndex `PGVectorStore` 기본값(HNSW 지원)을 그대로
-  쓴다. v1의 HNSW 영구 금지 규칙은 v2에 적용하지 않는다.
+- 2026-08-18: (정정, 최초 결정을 대체) LlamaIndex `PGVectorStore`의 실제 기본값은
+  `hnsw_kwargs=None` → HNSW 미생성(brute-force exact)이다. v2는 이번 spec에서 이
+  기본값 그대로 HNSW를 쓰지 않되, vector store 생성 함수가 `hnsw_kwargs`를 받아 나중에
+  한 줄로 켤 수 있게 준비해 둔다. v1의 HNSW 영구 금지 규칙은 v2에 적용하지 않는다 —
+  v2의 HNSW 미사용은 규칙이 아니라 현재 선택이다.
 - 2026-08-18: node→`SearchHit` 매핑은 ingestion 시 metadata에 저장한 원본 필드를
   1:1로 옮기며, 임베딩용 결합 텍스트(`text`)와 원본 `content`를 분리 보관해 정보
   손실을 막는다.
