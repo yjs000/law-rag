@@ -31,7 +31,7 @@
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
 | [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 승인 | 근거 0건·라우팅 차단·clarification 경로 전부 LLM 생성으로 전환, 호출량·비용 영향 |
-| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 제안됨 | v1과 병행하는 신규 `law-rag-llamaindex` 워크스페이스와 `/v2/search`, LangGraph 확장 로드맵 |
+| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 구현 중 | v1과 병행하는 신규 `law-rag-llamaindex` 워크스페이스, ingestion 준비 상태, `/v2/search`, 운영자 관리 HNSW와 LangGraph 확장 로드맵 |
 
 ## 버전 표기
 
@@ -45,6 +45,7 @@
 - `제안`: 비교와 피드백 단계
 - `승인 전 초안`: 구현 전 사용자 확인이 필요한 설계
 - `승인`: 구현의 기준
+- `구현 중`: 승인된 설계를 실제 코드로 구현하는 단계
 - `대체됨`: 새 문서 링크를 포함한 과거 기록
 
 ## 새 문서가 필요한 경우

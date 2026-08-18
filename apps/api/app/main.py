@@ -4,13 +4,21 @@ import json
 import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from law_rag_core.ports.repository import LegalRepository
+from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
+from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
+from law_rag_llamaindex.retriever import search as llamaindex_search
+from law_rag_llamaindex.store import build_vector_store as build_llamaindex_vector_store
+from sqlalchemy import text
 
+from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.mock_route_classifier import MockRouteClassifier
@@ -80,6 +88,46 @@ question_tasks = QuestionTaskRegistry()
 repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
 )
+llamaindex_settings = get_llamaindex_settings()
+llamaindex_vector_store = None
+llamaindex_embedder = None
+llamaindex_repository = None
+
+
+@lru_cache(maxsize=1)
+def _build_llamaindex_resources(
+    database_url: str | None, nvidia_api_key: str | None
+) -> tuple[object, object, LlamaIndexLegalRepository] | None:
+    if not database_url or not nvidia_api_key:
+        return None
+
+    vector_store = build_llamaindex_vector_store(llamaindex_settings)
+    embedder = build_llamaindex_embedder(llamaindex_settings)
+    v2_repository = LlamaIndexLegalRepository(repository, vector_store, embedder)
+    return vector_store, embedder, v2_repository
+
+
+def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:
+    """Return v2 resources while preserving test-injected module globals."""
+    global llamaindex_embedder, llamaindex_repository, llamaindex_vector_store
+
+    if any(
+        resource is not None
+        for resource in (llamaindex_vector_store, llamaindex_embedder, llamaindex_repository)
+    ):
+        return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
+
+    try:
+        resources = _build_llamaindex_resources(
+            settings.database_url, llamaindex_settings.nvidia_api_key
+        )
+    except Exception:
+        return None
+    if resources is None:
+        return None
+
+    llamaindex_vector_store, llamaindex_embedder, llamaindex_repository = resources
+    return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
 supabase_auth = (
     SupabaseAuth(
         settings.supabase_url,
@@ -196,7 +244,7 @@ async def health() -> dict[str, str]:
 
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
-    await _require_supported_as_of_date(payload.as_of_date)
+    await _require_supported_as_of_date(payload.as_of_date, repository)
     await _check_quota("search")
     try:
         hits = await repository.search(payload.query, payload.as_of_date, payload.limit, None)
@@ -212,8 +260,64 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
 
 
-@app.post("/v1/questions", response_model=QuestionResponse)
-async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+def _v2_not_ready_http_error() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={"code": "v2_search_not_ready", "message": "v2 검색을 아직 사용할 수 없습니다."},
+    )
+
+
+async def _v2_index_ready() -> bool:
+    if not settings.database_url:
+        return False
+    try:
+        async with repository.engine.connect() as connection:  # type: ignore[union-attr]
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT status FROM law_rag_llamaindex_ingestion_runs "
+                        "ORDER BY started_at DESC, id DESC LIMIT 1"
+                    )
+                )
+            ).first()
+    except Exception:
+        return False
+    return row is not None and row[0] == "completed"
+
+
+async def _v2_ready() -> bool:
+    """Fail closed when readiness-marker access is unavailable."""
+    try:
+        return await _v2_index_ready()
+    except Exception:
+        return False
+
+
+@app.post("/v2/search", response_model=list[SearchHit])
+async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]:
+    resources = _llamaindex_resources()
+    if resources is None:
+        raise _v2_not_ready_http_error()
+    vector_store, embedder, _ = resources
+    if vector_store is None or embedder is None:
+        raise _v2_not_ready_http_error()
+    if not await _v2_ready():
+        raise _v2_not_ready_http_error()
+    hits = await llamaindex_search(
+        vector_store,
+        embedder,
+        payload.query,
+        payload.as_of_date,
+        payload.limit,
+    )
+    if payload.source_kinds:
+        hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
+    return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
+
+
+async def _handle_question(
+    payload: QuestionRequest, request: Request, repository: LegalRepository
+) -> QuestionResponse:
     budget = RequestBudget.start(
         settings.question_request_timeout_seconds,
         settings.response_reserve_seconds,
@@ -224,7 +328,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     # 실패 등 stage 시작 전 오류 포함)되면 이 값 그대로 finally에서 기록된다.
     outcome: QuestionStageTimingOutcome = "failed"
     try:
-        await _require_supported_as_of_date(payload.as_of_date)
+        await _require_supported_as_of_date(payload.as_of_date, repository)
         user = await _optional_user(request.headers.get("authorization"))
         owner = _question_owner(request, user)
         task = asyncio.current_task()
@@ -235,7 +339,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         try:
             await asyncio.sleep(0)
             async with asyncio.timeout(budget.remaining_seconds()):
-                response = await _answer_question(payload, request, user, budget)
+                response = await _answer_question(payload, request, user, budget, repository)
         except asyncio.CancelledError as exc:
             outcome = "failed"
             raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
@@ -261,6 +365,24 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
         )
 
 
+@app.post("/v1/questions", response_model=QuestionResponse)
+async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    return await _handle_question(payload, request, repository)
+
+
+@app.post("/v2/questions", response_model=QuestionResponse)
+async def question_v2(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    resources = _llamaindex_resources()
+    if resources is None:
+        raise _v2_not_ready_http_error()
+    _, _, v2_repository = resources
+    if v2_repository is None:
+        raise _v2_not_ready_http_error()
+    if not await _v2_ready():
+        raise _v2_not_ready_http_error()
+    return await _handle_question(payload, request, v2_repository)
+
+
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
 async def cancel_question(client_request_id: UUID, request: Request) -> dict[str, bool]:
     user = await _optional_user(request.headers.get("authorization"))
@@ -272,6 +394,7 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
 async def _retrieve_question_evidence(
     payload: QuestionRequest,
     query_embedding: list[float] | None,
+    repository: LegalRepository,
 ) -> tuple[list[SearchHit], SearchTrace, datetime | None]:
     """검색과 corpus 동기화 시각 조회를 하나의 retrieval budget stage로 묶는다 - 둘이
     별도 stage였다면 각자 예산을 갖게 되어 전체 retrieval에 허용된 8초를 넘길 수 있다."""
@@ -305,7 +428,11 @@ def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTi
 
 
 async def _answer_question(
-    payload: QuestionRequest, request: Request, user: MockUser | None, budget: RequestBudget
+    payload: QuestionRequest,
+    request: Request,
+    user: MockUser | None,
+    budget: RequestBudget,
+    repository: LegalRepository,
 ) -> QuestionResponse:
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
@@ -475,7 +602,7 @@ async def _answer_question(
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
-            lambda: _retrieve_question_evidence(payload, query_embedding),
+            lambda: _retrieve_question_evidence(payload, query_embedding, repository),
             cap_seconds=settings.retrieval_timeout_seconds,
         )
         retrieval_outcome = "succeeded"
@@ -886,7 +1013,7 @@ async def export_checklist(
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
     requested_date = as_of_date or _current_korea_date()
-    await _require_supported_as_of_date(requested_date)
+    await _require_supported_as_of_date(requested_date, repository)
     try:
         hit = await repository.provision(provision_id, requested_date)
     except CorpusSearchUnavailableError as exc:
@@ -916,7 +1043,7 @@ async def corpus_status() -> CorpusStatus:
         )
     else:
         items = await repository.corpus_items()
-        temporal_state = await _load_corpus_temporal_state()
+        temporal_state = await _load_corpus_temporal_state(repository)
         last_successful_sync = await repository.last_sync()
     warnings = []
     if not temporal_state.ready:
@@ -955,15 +1082,17 @@ def _current_korea_date() -> date:
     return korea_today()
 
 
-async def _load_corpus_temporal_state() -> CorpusTemporalState:
+async def _load_corpus_temporal_state(repository: LegalRepository) -> CorpusTemporalState:
     try:
         return await repository.corpus_temporal_state(_current_korea_date())
     except Exception as exc:
         raise _corpus_unready_http_error() from exc
 
 
-async def _require_supported_as_of_date(requested_date: date) -> None:
-    state = await _load_corpus_temporal_state()
+async def _require_supported_as_of_date(
+    requested_date: date, repository: LegalRepository
+) -> None:
+    state = await _load_corpus_temporal_state(repository)
     if not state.ready:
         raise _corpus_unready_http_error()
     try:

@@ -24,7 +24,7 @@ def ready_corpus_temporal_state(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.main as main_module
     from app.domain.schemas import CorpusTemporalState
 
-    async def ready_state() -> CorpusTemporalState:
+    async def ready_state(repository) -> CorpusTemporalState:
         return CorpusTemporalState(
             ready=True,
             supported_as_of_from=date(1900, 1, 1),

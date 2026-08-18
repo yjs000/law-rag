@@ -105,7 +105,7 @@ export function getCorpusStatus(): Promise<CorpusStatus> {
 }
 
 export function askQuestion(input: QuestionInput, signal?: AbortSignal): Promise<QuestionResponse> {
-  return request("/v1/questions", {
+  return request("/v2/questions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

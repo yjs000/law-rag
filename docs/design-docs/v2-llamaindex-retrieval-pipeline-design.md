@@ -1,6 +1,6 @@
 # V2: LlamaIndex 기반 검색 파이프라인 (Phase 1) 설계
 
-상태: 제안됨 (2026-08-18)
+상태: 구현 중 (2026-08-18)
 결정일: 2026-08-18
 
 ## 배경
@@ -34,7 +34,7 @@ v2를 만드는 이유: LangChain/LangGraph 기반 에이전트로 서비스를 
 
 - 위치: `apps/api`(NVIDIA NIM embedder, `/v1/search`, `/v1/questions`), collector
 - 저장: Postgres `provision_embeddings` + `embedding_profiles` 계약 테이블
-- 검색: dense-only exact cosine(HNSW 영구 금지) + PGroonga keyword fallback +
+- 검색: dense-only exact cosine + PGroonga keyword fallback +
   direct-path 조문 조회
 - 반영: `corpus.search_ready` 게이트, A/B 트랜잭션 + 65초 drain 무중단 반영 프로토콜
 - 전체 설계는 [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) 참고
@@ -135,19 +135,42 @@ effective_from, effective_to, path, heading, content, source_url, law_type_code
 
 **저장**: LlamaIndex `PGVectorStore`를 같은 Supabase Postgres 인스턴스에 연결한다.
 LlamaIndex 소스 확인 결과 `hnsw_kwargs`의 실제 라이브러리 기본값은 `None`이며, 이
-경우 HNSW 인덱스를 만들지 않고 brute-force exact 검색을 한다. 이번 spec은 이 기본값
-그대로 `hnsw_kwargs`를 넘기지 않는다(HNSW 미사용). 다만 vector store 생성 함수는
-`hnsw_kwargs` 파라미터를 받아들이는 형태로 만들어, 값을 필요할 때(로드맵 5단계 성능
-평가 이후) 한 줄만 바꿔 HNSW를 켤 수 있게 준비해 둔다. v1의 "HNSW 영구 금지" 규칙은
-v2에 적용되지 않는다 — v2가 HNSW를 미사용하는 건 규칙이 아니라 현재 선택일 뿐이다.
+경우 HNSW 인덱스를 만들지 않고 brute-force exact 검색을 한다. 따라서 HNSW가 없는
+상태에서도 v2는 cosine exact 검색으로 동작한다.
+
+v2 물리 벡터 테이블 `data_law_rag_llamaindex`에 HNSW를 적용할 때는 vector store
+생성이나 ingestion/API 요청이 자동으로 상태를 바꾸지 않는다. HNSW는
+`HnswIndexManager`와 운영자 전용 CLI의 명시적 명령으로만 변경한다.
+
+```text
+python -m law_rag_llamaindex.hnsw enable|disable|status|ensure
+```
+
+- `enable`: `CREATE INDEX CONCURRENTLY IF NOT EXISTS`로
+  `embedding vector_cosine_ops` 인덱스를 만들며 `m=16`, `ef_construction=128`을
+  사용한다.
+- `disable`: `DROP INDEX CONCURRENTLY IF EXISTS`로 같은 v2 인덱스를 제거한다.
+- `status`: public catalog에서 `data_law_rag_llamaindex_embedding_hnsw_idx`의
+  존재 여부만 조회한다.
+- `ensure`: 인덱스가 없을 때만 `enable`을 호출한다.
+
+관리 모듈은 정확히 `law_rag_llamaindex` 테이블만 허용한다. ingestion은 HNSW를
+생성·삭제하거나 현재 모드를 바꾸지 않으며, API 요청도 같은 상태를 자동으로 변경하지
+않는다. `ef_search=80`은 아직 구현하지 않았고 적용 여부와 방식은 미결정이다.
 
 **재실행 최적화**: 노드 id로 `provision_id`를 쓰고, 메타데이터에 `source_text_sha256`
 (passage 템플릿 전체의 SHA-256)을 저장한다. 재실행 시 해시가 같은 조문은 재임베딩을
 건너뛴다.
 
 **준비 상태**: `law_rag_llamaindex_ingestion_runs` 테이블(id, started_at, finished_at,
-node_count, status)에 완료 여부만 기록하는 단순 완료 마커. 완료된 run이 하나도 없으면
-`/v2/search`는 검색을 수행하지 않고 HTTP 503을 반환한다.
+node_count, status)에 ingestion 실행 lifecycle을 기록한다. `run_ingestion`은 벡터
+저장 전에 `running`을 기록하고, 벡터 저장과 완료 마커 갱신이 끝나면 `completed`를
+기록한다. retrieval·임베딩·삭제·벡터 저장 또는 완료 갱신에서 예외가 나면 `failed`를
+기록하고 최초 예외를 보존한다. **가장 최근 run이 `completed`일 때만** `/v2/search`는
+검색을 수행한다. run이 없거나 가장 최근 run이 `running` 또는 `failed`이면 부분적으로
+갱신된 벡터를 노출하지 않고 HTTP 503을 반환한다. HNSW 인덱스의 존재 여부는 이
+ingestion 준비
+마커와 별개의 운영 상태이며, HNSW가 없어도 exact cosine 검색으로 API를 열 수 있다.
 
 ### 조회 인터페이스
 
@@ -241,11 +264,12 @@ POST /v2/questions
   spec 범위 밖이다.
 - 2026-08-18: v2는 `apps/api`와 독립된 uv workspace 앱(`apps/law-rag-llamaindex`,
   패키지명 `law-rag-llamaindex`)으로 만든다.
-- 2026-08-18: (정정, 최초 결정을 대체) LlamaIndex `PGVectorStore`의 실제 기본값은
-  `hnsw_kwargs=None` → HNSW 미생성(brute-force exact)이다. v2는 이번 spec에서 이
-  기본값 그대로 HNSW를 쓰지 않되, vector store 생성 함수가 `hnsw_kwargs`를 받아 나중에
-  한 줄로 켤 수 있게 준비해 둔다. v1의 HNSW 영구 금지 규칙은 v2에 적용하지 않는다 —
-  v2의 HNSW 미사용은 규칙이 아니라 현재 선택이다.
+- 2026-08-18: (정정, 최초 HNSW 미사용 결정을 대체) HNSW는 v2 물리 테이블
+  `data_law_rag_llamaindex`에만 적용한다. `HnswIndexManager`의 운영자 CLI
+  `enable`·`disable`·`status`·`ensure`로만 상태를 변경하며, ingestion과 API 요청은
+  자동으로 인덱스를 생성·삭제하거나 모드를 바꾸지 않는다. 인덱스는 cosine 연산
+  (`vector_cosine_ops`), `m=16`, `ef_construction=128`으로 구성한다. `ef_search=80`은
+  아직 구현하지 않았고 미결정으로 남긴다.
 - 2026-08-18: node→`SearchHit` 매핑은 ingestion 시 metadata에 저장한 원본 필드를
   1:1로 옮기며, 임베딩용 결합 텍스트(`text`)와 원본 `content`를 분리 보관해 정보
   손실을 막는다.
@@ -272,6 +296,9 @@ POST /v2/questions
 - `LlamaIndexLegalRepository.search_with_trace`가 반환할 `SearchTrace`의 정확한 필드값
   (v1의 키워드 fallback 단계 계측과 그대로 맞출 수 없으므로 v2 dense 검색에 맞는
   간소화된 값을 실행 계획 단계에서 확정)
+- HNSW `ef_search=80`의 구현 여부와 적용 방식은 미결정이다.
+- HNSW 평가는 recall, p95 latency, index size, ingestion duration을 기준으로 한다.
+  각 기준의 실제 측정값은 아직 없으며 미결정이다.
 
 ## 확정된 구현 세부사항 (검증 완료)
 

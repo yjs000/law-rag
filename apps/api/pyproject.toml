@@ -10,6 +10,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "kiwipiepy>=0.23.2",
   "law-rag-core",
+  "law-rag-llamaindex",
   "openai>=1.99,<3",
   "pgvector>=0.4,<1",
   "pydantic-settings>=2.10,<3",
@@ -29,6 +30,7 @@ package = false
 
 [tool.uv.sources]
 law-rag-core = { workspace = true }
+law-rag-llamaindex = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

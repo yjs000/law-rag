@@ -37,14 +37,14 @@
 **인터페이스:**
 - 산출물: `__version__ = "0.1.0"`를 가지며 uv 워크스페이스 멤버로 설치 가능한 임포트 가능 패키지 `law_rag_llamaindex`.
 
-- [ ] **1단계: 루트 `pyproject.toml`에 워크스페이스 멤버 추가**
+- [x] **1단계: 루트 `pyproject.toml`에 워크스페이스 멤버 추가**
 
 ```toml
 [tool.uv.workspace]
 members = ["apps/api", "apps/collector", "apps/law-rag-llamaindex", "packages/law-rag-core"]
 ```
 
-- [ ] **2단계: 앱 디렉터리와 `pyproject.toml` 생성**
+- [x] **2단계: 앱 디렉터리와 `pyproject.toml` 생성**
 
 ```toml
 [project]
@@ -84,14 +84,14 @@ target-version = "py314"
 select = ["E", "F", "I", "UP", "B"]
 ```
 
-- [ ] **3단계: 패키지 골격 생성**
+- [x] **3단계: 패키지 골격 생성**
 
 `apps/law-rag-llamaindex/src/law_rag_llamaindex/__init__.py`:
 ```python
 __version__ = "0.1.0"
 ```
 
-- [ ] **4단계: 스모크 테스트 작성**
+- [x] **4단계: 스모크 테스트 작성**
 
 `apps/law-rag-llamaindex/tests/test_package.py`:
 ```python
@@ -102,7 +102,7 @@ def test_package_imports():
     assert law_rag_llamaindex.__version__ == "0.1.0"
 ```
 
-- [ ] **5단계: 워크스페이스 동기화 및 테스트 실행**
+- [x] **5단계: 워크스페이스 동기화 및 테스트 실행**
 
 실행: `uv sync --all-packages`(`--directory apps/law-rag-llamaindex` 단독 실행 금지 — 이 저장소는 공유 venv uv 워크스페이스이며, 멤버 하나만 동기화하면 다른 멤버가 필요로 하는 패키지가 정리될 수 있음)
 기대 결과: Python 3.14 하에서 의존성 해석이 성공함(llama-index-core는 `>=3.9,<4.0`을 요구하므로 해석되어야 함 — 만약 실패하면, 이후의 모든 태스크가 이 설치 성공에 의존하므로 다음 태스크로 넘어가기 전에 resolver 오류를 기록할 것).
@@ -110,7 +110,7 @@ def test_package_imports():
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest -v`
 기대 결과: `test_package_imports PASSED`
 
-- [ ] **6단계: 커밋**
+- [x] **6단계: 커밋**
 
 ```bash
 git add pyproject.toml apps/law-rag-llamaindex/
@@ -129,7 +129,7 @@ git commit -m "feat(law-rag-llamaindex): scaffold new uv workspace app"
 - 산출물: `database_url: str | None`, `nvidia_api_key: str | None`, `nvidia_base_url: str`, `nvidia_embedding_model: str`, `embed_dim: int`, `vector_table_name: str`, `hnsw_kwargs: dict | None` 필드를 가진 `Settings`(pydantic `BaseSettings`); `get_settings() -> Settings`(`lru_cache` 적용).
 - 소비: 없음(리프 모듈).
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_config.py
@@ -163,12 +163,12 @@ def test_get_settings_is_cached():
     assert get_settings() is get_settings()
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_config.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.config'`로 FAIL
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-llamaindex/src/law_rag_llamaindex/config.py
@@ -200,12 +200,12 @@ def get_settings() -> Settings:
     return Settings()
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_config.py -v`
 기대 결과: 3 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/config.py apps/law-rag-llamaindex/tests/test_config.py
@@ -224,7 +224,7 @@ git commit -m "feat(law-rag-llamaindex): add settings module"
 - 산출물: `ProvisionRecord`(`TypedDict`: `provision_id: str`, `document_id: str`, `document_title: str`, `source_kind: str`, `law_type_code: str | None`, `version_label: str`, `effective_from: str | None`, `effective_to: str | None`, `path: str`, `heading: str | None`, `content: str`, `source_url: str`); `build_passage_text(record: ProvisionRecord) -> str`; `build_node_metadata(record: ProvisionRecord, source_text_sha256: str) -> dict[str, object]`; `compute_source_text_sha256(passage_text: str) -> str`.
 - 소비: 없음(리프 모듈 — Task 4의 소스 쿼리 행이 변환되는 대상이며, Task 7의 ingestion이 소비하는 대상).
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_passage.py
@@ -293,12 +293,12 @@ def test_build_node_metadata_preserves_raw_fields_separately_from_passage_text()
     assert metadata["source_text_sha256"] == "deadbeef"
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_passage.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.passage'`로 FAIL
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-llamaindex/src/law_rag_llamaindex/passage.py
@@ -353,12 +353,12 @@ def build_node_metadata(record: ProvisionRecord, source_text_sha256: str) -> dic
     }
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_passage.py -v`
 기대 결과: 5 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/passage.py apps/law-rag-llamaindex/tests/test_passage.py
@@ -379,7 +379,7 @@ git commit -m "feat(law-rag-llamaindex): add passage template and node metadata 
 
 이 태스크의 테스트는 실제 join 쿼리를 실행하므로 살아있는 Postgres(`DATABASE_URL` 설정됨)를 필요로 한다 — `apps/api`의 관례(테스트에서 `DATABASE_URL=""`을 기본값으로 두는 것)에 맞춰, 기본 `pytest` 실행(즉 `DATABASE_URL` 없음)에서는 건너뛰도록 가드할 것.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_source.py
@@ -422,12 +422,12 @@ async def test_fetch_provisions_returns_expected_fields():
             assert key in record
 ```
 
-- [ ] **2단계: 테스트가 건너뛰어지는지(DB 미설정) 확인하고, 임포트가 먼저 실패하는지도 확인**
+- [x] **2단계: 테스트가 건너뛰어지는지(DB 미설정) 확인하고, 임포트가 먼저 실패하는지도 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_source.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.source'`로 FAIL(skip 마커는 모듈이 존재해야 비로소 적용되므로, 이 단계는 모듈이 존재하기 전에 테스트 파일 자체가 제대로 연결되어 있음을 증명하기 위한 것)
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 `apps/api/app/adapters/postgres_repository.py`가 이미 사용 중인 join과 컬럼 별칭(`provisions p JOIN document_versions v ON v.id = p.version_id JOIN legal_documents d ON d.id = v.document_id`, `version_label`은 `'MST '||v.mst`로 구성)을 그대로 재사용하여, v2의 원시 행(raw row)이 동일한 컬럼에 대해 v1의 의미(semantics)와 일치하도록 한다.
 
@@ -475,12 +475,12 @@ async def fetch_provisions(engine: AsyncEngine) -> list[ProvisionRecord]:
     ]
 ```
 
-- [ ] **4단계: 테스트가 통과하는지(또는 DB 없이 깔끔하게 건너뛰는지) 확인**
+- [x] **4단계: 테스트가 통과하는지(또는 DB 없이 깔끔하게 건너뛰는지) 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_source.py -v`
 기대 결과: `1 skipped`(기본 개발 셸에는 `DATABASE_URL`이 없음) — 로컬에 `DATABASE_URL`을 export해두었다면 `1 passed`가 나와야 함.
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/source.py apps/law-rag-llamaindex/tests/test_source.py
@@ -501,7 +501,7 @@ git commit -m "feat(law-rag-llamaindex): add provisions source query"
 
 NIM의 passage-vs-query 구분은 LlamaIndex의 `NVIDIAEmbedding`이 어떤 메서드를 호출하는지(ingestion/passage용 `get_text_embedding_batch(...)`, 쿼리용 `get_query_embedding(...)`)에 따라 내부적으로 처리된다 — 이 래퍼는 `input_type`을 직접 넘길 필요 없이, 올바른 모델/자격 증명으로 클라이언트를 생성하기만 하면 된다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_embedding.py
@@ -521,12 +521,12 @@ def test_build_embedder_uses_configured_model_and_endpoint():
     assert embedder.truncate == "END"
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_embedding.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.embedding'`로 FAIL
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-llamaindex/src/law_rag_llamaindex/embedding.py
@@ -544,13 +544,13 @@ def build_embedder(settings: Settings) -> NVIDIAEmbedding:
     )
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_embedding.py -v`
 기대 결과: 1 passed
 (만약 `NVIDIAEmbedding.__init__`이 가짜 API 키를 거부하거나 생성 시 네트워크 접근을 요구한다면, 이는 실제 API 형태에 관한 뜻밖의 발견이므로 — 테스트를 건너뛰지 말고 멈춰서 래퍼/테스트를 조정할 것. 네트워크 호출 없이 생성될 것으로 예상됨.)
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/embedding.py apps/law-rag-llamaindex/tests/test_embedding.py
@@ -569,7 +569,7 @@ git commit -m "feat(law-rag-llamaindex): add NVIDIA embedding wrapper"
 - 소비: `Settings`(Task 2).
 - 산출물: `build_vector_store(settings: Settings) -> PGVectorStore`.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-llamaindex/tests/test_store.py
@@ -603,12 +603,12 @@ def test_build_vector_store_passes_through_hnsw_kwargs_when_set():
     assert store.hnsw_kwargs == {"hnsw_m": 16, "hnsw_ef_construction": 64}
 ```
 
-- [ ] **2단계: 테스트가 실패하는지 확인**
+- [x] **2단계: 테스트가 실패하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_store.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_llamaindex.store'`로 FAIL
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-llamaindex/src/law_rag_llamaindex/store.py
@@ -636,13 +636,13 @@ def build_vector_store(settings: Settings) -> PGVectorStore:
     )
 ```
 
-- [ ] **4단계: 테스트가 통과하는지 확인**
+- [x] **4단계: 테스트가 통과하는지 확인**
 
 실행: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_store.py -v`
 기대 결과: 2 passed
 (이 테스트가 살아있는 DB 없이 통과하려면 `PGVectorStore.from_params`가 생성 시점에 연결을 열지 않아야 한다 — 만약 연결을 연다면 이 테스트에는 실행 중인 Postgres가 필요하다는 뜻이므로, 이 사실을 계획의 진행 기록에 남기고 테스트를 Task 4의 `DATABASE_URL`-skip 패턴으로 전환할 것.)
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-llamaindex/src/law_rag_llamaindex/store.py apps/law-rag-llamaindex/tests/test_store.py

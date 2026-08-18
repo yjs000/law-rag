@@ -3,7 +3,7 @@
 현재 진행 중인 복잡한 작업의 실행 계획을 둔다. 각 계획에는 완료 조건, 체크리스트, 결정 로그, 진행 기록, 차단 요소를 포함한다.
 
 - [0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — E-10 base 실행 완료, 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건(품질 원인 미진단)
-- [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md) — 착수 전, 새 `law-rag-llamaindex` 워크스페이스와 `/v2/search`·`/v2/questions`, web 전환까지 포함한 계획 작성 완료
+- [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md) — `law-rag-llamaindex` 워크스페이스, `/v2/search`·`/v2/questions`, web 전환
 
 2026-08-18: 0002·0008·0015·0022·0025·0028·0036·0043·0046은 사용자 확인 또는 판단으로
 [completed/](../completed/README.md)로 이동했다. 0012는 설계 현행화가 필요해
