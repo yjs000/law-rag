@@ -149,6 +149,18 @@ async def run_ingestion(engine, vector_store, embedder, table_name: str) -> Inge
         raise
 
 
+def _async_database_url(database_url: str) -> str:
+    """SQLAlchemy's async engine requires an async driver in the URL scheme.
+    apps/api's DATABASE_URL is typically a plain `postgresql://` value (the
+    driver-agnostic form Supabase/Alembic use); normalize it to asyncpg here
+    the same way apps/api's own engine construction does."""
+    if database_url.startswith("postgresql+asyncpg://"):
+        return database_url
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return database_url
+
+
 async def main() -> None:
     """CLI entrypoint: `python -m law_rag_llamaindex.ingest`.
 
@@ -166,7 +178,7 @@ async def main() -> None:
     if not settings.nvidia_api_key:
         raise SystemExit("NVIDIA_API_KEY is not configured")
 
-    engine = create_async_engine(settings.database_url)
+    engine = create_async_engine(_async_database_url(settings.database_url))
     try:
         vector_store = build_vector_store(settings)
         embedder = build_embedder(settings)

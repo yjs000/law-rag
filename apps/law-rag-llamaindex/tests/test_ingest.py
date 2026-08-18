@@ -7,6 +7,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from law_rag_llamaindex.ingest import (
+    _async_database_url,
     build_nodes,
     changed_provision_ids,
     existing_hashes,
@@ -289,6 +290,18 @@ async def test_run_ingestion_skips_unchanged_rows_on_second_run():
     assert first.embedded_count >= 0
     assert second.embedded_count == 0
     assert second.skipped_count == second.total_provisions
+
+
+def test_async_database_url_adds_asyncpg_driver_to_plain_postgresql_url():
+    assert (
+        _async_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+asyncpg://user:pass@host:5432/db"
+    )
+
+
+def test_async_database_url_leaves_asyncpg_url_unchanged():
+    url = "postgresql+asyncpg://user:pass@host:5432/db"
+    assert _async_database_url(url) == url
 
 
 @pytest.mark.asyncio
