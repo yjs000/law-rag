@@ -18,7 +18,7 @@ v2를 만드는 이유: LangChain/LangGraph 기반 에이전트로 서비스를 
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| **1** | v2 검색 파이프라인 구축 (`law-rag-llamaindex` + `/v2/search`) | **이 문서의 범위** |
+| **1** | v2 검색 파이프라인 구축 (`law-rag-llamaindex` + `/v2/search` + `/v2/questions`) | **이 문서의 범위** |
 | 2 | LangGraph 워크플로우 설계 — 대화 컨텍스트 영속화(Supabase 체크포인터), `clarification_required` interrupt 처리, realtime 웹검색 도구 | 별도 spec ([0047](../exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md)과 연계) |
 | 3 | 1+2 통합 테스트 — LangGraph 에이전트가 v2를 검색 도구로 호출하는 end-to-end 검증 | 별도 spec |
 | 4 | UI/UX 연결 및 세부 오류 케이스 테스트 — web이 실제로 v2/에이전트 경로를 사용하도록 전환 | 별도 spec |
@@ -45,17 +45,25 @@ v2를 만드는 이유: LangChain/LangGraph 기반 에이전트로 서비스를 
 
 - `provisions` 테이블(v1과 공유하는 입력 데이터)을 읽어 LlamaIndex 기반 검색
   파이프라인을 새 uv workspace 프로젝트(`law-rag-llamaindex`)로 만든다.
-- `apps/api`에 `/v2/search` 엔드포인트를 추가해 이 파이프라인을 노출한다.
+- `apps/api`에 `/v2/search`(단독 검색, 디버그·후속 도구화용)와 `/v2/questions`(v1과
+  동일한 질문 응답 엔드포인트, 근거 검색만 v2로 교체)를 추가한다.
+- `/v2/questions`는 v1의 라우팅·AI 답변 생성·인용 검증 로직을 전혀 새로 만들지 않고
+  그대로 재사용한다 — 바뀌는 건 근거를 가져오는 검색 단계 하나뿐이다.
 - 인용 위치(조·항·호·목 경로 + 법령명)와 기준일 시간 유효성 필터링을 기능 요구사항으로
-  갖는다(법률 도메인 불변조건 — 구현 메커니즘은 v2가 독자적으로 설계).
+  갖는다(법률 도메인 불변조건 — 검색 자체의 구현 메커니즘은 v2가 독자적으로 설계).
 
 ### 비범위
 
-- AI 답변 생성·인용 검증(로드맵 2~3단계에서 LangGraph 에이전트가 담당)
-- direct-path 법령명+조문 직접 조회, keyword fallback(이번 spec은 dense-only)
-- quota 제한(로그인 여부와 무관하게 이번 spec에서는 적용하지 않음)
+- AI 답변 생성·인용 검증 로직 자체를 새로 작성하는 것(v1의 기존 코드를 그대로 재사용)
+- `search_only`(순수 키워드 매칭) 모드를 v2로 이식하는 것 — 현재 `apps/web`이 이
+  모드를 실제로 요청하지 않으므로 v2 범위에서 뺀다. v1에는 그대로 남는다.
+- direct-path 법령명+조문 직접 조회, PGroonga keyword fallback(v2 검색 자체는
+  dense-only)
+- v2 전용 quota 제한(v1과 동일하게 이번 spec에서는 적용하지 않음 — `account_quota_enabled`
+  기본값을 그대로 따름)
 - BM25 등 다른 검색기 도입(로드맵 5단계)
-- collector·수집 로직 변경, v1 코드 변경
+- collector·수집 로직 변경, v1 코드 변경(단, `/v2/questions`가 v1의 함수를 호출하는
+  건 변경이 아니라 재사용이다)
 
 ### 아키텍처
 
@@ -67,16 +75,32 @@ apps/law-rag-llamaindex/  (신규 uv workspace 앱, 독립 pyproject.toml)
 └─ retriever.py  질의 임베딩(query) → 메타데이터 필터 → cosine top-k → SearchHit 매핑
 
 apps/api/
-└─ /v2/search    law-rag-llamaindex를 워크스페이스 의존성으로 호출, SearchHit 그대로 반환
+├─ /v2/search      law-rag-llamaindex를 직접 호출, SearchHit 그대로 반환(단독,
+│                   지금은 web이 호출하지 않는 디버그·후속 도구화용 엔드포인트)
+├─ LlamaIndexLegalRepository  기존 LegalRepository Protocol을 구현하는 새 adapter.
+│   search/search_with_trace만 law-rag-llamaindex로 새로 구현하고, 나머지 메서드
+│   (consume_quota, corpus_temporal_state, provision, last_sync 등)는 기존
+│   PostgresLegalRepository 인스턴스에 그대로 위임한다.
+└─ /v2/questions   v1의 `_answer_question`과 완전히 같은 라우팅·생성·검증 코드를
+                    호출하되, evidence 검색에 쓰는 repository만
+                    LlamaIndexLegalRepository로 바꿔서 실행한다.
 
 apps/web/
-└─ 기존 검색 결과 렌더링 재사용, 검색 호출 대상을 /v1/search → /v2/search로 전환
+└─ /v1/questions 호출을 /v2/questions로 전환(search_only 전용 화면은 원래 없었음)
 ```
 
-새 워크스페이스는 `apps/api`, `apps/collector`, `packages/law-rag-core`와 별개의 uv
-workspace 멤버로 `pyproject.toml`의 `[tool.uv.workspace] members`에 추가한다. 의존성은
-`apps/api`와 완전히 분리되어 있어 LlamaIndex·LangChain 계열 패키지가 v1 서비스에
-영향을 주지 않는다.
+새 워크스페이스(`law-rag-llamaindex`)는 `apps/api`, `apps/collector`,
+`packages/law-rag-core`와 별개의 uv workspace 멤버로 `pyproject.toml`의
+`[tool.uv.workspace] members`에 추가한다. 의존성은 `apps/api`와 완전히 분리되어 있어
+LlamaIndex·LangChain 계열 패키지가 v1 서비스에 영향을 주지 않는다.
+
+`LlamaIndexLegalRepository`는 `apps/api`(v1 코드가 있는 곳) 안에 두는 adapter다 —
+`law_rag_core.ports.repository.LegalRepository` Protocol을 구현하며, 생성자로 기존
+`PostgresLegalRepository` 인스턴스(`delegate`)와 law-rag-llamaindex의 vector
+store·embedder를 받는다. 이 protocol이 이미 ports/adapters 경계로 설계돼 있어서, v1의
+`_answer_question`/`_retrieve_question_evidence` 등 애플리케이션 로직은 어떤
+repository 구현체가 주입됐는지 몰라도 동작한다 — `/v2/questions`는 이 코드를 전혀
+복제하지 않고, repository 주입만 바꿔서 호출한다.
 
 ### 데이터 모델과 Ingestion
 
@@ -151,31 +175,36 @@ LlamaIndex 노드가 추가로 갖는 내부 필드(`node_id`, `relationships`,
 POST /v2/search
   request:  SearchRequest (query, as_of_date, limit, source_kinds)
   response: list[SearchHit]
+
+POST /v2/questions
+  request:  QuestionRequest  (v1과 동일 스키마)
+  response: QuestionResponse (v1과 동일 스키마)
 ```
 
-- `law-rag-llamaindex`를 `apps/api`의 uv workspace 의존성으로 추가하고, 새 라우트
-  핸들러가 `retriever.search(...)`를 직접 호출한다.
-- 인증은 필수가 아니다(아래 "인증과 로그" 참고) — quota 제한은 적용하지 않는다.
-- 준비 마커가 없으면 HTTP 503, 안정 코드 `v2_search_not_ready`를 반환한다.
+- **`/v2/search`**: `law-rag-llamaindex`의 `retriever.search(...)`를 직접 호출한다.
+  v1의 `/v1/search`처럼 인증·quota를 요구하지 않는다. 지금은 `apps/web`이 호출하지
+  않는 단독 엔드포인트다(디버그, 후속 spec에서 도구화할 때 대비). 준비 마커가 없으면
+  HTTP 503, 안정 코드 `v2_search_not_ready`를 반환한다.
+- **`/v2/questions`**: 핸들러 본문은 v1의 `_answer_question` 로직을 그대로 호출하되,
+  그 함수가 쓰는 `repository`를 `LlamaIndexLegalRepository`(위 아키텍처 참고)로
+  바꿔서 실행한다. 인증·quota·이력 저장·라우팅·생성·검증·오류 처리 전부 v1과 동일한
+  코드 경로다 — 새로 구현하는 부분이 없다.
 - `/v1/*`는 이 작업으로 전혀 수정하지 않는다.
 
-### 인증과 로그
+### 인증과 이력
 
-- `/v2/search`는 로그인을 요구하지 않는다 — 익명 호출도 허용한다.
-- 모든 요청(익명 포함)은 서버 로그에 기록한다(질의, 기준일, 결과 수, 사용자 여부,
-  시각). 운영·감사 목적이며 익명 요청은 이 로그만 남고 사용자에게 노출되는 이력이
-  없다.
-- 로그인한 사용자의 요청은 같은 로그 기록에 더해, 사용자에게 보이는 검색 이력으로도
-  노출한다(v1의 `/v1/questions/history`와 같은 패턴의 이력 조회 엔드포인트 — 구체적인
-  테이블·엔드포인트 형태는 실행 계획 단계에서 확정).
-- v1과 같은 Supabase Auth 세션·토큰 검증 방식을 그대로 재사용한다(새 인증 메커니즘을
-  만들지 않음).
+- `/v2/search`는 v1의 `/v1/search`와 동일하게 인증을 요구하지 않고, 이력도 저장하지
+  않는다(단독·디버그용이므로).
+- `/v2/questions`는 인증·quota·이력 저장을 전부 v1의 기존 메커니즘 그대로 쓴다 —
+  `_optional_user`로 로그인 여부를 확인하고, 로그인 사용자의 질문·답변은 기존
+  `postgres_identity.save_question`으로 `question_history`에 저장한다. v2 전용 로그
+  테이블이나 별도 이력 조회 엔드포인트는 만들지 않는다.
 
 ### Web (`apps/web`)
 
-기존 검색 결과 렌더링 컴포넌트는 변경하지 않는다(`SearchHit` 스키마를 v1·v2가
-공유하므로). 토글 없이 검색 호출 대상을 `/v1/search`에서 `/v2/search`로 바로
-전환한다.
+`/v1/questions` 호출을 `/v2/questions`로 전환한다. 요청·응답 스키마가 동일하므로
+기존 채팅 UI 컴포넌트는 변경하지 않는다. `search_only` 모드를 사용자가 명시적으로
+선택하는 진입점은 원래 없었으므로 web 쪽에서 추가로 고려할 게 없다.
 
 ### 테스트
 
@@ -186,8 +215,10 @@ POST /v2/search
     제외/포함되는 경계 케이스 포함, `SearchHit` 매핑 필드 정확성)
 - `apps/api`:
   - `/v2/search` 계약 테스트(정상 응답 스키마, ingestion 미완료 시 503)
-  - 익명 요청은 로그만 남고 사용자 이력에 노출되지 않는지, 로그인 요청은 이력에
-    노출되는지에 대한 인증 분기 테스트
+  - `LlamaIndexLegalRepository`가 `search`/`search_with_trace`만 오버라이드하고
+    나머지 메서드는 delegate로 위임하는지에 대한 단위 테스트
+  - `/v2/questions`가 v1과 같은 인증·이력 저장 동작을 하는지에 대한 계약 테스트
+    (로그인 시 `question_history`에 저장, 익명은 저장 안 함 — v1과 동일 기준)
 - 검증 명령(구현 단계에서 최종 확정):
   ```powershell
   uv run --directory apps/law-rag-llamaindex pytest
@@ -218,14 +249,33 @@ POST /v2/search
 - 2026-08-18: node→`SearchHit` 매핑은 ingestion 시 metadata에 저장한 원본 필드를
   1:1로 옮기며, 임베딩용 결합 텍스트(`text`)와 원본 `content`를 분리 보관해 정보
   손실을 막는다.
-- 2026-08-18: `/v2/search`는 로그인을 요구하지 않되(익명 허용), quota는 적용하지
-  않는다. 모든 요청은 로그로 남기고, 로그인한 사용자에게만 그 기록을 검색 이력으로
-  노출한다. 익명 요청은 로그만 남고 사용자 이력에는 노출하지 않는다.
+- 2026-08-18: `/v2/search`는 v1의 `/v1/search`와 동일하게 인증·quota·이력 저장이
+  없는 단독 엔드포인트다. 지금은 `apps/web`이 호출하지 않는다.
 - 2026-08-18: `/v2/search`의 준비 미완료 안정 코드는 `v2_search_not_ready`로 확정한다.
-- 2026-08-18: `apps/web`은 개발자 토글 없이 검색 호출 대상을 곧바로 `/v1/search`에서
-  `/v2/search`로 전환한다.
+- 2026-08-18: (범위 재조정) `search_only` 모드는 v2로 이식하지 않는다 —
+  `apps/web`이 실제로 요청하지 않는 모드이기 때문이다. 대신 `/v2/questions`를
+  추가해 v1의 `_answer_question`(라우팅·AI 답변 생성·인용 검증·이력 저장)을 그대로
+  재사용하고, evidence 검색에 쓰는 `repository`만 새 `LlamaIndexLegalRepository`
+  adapter로 바꾼다. 이 adapter는 `LegalRepository` Protocol 중 `search`/
+  `search_with_trace`만 v2로 새로 구현하고 나머지 메서드(quota, corpus 상태, 개별
+  조문 조회, last_sync 등)는 기존 `PostgresLegalRepository` 인스턴스에 위임한다 —
+  AI 생성·검증 코드 자체는 전혀 새로 만들지 않는다.
+- 2026-08-18: `apps/web`은 `/v1/questions` 호출을 `/v2/questions`로 전환한다. 요청·
+  응답 스키마가 v1과 동일하므로 채팅 UI 컴포넌트는 변경하지 않는다.
+- 2026-08-18: `/v2/questions`의 인증·quota·이력 저장은 v1의 기존 메커니즘
+  (`_optional_user`, `postgres_identity.save_question`)을 그대로 재사용한다. v2
+  전용 로그 테이블이나 별도 이력 조회 엔드포인트는 만들지 않는다.
 
 ## 미결정
 
 - ingestion CLI의 정확한 명령·옵션 형태(실행 계획 단계에서 확정)
-- LlamaIndex `PGVectorStore`가 생성하는 실제 테이블명(라이브러리 기본 명명 규칙 확인 필요)
+- `LlamaIndexLegalRepository.search_with_trace`가 반환할 `SearchTrace`의 정확한 필드값
+  (v1의 키워드 fallback 단계 계측과 그대로 맞출 수 없으므로 v2 dense 검색에 맞는
+  간소화된 값을 실행 계획 단계에서 확정)
+
+## 확정된 구현 세부사항 (검증 완료)
+
+- LlamaIndex `PGVectorStore.from_params(table_name="law_rag_llamaindex", ...)`의
+  실제 물리 테이블명은 `data_law_rag_llamaindex`다(라이브러리 소스 확인:
+  `tablename = "data_%s" % index_name`). 노드 id는 `node_id` 컬럼(VARCHAR), 메타데이터는
+  `metadata_` 컬럼(JSON/JSONB), 임베딩은 `embedding` 컬럼에 저장된다.
