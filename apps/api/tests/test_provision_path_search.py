@@ -139,6 +139,48 @@ async def test_direct_path_search_supports_korean_numbers_lists_and_ranges(
 
 
 @pytest.mark.asyncio
+async def test_subclause_content_query_only_returns_parent_article_header() -> None:
+    """Regression test for 0048 (KNOWN LIMITATION, not desired behavior).
+
+    Real repro (from /v1/questions logs against "신에너지 및 재생에너지 개발ㆍ
+    이용ㆍ보급 촉진법 제2조"): a "하위 내용" (sub-clause content) query with a
+    bare article number and no explicit 항 number currently only ever
+    retrieves the parent article's header/title chunk (e.g. "제2조(시험 2)")
+    -- the actual 항 (paragraph) text is never returned as evidence, even
+    though it exists in the corpus.
+
+    Mechanism: parse_provision_references() matches "제2조" via
+    _PROVISION_REFERENCE but finds no paragraph/item/subitem group, so the
+    resulting ProvisionReference.path is the bare "제2조" and its
+    storage_paths is just {"제2조"} (see
+    app/domain/provision_queries.py ProvisionReference.storage_paths, which
+    only expands paragraph/item/subitem *when a paragraph number is present
+    in the query*). MemoryLegalRepository.search_with_trace() then takes the
+    "direct_path" branch and keeps only provisions whose path is exactly in
+    that storage_paths set (app/adapters/memory_repository.py), which
+    excludes every child "제2조/항①" ... "제2조/항③" provision -- even
+    though their content ("첫째 항", "둘째 항", "셋째 항") is present in the
+    corpus. See docs/exec-plans/todo/0048-article-subclause-query-only-
+    returns-parent-article.md (now deleted) for the original repro/analysis.
+    """
+    repository = MemoryLegalRepository()
+    formal_title = "신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법"
+    document = _document(formal_title, "1")
+    await repository.upsert_document(document)
+
+    # Sanity check: the sub-clause content actually exists in the corpus.
+    subclause_paths = {"제2조/항①", "제2조/항②", "제2조/항③"}
+    assert subclause_paths <= {provision.path for provision in document.provisions}
+
+    for question in ("제2조 하위 내용은?", "제2조의 내용은?"):
+        hits = await repository.search(question, date(2026, 7, 15), 10)
+
+        assert [hit.path for hit in hits] == ["제2조"]
+        assert hits[0].content == "제2조(시험 2)"
+        assert not subclause_paths & {hit.path for hit in hits}
+
+
+@pytest.mark.asyncio
 async def test_invalid_range_does_not_fall_back_to_lexical_search() -> None:
     repository = MemoryLegalRepository()
     await repository.upsert_document(_document("전기사업법", "1"))

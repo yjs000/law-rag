@@ -276,6 +276,118 @@ def test_search_only_mode_is_not_gated_by_routing(monkeypatch) -> None:
     assert search_calls == [1]
 
 
+def test_abbreviated_provision_followup_routes_to_search_only(monkeypatch) -> None:
+    """Regression test for 0049: documents that an abbreviated provision-only follow-up
+    query like '7조1항' currently gets routed/downgraded to search_only instead of
+    legal_search, even after an earlier conversation turn established the relevant law.
+    This is a known bug, not the desired behavior - see
+    docs/exec-plans/todo/0049-abbreviated-article-reference-routes-to-search-only.md
+    (now deleted) for the original repro/analysis.
+
+    Root cause (confirmed by reading app/main.py's _retrieve_question_evidence and
+    _answer_question): retrieval calls repository.search_with_trace(payload.question, ...)
+    using only the current turn's question text - conversation_context is never fed into
+    search, only into generation prompts (see openai_answerer.py). Routing itself is not
+    the culprit: tier 1 has no keyword match for "7조1항" and the mock tier 2 classifier
+    defaults to legal_search with no hint (see MockRouteClassifier.classify), so
+    route_decision.route stays "legal_search". The downgrade happens afterwards, in two
+    steps inside _answer_question: because "7조1항" carries no law name, search finds no
+    matching provision, hits comes back empty and fallback_reason is set to
+    AiFallbackReason.NO_EVIDENCE (main.py's "if use_ai and not hits" block) - but
+    generation is still attempted with zero evidence (main.py only skips generation when
+    `not use_ai`, never when hits is merely empty). When the model still tries to answer
+    despite having nothing to cite, validate_draft() (openai_answerer.py) rejects the
+    draft because it isn't a clean, citation-free "unanswerable" response, which
+    overwrites fallback_reason to GROUNDING_FAILED and returns the search_only fallback
+    (main.py's "if not validate_draft(...)" branch). Either way - NO_EVIDENCE alone, or
+    NO_EVIDENCE cascading into GROUNDING_FAILED - the terra request ends up as
+    mode="search_only" instead of an AI answer, even though route_decision.route was
+    correctly "legal_search" the whole time.
+    """
+    embedding_calls: list[int] = []
+    search_calls: list[str] = []
+
+    async def search(question, *args, **kwargs):
+        search_calls.append(question)
+        # The earlier turn's full query (with a law name) resolves fine; the abbreviated
+        # follow-up ("7조1항", no law name) cannot be resolved by search alone since
+        # conversation_context is never passed into retrieval - it returns no hits.
+        if question == "7조1항":
+            return []
+        return [_hit()]
+
+    async def last_sync():
+        return None
+
+    async def consume_quota(*args, **kwargs):
+        return True
+
+    class NoopEmbedder:
+        async def embed(self, texts):
+            embedding_calls.append(1)
+            return [[1.0, *([0.0] * 511)]]
+
+    monkeypatch.setattr(main_module.repository, "search_with_trace", _with_trace(search))
+    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
+    monkeypatch.setattr(main_module.repository, "consume_quota", consume_quota)
+    monkeypatch.setattr(main_module, "_embedder", lambda: NoopEmbedder())
+    monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
+    monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
+
+    class OvereagerAnswerer:
+        """Stands in for a real model that still attempts an answer despite having zero
+        retrieved evidence to cite - validate_draft() must reject this (it only accepts a
+        clean, citation-free "unanswerable" draft when hits is empty)."""
+
+        async def answer(self, payload, hits):
+            from app.adapters.openai_answerer import DraftAnswer
+            from app.domain.schemas import AnswerSection
+
+            return DraftAnswer(
+                summary="전기사업법 제7조제1항에 따라 답변합니다.",
+                scope="전기사업법 제7조제1항",
+                sections=[
+                    AnswerSection(
+                        claim="제7조제1항 요건을 충족해야 합니다.",
+                        explanation="이전 대화에서 다룬 법령을 기준으로 판단했습니다.",
+                        citation_ids=["C1"],
+                    )
+                ],
+                checklist=[],
+                action="fully_answerable",
+            )
+
+    monkeypatch.setattr(main_module, "_answerer", lambda: OvereagerAnswerer())
+
+    response = TestClient(main_module.app).post(
+        "/v1/questions",
+        json={
+            "question": "7조1항",
+            "answer_mode": "terra",
+            "conversation_context": [
+                {
+                    "question": "전기사업법 제2조는 무슨 내용인가요?",
+                    "answer": "전기사업법 제2조는 용어의 정의를 규정합니다.",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    # Routing itself got it right ...
+    assert body["route"] == "legal_search"
+    # ... but the response still comes back as search_only, not an AI answer, because
+    # retrieval (which ignores conversation_context) found no evidence for the bare
+    # "7조1항" reference. This is the bug: the user asked a terra follow-up expecting it
+    # to resolve against the law discussed earlier in the conversation, but got a
+    # search_only fallback instead.
+    assert body["mode"] == "search_only"
+    assert body["fallback_reason"] == "grounding_failed"
+    assert search_calls == ["7조1항"]
+    assert embedding_calls == [1]
+
+
 def test_tier2_llm_explanation_is_passed_to_blocked_route_generation(monkeypatch) -> None:
     """2026-08-08 (user proposal): tier 2's own reasoning, already produced for free,
     should make blocked-route messages question-specific instead of purely canned. 0046:
