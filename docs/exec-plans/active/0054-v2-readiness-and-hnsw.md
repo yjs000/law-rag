@@ -4,7 +4,7 @@
 
 **목표:** 성공한 v2 ingestion이 API를 열도록 만들고, v2 벡터 테이블 전용 HNSW cosine 인덱스를 운영자 통제로 도입한다.
 
-**아키텍처:** `run_ingestion`은 벡터 저장 전 `running`, 저장·완료 마커 갱신 후 `completed`, 예외 발생 시 `failed`를 영속화한다. 완료된 ingestion run이 있으면 API가 v2 리소스를 사용할 수 있으며, HNSW 인덱스 유무는 별도의 운영 상태다. HNSW가 없을 때는 exact cosine 검색으로 동작한다. API는 v2 리소스를 지연 생성해 v1 시작 경로를 분리한다.
+**아키텍처:** `run_ingestion`은 벡터 저장 전 `running`, 저장·완료 마커 갱신 후 `completed`, 예외 발생 시 `failed`를 영속화한다. API는 **가장 최근 ingestion run이 `completed`일 때만** v2 리소스를 사용할 수 있으며, `running`·`failed`·실행 없음이면 부분 데이터를 노출하지 않고 503으로 닫는다. HNSW 인덱스 유무는 별도의 운영 상태다. HNSW가 없을 때는 exact cosine 검색으로 동작한다. API는 v2 리소스를 지연 생성해 v1 시작 경로를 분리한다.
 
 ## 전역 제약
 

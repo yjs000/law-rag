@@ -166,8 +166,10 @@ python -m law_rag_llamaindex.hnsw enable|disable|status|ensure
 node_count, status)에 ingestion 실행 lifecycle을 기록한다. `run_ingestion`은 벡터
 저장 전에 `running`을 기록하고, 벡터 저장과 완료 마커 갱신이 끝나면 `completed`를
 기록한다. retrieval·임베딩·삭제·벡터 저장 또는 완료 갱신에서 예외가 나면 `failed`를
-기록하고 최초 예외를 보존한다. 완료된 run이 하나도 없으면 `/v2/search`는 검색을
-수행하지 않고 HTTP 503을 반환한다. HNSW 인덱스의 존재 여부는 이 ingestion 준비
+기록하고 최초 예외를 보존한다. **가장 최근 run이 `completed`일 때만** `/v2/search`는
+검색을 수행한다. run이 없거나 가장 최근 run이 `running` 또는 `failed`이면 부분적으로
+갱신된 벡터를 노출하지 않고 HTTP 503을 반환한다. HNSW 인덱스의 존재 여부는 이
+ingestion 준비
 마커와 별개의 운영 상태이며, HNSW가 없어도 exact cosine 검색으로 API를 열 수 있다.
 
 ### 조회 인터페이스
