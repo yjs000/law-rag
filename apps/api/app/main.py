@@ -348,19 +348,18 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
 async def _retrieve_question_evidence(
     payload: QuestionRequest,
     query_embedding: list[float] | None,
-    repository: LegalRepository | None = None,
+    repository: LegalRepository,
 ) -> tuple[list[SearchHit], SearchTrace, datetime | None]:
     """검색과 corpus 동기화 시각 조회를 하나의 retrieval budget stage로 묶는다 - 둘이
     별도 stage였다면 각자 예산을 갖게 되어 전체 retrieval에 허용된 8초를 넘길 수 있다."""
-    selected_repository = repository or globals()["repository"]
-    hits, trace = await selected_repository.search_with_trace(
+    hits, trace = await repository.search_with_trace(
         payload.question,
         payload.as_of_date,
         10,
         query_embedding,
         NVIDIA_NEMOTRON_512_PROFILE.key if query_embedding is not None else None,
     )
-    return hits, trace, await selected_repository.last_sync()
+    return hits, trace, await repository.last_sync()
 
 
 def _elapsed_ms(started_at: float) -> int:
@@ -387,9 +386,8 @@ async def _answer_question(
     request: Request,
     user: MockUser | None,
     budget: RequestBudget,
-    repository: LegalRepository | None = None,
+    repository: LegalRepository,
 ) -> QuestionResponse:
-    selected_repository = repository or globals()["repository"]
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
@@ -558,7 +556,7 @@ async def _answer_question(
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
-            lambda: _retrieve_question_evidence(payload, query_embedding, selected_repository),
+            lambda: _retrieve_question_evidence(payload, query_embedding, repository),
             cap_seconds=settings.retrieval_timeout_seconds,
         )
         retrieval_outcome = "succeeded"
@@ -999,15 +997,7 @@ async def corpus_status() -> CorpusStatus:
         )
     else:
         items = await repository.corpus_items()
-        try:
-            temporal_state = await _load_corpus_temporal_state(repository)
-        except TypeError as exc:
-            # Keep compatibility with test-only legacy loader overrides while
-            # production callers continue to pass the selected repository.
-            try:
-                temporal_state = await _load_corpus_temporal_state()
-            except TypeError:
-                raise exc from None
+        temporal_state = await _load_corpus_temporal_state(repository)
         last_successful_sync = await repository.last_sync()
     warnings = []
     if not temporal_state.ready:
@@ -1046,28 +1036,17 @@ def _current_korea_date() -> date:
     return korea_today()
 
 
-async def _load_corpus_temporal_state(
-    repository: LegalRepository | None = None,
-) -> CorpusTemporalState:
+async def _load_corpus_temporal_state(repository: LegalRepository) -> CorpusTemporalState:
     try:
-        selected_repository = repository or globals()["repository"]
-        return await selected_repository.corpus_temporal_state(_current_korea_date())
+        return await repository.corpus_temporal_state(_current_korea_date())
     except Exception as exc:
         raise _corpus_unready_http_error() from exc
 
 
 async def _require_supported_as_of_date(
-    requested_date: date, repository: LegalRepository | None = None
+    requested_date: date, repository: LegalRepository
 ) -> None:
-    try:
-        state = await _load_corpus_temporal_state(repository)
-    except TypeError as exc:
-        # Keep compatibility with test-only legacy loader overrides while
-        # production callers continue to pass the selected repository.
-        try:
-            state = await _load_corpus_temporal_state()
-        except TypeError:
-            raise exc from None
+    state = await _load_corpus_temporal_state(repository)
     if not state.ready:
         raise _corpus_unready_http_error()
     try:

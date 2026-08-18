@@ -279,7 +279,9 @@ async def test_generation_never_starts_when_only_reserve_remains(monkeypatch) ->
         deadline=1000.0, reserve_seconds=3.0, clock=lambda: next(clock_values)
     )
 
-    response = await main_module._answer_question(payload, request, None, budget)
+    response = await main_module._answer_question(
+        payload, request, None, budget, main_module.repository
+    )
 
     assert generation_called is False
     assert response.mode == "search_only"

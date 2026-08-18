@@ -38,6 +38,32 @@ def test_v2_questions_returns_503_when_not_configured(monkeypatch: pytest.Monkey
     assert response.json()["detail"]["code"] == "v2_search_not_ready"
 
 
+def test_v2_questions_returns_503_when_index_is_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "llamaindex_repository", object())
+
+    async def fake_not_ready() -> bool:
+        return False
+
+    monkeypatch.setattr(main_module, "_v2_index_ready", fake_not_ready)
+    client = TestClient(main_module.app)
+    response = client.post(
+        "/v2/questions",
+        json={
+            "client_request_id": "11111111-1111-1111-1111-111111111111",
+            "question": "태양광 설비 인허가 요건이 뭐야",
+            "as_of_date": "2026-01-01",
+            "project_stage": "planning",
+            "answer_mode": "search_only",
+        },
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "v2_search_not_ready"
+
+
 def test_v2_questions_uses_llamaindex_repository_for_evidence(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
