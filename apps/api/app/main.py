@@ -4,6 +4,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime
+from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
@@ -88,19 +89,41 @@ repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
 )
 llamaindex_settings = get_llamaindex_settings()
-llamaindex_vector_store = (
-    build_llamaindex_vector_store(llamaindex_settings) if settings.database_url else None
-)
-llamaindex_embedder = (
-    build_llamaindex_embedder(llamaindex_settings)
-    if llamaindex_settings.nvidia_api_key
-    else None
-)
-llamaindex_repository = (
-    LlamaIndexLegalRepository(repository, llamaindex_vector_store, llamaindex_embedder)
-    if llamaindex_vector_store is not None and llamaindex_embedder is not None
-    else None
-)
+llamaindex_vector_store = None
+llamaindex_embedder = None
+llamaindex_repository = None
+
+
+@lru_cache(maxsize=1)
+def _build_llamaindex_resources(
+    database_url: str | None, nvidia_api_key: str | None
+) -> tuple[object, object, LlamaIndexLegalRepository] | None:
+    if not database_url or not nvidia_api_key:
+        return None
+
+    vector_store = build_llamaindex_vector_store(llamaindex_settings)
+    embedder = build_llamaindex_embedder(llamaindex_settings)
+    return vector_store, embedder, LlamaIndexLegalRepository(repository, vector_store, embedder)
+
+
+def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:
+    """Return v2 resources while preserving test-injected module globals."""
+    global llamaindex_embedder, llamaindex_repository, llamaindex_vector_store
+
+    if any(
+        resource is not None
+        for resource in (llamaindex_vector_store, llamaindex_embedder, llamaindex_repository)
+    ):
+        return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
+
+    resources = _build_llamaindex_resources(
+        settings.database_url, llamaindex_settings.nvidia_api_key
+    )
+    if resources is None:
+        return None
+
+    llamaindex_vector_store, llamaindex_embedder, llamaindex_repository = resources
+    return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
 supabase_auth = (
     SupabaseAuth(
         settings.supabase_url,
@@ -257,13 +280,17 @@ async def _v2_index_ready() -> bool:
 
 @app.post("/v2/search", response_model=list[SearchHit])
 async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]:
-    if llamaindex_vector_store is None or llamaindex_embedder is None:
+    resources = _llamaindex_resources()
+    if resources is None:
+        raise _v2_not_ready_http_error()
+    vector_store, embedder, _ = resources
+    if vector_store is None or embedder is None:
         raise _v2_not_ready_http_error()
     if not await _v2_index_ready():
         raise _v2_not_ready_http_error()
     hits = await llamaindex_search(
-        llamaindex_vector_store,
-        llamaindex_embedder,
+        vector_store,
+        embedder,
         payload.query,
         payload.as_of_date,
         payload.limit,
@@ -330,11 +357,15 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
 
 @app.post("/v2/questions", response_model=QuestionResponse)
 async def question_v2(payload: QuestionRequest, request: Request) -> QuestionResponse:
-    if llamaindex_repository is None:
+    resources = _llamaindex_resources()
+    if resources is None:
+        raise _v2_not_ready_http_error()
+    _, _, v2_repository = resources
+    if v2_repository is None:
         raise _v2_not_ready_http_error()
     if not await _v2_index_ready():
         raise _v2_not_ready_http_error()
-    return await _handle_question(payload, request, llamaindex_repository)
+    return await _handle_question(payload, request, v2_repository)
 
 
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)

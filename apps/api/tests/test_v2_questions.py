@@ -2,6 +2,65 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def test_v2_resources_factory_builds_each_resource_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://factory.example/law")
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", None)
+    monkeypatch.setattr(main_module, "llamaindex_embedder", None)
+    monkeypatch.setattr(main_module, "llamaindex_repository", None)
+
+    class LlamaIndexSettings:
+        nvidia_api_key = "nvidia-test-key"
+
+    monkeypatch.setattr(main_module, "llamaindex_settings", LlamaIndexSettings())
+    store = object()
+    embedder = object()
+    build_calls = {"store": 0, "embedder": 0, "repository": 0}
+
+    def build_store(settings) -> object:
+        build_calls["store"] += 1
+        return store
+
+    def build_embedder(settings) -> object:
+        build_calls["embedder"] += 1
+        return embedder
+
+    class RepositoryDouble:
+        pass
+
+    def build_repository(delegate, vector_store, repository_embedder) -> RepositoryDouble:
+        build_calls["repository"] += 1
+        assert delegate is main_module.repository
+        assert vector_store is store
+        assert repository_embedder is embedder
+        return RepositoryDouble()
+
+    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", build_store)
+    monkeypatch.setattr(main_module, "build_llamaindex_embedder", build_embedder)
+    monkeypatch.setattr(main_module, "LlamaIndexLegalRepository", build_repository)
+    main_module._build_llamaindex_resources.cache_clear()
+
+    first = main_module._build_llamaindex_resources(
+        main_module.settings.database_url, "nvidia-test-key"
+    )
+    second = main_module._build_llamaindex_resources(
+        main_module.settings.database_url, "nvidia-test-key"
+    )
+
+    assert first is not None
+    assert second is first
+    assert build_calls == {"store": 1, "embedder": 1, "repository": 1}
+    resolved = main_module._llamaindex_resources()
+    assert resolved is not None
+    assert resolved[0] is store
+    assert resolved[1] is embedder
+    assert resolved[2] is first[2]
+    main_module._build_llamaindex_resources.cache_clear()
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     import app.main as main_module

@@ -1,5 +1,46 @@
+import os
+import subprocess
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
+
+
+def test_module_import_does_not_build_vector_store_with_database_only() -> None:
+    child_environment = os.environ.copy()
+    child_environment.update(
+        {
+            "DATABASE_URL": "postgresql://db.example/law",
+            "NVIDIA_API_KEY": "",
+            "ENVIRONMENT": "test",
+            "SUPABASE_URL": "",
+            "SUPABASE_SECRET_KEY": "",
+            "COLLECTOR_STATE_DIR": ".data/nonexistent-api-test-state",
+            "PYTHONPATH": os.getcwd(),
+        }
+    )
+    script = """
+from law_rag_llamaindex import store
+
+def fail_build(settings):
+    raise AssertionError("vector store must not be built without NVIDIA_API_KEY")
+
+store.build_vector_store = fail_build
+import app.main as main_module
+
+assert main_module.llamaindex_vector_store is None
+assert main_module.llamaindex_embedder is None
+assert main_module.llamaindex_repository is None
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        env=child_environment,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture
