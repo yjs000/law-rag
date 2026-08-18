@@ -82,3 +82,10 @@
   - `uv run --directory apps/law-rag-llamaindex ruff check src/law_rag_llamaindex/ingest.py src/law_rag_llamaindex/hnsw.py tests/test_ingest.py tests/test_hnsw.py` → `All checks passed!`
   - `uv run --directory apps/api ruff check app/main.py tests/test_v2_search.py tests/test_v2_questions.py` → `All checks passed!`
 - `git diff --check`: staged 문서·AGENTS·계획 전체에 대해 통과했다.
+
+### 완료 결과와 잔여 작업
+
+- 2026-08-18 최종 보정 `5d11407`으로 최신 ingestion run이 `completed`인 경우에만 v2를 열고, run 상태·마커 조회·리소스 초기화 실패는 민감한 예외를 노출하지 않는 `v2_search_not_ready` 503으로 닫았다. 일시적인 리소스 초기화 실패는 성공한 결과만 캐시하는 방식으로 다음 요청에서 재시도한다.
+- 최종 API 전체 재검증은 쓰기 가능한 임시 경로에서 `657 passed, 3 skipped, 2 warnings in 115.14s`로 통과했다. warning은 Starlette의 `httpx` 사용 중단 예정과 workspace pytest cache 권한이다.
+- 최종 전체 재검토에서 P0/P1/P2가 없음을 확인했다. 최신 run 준비 상태 계약과 v1·실험 D HNSW 금지/v2 전용 예외의 문서 불일치도 `a7d9d84`로 정정했다.
+- 실제 PostgreSQL migration·ingestion·HNSW DDL과 HNSW 성능 측정(recall, p95 latency, index size, ingestion duration)은 사용자 승인 전 실행하지 않았다. `ef_search=80`은 미구현·미결정이다.
