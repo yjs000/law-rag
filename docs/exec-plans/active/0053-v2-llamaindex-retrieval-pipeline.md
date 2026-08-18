@@ -20,6 +20,8 @@
 - `PGVectorStore` table name: `law_rag_llamaindex` (physical table `data_law_rag_llamaindex`, confirmed from library source). `hnsw_kwargs` stays `None` for now but the factory function must accept it as a parameter.
 - 503 stable error code for both `/v2/search` and `/v2/questions` when the v2 index has no completed ingestion run: `{"code": "v2_search_not_ready", "message": "..."}` (same `detail` shape as `_corpus_unready_http_error`).
 - Never commit `.env`/secrets. Never run destructive DB commands without explicit confirmation.
+- Test invocation: always run `python -m pytest` (e.g. `uv run --directory apps/api python -m pytest`), never bare `pytest` — bare `pytest` does not add the working directory to `sys.path` on this project's setup, so `import app`/`import law_rag_llamaindex` fails with `ModuleNotFoundError` even though the code is correct. Verified against this repo's actual environment before this plan's execution began.
+- Dependency sync: always run `uv sync --all-packages` from the repo root, never `uv sync --directory <single-member>` — this is a shared-venv uv workspace, and syncing one member alone prunes packages other members need, breaking their tests. Verified against this repo's actual environment before this plan's execution began.
 - Design doc of record: [`docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md`](../../design-docs/v2-llamaindex-retrieval-pipeline-design.md). If an implementation detail here conflicts with it, the design doc's "결정 기록" wins and this plan should be corrected to match, not the other way around.
 
 ---
@@ -102,10 +104,10 @@ def test_package_imports():
 
 - [ ] **Step 5: Sync the workspace and run the test**
 
-Run: `uv sync --directory apps/law-rag-llamaindex`
+Run: `uv sync --all-packages` (not `--directory apps/law-rag-llamaindex` alone — this repo is a shared-venv uv workspace, and syncing a single member can prune packages other members need)
 Expected: dependency resolution succeeds under Python 3.14 (llama-index-core requires `>=3.9,<4.0`, so this should resolve — if it fails, capture the resolver error before proceeding to later tasks, since every later task in this plan depends on this install succeeding).
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest -v`
 Expected: `test_package_imports PASSED`
 
 - [ ] **Step 6: Commit**
@@ -163,7 +165,7 @@ def test_get_settings_is_cached():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_config.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_config.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.config'`
 
 - [ ] **Step 3: Write the implementation**
@@ -200,7 +202,7 @@ def get_settings() -> Settings:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_config.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_config.py -v`
 Expected: 3 passed
 
 - [ ] **Step 5: Commit**
@@ -293,7 +295,7 @@ def test_build_node_metadata_preserves_raw_fields_separately_from_passage_text()
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_passage.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_passage.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.passage'`
 
 - [ ] **Step 3: Write the implementation**
@@ -353,7 +355,7 @@ def build_node_metadata(record: ProvisionRecord, source_text_sha256: str) -> dic
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_passage.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_passage.py -v`
 Expected: 5 passed
 
 - [ ] **Step 5: Commit**
@@ -422,7 +424,7 @@ async def test_fetch_provisions_returns_expected_fields():
 
 - [ ] **Step 2: Run test to verify it is skipped (no DB configured) and fails to import first**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_source.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_source.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.source'` (the skip marker only takes effect once the module exists — this step proves the test file itself is wired up before the module exists)
 
 - [ ] **Step 3: Write the implementation**
@@ -475,7 +477,7 @@ async def fetch_provisions(engine: AsyncEngine) -> list[ProvisionRecord]:
 
 - [ ] **Step 4: Run test to verify it passes (or skips cleanly without a DB)**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_source.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_source.py -v`
 Expected: `1 skipped` (no `DATABASE_URL` in the default dev shell) — if you have a local `DATABASE_URL` exported, expect `1 passed` instead.
 
 - [ ] **Step 5: Commit**
@@ -521,7 +523,7 @@ def test_build_embedder_uses_configured_model_and_endpoint():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_embedding.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_embedding.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.embedding'`
 
 - [ ] **Step 3: Write the implementation**
@@ -544,7 +546,7 @@ def build_embedder(settings: Settings) -> NVIDIAEmbedding:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_embedding.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_embedding.py -v`
 Expected: 1 passed
 (If `NVIDIAEmbedding.__init__` rejects a fake API key or requires network access to construct, that's a real API-shape surprise — stop and adjust the wrapper/test rather than skip the test. This is expected to construct without any network call.)
 
@@ -603,7 +605,7 @@ def test_build_vector_store_passes_through_hnsw_kwargs_when_set():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_store.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_store.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.store'`
 
 - [ ] **Step 3: Write the implementation**
@@ -636,7 +638,7 @@ def build_vector_store(settings: Settings) -> PGVectorStore:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_store.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_store.py -v`
 Expected: 2 passed
 (`PGVectorStore.from_params` must not open a connection at construction time for this to pass without a live DB — if it does, the test needs a running Postgres; note that discovery in the plan's progress log and switch the test to the `DATABASE_URL`-skip pattern from Task 4 if so.)
 
@@ -749,7 +751,7 @@ async def test_run_ingestion_skips_unchanged_rows_on_second_run():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_ingest.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_ingest.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.ingest'`
 
 - [ ] **Step 3: Write the implementation**
@@ -848,7 +850,7 @@ async def run_ingestion(engine, vector_store, embedder, table_name: str) -> Inge
 
 - [ ] **Step 4: Run tests to verify they pass (or skip cleanly)**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_ingest.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_ingest.py -v`
 Expected: 3 passed, 1 skipped (no `DATABASE_URL`) — or 4 passed if `DATABASE_URL` is set to a real dev Postgres with the `law_rag_llamaindex_ingestion_runs` migration (Task 8) and provisions data already present.
 
 - [ ] **Step 5: Commit**
@@ -974,7 +976,7 @@ Note: `provision_id`/`document_id` on `SearchHit` are typed `UUID` in `law_rag_c
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_retriever.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_retriever.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'law_rag_llamaindex.retriever'`
 
 - [ ] **Step 3: Check `SearchHit`'s field types, then write the implementation**
@@ -1048,7 +1050,7 @@ async def search(vector_store, embedder, query: str, as_of_date: date, limit: in
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --directory apps/law-rag-llamaindex pytest tests/test_retriever.py -v`
+Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_retriever.py -v`
 Expected: 4 passed
 (If `MetadataFilter`/`FilterOperator`/`MetadataFilters`/`VectorStoreQuery` import paths differ from `llama_index.core.vector_stores.types` in the installed version, fix the import based on the actual installed package layout — check with `uv run --directory apps/law-rag-llamaindex python -c "from llama_index.core.vector_stores.types import MetadataFilter"` first.)
 
@@ -1138,7 +1140,7 @@ law-rag-core = { workspace = true }
 law-rag-llamaindex = { workspace = true }
 ```
 
-Run: `uv sync --directory apps/api`
+Run: `uv sync --all-packages` (shared-venv workspace — see the note in Task 1)
 Expected: resolves without conflicts.
 
 - [ ] **Step 2: Write the failing test**
@@ -1226,7 +1228,7 @@ async def test_non_search_methods_delegate_to_v1_repository():
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `uv run --directory apps/api pytest tests/test_llamaindex_repository.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_llamaindex_repository.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'app.adapters.llamaindex_repository'`
 
 - [ ] **Step 4: Write the implementation**
@@ -1325,7 +1327,7 @@ class LlamaIndexLegalRepository:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run --directory apps/api pytest tests/test_llamaindex_repository.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_llamaindex_repository.py -v`
 Expected: 3 passed
 
 - [ ] **Step 6: Commit**
@@ -1397,7 +1399,7 @@ def test_v2_search_returns_503_with_stable_code_when_not_configured(monkeypatch)
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --directory apps/api pytest tests/test_v2_search.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_v2_search.py -v`
 Expected: FAIL — `/v2/search` route does not exist (404), or `AttributeError` on `main_module.llamaindex_vector_store` not existing yet.
 
 - [ ] **Step 3: Add the module-level wiring and route**
@@ -1476,12 +1478,12 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --directory apps/api pytest tests/test_v2_search.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_v2_search.py -v`
 Expected: 2 passed
 
 - [ ] **Step 5: Run the full `apps/api` test suite to check for regressions**
 
-Run: `uv run --directory apps/api pytest -v`
+Run: `uv run --directory apps/api python -m pytest -v`
 Expected: all previously-passing tests still pass (the new imports/globals must not break app startup for any existing test that constructs `TestClient(main_module.app)`).
 
 - [ ] **Step 6: Commit**
@@ -1585,7 +1587,7 @@ Note: `QuestionResponse`'s exact required fields must match `app/domain/schemas.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --directory apps/api pytest tests/test_v2_questions.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_v2_questions.py -v`
 Expected: FAIL — `/v2/questions` route does not exist (404)
 
 - [ ] **Step 3: Refactor `_answer_question` and its helpers to accept `repository`**
@@ -1738,12 +1740,12 @@ async def question_v2(payload: QuestionRequest, request: Request) -> QuestionRes
 
 - [ ] **Step 6: Run the new tests to verify they pass**
 
-Run: `uv run --directory apps/api pytest tests/test_v2_questions.py -v`
+Run: `uv run --directory apps/api python -m pytest tests/test_v2_questions.py -v`
 Expected: 2 passed
 
 - [ ] **Step 7: Run the full `apps/api` test suite to check for regressions**
 
-Run: `uv run --directory apps/api pytest -v`
+Run: `uv run --directory apps/api python -m pytest -v`
 Expected: all tests pass, including every existing `/v1/questions` test (`test_api.py`, `test_answering.py`, `test_distributed_question_cancellation.py`, etc.) — these exercise `_answer_question`/`_retrieve_question_evidence` and must behave identically now that they take an explicit (module-global-valued) `repository` argument. If any fail, the refactor changed v1 behavior — fix the refactor, not the test.
 
 - [ ] **Step 8: Commit**
@@ -1843,8 +1845,8 @@ to:
 - [ ] **Step 3: Run the full verification suite across all three touched projects**
 
 ```bash
-uv run --directory apps/law-rag-llamaindex pytest
-uv run --directory apps/api pytest
+uv run --directory apps/law-rag-llamaindex python -m pytest
+uv run --directory apps/api python -m pytest
 pnpm --filter web test
 ```
 Expected: all green.
