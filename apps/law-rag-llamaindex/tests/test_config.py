@@ -1,5 +1,3 @@
-import os
-
 from law_rag_llamaindex.config import Settings, get_settings
 
 
