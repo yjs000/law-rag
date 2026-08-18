@@ -4,6 +4,7 @@
 
 - [0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — E-10 base 실행 완료, 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건(품질 원인 미진단)
 - [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md) — `law-rag-llamaindex` 워크스페이스, `/v2/search`·`/v2/questions`, web 전환
+- [0054: V2 준비 상태와 HNSW 운영](0054-v2-readiness-and-hnsw.md) — ingestion lifecycle과 v2 전용 운영자 관리 HNSW
 
 2026-08-18: 0002·0008·0015·0022·0025·0028·0036·0043·0046은 사용자 확인 또는 판단으로
 [completed/](../completed/README.md)로 이동했다. 0012는 설계 현행화가 필요해
