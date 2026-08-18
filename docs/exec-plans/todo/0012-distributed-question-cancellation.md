@@ -1,5 +1,14 @@
 # 분산 질문 취소 실행 계획
 
+상태: `todo로 환원 (2026-08-18)` — active에서 구현 대부분(coordinator 포트·memory adapter·
+polling watcher 목업 테스트)까지 진행했으나, [설계 문서](../../design-docs/distributed-question-cancellation.md)와
+아래 "미결정·차단 요소"가 여전히 현재 생성 provider(NVIDIA hosted NIM, [0013](../completed/0013-nvidia-hosted-nim-integration.md))가
+아닌 옛 Qwen/Ollama adapter 기준으로 남아 있어 설계가 현행화되지 않은 상태다. **재승격 전
+선행 작업**: 설계 문서와 이 계획의 provider-side 취소 가정을 NVIDIA hosted NIM 기준으로
+현행화한다(실제로 provider가 explicit cancel ID를 제공하는지 재확인 포함). 그 전에는 이
+계획을 active로 다시 옮기지 않는다. DB migration·RLS·watcher 등 나머지 구현 TODO는
+아래에 그대로 보존한다.
+
 ## 목적과 사용자 결과
 
 sticky routing 없이 어느 Vercel API 인스턴스에 취소 요청이 도착해도 중지 신호가 접수되고, 실제 질문 인스턴스의 검색·모델 태스크가 이를 감지해 종료된다. 정상 scale-out은 404가 되지 않는다.

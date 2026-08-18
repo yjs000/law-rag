@@ -5,12 +5,18 @@
 
 ## 열린 항목
 
+- [0012: 분산 질문 취소](0012-distributed-question-cancellation.md) — active에서 환원(2026-08-18), 설계 문서가 옛 Qwen/Ollama 가정을 NVIDIA hosted NIM 기준으로 현행화하기 전에는 재승격하지 않음
 - [0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 보류, 실제 일반화·회귀 필요 시만 착수
 - [0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 항목 5(agent context diet) 완료, 나머지(machine-readable rubric·conflict detector·통합 CLI) 미착수
 - [0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 제안됨, 미착수 · tier1 사전 확장 재검토 + 인증·비인증 사용자 이력 검토를 하나의 재검토 라운드로 묶음
 - [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
-- [0043: 일반인 답변 계약 v2와 가독성 평가](../active/0043-layperson-answer-contract-v2.md) — active로 이동, 1~4번(프롬프트 v2·프로필·결정적 테스트·원문 링크 UI) 구현 완료, 5번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수
 - [0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 제안됨, 미착수 · 기존 `terra` 호환을 유지하며 provider/model을 설정으로 교체 가능한 계약으로 전환
+- [0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](0047-clarification-loop-dedup-and-unanswered-handling.md) — 2026-08-18 갱신, v2 LangGraph 전환에서 해결 예정이라 별도 착수 보류 · `clarification_required` 재질문이 이미 답변된 항목을 반복 포함해 무한루프됨을 실제 로그로 재현·보고
+- [0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](0050-query-format-edge-case-regression-bank.md) — 제안됨, 미착수 · 0047~0049류 엣지케이스를 사전 조사해 회귀 테스트로 등록
+
+0048·0049·0051·0052는 2026-08-18 사용자 결정으로 종료했다. 0048·0049는 재현 로그가 기술한
+버그를 잡아내는 회귀 테스트를 코드에 남기고 이 트랙에서는 제거했다(테스트 파일 위치는 관련
+커밋 참고). 0051·0052는 조사 결과만 남기고 후속 조치 없이 닫았다.
 
 ## 등록 계약
 

@@ -1,5 +1,7 @@
 # terra 모드 search_only 폴백 제거 (always-generate) Implementation Plan
 
+상태: 완료(2026-08-18) — Task 1~7 구현과 검증을 마치고 사용자가 완료로 확인했다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** `answer_mode=terra`이고 AI가 가용한 요청은 근거 0건·사전 라우팅 차단

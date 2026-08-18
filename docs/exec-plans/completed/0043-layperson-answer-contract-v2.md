@@ -1,5 +1,9 @@
 # 일반인 답변 계약 v2 구현 계획
 
+상태: 완료(2026-08-18) — 범위 1~4번(프롬프트 v2·프로필·결정적 테스트·원문 링크 UI)은
+구현·검증을 마쳤다. 사용자 판단으로 범위 4번의 실제 hosted v1/v2 비교(0045 완료 후 착수
+가능했던 항목)는 더 이상 필요하지 않다고 결정해 이 계획을 종료한다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 초보자용 프롬프트 v2, 독립 generation profile, 결정적 회귀 테스트, 근거 카드 원문 링크를 기존 v1 경로를 건드리지 않고 추가한다.

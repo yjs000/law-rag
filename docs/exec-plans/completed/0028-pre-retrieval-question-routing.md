@@ -1,15 +1,21 @@
 # 0028: 검색 전 질문 라우팅과 조건부 query 보강
 
-상태: `진행 중 · schema/tier 1/관측 tracking 완료 · tier 1 사전 v1 질문은행(1,000문항) 전수
-분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM 판단으로 교체 확정,
-adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라우팅 파이프라인
-app/main.py 배선 완료 · 평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령
+상태: 완료(2026-08-18) — 사용자 확인으로 종료. schema·tier 1/2·관측 tracking·라우팅 배선·평가
+fixture(14 케이스) live 실행까지 구현·검증했다. tier2 LLM이 남긴 새 오분류 2건(0346·0561,
+`external_document_required` 과대 차단)은 [TD-024](../tech-debt-tracker.md)로 남아 있으며,
+[0033 트래픽 축적 후 재검토](../todo/0033-traffic-based-routing-calibration-review.md)에서
+후속 조치한다.
+
+원래 상태(진행 중, 2026-08-08 마지막 갱신): `schema/tier 1/관측 tracking 완료 · tier 1 사전 v1
+질문은행(1,000문항) 전수 분석으로 확장 완료 · tier 2 설계를 embedding 유사도 gate에서 LLM
+판단으로 교체 확정, adapter 골격 구현 · tier 3 사용 안 함으로 확정(2026-08-08) · 라우팅
+파이프라인 app/main.py 배선 완료 · 평가 fixture(14 케이스) 구축·실행 완료 · tier1 위양성 2건(법령
 currency 질문·일반 법적 의무 질문이 잘못 차단되던 것) 타이트닝으로 제거해
 misclassification_rate 0.2857→0.1429, unnecessary_block_rate 0.1429→0(2026-08-08) ·
 NVIDIA API key 실배선 완료(2026-08-08) · fixture 14개 전체 --live 완주(재시도 러너,
 2026-08-08): misclassification_rate 0.2143(3/14), unnecessary_block_rate 0.1429(2/14),
-unnecessary_search_rate 0.0714(1/14) — tier1 자체 위양성은 0인데 **tier2 LLM이 새 오분류
-2건(0346·0561, 둘 다 legal_search를 external_document_required로 과대 차단)을 만들어**
+unnecessary_search_rate 0.0714(1/14) — tier1 자체 위양성은 0인데 tier2 LLM이 새 오분류
+2건(0346·0561, 둘 다 legal_search를 external_document_required로 과대 차단)을 만들어
 unnecessary_block_rate가 재상승했다 - tier2 calibration 후속 과제로 기록`
 
 착수일: 2026-08-07
