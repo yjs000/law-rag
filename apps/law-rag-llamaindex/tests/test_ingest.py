@@ -6,7 +6,12 @@ from llama_index.core.schema import TextNode
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from law_rag_llamaindex.ingest import build_nodes, changed_provision_ids, existing_hashes
+from law_rag_llamaindex.ingest import (
+    build_nodes,
+    changed_provision_ids,
+    existing_hashes,
+    run_ingestion,
+)
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
 
 
@@ -87,6 +92,132 @@ class _Engine:
 
     def connect(self):
         return self._connection
+
+
+class _LifecycleResult:
+    def __init__(self, run_id: str) -> None:
+        self._run_id = run_id
+
+    def scalar_one(self) -> str:
+        return self._run_id
+
+    def __iter__(self):
+        return iter(())
+
+
+class _LifecycleConnection(_ConnectionContext):
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.statements: list[tuple[str, dict | None]] = []
+
+    async def run_sync(self, _sync_operation):
+        return True
+
+    async def execute(self, query, parameters=None):
+        sql = query.text
+        self.statements.append((sql, parameters))
+        if sql.lstrip().upper().startswith("INSERT INTO LAW_RAG_LLAMAINDEX_INGESTION_RUNS"):
+            self.events.append("insert-running")
+            return _LifecycleResult("run-1")
+        if "SELECT node_id" in sql:
+            return []
+        if "status = :status" in sql:
+            self.events.append(parameters["status"])
+            return None
+        raise AssertionError(f"unexpected query: {sql}")
+
+
+class _LifecycleEngine:
+    def __init__(self, connection: _LifecycleConnection) -> None:
+        self.connection = connection
+
+    def connect(self):
+        return self.connection
+
+    def begin(self):
+        return self.connection
+
+
+class _Embedder:
+    def get_text_embedding_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1, 0.2] for _ in texts]
+
+
+class _VectorStore:
+    def __init__(self, events: list[str], error: Exception | None = None) -> None:
+        self.events = events
+        self.error = error
+
+    def add(self, nodes: list[TextNode]) -> None:
+        self.events.append("vector-write")
+        if self.error is not None:
+            raise self.error
+
+
+async def _provisions(events: list[str]) -> list[dict]:
+    events.append("retrieve")
+    return [_record("a", "본문 A")]
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_records_running_then_completed_after_vector_write(monkeypatch):
+    events: list[str] = []
+    connection = _LifecycleConnection(events)
+    engine = _LifecycleEngine(connection)
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+
+    result = await run_ingestion(engine, _VectorStore(events), _Embedder(), "law_rag_llamaindex")
+
+    lifecycle_statements = [
+        (sql, parameters)
+        for sql, parameters in connection.statements
+        if "law_rag_llamaindex_ingestion_runs" in sql
+    ]
+    assert len(lifecycle_statements) == 2
+    assert events.index("insert-running") < events.index("retrieve")
+    assert events.index("vector-write") < events.index("completed")
+    assert "RETURNING id" in lifecycle_statements[0][0]
+    assert lifecycle_statements[0][1] == {"status": "running"}
+    assert "finished_at" in lifecycle_statements[1][0]
+    assert "node_count" in lifecycle_statements[1][0]
+    assert lifecycle_statements[1][1] == {"status": "completed", "node_count": 1, "run_id": "run-1"}
+    assert result.embedded_count == 1
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_records_failed_and_reraises_original_error(monkeypatch):
+    events: list[str] = []
+    connection = _LifecycleConnection(events)
+    engine = _LifecycleEngine(connection)
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+    original_error = RuntimeError("vector write failed")
+
+    with pytest.raises(RuntimeError, match="vector write failed") as raised:
+        await run_ingestion(
+            engine,
+            _VectorStore(events, error=original_error),
+            _Embedder(),
+            "law_rag_llamaindex",
+        )
+
+    lifecycle_statements = [
+        (sql, parameters)
+        for sql, parameters in connection.statements
+        if "law_rag_llamaindex_ingestion_runs" in sql
+    ]
+    assert len(lifecycle_statements) == 2
+    assert events.index("vector-write") < events.index("failed")
+    assert "finished_at" in lifecycle_statements[1][0]
+    assert lifecycle_statements[1][1] == {"status": "failed", "run_id": "run-1"}
+    assert not any(
+        parameters and parameters.get("status") == "completed"
+        for _, parameters in lifecycle_statements
+    )
+    assert raised.value is original_error
 
 
 @pytest.mark.asyncio
