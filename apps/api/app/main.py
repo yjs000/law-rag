@@ -10,7 +10,13 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
+from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
+from law_rag_llamaindex.retriever import search as llamaindex_search
+from law_rag_llamaindex.store import build_vector_store as build_llamaindex_vector_store
+from sqlalchemy import text
 
+from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.mock_route_classifier import MockRouteClassifier
@@ -79,6 +85,20 @@ ai_quota_exhausted = False
 question_tasks = QuestionTaskRegistry()
 repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
+)
+llamaindex_settings = get_llamaindex_settings()
+llamaindex_vector_store = (
+    build_llamaindex_vector_store(llamaindex_settings) if settings.database_url else None
+)
+llamaindex_embedder = (
+    build_llamaindex_embedder(llamaindex_settings)
+    if llamaindex_settings.nvidia_api_key
+    else None
+)
+llamaindex_repository = (
+    LlamaIndexLegalRepository(repository, llamaindex_vector_store, llamaindex_embedder)
+    if llamaindex_vector_store is not None and llamaindex_embedder is not None
+    else None
 )
 supabase_auth = (
     SupabaseAuth(
@@ -207,6 +227,46 @@ async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
             status_code=503,
             detail="법령 검색을 일시적으로 사용할 수 없습니다.",
         ) from exc
+    if payload.source_kinds:
+        hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
+    return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
+
+
+def _v2_not_ready_http_error() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={"code": "v2_search_not_ready", "message": "v2 검색을 아직 사용할 수 없습니다."},
+    )
+
+
+async def _v2_index_ready() -> bool:
+    if not settings.database_url:
+        return False
+    async with repository.engine.connect() as connection:  # type: ignore[union-attr]
+        row = (
+            await connection.execute(
+                text(
+                    "SELECT 1 FROM law_rag_llamaindex_ingestion_runs "
+                    "WHERE status='completed' LIMIT 1"
+                )
+            )
+        ).first()
+    return row is not None
+
+
+@app.post("/v2/search", response_model=list[SearchHit])
+async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]:
+    if llamaindex_vector_store is None or llamaindex_embedder is None:
+        raise _v2_not_ready_http_error()
+    if not await _v2_index_ready():
+        raise _v2_not_ready_http_error()
+    hits = await llamaindex_search(
+        llamaindex_vector_store,
+        llamaindex_embedder,
+        payload.query,
+        payload.as_of_date,
+        payload.limit,
+    )
     if payload.source_kinds:
         hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]
