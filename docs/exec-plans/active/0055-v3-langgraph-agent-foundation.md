@@ -35,14 +35,14 @@
 **인터페이스:**
 - 산출물: import 가능한 `law_rag_agent` 패키지, `__version__ = "0.1.0"`, uv workspace 멤버로 설치 가능.
 
-- [ ] **1단계: 루트 `pyproject.toml`에 workspace 멤버 추가**
+- [x] **1단계: 루트 `pyproject.toml`에 workspace 멤버 추가**
 
 ```toml
 [tool.uv.workspace]
 members = ["apps/api", "apps/collector", "apps/law-rag-agent", "apps/law-rag-llamaindex", "packages/law-rag-core"]
 ```
 
-- [ ] **2단계: 앱 디렉터리와 `pyproject.toml` 생성**
+- [x] **2단계: 앱 디렉터리와 `pyproject.toml` 생성**
 
 ```toml
 [project]
@@ -85,14 +85,14 @@ target-version = "py314"
 select = ["E", "F", "I", "UP", "B"]
 ```
 
-- [ ] **3단계: 패키지 골격 생성**
+- [x] **3단계: 패키지 골격 생성**
 
 `apps/law-rag-agent/src/law_rag_agent/__init__.py`:
 ```python
 __version__ = "0.1.0"
 ```
 
-- [ ] **4단계: smoke 테스트 작성**
+- [x] **4단계: smoke 테스트 작성**
 
 `apps/law-rag-agent/tests/test_package.py`:
 ```python
@@ -103,7 +103,7 @@ def test_package_imports():
     assert law_rag_agent.__version__ == "0.1.0"
 ```
 
-- [ ] **5단계: 워크스페이스 동기화와 테스트 실행**
+- [x] **5단계: 워크스페이스 동기화와 테스트 실행**
 
 실행: `uv sync --all-packages` (`uv sync --directory apps/law-rag-agent` 단독 사용 금지 — 공유 venv workspace라 다른 멤버 의존성이 정리될 수 있음)
 기대 결과: Python 3.14 아래에서 의존성 해석 성공(만약 langgraph/langchain-nvidia-ai-endpoints가 3.14를 아직 지원하지 않는다는 resolver 오류가 나면, 이후 모든 태스크가 이 설치에 의존하므로 진행 전에 오류를 그대로 기록하고 사용자에게 보고할 것).
@@ -111,7 +111,7 @@ def test_package_imports():
 실행: `uv run --directory apps/law-rag-agent python -m pytest -v`
 기대 결과: `test_package_imports PASSED`
 
-- [ ] **6단계: 커밋**
+- [x] **6단계: 커밋**
 
 ```bash
 git add pyproject.toml apps/law-rag-agent/
@@ -131,7 +131,7 @@ git commit -m "feat(law-rag-agent): scaffold new uv workspace app"
 
 route/generate에 서로 다른 모델을 쓸 수 있게 필드를 분리한다(기본값은 같은 모델이어도, 나중에 라우팅용 소형 모델로 바꿀 여지를 남김 — v1의 `nvidia_route_classifier_model` 분리와 같은 이유).
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_config.py
@@ -161,12 +161,12 @@ def test_get_settings_is_cached():
     assert get_settings() is get_settings()
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_config.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.config'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/config.py
@@ -195,12 +195,12 @@ def get_settings() -> Settings:
     return Settings()
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_config.py -v`
 기대 결과: 3 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/config.py apps/law-rag-agent/tests/test_config.py
@@ -220,7 +220,7 @@ git commit -m "feat(law-rag-agent): add settings module"
 
 LangGraph의 State는 각 노드가 반환하는 dict가 병합(update)되는 `TypedDict`다. `turns`는 그래프가 시작할 때 체크포인터에서 복원되고, `question`/`as_of_date`/`route`/`search_hits`/`draft_*`/`final_*`는 "현재 턴 작업 필드"로 매 요청마다 새로 채워진다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_state.py
@@ -269,12 +269,12 @@ def test_append_turn_does_not_mutate_input_state():
     assert new_state["turns"][1].question == "질문2"
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_state.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.state'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/state.py
@@ -310,12 +310,12 @@ def append_turn(state: AgentState, turn: Turn) -> AgentState:
     return {**state, "turns": [*state["turns"], turn]}
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_state.py -v`
 기대 결과: 2 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/state.py apps/law-rag-agent/tests/test_state.py
@@ -335,7 +335,7 @@ git commit -m "feat(law-rag-agent): add State schema and pure turn helper"
 
 이 두 모델은 `ChatNVIDIA(...).with_structured_output(RouteDecision)`/`.with_structured_output(GenerationResult)`에 그대로 전달되어 LLM 응답을 구조화한다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_schemas.py
@@ -365,12 +365,12 @@ def test_generation_result_holds_citation_ids_and_action():
     assert result.action == "fully_answerable"
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_schemas.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.schemas'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/schemas.py
@@ -397,12 +397,12 @@ class GenerationResult(BaseModel):
     ]
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_schemas.py -v`
 기대 결과: 3 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/schemas.py apps/law-rag-agent/tests/test_schemas.py
