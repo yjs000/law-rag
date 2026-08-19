@@ -24,6 +24,12 @@
    Superpowers `writing-plans`로 실행 계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
 6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
 
+## Docker·로컬 DB 정책
+
+- 명시적 사용자 승인 없이는 `supabase start` 또는 `docker compose up -d`를 실행하거나, `docker run -d`로 PostgreSQL·Redis·벡터 DB 등 상주형 로컬 서비스를 기동하지 않는다.
+- 기본 DB 경로는 원격 개발·테스트 환경이다. 운영 DB를 테스트·초기화 대상으로 사용하지 않는다.
+- 기존 테스트 명령이 요구하는 일회성 Docker 검증은 자동 실행할 수 있다. 단, `--rm` 등으로 종료 뒤 컨테이너가 남지 않아야 하며 상주형 로컬 DB·서비스를 기동해서는 안 된다.
+
 ## 개발 작업 워크플로우
 
 개발 작업의 skill 선택, brainstorming, 설계 승인, planning, worktree 격리, TDD, 구현, 코드 리뷰,
