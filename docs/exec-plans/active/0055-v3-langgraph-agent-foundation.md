@@ -11,7 +11,7 @@
 ## 전역 제약 조건
 
 - Python: 새 패키지는 `>=3.14,<3.15`(`apps/api`, `apps/law-rag-llamaindex`와 동일).
-- 테스트 실행: 항상 `python -m pytest`를 쓸 것(예: `uv run --directory apps/law-rag-agent python -m pytest`), 순수 `pytest` 금지 — 이 저장소에서 작업 디렉터리가 `sys.path`에 안 들어가 `ModuleNotFoundError`가 거짓으로 뜬다([0053](0053-v2-llamaindex-retrieval-pipeline.md)에서 검증됨).
+- 테스트 실행: 항상 `python -m pytest`를 쓸 것(예: `uv run --directory apps/law-rag-agent python -m pytest`), 순수 `pytest` 금지 — 이 저장소에서 작업 디렉터리가 `sys.path`에 안 들어가 `ModuleNotFoundError`가 거짓으로 뜬다([0053](../completed/0053-v2-llamaindex-retrieval-pipeline.md)에서 검증됨).
 - 의존성 동기화: 항상 저장소 루트에서 `uv sync --all-packages`, `uv sync --directory <단일 멤버>` 금지(공유 venv workspace, 단일 멤버 동기화가 다른 멤버 의존성을 정리해버림).
 - `apps/api`/`apps/law-rag-llamaindex`에 langchain/langgraph 계열 의존성을 추가하지 않는다 — 전부 `apps/law-rag-agent`에만 둔다.
 - 검색은 새로 짜지 않는다 — `law_rag_llamaindex.retriever.search(vector_store, embedder, query, as_of_date, limit)`를 그대로 호출한다(시그니처: `apps/law-rag-llamaindex/src/law_rag_llamaindex/retriever.py`).
@@ -21,6 +21,15 @@
 - SSE 스트리밍은 노드 단위(`route`/`search`/`generate`/`validate`/`final`)까지만 — 토큰 단위 스트리밍은 범위 밖.
 - `.env`/시크릿을 절대 커밋하지 않는다. 명시적 확인 없이 파괴적인 DB 명령을 실행하지 않는다.
 - 설계 문서: [`docs/design-docs/v3-langgraph-agent-foundation-design.md`](../../design-docs/v3-langgraph-agent-foundation-design.md). 이 계획과 충돌하면 설계 문서의 "결정 기록"이 우선하며 이 계획을 그에 맞게 고친다.
+
+---
+
+## 현재 진행 상태 (2026-08-19)
+
+- **확정 완료:** Task 1~11은 구현과 독립 리뷰까지 완료했다. Task 5~11의 구현·보강 테스트 커밋은 `3ea36e2`, `f3ba2d4`, `d0b7847`, `dbf5aff`, `9956d8d`, `eeda356`, `1dbc2ae`, `1ab3cf0`, `897c031`, `272b6c7`, `238f599`에 해당한다.
+- **미시작·보류:** Task 12~16은 사용자 지시로 시작하지 않았다. 따라서 이 계획은 계속 `active/`에 두며, Task 12 이상을 완료로 표시하지 않는다.
+- **Task 11 스키마 검증:** `apps/api/migrations/versions/0014_v3_thread_index.py`와 계약 테스트는 커밋 `238f599`에 존재한다. `docs/generated/db-schema.md`는 존재하지만 기준 헤더가 `0013`까지이며, 저장소에서 별도 schema generator를 찾지 못했고 이 worktree에는 `DATABASE_URL` 환경 변수와 `.env`가 없다. 그러므로 0014의 실제 Alembic 적용과 schema 문서 재생성은 **미검증**으로 남기고, 근거 없이 `v3_agent_threads` 내용을 생성 문서에 추가하지 않는다. DB 연결 또는 결정된 generator를 확보한 후 적용 revision을 `0014`로 확인하고 해당 generator로 `docs/generated/db-schema.md`를 갱신하는 것이 후속 작업이다.
+- **설계 상태:** Task 16이 미시작이므로 v3 설계 문서와 설계 인덱스의 상태는 변경하지 않는다. 현재 상태 `제안됨`을 `구현 중`으로 바꾸지 않는다.
 
 ---
 
@@ -422,7 +431,7 @@ git commit -m "feat(law-rag-agent): add structured output schemas"
 - 소비: `AgentState`(Task 3), `RouteDecision`(Task 4), `Settings`(Task 2).
 - 산출물: `build_route_node(llm) -> Callable[[AgentState], dict]`(LangGraph 노드 팩토리 — 이미 구조화 출력이 바인딩된 `llm`을 주입받아 테스트 시 fake로 교체 가능), `async def route_node(state: AgentState, llm) -> dict`(반환값은 `{"route": str}` — LangGraph가 State에 병합).
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_route_node.py
@@ -464,12 +473,12 @@ async def test_route_node_passes_question_text_to_llm():
     assert "인허가 받을 수 있어?" in str(fake_llm.last_messages)
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_route_node.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.nodes'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/nodes/__init__.py
@@ -502,12 +511,12 @@ def build_route_node(llm):
     return _node
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_route_node.py -v`
 기대 결과: 2 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/nodes/ apps/law-rag-agent/tests/test_route_node.py
@@ -523,12 +532,12 @@ git commit -m "feat(law-rag-agent): add route node"
 - 테스트: `apps/law-rag-agent/tests/test_search_node.py`
 
 **인터페이스:**
-- 소비: `AgentState`(Task 3), `law_rag_llamaindex.retriever.search(vector_store, embedder, query, as_of_date, limit) -> list[SearchHit]`(이미 존재 — [0053](0053-v2-llamaindex-retrieval-pipeline.md) Task 8 산출물).
+- 소비: `AgentState`(Task 3), `law_rag_llamaindex.retriever.search(vector_store, embedder, query, as_of_date, limit) -> list[SearchHit]`(이미 존재 — [0053](../completed/0053-v2-llamaindex-retrieval-pipeline.md) Task 8 산출물).
 - 산출물: `build_search_node(vector_store, embedder, limit=10) -> Callable[[AgentState], dict]`, `async def search_node(state: AgentState, vector_store, embedder, limit: int) -> dict`(반환값 `{"search_hits": list[dict]}`, 각 dict는 `SearchHit.model_dump()`).
 
 이 노드는 새 검색 로직을 담지 않는다 — `law_rag_llamaindex.retriever.search`를 그대로 호출하는 얇은 래퍼다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_search_node.py
@@ -579,12 +588,12 @@ async def test_search_node_calls_retriever_search_and_returns_hit_dicts(monkeypa
     assert captured["args"][4] == 5
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_search_node.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.nodes.search'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/nodes/search.py
@@ -607,12 +616,12 @@ def build_search_node(vector_store, embedder, limit: int = 10):
     return _node
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_search_node.py -v`
 기대 결과: 1 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/nodes/search.py apps/law-rag-agent/tests/test_search_node.py
@@ -633,7 +642,7 @@ git commit -m "feat(law-rag-agent): add search node wrapping v2 retriever"
 
 `draft_citations`는 `search_hits` 중 `generate`가 실제로 인용한(`citation_ids`에 대응하는) 것만 골라 `{"id": ..., "path": ..., "document_title": ..., "source_url": ...}` 형태로 축약한다. citation id 매핑은 `search_hits`의 인덱스를 `C1`, `C2`, ... 순서로 붙인다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_generate_node.py
@@ -697,12 +706,12 @@ async def test_generate_node_ignores_citation_ids_outside_search_hits_range():
     assert update["draft_citations"][0]["id"] == "C1"
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_generate_node.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.nodes.generate'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/nodes/generate.py
@@ -759,12 +768,12 @@ def build_generate_node(llm):
     return _node
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_generate_node.py -v`
 기대 결과: 2 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/nodes/generate.py apps/law-rag-agent/tests/test_generate_node.py
@@ -785,7 +794,7 @@ git commit -m "feat(law-rag-agent): add generate node"
 
 검증 규칙(새로 구현, v1보다 단순한 버전 — 실험 단계): `draft_action`이 `unanswerable`이면 근거 없이 빈 답변을 그대로 통과시킨다(주장이 없으므로 검증할 게 없음). 그 외에는 `draft_citations`가 하나도 없으면(인용 없는 주장) 초안을 버리고 검색 결과 목록만 담은 안전 응답으로 대체한다. 인용이 하나라도 있으면 초안을 그대로 통과시킨다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_validate_node.py
@@ -834,12 +843,12 @@ def test_validate_node_passes_through_unanswerable_with_no_citations():
     assert update["final_citations"] == []
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_validate_node.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.nodes.validate'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/nodes/validate.py
@@ -856,12 +865,12 @@ def validate_node(state) -> dict:
     return {"final_answer": state["draft_answer"], "final_citations": state["draft_citations"]}
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_validate_node.py -v`
 기대 결과: 3 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/nodes/validate.py apps/law-rag-agent/tests/test_validate_node.py
@@ -882,7 +891,7 @@ git commit -m "feat(law-rag-agent): add validate node"
 
 `AsyncPostgresSaver`는 psycopg3 DSN(`postgresql://...`, asyncpg 접두어 아님)을 받는다 — `law_rag_llamaindex.ingest._async_database_url`과 반대 방향 변환이 필요할 수 있다. `apps/api`의 `DATABASE_URL`은 이미 psycopg가 이해하는 `postgresql://` 형태이므로, asyncpg용 `+asyncpg` 접두어가 붙어 있다면 제거한다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_checkpointer.py
@@ -912,12 +921,12 @@ def test_build_checkpointer_context_requires_database_url():
         build_checkpointer_context(settings)
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_checkpointer.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.checkpointer'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/checkpointer.py
@@ -938,13 +947,13 @@ def build_checkpointer_context(settings: Settings):
     return AsyncPostgresSaver.from_conn_string(_psycopg_database_url(settings.database_url))
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_checkpointer.py -v`
 기대 결과: 3 passed
 (`AsyncPostgresSaver.from_conn_string`이 문자열만으로 즉시 연결을 열지 않고 context manager 진입 시에만 연결한다는 전제 — 만약 import나 호출 시점에 실제 연결을 시도해 이 테스트가 실패하면, `psycopg` 미설치/연결 실패 에러 메시지를 그대로 보고서에 남기고 이 단계에서 멈출 것.)
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/checkpointer.py apps/law-rag-agent/tests/test_checkpointer.py
@@ -965,7 +974,7 @@ git commit -m "feat(law-rag-agent): add Postgres checkpointer factory"
 
 조건부 엣지: `route` 노드 실행 후 `state["route"]`가 `"legal_search"`가 아니면 `blocked` 노드(차단 응답을 `final_answer`에 채우는 간단한 동기 함수, 이 파일 안에 정의)로 분기하고 그래프를 끝낸다. `"legal_search"`면 `search`→`generate`→`validate` 순서로 이어간다.
 
-- [ ] **1단계: 실패하는 테스트 작성**
+- [x] **1단계: 실패하는 테스트 작성**
 
 ```python
 # apps/law-rag-agent/tests/test_graph.py
@@ -1038,12 +1047,12 @@ async def test_graph_skips_search_and_generate_when_route_is_blocked():
     assert "clarification_required" in result["final_answer"] or result["final_answer"]
 ```
 
-- [ ] **2단계: 테스트 실패 확인**
+- [x] **2단계: 테스트 실패 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_graph.py -v`
 기대 결과: `ModuleNotFoundError: No module named 'law_rag_agent.graph'`로 실패
 
-- [ ] **3단계: 구현 작성**
+- [x] **3단계: 구현 작성**
 
 ```python
 # apps/law-rag-agent/src/law_rag_agent/graph.py
@@ -1086,12 +1095,12 @@ def build_graph(route_node, search_node, generate_node, validate_node, checkpoin
     return graph.compile(checkpointer=checkpointer)
 ```
 
-- [ ] **4단계: 테스트 통과 확인**
+- [x] **4단계: 테스트 통과 확인**
 
 실행: `uv run --directory apps/law-rag-agent python -m pytest tests/test_graph.py -v`
 기대 결과: 2 passed
 
-- [ ] **5단계: 커밋**
+- [x] **5단계: 커밋**
 
 ```bash
 git add apps/law-rag-agent/src/law_rag_agent/graph.py apps/law-rag-agent/tests/test_graph.py
@@ -1108,7 +1117,7 @@ git commit -m "feat(law-rag-agent): assemble StateGraph with conditional routing
 **인터페이스:**
 - 산출물: `v3_agent_threads(thread_id uuid pk, user_id uuid null references user_profiles(id), created_at timestamptz)`.
 
-- [ ] **1단계: 마이그레이션 작성**
+- [x] **1단계: 마이그레이션 작성**
 
 ```python
 # apps/api/migrations/versions/0014_v3_thread_index.py
@@ -1140,12 +1149,12 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS v3_agent_threads")
 ```
 
-- [ ] **2단계: 마이그레이션 적용 확인(로컬/dev DB가 있으면)**
+- [x] **2단계: 마이그레이션 적용 확인(로컬/dev DB가 있으면)**
 
 실행: `uv run --directory apps/api python -m alembic upgrade head`
 기대 결과: 에러 없음, `alembic_version`이 `0014`로 전진. 로컬 `DATABASE_URL`이 없으면 이 단계는 건너뛰고 계획 진행 기록에 미검증으로 남길 것 — 마이그레이션은 CI/staging에서 병합 전에 검증한다.
 
-- [ ] **3단계: 커밋**
+- [x] **3단계: 커밋**
 
 ```bash
 git add apps/api/migrations/versions/0014_v3_thread_index.py
@@ -1749,5 +1758,5 @@ git commit -m "docs: link 0055 plan and mark v3 design doc as in progress"
 ## Self-Review Notes(계획 작성자를 위한 것이며 태스크가 아님)
 
 - **명세 커버리지:** 목표(그래프·노드·영속화·API) → Task 1–15. 비범위(interrupt, 웹검색, 품질 동등성, 토큰 스트리밍, web 연동, 과거 데이터 이관, v1/v2 코드 변경) → 이 계획 어디에도 해당 코드를 만들지 않음. State/영속화 → Task 3, 9, 10, 14. API 계약(스레드/run 구조 + SSE) → Task 12, 13, 14. thread_id 인증/인덱스 → Task 15. 결정 기록 항목(라우팅 단순화, 검색 재사용, 노드 단위 스트리밍, 워크스페이스 위치) → 각각 Task 5, 6, 13, 1에 대응.
-- **알려진 위험:** Task 12~15는 실제 NVIDIA/Postgres 자격 증명 없이는 `_v3_configured()`가 항상 `False`를 반환해 503만 확인 가능하다 — 실 데이터 경로(체크포인터 직렬화, LLM 구조화 출력 실제 호출)는 이 계획 완료 후 [0053](0053-v2-llamaindex-retrieval-pipeline.md)의 staging 검증과 같은 방식으로 실제 자격 증명을 두고 별도로 확인해야 한다.
+- **알려진 위험:** Task 12~15는 실제 NVIDIA/Postgres 자격 증명 없이는 `_v3_configured()`가 항상 `False`를 반환해 503만 확인 가능하다 — 실 데이터 경로(체크포인터 직렬화, LLM 구조화 출력 실제 호출)는 이 계획 완료 후 [0053](../completed/0053-v2-llamaindex-retrieval-pipeline.md)의 staging 검증과 같은 방식으로 실제 자격 증명을 두고 별도로 확인해야 한다.
 - **구현 시점까지 미해결로 남은 항목(설계 문서의 미결정 섹션에서 이어짐):** 체크포인터 구현체의 정확한 스키마 호환성, `route`/`generate` 프롬프트의 세부 튜닝, SSE payload 필드의 최종 확정은 이 계획의 태스크 범위 밖이며 Task 12~13에서 합리적 기본값으로 구현한 뒤 실제 사용 결과를 보고 후속 조정한다.

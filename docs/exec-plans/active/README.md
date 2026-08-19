@@ -3,7 +3,7 @@
 현재 진행 중인 복잡한 작업의 실행 계획을 둔다. 각 계획에는 완료 조건, 체크리스트, 결정 로그, 진행 기록, 차단 요소를 포함한다.
 
 - [0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — E-10 base 실행 완료, 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건(품질 원인 미진단)
-- [0055: V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — 16개 태스크 중 1~4 완료(워크스페이스 스캐폴딩, config, State 스키마, 구조화 출력 스키마), 5(route 노드)부터 이어서 진행 예정
+- [0055: V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — Task 1~11 구현·독립 리뷰 완료; Task 12~16은 사용자 지시로 미시작·보류(0014 실제 DB 적용과 generated schema 반영은 미검증 후속 항목)
 
 2026-08-18: 0053(V2 LlamaIndex 검색 파이프라인)은 Task 1~14와 전체 브랜치
 통합 리뷰까지 마치고 [completed/](../completed/README.md)로 이동했다.
