@@ -27,6 +27,8 @@
 ## 현재 진행 상태 (2026-08-19)
 
 - **확정 완료:** Task 1~11은 구현과 독립 리뷰까지 완료했다. Task 5~11의 구현·보강 테스트 커밋은 `3ea36e2`, `f3ba2d4`, `d0b7847`, `dbf5aff`, `9956d8d`, `eeda356`, `1dbc2ae`, `1ab3cf0`, `897c031`, `272b6c7`, `238f599`에 해당한다.
+- **Task 10 근거:** `897c031`이 `StateGraph` 조립과 `legal_search`/차단 조건부 분기를 구현했고, `272b6c7`이 노드 실행 순서·차단 분기 안전성·검증 fallback·MemorySaver 상태 복원 회귀 테스트를 보강했다. `897c031`에 대한 보강 커밋 `272b6c7`까지 반영한 독립 리뷰 판정은 **PASS**다.
+- **Task 11 근거:** `238f599`가 `0014_v3_thread_index.py`와 `v3_agent_threads` 마이그레이션 계약 테스트를 추가했다. 해당 커밋의 독립 리뷰 판정은 **PASS**다. 다만 이 worktree에는 `DATABASE_URL` 환경 변수와 `.env`가 없어 `uv run --directory apps/api python -m alembic upgrade head`의 실제 로컬 DB 적용은 **미검증**이다.
 - **미시작·보류:** Task 12~16은 사용자 지시로 시작하지 않았다. 따라서 이 계획은 계속 `active/`에 두며, Task 12 이상을 완료로 표시하지 않는다.
 - **Task 11 스키마 검증:** `apps/api/migrations/versions/0014_v3_thread_index.py`와 계약 테스트는 커밋 `238f599`에 존재한다. `docs/generated/db-schema.md`는 존재하지만 기준 헤더가 `0013`까지이며, 저장소에서 별도 schema generator를 찾지 못했고 이 worktree에는 `DATABASE_URL` 환경 변수와 `.env`가 없다. 그러므로 0014의 실제 Alembic 적용과 schema 문서 재생성은 **미검증**으로 남기고, 근거 없이 `v3_agent_threads` 내용을 생성 문서에 추가하지 않는다. DB 연결 또는 결정된 generator를 확보한 후 적용 revision을 `0014`로 확인하고 해당 generator로 `docs/generated/db-schema.md`를 갱신하는 것이 후속 작업이다.
 - **설계 상태:** Task 16이 미시작이므로 v3 설계 문서와 설계 인덱스의 상태는 변경하지 않는다. 현재 상태 `제안됨`을 `구현 중`으로 바꾸지 않는다.
