@@ -76,3 +76,52 @@ async def test_generate_node_ignores_citation_ids_outside_search_hits_range():
 
     assert len(update["draft_citations"]) == 1
     assert update["draft_citations"][0]["id"] == "C1"
+
+
+@pytest.mark.asyncio
+async def test_generate_node_returns_only_draft_fields():
+    fake_llm = FakeStructuredLLM(
+        GenerationResult(answer="답변", citation_ids=[], action="unanswerable")
+    )
+    state = {
+        "question": "질문",
+        "search_hits": [],
+    }
+
+    update = await generate_node(state, fake_llm)
+
+    assert set(update) == {"draft_answer", "draft_citations", "draft_action"}
+
+
+@pytest.mark.asyncio
+async def test_generate_node_passes_only_numbered_search_evidence_to_llm():
+    fake_llm = FakeStructuredLLM(
+        GenerationResult(answer="답변", citation_ids=[], action="partially_answerable")
+    )
+    state = {
+        "question": "태양광 정의가 뭐야",
+        "search_hits": [
+            {
+                "path": "제1조",
+                "document_title": "신에너지법",
+                "source_url": "https://example.test/1",
+                "content": "본문1",
+            },
+            {
+                "path": "제2조",
+                "document_title": "신에너지법",
+                "source_url": "https://example.test/2",
+                "content": "본문2",
+            },
+        ],
+    }
+
+    await generate_node(state, fake_llm)
+
+    prompt = fake_llm.last_messages[0]["content"]
+    evidence = prompt.split("근거:\n", maxsplit=1)[1]
+    assert state["question"] in prompt
+    assert evidence == (
+        "[C1] 신에너지법 제1조: 본문1\n"
+        "[C2] 신에너지법 제2조: 본문2\n"
+    )
