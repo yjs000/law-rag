@@ -39,9 +39,7 @@ def build_graph(
     graph.add_node("blocked", _blocked_node)
 
     graph.set_entry_point("route")
-    graph.add_conditional_edges(
-        "route", _route_branch, {"search": "search", "blocked": "blocked"}
-    )
+    graph.add_conditional_edges("route", _route_branch, {"search": "search", "blocked": "blocked"})
     graph.add_edge("search", "generate")
     graph.add_edge("generate", "validate")
     graph.add_edge("validate", END)
