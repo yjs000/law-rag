@@ -32,13 +32,16 @@
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
 | [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 승인 | 근거 0건·라우팅 차단·clarification 경로 전부 LLM 생성으로 전환, 호출량·비용 영향 |
 | [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 구현 중 | v1과 병행하는 신규 `law-rag-llamaindex` 워크스페이스, ingestion 준비 상태, `/v2/search`, 운영자 관리 HNSW와 LangGraph 확장 로드맵 |
+| [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 제안됨 | v1/v2 재사용 없이 라우팅·생성·검증을 LangGraph 노드로 재구축, Postgres 체크포인터 대화 영속화, 스레드/run API |
 
 ## 버전 표기
 
-검색·임베딩 파이프라인이 v1(기존)과 v2(신규, `law-rag-llamaindex`)로 병행 운영되는
-동안, v2 전용 설계 문서는 폴더를 나누지 않고 같은 `docs/design-docs/`에 두되 파일명과
-제목 앞에 `v2`/`V2` 접두어를 붙여 구분한다(날짜 없이, 예: `v2-...-design.md`, 제목
-`V2: ...`). v1에도 공통 적용되거나 버전 구분이 필요 없는 문서는 접두어를 붙이지 않는다.
+v1(기존 운영 파이프라인)·v2(LlamaIndex 검색, `law-rag-llamaindex`)·v3(LangGraph 에이전트,
+`law-rag-agent`)가 병행 운영되는 동안, 버전 전용 설계 문서는 폴더를 나누지 않고 같은
+`docs/design-docs/`에 두되 파일명과 제목 앞에 `v2`/`V2`, `v3`/`V3` 접두어를 붙여
+구분한다(날짜 없이, 예: `v3-...-design.md`, 제목 `V3: ...`). v1에도 공통 적용되거나
+버전 구분이 필요 없는 문서는 접두어를 붙이지 않는다. 각 버전의 실제 구현 개요와
+로직 변화 비교는 [학습 코스 6장](../learning/06-v1-to-langchain-evolution.md)을 참고한다.
 
 ## 상태 정의
 

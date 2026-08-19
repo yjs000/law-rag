@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>law-rag: v1 → v2 → v3 파이프라인 로직 변화</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --ink: #1a1a2e;
+    --muted: #5a5a72;
+    --grid: #e4e4ec;
+    --existing: #3b6ea5;      /* v1 기존 로직 그대로 */
+    --existing-bg: #e8f0fa;
+    --reused: #0f9b8e;        /* 이전 단계 산출물 재사용 */
+    --reused-bg: #e3f7f4;
+    --new: #d97a34;           /* 이번 단계에서 새로 짠 로직 */
+    --new-bg: #fdece0;
+    --persist: #7b4fa6;       /* 새 영속화 계층 */
+    --persist-bg: #f1e8f9;
+  }
+  body {
+    margin: 0;
+    padding: 32px 24px 64px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 28px; font-size: 0.95rem; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    margin: 0 0 28px; font-size: 0.85rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+  figure { margin: 0 0 40px; }
+  figcaption { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  svg { width: 100%; height: auto; display: block; }
+  .note {
+    max-width: 1180px; margin: 40px auto 0; padding: 16px 20px;
+    background: #f7f7fb; border-radius: 8px; font-size: 0.9rem; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>law-rag: v1 → v2 → v3 파이프라인에서 로직이 어떻게 바뀌었나</h1>
+  <p class="subtitle">
+    질문 하나가 답으로 만들어지기까지, 각 버전에서 어떤 단계가 "그대로"고 어떤 단계가
+    "새로 짠 것"인지를 색으로 구분했다.
+  </p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background:var(--existing)"></span>v1 기존 로직(변경 없음)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--reused)"></span>이전 단계 산출물을 그대로 재사용</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--new)"></span>이번 단계에서 새로 구현</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--persist)"></span>새로 추가된 영속화 계층</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1180 900" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Segoe UI, Malgun Gothic, sans-serif">
+
+      <!-- ================= v1 lane ================= -->
+      <text x="20" y="34" font-size="18" font-weight="700" fill="#1a1a2e">v1 — 기존 운영 파이프라인</text>
+      <text x="20" y="54" font-size="12.5" fill="#5a5a72">apps/api, 한 FastAPI 함수(_answer_question) 안에서 전부 순서대로 실행</text>
+
+      <!-- boxes: 질문 -> tier1 -> tier2 -> search(dense+keyword) -> NIM 생성 -> validate -> 답변 -->
+      <g font-size="13" text-anchor="middle">
+        <!-- 질문 -->
+        <rect x="20" y="76" width="120" height="52" rx="8" fill="#f2f2f7" stroke="#c9c9d6"/>
+        <text x="80" y="107" fill="#1a1a2e">질문 입력</text>
+
+        <!-- tier1 -->
+        <rect x="176" y="76" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="251" y="100" fill="var(--existing)" font-weight="600">tier1 라우팅</text>
+        <text x="251" y="117" fill="#5a5a72" font-size="11">Kiwi 키워드 규칙</text>
+
+        <!-- tier2 -->
+        <rect x="362" y="76" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="437" y="100" fill="var(--existing)" font-weight="600">tier2 라우팅</text>
+        <text x="437" y="117" fill="#5a5a72" font-size="11">LLM judgment</text>
+
+        <!-- search -->
+        <rect x="548" y="76" width="170" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="633" y="100" fill="var(--existing)" font-weight="600">검색</text>
+        <text x="633" y="117" fill="#5a5a72" font-size="11">dense + keyword fallback SQL</text>
+
+        <!-- generate -->
+        <rect x="754" y="76" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="829" y="100" fill="var(--existing)" font-weight="600">답변 생성</text>
+        <text x="829" y="117" fill="#5a5a72" font-size="11">NVIDIA NIM 직접 호출</text>
+
+        <!-- validate -->
+        <rect x="940" y="76" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="1015" y="100" fill="var(--existing)" font-weight="600">인용 검증</text>
+        <text x="1015" y="117" fill="#5a5a72" font-size="11">validate_draft</text>
+      </g>
+
+      <!-- arrows v1 -->
+      <g stroke="#9a9ab0" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+        <path d="M140 102 H176"/>
+        <path d="M326 102 H362"/>
+        <path d="M512 102 H548"/>
+        <path d="M718 102 H754"/>
+        <path d="M904 102 H940"/>
+      </g>
+
+      <!-- ================= v2 lane ================= -->
+      <text x="20" y="204" font-size="18" font-weight="700" fill="#1a1a2e">v2 — LlamaIndex 검색 교체 (2026-08, 완료)</text>
+      <text x="20" y="224" font-size="12.5" fill="#5a5a72">/v2/questions, v1의 _answer_question을 그대로 호출하되 evidence repository만 교체</text>
+
+      <g font-size="13" text-anchor="middle">
+        <rect x="20" y="246" width="120" height="52" rx="8" fill="#f2f2f7" stroke="#c9c9d6"/>
+        <text x="80" y="277" fill="#1a1a2e">질문 입력</text>
+
+        <rect x="176" y="246" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="251" y="270" fill="var(--existing)" font-weight="600">tier1 라우팅</text>
+        <text x="251" y="287" fill="#5a5a72" font-size="11">v1 그대로</text>
+
+        <rect x="362" y="246" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="437" y="270" fill="var(--existing)" font-weight="600">tier2 라우팅</text>
+        <text x="437" y="287" fill="#5a5a72" font-size="11">v1 그대로</text>
+
+        <rect x="548" y="246" width="170" height="52" rx="8" fill="var(--new-bg)" stroke="var(--new)"/>
+        <text x="633" y="270" fill="var(--new)" font-weight="600">검색 — 새로 짠 부분</text>
+        <text x="633" y="287" fill="#5a5a72" font-size="11">LlamaIndex + PGVectorStore</text>
+
+        <rect x="754" y="246" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="829" y="270" fill="var(--existing)" font-weight="600">답변 생성</text>
+        <text x="829" y="287" fill="#5a5a72" font-size="11">v1 그대로 재사용</text>
+
+        <rect x="940" y="246" width="150" height="52" rx="8" fill="var(--existing-bg)" stroke="var(--existing)"/>
+        <text x="1015" y="270" fill="var(--existing)" font-weight="600">인용 검증</text>
+        <text x="1015" y="287" fill="#5a5a72" font-size="11">v1 그대로 재사용</text>
+      </g>
+
+      <g stroke="#9a9ab0" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+        <path d="M140 272 H176"/>
+        <path d="M326 272 H362"/>
+        <path d="M512 272 H548"/>
+        <path d="M718 272 H754"/>
+        <path d="M904 272 H940"/>
+      </g>
+
+      <!-- LlamaIndexLegalRepository callout -->
+      <rect x="548" y="316" width="342" height="40" rx="6" fill="none" stroke="var(--new)" stroke-dasharray="4 3"/>
+      <text x="719" y="340" font-size="11.5" fill="var(--new)" text-anchor="middle">
+        LlamaIndexLegalRepository: search만 새로 구현, 나머지 8개 메서드는 v1에 위임
+      </text>
+
+      <!-- ================= v3 lane ================= -->
+      <text x="20" y="424" font-size="18" font-weight="700" fill="#1a1a2e">v3 — LangGraph 에이전트 기본 골격 (설계 단계)</text>
+      <text x="20" y="444" font-size="12.5" fill="#5a5a72">apps/law-rag-agent, POST /v3/threads/{id}/runs · 노드 단위 SSE 스트리밍</text>
+
+      <g font-size="13" text-anchor="middle">
+        <rect x="20" y="466" width="120" height="52" rx="8" fill="#f2f2f7" stroke="#c9c9d6"/>
+        <text x="80" y="497" fill="#1a1a2e">질문 입력</text>
+
+        <rect x="176" y="466" width="150" height="52" rx="8" fill="var(--new-bg)" stroke="var(--new)"/>
+        <text x="251" y="490" fill="var(--new)" font-weight="600">route 노드</text>
+        <text x="251" y="507" fill="#5a5a72" font-size="11">LLM 1회, 구조화 출력</text>
+
+        <rect x="362" y="466" width="170" height="52" rx="8" fill="var(--reused-bg)" stroke="var(--reused)"/>
+        <text x="447" y="490" fill="var(--reused)" font-weight="600">search 노드</text>
+        <text x="447" y="507" fill="#5a5a72" font-size="11">v2 retriever 그대로 재사용</text>
+
+        <rect x="568" y="466" width="150" height="52" rx="8" fill="var(--new-bg)" stroke="var(--new)"/>
+        <text x="643" y="490" fill="var(--new)" font-weight="600">generate 노드</text>
+        <text x="643" y="507" fill="#5a5a72" font-size="11">새 프롬프트/스키마</text>
+
+        <rect x="754" y="466" width="150" height="52" rx="8" fill="var(--new-bg)" stroke="var(--new)"/>
+        <text x="829" y="490" fill="var(--new)" font-weight="600">validate 노드</text>
+        <text x="829" y="507" fill="#5a5a72" font-size="11">새로 구현</text>
+
+        <rect x="940" y="466" width="150" height="52" rx="8" fill="var(--persist-bg)" stroke="var(--persist)"/>
+        <text x="1015" y="490" fill="var(--persist)" font-weight="600">체크포인터</text>
+        <text x="1015" y="507" fill="#5a5a72" font-size="11">Postgres, 스레드 전체 상태</text>
+      </g>
+
+      <g stroke="#9a9ab0" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+        <path d="M140 492 H176"/>
+        <path d="M326 492 H362"/>
+        <path d="M532 492 H568"/>
+        <path d="M718 492 H754"/>
+        <path d="M904 492 H940"/>
+      </g>
+      <!-- feedback arrow: checkpointer persists every node's output, not just the final one -->
+      <path d="M1015 518 V560 H251 V518" stroke="var(--persist)" stroke-width="1.4" fill="none" stroke-dasharray="3 3" marker-end="url(#arrow-purple)"/>
+      <text x="633" y="576" font-size="11" fill="var(--persist)" text-anchor="middle">매 노드 실행마다 State 전체를 스냅샷 저장(체크포인트)</text>
+
+      <!-- ================= summary table ================= -->
+      <text x="20" y="640" font-size="15" font-weight="700" fill="#1a1a2e">한눈에 보는 변화</text>
+
+      <g font-size="12.5">
+        <line x1="20" y1="656" x2="1160" y2="656" stroke="var(--grid)"/>
+        <text x="20"  y="678" fill="#5a5a72" font-weight="600">단계</text>
+        <text x="150" y="678" fill="#5a5a72" font-weight="600">라우팅</text>
+        <text x="380" y="678" fill="#5a5a72" font-weight="600">검색</text>
+        <text x="610" y="678" fill="#5a5a72" font-weight="600">생성</text>
+        <text x="800" y="678" fill="#5a5a72" font-weight="600">검증</text>
+        <text x="960" y="678" fill="#5a5a72" font-weight="600">대화 영속화</text>
+        <line x1="20" y1="690" x2="1160" y2="690" stroke="var(--grid)"/>
+
+        <text x="20"  y="716" fill="#1a1a2e" font-weight="600">v1</text>
+        <text x="150" y="716" fill="var(--existing)">tier1+tier2</text>
+        <text x="380" y="716" fill="var(--existing)">dense+keyword SQL</text>
+        <text x="610" y="716" fill="var(--existing)">NIM 직접 호출</text>
+        <text x="800" y="716" fill="var(--existing)">validate_draft</text>
+        <text x="960" y="716" fill="#8a8a9a">클라이언트가 컨텍스트 재전송</text>
+
+        <line x1="20" y1="730" x2="1160" y2="730" stroke="var(--grid)"/>
+        <text x="20"  y="756" fill="#1a1a2e" font-weight="600">v2</text>
+        <text x="150" y="756" fill="var(--existing)">v1과 동일</text>
+        <text x="380" y="756" fill="var(--new)">LlamaIndex(신규)</text>
+        <text x="610" y="756" fill="var(--existing)">v1과 동일</text>
+        <text x="800" y="756" fill="var(--existing)">v1과 동일</text>
+        <text x="960" y="756" fill="#8a8a9a">v1과 동일(변경 없음)</text>
+
+        <line x1="20" y1="770" x2="1160" y2="770" stroke="var(--grid)"/>
+        <text x="20"  y="796" fill="#1a1a2e" font-weight="600">v3</text>
+        <text x="150" y="796" fill="var(--new)">LLM 1회(신규)</text>
+        <text x="380" y="796" fill="var(--reused)">v2 재사용</text>
+        <text x="610" y="796" fill="var(--new)">새 구현</text>
+        <text x="800" y="796" fill="var(--new)">새 구현</text>
+        <text x="960" y="796" fill="var(--persist)" font-weight="600">Postgres 체크포인터(단일 소스)</text>
+        <line x1="20" y1="810" x2="1160" y2="810" stroke="var(--grid)"/>
+      </g>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#9a9ab0"/>
+        </marker>
+        <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--persist)"/>
+        </marker>
+      </defs>
+    </svg>
+    <figcaption>
+      v1의 다섯 단계는 한 Python 함수 안에서 순서대로 실행된다. v2는 검색 한 칸만
+      LlamaIndex로 바꿔 끼우고 나머지는 v1을 그대로 부른다. v3는 라우팅·생성·검증을
+      LangGraph 노드로 다시 짜되 검색은 v2 것을 그대로 쓰고, 모든 노드 결과를 Postgres
+      체크포인터에 스냅샷으로 남겨 대화가 재로그인 후에도 이어지게 한다.
+    </figcaption>
+  </figure>
+
+  <div class="note">
+    이 다이어그램은 <code>docs/learning/06-v1-to-langchain-evolution.md</code>의 부속
+    자료다. 각 버전의 상세 설계 근거는 권위 설계 문서
+    (<code>docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md</code>,
+    <code>docs/design-docs/v3-langgraph-agent-foundation-design.md</code>)를 따른다 —
+    이 페이지는 개념을 빠르게 훑기 위한 시각 자료일 뿐, 이 페이지와 설계 문서가 다르면
+    설계 문서가 우선한다.
+  </div>
+</div>
+</body>
+</html>
