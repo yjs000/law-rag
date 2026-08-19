@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["apps/api", "apps/collector", "apps/law-rag-llamaindex", "packages/law-rag-core"]
+members = ["apps/api", "apps/collector", "apps/law-rag-agent", "apps/law-rag-llamaindex", "packages/law-rag-core"]
 
 [tool.uv]
 # Codex sandbox cannot write to the Windows user-level uv cache. Keep the
