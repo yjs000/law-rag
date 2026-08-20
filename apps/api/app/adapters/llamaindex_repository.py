@@ -1,3 +1,5 @@
+"""v2 LlamaIndex 검색과 v1 저장소 위임을 결합한다."""
+
 from datetime import date, datetime
 from time import perf_counter
 from uuid import UUID
@@ -16,9 +18,10 @@ from app.domain.search_queries import SearchTrace
 
 
 class LlamaIndexLegalRepository:
-    """Use the v2 retriever for search and delegate all other operations to v1."""
+    """v2 검색기는 사용하고 나머지 저장소 계약은 v1에 위임한다."""
 
     def __init__(self, delegate: LegalRepository, vector_store, embedder) -> None:
+        """v1 위임 저장소와 v2 검색 의존성을 연결한다."""
         self._delegate = delegate
         self._vector_store = vector_store
         self._embedder = embedder
@@ -31,6 +34,7 @@ class LlamaIndexLegalRepository:
         query_embedding: list[float] | None = None,
         embedding_profile_key: str | None = None,
     ) -> list[SearchHit]:
+        """v2 검색 결과만 반환하고 검색 추적 정보는 숨긴다."""
         hits, _ = await self.search_with_trace(query, as_of_date, limit)
         return hits
 
@@ -42,6 +46,11 @@ class LlamaIndexLegalRepository:
         query_embedding: list[float] | None = None,
         embedding_profile_key: str | None = None,
     ) -> tuple[list[SearchHit], SearchTrace]:
+        """v2 dense 검색 결과와 관측용 검색 추적 정보를 반환한다.
+
+        호출자가 제공한 v1 임베딩 인자는 사용하지 않는다. v2 검색기가 자체 query embedding을
+        생성해 검색 구현 경계를 유지한다.
+        """
         started = perf_counter()
         hits = await llamaindex_search(
             self._vector_store,
@@ -64,9 +73,11 @@ class LlamaIndexLegalRepository:
         return hits, trace
 
     async def consume_quota(self, subject_hash: str, day: date, kind: str, limit: int) -> bool:
+        """사용량 한도 소비를 v1 저장소에 위임한다."""
         return await self._delegate.consume_quota(subject_hash, day, kind, limit)
 
     async def upsert_document(self, document: LegalDocumentRecord) -> UUID:
+        """문서 upsert를 v1 저장소에 위임한다."""
         return await self._delegate.upsert_document(document)
 
     async def upsert_embeddings(
@@ -75,19 +86,25 @@ class LlamaIndexLegalRepository:
         profile_key: str,
         dimensions: int,
     ) -> None:
+        """임베딩 upsert를 v1 저장소에 위임한다."""
         await self._delegate.upsert_embeddings(values, profile_key, dimensions)
 
     async def provision(self, provision_id: UUID, as_of_date: date) -> SearchHit | None:
+        """단일 조문 조회를 v1 저장소에 위임한다."""
         return await self._delegate.provision(provision_id, as_of_date)
 
     async def corpus_items(self) -> list[CorpusItemStatus]:
+        """Corpus 항목 상태 조회를 v1 저장소에 위임한다."""
         return await self._delegate.corpus_items()
 
     async def corpus_search_status(self) -> CorpusSearchStatus:
+        """Corpus 검색 상태 조회를 v1 저장소에 위임한다."""
         return await self._delegate.corpus_search_status()
 
     async def corpus_temporal_state(self, supported_through: date) -> CorpusTemporalState:
+        """Corpus 기준일 범위 상태 조회를 v1 저장소에 위임한다."""
         return await self._delegate.corpus_temporal_state(supported_through)
 
     async def last_sync(self) -> datetime | None:
+        """마지막 corpus 동기화 시각 조회를 v1 저장소에 위임한다."""
         return await self._delegate.last_sync()

@@ -43,6 +43,9 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
 [tool.ruff.lint.per-file-ignores]
 "migrations/versions/*.py" = ["E501"]
 "app/adapters/postgres_repository.py" = ["E501"]

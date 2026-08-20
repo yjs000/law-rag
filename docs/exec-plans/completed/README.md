@@ -26,3 +26,4 @@
 - [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md)
 - [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md)
 - [0054: V2 준비 상태와 HNSW 운영](0054-v2-readiness-and-hnsw.md)
+- [0056: Python docstring과 Ruff D 규칙](0056-python-docstrings-and-ruff-d.md)

@@ -1,3 +1,5 @@
+"""법령 RAG API와 v2 LlamaIndex 검색 경계를 제공한다."""
+
 import asyncio
 import base64
 import json
@@ -98,6 +100,10 @@ llamaindex_repository = None
 def _build_llamaindex_resources(
     database_url: str | None, nvidia_api_key: str | None
 ) -> tuple[object, object, LlamaIndexLegalRepository] | None:
+    """v2 검색에 필요한 리소스를 모두 구성하거나 미구성 상태를 반환한다.
+
+    데이터베이스 URL 또는 NVIDIA 키가 없으면 외부 초기화를 시도하지 않는다.
+    """
     if not database_url or not nvidia_api_key:
         return None
 
@@ -108,7 +114,10 @@ def _build_llamaindex_resources(
 
 
 def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:
-    """Return v2 resources while preserving test-injected module globals."""
+    """테스트 주입 리소스를 보존하며 v2 리소스를 반환한다.
+
+    구성 또는 초기화에 실패하면 호출자가 준비되지 않은 v2 상태로 처리하도록 `None`을 반환한다.
+    """
     global llamaindex_embedder, llamaindex_repository, llamaindex_vector_store
 
     if any(
@@ -149,6 +158,7 @@ if repository is memory_repository:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """애플리케이션 종료 시 선택적 외부 인증 리소스를 정리한다."""
     yield
     if supabase_auth:
         await supabase_auth.aclose()
@@ -239,11 +249,13 @@ async def _authenticated_user(
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    """서비스 상태를 반환한다."""
     return {"status": "ok"}
 
 
 @app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
+    """v1 저장소에서 허용된 법령 검색 결과만 반환한다."""
     await _require_supported_as_of_date(payload.as_of_date, repository)
     await _check_quota("search")
     try:
@@ -268,6 +280,7 @@ def _v2_not_ready_http_error() -> HTTPException:
 
 
 async def _v2_index_ready() -> bool:
+    """가장 최근 v2 색인 작업의 완료 상태를 fail-closed 방식으로 확인한다."""
     if not settings.database_url:
         return False
     try:
@@ -286,7 +299,7 @@ async def _v2_index_ready() -> bool:
 
 
 async def _v2_ready() -> bool:
-    """Fail closed when readiness-marker access is unavailable."""
+    """준비 표지 접근 실패 시 fail-closed로 v2 준비 상태를 확인한다."""
     try:
         return await _v2_index_ready()
     except Exception:
@@ -295,6 +308,10 @@ async def _v2_ready() -> bool:
 
 @app.post("/v2/search", response_model=list[SearchHit])
 async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]:
+    """준비된 v2 인덱스에서 허용된 법령 검색 결과만 반환한다.
+
+    리소스 또는 색인 준비 상태를 확인할 수 없으면 검색 결과 대신 503을 반환한다.
+    """
     resources = _llamaindex_resources()
     if resources is None:
         raise _v2_not_ready_http_error()
@@ -318,6 +335,11 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
 async def _handle_question(
     payload: QuestionRequest, request: Request, repository: LegalRepository
 ) -> QuestionResponse:
+    """질문 요청의 예산, 인증, 중복 등록 및 취소 정리를 조정한다.
+
+    등록한 작업은 모든 성공·실패·취소 경로에서 해제하고, 요청 단계 관측 이벤트는 정확히 한 번
+    기록한다.
+    """
     budget = RequestBudget.start(
         settings.question_request_timeout_seconds,
         settings.response_reserve_seconds,
@@ -367,11 +389,16 @@ async def _handle_question(
 
 @app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    """v1 검색 저장소로 법령 질문에 응답한다."""
     return await _handle_question(payload, request, repository)
 
 
 @app.post("/v2/questions", response_model=QuestionResponse)
 async def question_v2(payload: QuestionRequest, request: Request) -> QuestionResponse:
+    """준비된 v2 검색 저장소로 법령 질문에 응답한다.
+
+    v2 리소스 또는 색인 준비 상태를 확인할 수 없으면 질문을 처리하지 않고 503을 반환한다.
+    """
     resources = _llamaindex_resources()
     if resources is None:
         raise _v2_not_ready_http_error()
@@ -385,6 +412,7 @@ async def question_v2(payload: QuestionRequest, request: Request) -> QuestionRes
 
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
 async def cancel_question(client_request_id: UUID, request: Request) -> dict[str, bool]:
+    """같은 요청 소유자가 실행 중인 질문을 취소한다."""
     user = await _optional_user(request.headers.get("authorization"))
     if not await question_tasks.cancel(_question_owner(request, user), client_request_id):
         raise HTTPException(status_code=404, detail="처리 중인 질문을 찾을 수 없습니다.")
@@ -396,8 +424,11 @@ async def _retrieve_question_evidence(
     query_embedding: list[float] | None,
     repository: LegalRepository,
 ) -> tuple[list[SearchHit], SearchTrace, datetime | None]:
-    """검색과 corpus 동기화 시각 조회를 하나의 retrieval budget stage로 묶는다 - 둘이
-    별도 stage였다면 각자 예산을 갖게 되어 전체 retrieval에 허용된 8초를 넘길 수 있다."""
+    """검색과 corpus 동기화 시각 조회를 하나의 retrieval 단계로 실행한다.
+
+    두 작업이 독립 예산을 소비해 전체 retrieval 허용 시간을 초과하지 않도록 같은 예산 단계에
+    묶는다.
+    """
     hits, trace = await repository.search_with_trace(
         payload.question,
         payload.as_of_date,
@@ -409,21 +440,26 @@ async def _retrieve_question_evidence(
 
 
 def _elapsed_ms(started_at: float) -> int:
-    """0045: 실제 경과 시간(wall clock)이다 - `RequestBudget.clock`과는 별개다. 테스트
-    일부가 예산 계산용 clock을 가짜 값으로 주입하므로, 관측 전용 타이밍에서 그 clock을
-    다시 호출하면 예산 로직이 소비할 값을 먼저 가로채 기존 timeout 테스트를 깨뜨린다."""
+    """관측용 실제 경과 시간을 밀리초로 반환한다.
+
+    예산 계산용 clock을 다시 호출하지 않아 테스트가 주입한 clock의 소비 순서를 바꾸지 않는다.
+    """
     return max(0, round((time.monotonic() - started_at) * 1000))
 
 
 def _remaining_ms(budget: RequestBudget) -> int:
-    """0045: `budget.deadline`은 이미 계산된 값을 그대로 읽기만 한다 - `budget.clock()`을
-    다시 호출하지 않아 위와 같은 이유로 예산 판정에 쓰이는 clock 소비 순서를 건드리지 않는다."""
+    """이미 계산된 마감 시각으로 남은 시간을 밀리초로 반환한다.
+
+    `budget.clock()`을 다시 호출하지 않아 예산 판정에 쓰이는 clock 소비 순서를 보존한다.
+    """
     return max(0, round((budget.deadline - time.monotonic()) * 1000))
 
 
 def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTimingOutcome:
-    """0045: 안전한 검색 전용 폴백(예: `generation_error`)으로 끝난 요청은 실패가 아니라
-    degraded다 - 사용자는 검증된 근거를 받았다. AI가 완결된 답을 낸 경우만 succeeded다."""
+    """응답의 안전한 fallback 여부로 요청 관측 결과를 분류한다.
+
+    검증된 근거를 제공한 검색 전용 fallback은 실패가 아닌 `degraded`로 기록한다.
+    """
     return "degraded" if response.fallback_reason is not None else "succeeded"
 
 
@@ -434,6 +470,11 @@ async def _answer_question(
     budget: RequestBudget,
     repository: LegalRepository,
 ) -> QuestionResponse:
+    """근거 우선 질문 답변 흐름을 라우팅·검색·생성 예산 안에서 실행한다.
+
+    검색 실패에는 근거 없는 답을 생성하지 않으며, 생성 실패 또는 grounding 거부에는 검증된
+    검색 전용 응답으로 안전하게 fallback한다.
+    """
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
@@ -777,9 +818,11 @@ async def _generate_blocked_route_answer(
     diagnostics: dict[str, object],
     budget: RequestBudget,
 ) -> QuestionResponse:
-    """0046: route_decision.route != legal_search일 때 고정 템플릿(blocked_fallback) 대신
-    LLM이 질문에 맞춘 답을 생성한다. 실패(timeout/예외/grounding 거부)하면 blocked_fallback
-    으로 떨어진다 - 기존 generation 예외 처리와 같은 원칙으로 새 실패 모드를 만들지 않는다."""
+    """검색을 건너뛴 라우트에 맞는 AI 응답을 생성한다.
+
+    시간 초과·예외·grounding 거부에는 근거 없는 새 실패 모드를 만들지 않고 제공된 고정
+    fallback 응답을 반환한다.
+    """
     stage = diagnostics["blocked_route_generation"]
     assert isinstance(stage, dict)
     stage.update({"attempted": True, "status": "started"})
@@ -839,6 +882,7 @@ async def _generate_blocked_route_answer(
 
 @app.post("/v1/auth/mock/google", response_model=MockLoginResponse)
 async def mock_google_login(payload: MockGoogleLoginRequest) -> MockLoginResponse:
+    """비운영 환경에서 목업 Google 로그인 세션을 발급한다."""
     _require_mock_auth()
     token, user = identity_repository.login_google(payload.email, payload.display_name)
     return MockLoginResponse(access_token=token, user=user)
@@ -848,11 +892,13 @@ async def mock_google_login(payload: MockGoogleLoginRequest) -> MockLoginRespons
 async def current_user(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> MockUser:
+    """현재 인증된 사용자를 반환한다."""
     return user
 
 
 @app.post("/v1/auth/logout", status_code=204)
 async def logout(authorization: Annotated[str | None, Header()] = None) -> Response:
+    """현재 인증 세션을 검증하고 목업 세션을 종료한다."""
     if supabase_auth and postgres_identity:
         try:
             await supabase_auth.verify_user(_bearer_token(authorization))
@@ -875,6 +921,7 @@ async def logout(authorization: Annotated[str | None, Header()] = None) -> Respo
 async def delete_account(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> Response:
+    """인증된 사용자의 계정과 연결된 데이터를 삭제한다."""
     if supabase_auth and postgres_identity:
         try:
             await supabase_auth.delete_user(await postgres_identity.auth_user_id(user.id))
@@ -890,6 +937,7 @@ async def delete_account(
 async def question_history(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> list[QuestionHistoryEntry]:
+    """인증된 사용자가 소유한 질문 이력을 반환한다."""
     if postgres_identity:
         return await postgres_identity.list_history(user.id)
     return identity_repository.list_history(user.id)
@@ -901,6 +949,7 @@ async def conversations(
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
     cursor: str | None = None,
 ) -> ConversationPage:
+    """인증된 사용자의 대화를 페이지 단위로 반환한다."""
     decoded = _decode_conversation_cursor(cursor) if cursor else None
     items, has_more = (
         await postgres_identity.list_conversations(user.id, limit, decoded)
@@ -922,6 +971,7 @@ async def conversation_turns(
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
     cursor: str | None = None,
 ) -> ConversationTurnPage:
+    """인증된 사용자가 소유한 대화의 턴을 페이지 단위로 반환한다."""
     decoded = _decode_turn_cursor(cursor) if cursor else None
     result = (
         await postgres_identity.list_conversation_turns(conversation_id, user.id, limit, decoded)
@@ -944,6 +994,7 @@ async def delete_conversation(
     conversation_id: UUID,
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> Response:
+    """인증된 사용자가 소유한 대화와 포함된 턴을 삭제한다."""
     deleted = (
         await postgres_identity.delete_conversation(conversation_id, user.id)
         if postgres_identity
@@ -958,6 +1009,7 @@ async def delete_conversation(
 async def question_history_detail(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> QuestionHistoryEntry:
+    """인증된 사용자가 소유한 질문 이력 항목을 반환한다."""
     return await _owned_history(history_id, user)
 
 
@@ -965,6 +1017,7 @@ async def question_history_detail(
 async def delete_question_history(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> Response:
+    """인증된 사용자가 소유한 질문 이력 항목을 삭제한다."""
     deleted = (
         await postgres_identity.delete_history(history_id, user.id)
         if postgres_identity
@@ -983,6 +1036,7 @@ async def export_checklist(
         ChecklistExportFormat.MARKDOWN
     ),
 ) -> StreamingResponse:
+    """인증된 사용자의 질문 이력에서 체크리스트 파일을 내보낸다."""
     entry = await _owned_history(history_id, user)
     document = ChecklistDocument(
         title="에너지 법령 체크리스트",
@@ -1012,6 +1066,7 @@ async def export_checklist(
 
 @app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
+    """검증된 기준일에 유효한 단일 법령 조문을 반환한다."""
     requested_date = as_of_date or _current_korea_date()
     await _require_supported_as_of_date(requested_date, repository)
     try:
@@ -1025,6 +1080,7 @@ async def provision(provision_id: UUID, as_of_date: date | None = None) -> Provi
 
 @app.get("/v1/documents/{document_id}/changes", response_model=DocumentChangesResponse)
 async def changes(document_id: UUID, from_date: date, to_date: date) -> DocumentChangesResponse:
+    """문서 연혁 비교의 현재 지원 상태를 반환한다."""
     return DocumentChangesResponse(
         document_id=document_id,
         from_date=from_date,
@@ -1037,6 +1093,7 @@ async def changes(document_id: UUID, from_date: date, to_date: date) -> Document
 
 @app.get("/v1/corpus/status", response_model=CorpusStatus)
 async def corpus_status() -> CorpusStatus:
+    """검색 가능 corpus와 AI 가용성 상태를 반환한다."""
     if isinstance(repository, PostgresLegalRepository):
         items, temporal_state, last_successful_sync = await repository.corpus_overview(
             _current_korea_date()

@@ -1,3 +1,5 @@
+"""v2 벡터 검색에서 기준일에 유효한 법령 조문만 반환한다."""
+
 from datetime import date
 
 from law_rag_core.domain.schemas import SearchHit
@@ -14,6 +16,11 @@ _OVER_FETCH_CAP = 100
 async def search(
     vector_store, embedder, query: str, as_of_date: date, limit: int
 ) -> list[SearchHit]:
+    """질문 임베딩으로 검색하고 요청 기준일에 유효한 결과만 반환한다.
+
+    후보를 넉넉히 가져온 뒤 시행일 범위로 다시 걸러, 벡터 저장소의 metadata filter만으로는
+    표현할 수 없는 종료일 경계를 보장한다.
+    """
     query_embedding = embedder.get_query_embedding(query)
     over_fetch = min(limit * 4, _OVER_FETCH_CAP)
     filters = MetadataFilters(
