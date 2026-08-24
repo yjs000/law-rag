@@ -12,7 +12,7 @@ from httpx import Response
 from app.adapters.mock_identity import identity_repository
 from app.main import app
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 MAX_RESPONSE_SECONDS = 1.0
 

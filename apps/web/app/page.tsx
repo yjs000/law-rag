@@ -32,6 +32,7 @@ import {
   resolveResponseAnswerMode,
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
+import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
 import { askQuestionWithRetry } from "../lib/generation-retry";
 import {
   appendPendingTurn,
@@ -409,7 +410,7 @@ export default function Home() {
     });
     getCorpusStatus().then((status) => {
       setCorpus(status);
-      const resolution = resolveCorpusAnswerMode(status);
+      const resolution = resolveCorpusAnswerMode(status, SEARCH_ONLY_ENABLED);
       if (!status.ai_available) {
         setModeNotice(resolution.notice ?? "");
         setAnswerPreference(resolution.preference);
@@ -547,7 +548,7 @@ export default function Home() {
     setSubmittedQuestion(trimmed);
     setQuestion(nextDraft);
     requestAnimationFrame(() => composer.current?.focus());
-    const requestedAnswerMode = terraUnavailable ? "search_only" : answerPreference;
+    const requestedAnswerMode = SEARCH_ONLY_ENABLED && terraUnavailable ? "search_only" : "terra";
     try {
       const answer = await askQuestionWithRetry({
         client_request_id: requestId,
@@ -576,7 +577,7 @@ export default function Home() {
         },
       });
       if (activeRequest.current?.id !== requestId) return;
-      const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer);
+      const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer, SEARCH_ONLY_ENABLED);
       setModeNotice(resolution.notice ?? "");
       setAnswerPreference(resolution.preference);
       if (isTerraAvailabilityFailure(answer.fallback_reason)) {
@@ -652,8 +653,8 @@ export default function Home() {
       setQuestion("");
       setSubmittedQuestion(latest.request.question);
       setAsOf(latest.request.as_of_date);
-      const requestedAnswerMode = latest.request.answer_mode ?? (latest.response.mode === "ai" ? "terra" : "search_only");
-      const resolution = resolveResponseAnswerMode(requestedAnswerMode, latest.response);
+      const requestedAnswerMode = SEARCH_ONLY_ENABLED ? (latest.request.answer_mode ?? (latest.response.mode === "ai" ? "terra" : "search_only")) : "terra";
+      const resolution = resolveResponseAnswerMode(requestedAnswerMode, latest.response, SEARCH_ONLY_ENABLED);
       setModeNotice(resolution.notice ?? "");
       setAnswerPreference(resolution.preference);
       setResult(latest.response);

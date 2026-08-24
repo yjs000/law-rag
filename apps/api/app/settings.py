@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     supabase_secret_key: str | None = None
     supabase_raw_bucket: str = "law-raw"
     ai_mode: Literal["auto", "off"] = "auto"
+    # 검색 전용 응답과 AI 실패 시 그 응답으로 전환하는 fallback을 함께 제어한다.
+    search_only_enabled: bool = False
     # 2026-08-09: OpenAI 생성 설정과 선택 분기를 제거했다. 답변·임베딩·tier 2 라우팅은
     # NVIDIA NIM만 사용하며, ai_mode=off 또는 NVIDIA_API_KEY 부재 시 검색 전용으로 동작한다.
     nvidia_api_key: str | None = None

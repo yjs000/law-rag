@@ -22,7 +22,7 @@ from app.observability import (
     route_metrics_snapshot,
 )
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 client = TestClient(app)
 

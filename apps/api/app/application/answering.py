@@ -154,7 +154,10 @@ def clarification_resubmission_summary(
 
 
 def post_generation_clarification_answer(
-    request: QuestionRequest, missing_information: list[str]
+    request: QuestionRequest,
+    missing_information: list[str],
+    *,
+    mode: str = "search_only",
 ) -> QuestionResponse:
     """2026-08-08: DraftAnswer.action == "clarification_required"일 때 쓴다 - 사전 라우팅이
     못 잡고 검색·생성까지 해본 뒤에야 드러난 clarification 케이스다. route는 그대로
@@ -163,7 +166,7 @@ def post_generation_clarification_answer(
     """
     return QuestionResponse(
         request_id=str(request.client_request_id),
-        mode="search_only",
+        mode=mode,
         summary=clarification_resubmission_summary(request.question, missing_information),
         scope="답변 생성 중 추가 정보 필요 확인됨 (검색은 실행됨)",
         sections=[],

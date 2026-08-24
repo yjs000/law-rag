@@ -12,7 +12,7 @@ from app.domain.routing import RouteDecision, RouteExample, nearest_example
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 
 def test_route_classifier_uses_mock_without_api_key(monkeypatch) -> None:
