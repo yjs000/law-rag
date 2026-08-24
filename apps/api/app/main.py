@@ -532,9 +532,9 @@ async def _answer_question(
     route_decision: RouteDecision | None = None
     if use_ai:
         routing_stage = diagnostics["routing"]
-        assert isinstance(routing_stage, dict)
+        assert isinstance(routing_stage, dict) #ask : 이거 왜 dict인지 확인해? dict가 아닐수도있어?
         routing_stage.update({"attempted": True, "status": "started"})
-        route_decision = route_tier1(payload.question)
+        route_decision = route_tier1(payload.question)  #todo : tier1 단계 없애
         routing_timed_out = False
         if route_decision is None:
             routing_started = time.monotonic()
@@ -545,13 +545,13 @@ async def _answer_question(
             try:
                 route_decision = await budget.run(
                     "routing",
-                    lambda: route_tier2(payload.question, _route_classifier()),
+                    lambda: route_tier2(payload.question, _route_classifier()), #todo : tier1을 없애면서 얘도 적절한이름으로 다시 설정해.
                     cap_seconds=settings.route_classifier_timeout_seconds,
                 )
                 routing_outcome = "succeeded"
             except StageTimeoutError:
                 # 라우팅 stage 예산을 다 썼다 - legal_search로 안전하게 진행한다(아래
-                # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다).
+                # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다). #ask : 라우팅 stage예산을 다쓴게 뭐야?
                 routing_timed_out = True
                 routing_outcome = "timed_out"
                 route_decision = RouteDecision(
@@ -585,10 +585,10 @@ async def _answer_question(
         real_explanation = (
             route_decision.explanation
             if route_decision.explanation
-            and not route_decision.explanation.startswith("mock_classifier:")
+            and not route_decision.explanation.startswith("mock_classifier:") # todo : mock관련된 설정은 외부에서 주입하도록해. 코드상에 이런식으로 mock의 if else처리를 하지말고. 그냥 주입되는데로 실행하도록. 그리고 주입하는곳에서 지금은 nvidia를 주입하도록.
             else None
         )
-        routing_stage.update(
+        routing_stage.update(# ask : 여기서 바로 db저장하는건가?
             {
                 "status": "timed_out" if routing_timed_out else "resolved",
                 "route": route_decision.route,

@@ -15,6 +15,7 @@ dist/
 
 # Node / Next.js
 node_modules/
+.pnpm-store/
 .next/
 .vercel/
 coverage/

@@ -7,7 +7,7 @@ from law_rag_llamaindex.config import Settings
 
 
 def build_vector_store(settings: Settings) -> PGVectorStore:
-    """데이터베이스 URL이 있는 설정으로 vector store를 생성한다.
+    """데이터베이스 URL이 있는 설정으로 vector store를 생성한다. (DB 저장소연결후 store객체 생성)
 
     URL이 없으면 네트워크 연결을 시도하지 않고 `ValueError`를 발생시킨다.
     """

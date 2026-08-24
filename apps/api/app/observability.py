@@ -81,7 +81,7 @@ def emit_route_outcome(request_id: str, decision: RouteDecision) -> None:
     ``missing_field_categories``는 ``설비용량``처럼 미리 정의된 슬롯 이름만 허용하고 자유
     텍스트를 받지 않는다. tier 1이 clarification을 거의 못 잡는 동안 이 누계로 어느 route가
     tier 2/3에서 얼마나 자주 잡히는지 보고, 나중에 tier 1 사전에 넣을 후보를 찾는다.
-    """
+    """ # ask : tier3은 뭐야..? tier1없으니까 이것도 없어도 되겠네..?
     event = RouteOutcomeEvent(
         request_id=request_id,
         route=decision.route,
