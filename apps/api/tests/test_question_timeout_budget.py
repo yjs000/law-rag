@@ -22,7 +22,7 @@ from app.domain.schemas import (
 )
 from app.domain.search_queries import SearchTrace
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 
 @pytest.fixture

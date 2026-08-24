@@ -463,6 +463,21 @@ def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTi
     return "degraded" if response.fallback_reason is not None else "succeeded"
 
 
+def _search_only_disabled_error() -> HTTPException:
+    return HTTPException(status_code=503, detail="검색 전용 기능이 비활성화되어 있습니다.")
+
+
+def _ai_unavailable_error() -> HTTPException:
+    return HTTPException(status_code=503, detail="AI 답변을 현재 사용할 수 없습니다.")
+
+
+def _generation_failed_error() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail="AI 답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    )
+
+
 async def _answer_question(
     payload: QuestionRequest,
     request: Request,
@@ -472,9 +487,14 @@ async def _answer_question(
 ) -> QuestionResponse:
     """근거 우선 질문 답변 흐름을 라우팅·검색·생성 예산 안에서 실행한다.
 
-    검색 실패에는 근거 없는 답을 생성하지 않으며, 생성 실패 또는 grounding 거부에는 검증된
-    검색 전용 응답으로 안전하게 fallback한다.
+    search_only_enabled=true일 때만 생성 실패 또는 grounding 거부를 검증된 검색 전용
+    응답으로 fallback한다. false이면 503으로 실패를 명시한다.
     """
+    if payload.answer_mode == "search_only" and not settings.search_only_enabled:
+        raise _search_only_disabled_error()
+    if not _ai_available() and not settings.search_only_enabled:
+        raise _ai_unavailable_error()
+
     use_ai = payload.answer_mode == "terra" and _ai_available()
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
@@ -733,7 +753,9 @@ async def _answer_question(
             cap_seconds=settings.answer_timeout_seconds,
         )
         generation_outcome = "succeeded"
-    except StageTimeoutError:
+    except StageTimeoutError as exc:
+        if not settings.search_only_enabled:
+            raise _generation_failed_error() from exc
         # 생성 stage 예산을 다 썼다 - 이미 검증된 근거(fallback)가 있으니 에러가 아니라
         # 200 + search_only로 끝낸다. 웹 클라이언트 재시도 로직이 이 응답 모양에
         # 의존한다(에러 응답으로 바꾸면 안 된다).
@@ -753,6 +775,8 @@ async def _answer_question(
         generation_stage["status"] = (
             "billing_or_quota_error" if status_code in {402, 429} else "failed"
         )
+        if not settings.search_only_enabled:
+            raise _generation_failed_error() from exc
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
     finally:
         emit_question_stage_timing(
@@ -763,6 +787,8 @@ async def _answer_question(
             _remaining_ms(budget),
         )
     if not validate_draft(draft, generation_hits):
+        if not settings.search_only_enabled:
+            raise _generation_failed_error()
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
@@ -775,7 +801,11 @@ async def _answer_question(
         "checklist_derived_action"
     ]
     if draft.action == "clarification_required":
-        clarification = post_generation_clarification_answer(payload, draft.missing_information)
+        clarification = post_generation_clarification_answer(
+            payload,
+            draft.missing_information,
+            mode="search_only" if settings.search_only_enabled else "ai",
+        )
         generation_stage["status"] = "clarification_required"
         return await _save_if_authenticated(user, payload, clarification, diagnostics)
     citations = [
@@ -837,9 +867,11 @@ async def _generate_blocked_route_answer(
             cap_seconds=settings.answer_timeout_seconds,
         )
         outcome = "succeeded"
-    except StageTimeoutError:
+    except StageTimeoutError as exc:
         outcome = "timed_out"
         stage["status"] = "timed_out"
+        if not settings.search_only_enabled:
+            raise _generation_failed_error() from exc
         return blocked_fallback
     except Exception as exc:
         outcome = "failed"
@@ -848,6 +880,8 @@ async def _generate_blocked_route_answer(
             global ai_quota_exhausted
             ai_quota_exhausted = True
         stage["status"] = "billing_or_quota_error" if status_code in {402, 429} else "failed"
+        if not settings.search_only_enabled:
+            raise _generation_failed_error() from exc
         return blocked_fallback
     finally:
         emit_question_stage_timing(
@@ -859,6 +893,8 @@ async def _generate_blocked_route_answer(
         )
     if not validate_draft(draft, []):
         stage["status"] = "grounding_failed"
+        if not settings.search_only_enabled:
+            raise _generation_failed_error()
         return blocked_fallback
     stage["status"] = "succeeded"
     if draft.action == "clarification_required":
@@ -1108,7 +1144,11 @@ async def corpus_status() -> CorpusStatus:
     if any(item.state != "ready" for item in items):
         warnings.append("MVP 허용 목록 일부가 아직 수집되지 않았습니다.")
     if not _ai_available():
-        warnings.append("AI가 비활성화되어 검색 전용 모드로 동작합니다.")
+        warnings.append(
+            "AI가 비활성화되어 검색 전용 모드로 동작합니다."
+            if settings.search_only_enabled
+            else "AI가 비활성화되어 답변을 생성할 수 없습니다."
+        )
     if collector_load_errors:
         warnings.append(f"collector 목업 원문 {len(collector_load_errors)}건을 읽지 못했습니다.")
     return CorpusStatus(

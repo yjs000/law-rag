@@ -10,7 +10,7 @@ from app.application.answering import search_only_answer
 from app.domain.schemas import ProjectStage, QuestionRequest
 from app.main import app
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 client = TestClient(app)
 

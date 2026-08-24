@@ -34,3 +34,10 @@ def ready_corpus_temporal_state(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(main_module, "_load_corpus_temporal_state", ready_state)
+
+@pytest.fixture
+def search_only_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise legacy search-only contracts only when the feature is explicitly enabled."""
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.settings, "search_only_enabled", True)

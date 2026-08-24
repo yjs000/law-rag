@@ -8,7 +8,7 @@ from app.adapters.memory_repository import MemoryLegalRepository
 from app.domain.errors import CorpusSearchUnavailableError
 from app.main import app
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 
 def test_health_exposes_no_secrets() -> None:
@@ -25,7 +25,11 @@ def test_corpus_status_exposes_search_readiness() -> None:
     assert response.json()["corpus_search_unavailable_reason"] is None
 
 
-def test_question_without_corpus_returns_safe_search_only_response() -> None:
+def test_question_without_corpus_returns_503_when_search_only_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module.settings, "search_only_enabled", False)
+
     response = TestClient(app).post(
         "/v1/questions",
         json={
@@ -34,14 +38,9 @@ def test_question_without_corpus_returns_safe_search_only_response() -> None:
             "project_stage": "planning",
         },
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["mode"] == "search_only"
-    assert payload["citations"] == []
-    assert payload["result_status"] == "no_results"
-    assert payload["no_results_reason"] == "no_matching_evidence"
-    assert any("근거를 찾지 못했습니다" in item for item in payload["limitations"])
 
+    assert response.status_code == 503
+    assert response.json()["detail"] == "AI 답변을 현재 사용할 수 없습니다."
 
 def test_anonymous_question_search_failure_returns_safe_temporary_error(
     monkeypatch: pytest.MonkeyPatch,

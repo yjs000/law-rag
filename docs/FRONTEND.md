@@ -45,7 +45,7 @@
 
 인증 상태는 `checking → ready`로 복원한다. 확인 중에는 익명 로그인 UI를 먼저 노출하지 않는다. Supabase `SIGNED_OUT`은 현재 질문·답변·인용·이력과 계정 UI를 즉시 비우고, `SIGNED_IN`·`USER_UPDATED`는 API 사용자 상태를 다시 읽는다. 인증 epoch보다 늦게 끝난 이력 요청은 반영하지 않아 로그아웃 뒤 개인정보가 되살아나는 경쟁 조건을 막는다. OAuth callback 오류·취소는 재시도 가능한 안내를 표시한 뒤 처리된 query를 제거한다.
 
-응답 모드는 화면의 선택값이 아니라 API의 실제 `mode`를 기준으로 동기화한다. 기본 선택은 NVIDIA Nemotron이다. `GET /v1/corpus/status`가 `ai_available=false`이면 생성 모드를 `현재 사용 불가`로 비활성화하고 AI 생성 한도 또는 연결 문제로 검색 전용 전환됐음을 알린다. 호환 wire 값 `terra` 요청의 응답이 `mode=search_only`이면 `requested_answer_mode`와 `fallback_reason`을 사용해 같은 전환을 수행한다.
+응답 모드는 화면의 선택값이 아니라 API의 실제 `mode`를 기준으로 동기화한다. 기본 선택은 NVIDIA Nemotron이다. `apps/web/lib/feature-flags.ts`의 `SEARCH_ONLY_ENABLED`는 현재 `false`다. 이 상태에서 `GET /v1/corpus/status`가 `ai_available=false`이거나 이전 응답이 `mode=search_only`여도 UI는 검색 전용으로 전환하거나 그 값을 요청하지 않고 AI 생성 불가 오류를 표시한다. 기능을 켜면 기존 호환 wire 값 `terra`와 `requested_answer_mode`·`fallback_reason` 기반의 검색 전용 전환을 복구한다.
 
 ## 테스트
 
@@ -71,3 +71,5 @@
 - 2026-07-18: 질문 단건 목록을 첫 질문 제목의 대화 목록으로 바꾸고, 요약 cursor 페이지와 선택 대화의 상세 턴만 지연 로딩한다.
 - 2026-07-18: 기존 400 메시지 결정을 폐기하고, 기본 24,576 입력 토큰 예산 안의 최근 완료 턴만 모델에 전달한다. 초과 시 새 대화와 컨텍스트 초기화를 안내한다.
 - 2026-07-19: 사용자 표시 생성 모델을 NVIDIA Nemotron으로 바꾸고 기존 `terra` 값은 배포 호환을 위해 wire 계약에만 유지한다.
+
+- 2026-08-24: 검색 전용 기능을 별도 Boolean으로 분리하고 현재 Web에서는 SEARCH_ONLY_ENABLED=false로 둔다. 기능이 꺼지면 API와 UI 모두 AI 실패를 검색 전용 응답으로 숨기지 않고 503/오류 상태로 드러낸다.
