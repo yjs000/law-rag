@@ -1,15 +1,7 @@
 # 활성 실행 계획
 
-현재 진행 중인 복잡한 작업의 실행 계획을 둔다. 각 계획에는 완료 조건, 체크리스트, 결정 로그, 진행 기록, 차단 요소를 포함한다.
+현재 진행 기록이 있는 실행계획 artifact를 둡니다. artifact 위치와 현재 milestone 상태는 다를 수 있으며, 전역 우선순위는 [프로젝트 로드맵](../../ROADMAP.md)이 관리합니다.
 
-- [0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — E-10 base 실행 완료, 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건(품질 원인 미진단)
-- [0055: V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — Task 1~11 구현·독립 리뷰 완료; Task 12~16은 사용자 지시로 미시작·보류(0014 실제 DB 적용과 generated schema 반영은 미검증 후속 항목)
-
-2026-08-18: 0053(V2 LlamaIndex 검색 파이프라인)은 Task 1~14와 전체 브랜치
-통합 리뷰까지 마치고 [completed/](../completed/README.md)로 이동했다.
-
-2026-08-18: 0002·0008·0015·0022·0025·0028·0036·0043·0046은 사용자 확인 또는 판단으로
-[completed/](../completed/README.md)로 이동했다. 0012는 설계 현행화가 필요해
-[todo/](../todo/README.md)로 되돌렸다.
-
-Discord thread `1528216345924337805`에서 시작한 작업의 착수 순서와 단일 `Picked Up` 상태는 [Discord 작업 보드](../../ROADMAP.md)에서 관리한다. 다른 환경에는 해당 보드를 적용하지 않는다.
+- [E-001 · Todo · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — 다음 milestone: 재개 전 품질 원인 진단 범위를 선택
+- [F-001 · Todo · Feature — V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — 다음 milestone: v3 설계를 확인하고 미시작 태스크의 착수를 명시
+- [DOC-001 · Picked Up · Documentation — 작업 관리 메타데이터와 얇은 로드맵](0059-task-management-metadata-and-roadmap.md) — 다음 milestone: 상태별 링크 색인과 폴더 색인을 반영

@@ -1,23 +1,18 @@
 # 예정 작업 트랙
 
-사용자가 다음 작업 또는 추후 개선안으로 명시했지만 아직 착수하지 않은 작업을 한곳에 보관한다. 단순한
-에이전트 아이디어, 현재 작업 중 발견한 메모, 이미 진행 중인 일은 이 트랙에 넣지 않는다.
+사용자가 다음 작업 또는 추후 개선안으로 명시했지만 아직 착수하지 않은 실행계획을 둡니다. 전역 우선순위와 상태 순서는 [프로젝트 로드맵](../../ROADMAP.md)을 따릅니다.
 
-## 열린 항목
+## Todo
 
-- [0012: 분산 질문 취소](0012-distributed-question-cancellation.md) — active에서 환원(2026-08-18), 설계 문서가 옛 Qwen/Ollama 가정을 NVIDIA hosted NIM 기준으로 현행화하기 전에는 재승격하지 않음
-- [0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 보류, 실제 일반화·회귀 필요 시만 착수
-- [0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 항목 5(agent context diet) 완료, 나머지(machine-readable rubric·conflict detector·통합 CLI) 미착수
-- [0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 제안됨, 미착수 · D-010 단일 `QuestionRouter` 정책·reason-code calibration; 제거된 tier 사전/스크립트/지표는 역사 기록으로만 보존
-- [0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 제안됨, 미착수 · source_kind 신호는 0041 의존, 근거 선정 우선순위는 재순위로 자동 해결될 것으로 판단
-- [0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 제안됨, 미착수 · 기존 `terra` 호환을 유지하며 provider/model을 설정으로 교체 가능한 계약으로 전환
-- [0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](0047-clarification-loop-dedup-and-unanswered-handling.md) — 2026-08-18 갱신, v2 LangGraph 전환에서 해결 예정이라 별도 착수 보류 · `clarification_required` 재질문이 이미 답변된 항목을 반복 포함해 무한루프됨을 실제 로그로 재현·보고
-- [0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](0050-query-format-edge-case-regression-bank.md) — 제안됨, 미착수 · 0047~0049류 엣지케이스를 사전 조사해 회귀 테스트로 등록
-- [0058: v2 청킹 ablation](0058-v2-chunking-ablation-d10.md) — 제안됨 · 동일 v2 snapshot에서 현행 조문 노드와 LlamaIndex 하위 청킹을 DI로 교체하고, sealed D-10 10문항의 top-k Recall 계열 수치만 비교
-
-0048·0049·0051·0052는 2026-08-18 사용자 결정으로 종료했다. 0048·0049는 재현 로그가 기술한
-버그를 잡아내는 회귀 테스트를 코드에 남기고 이 트랙에서는 제거했다(테스트 파일 위치는 관련
-커밋 참고). 0051·0052는 조사 결과만 남기고 후속 조치 없이 닫았다.
+- [F-002 · Feature — 0012: 분산 질문 취소](0012-distributed-question-cancellation.md) — 다음 행동: NVIDIA hosted NIM 기준으로 취소 설계를 현행화
+- [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 다음 행동: 실제 일반화·회귀 필요 시에만 착수
+- [E-003 · Experiment — 0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 다음 행동: rubric·conflict detector·통합 CLI 착수 여부를 결정
+- [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 다음 행동: 실 트래픽 축적 후 단일 QuestionRouter 정책을 재검토
+- [F-003 · Feature — 0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 다음 행동: 0041의 `source_kind` 신호를 확인하고 착수 범위를 결정
+- [F-004 · Feature — 0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 다음 행동: `terra` 호환을 유지하는 provider/model 설정 계약을 설계
+- [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
+- [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 엣지케이스 범위를 확정
+- [E-005 · Experiment — 0058: v2 청킹 ablation](0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
 
 ## 등록 계약
 
@@ -27,14 +22,3 @@
 - 우선순위나 제품 결정을 사용자가 확정하지 않았다면 `제안됨`으로 표시하고 사실처럼 확정하지 않는다.
 - 현재 active 계획에서 미착수 후속 작업을 분리할 때는 양쪽 문서가 서로 연결되게 한다.
 - 인증정보, 사용자 데이터, 대화 전문은 복제하지 않고 작업에 필요한 결정만 요약한다.
-
-## 상태 전이
-
-1. `todo/`: 사용자가 제안했으나 아직 구현·조사에 착수하지 않은 상태
-2. `active/`: 사용자가 착수를 요청하고 범위·완료 조건·외부 병목을 점검한 상태. 같은 파일을 이동한다.
-3. `completed/`: 구현과 요구 검증이 끝난 상태. 실제 결과와 잔여 작업을 기록한 같은 파일을 이동한다.
-
-`tech-debt-tracker.md`는 이미 관찰된 결함·위험을 기록하는 원장이다. 기술부채 항목이 다음 작업으로
-선택되면 원장 항목을 삭제하지 않고 TODO 또는 active 계획에서 TD ID를 연결한다. GitHub 프로젝트의
-`Backlog`은 외부 이슈 실행 상태이며 이 로컬 트랙의 대체 저장소가 아니다. GitHub 동기화는 사용자가
-별도로 요청한 경우에만 한다.

@@ -1,35 +1,41 @@
-# Discord 작업 보드
+# 프로젝트 로드맵
 
-이 문서는 Discord thread `1528216345924337805`에서 시작한 작업의 순서와 상태를 관리하는 단일 진입점이다. 다른 환경에서는 적용하지 않는다. 상세 범위와 결정은 연결된 실행 계획이 권위 문서다.
+공통 프로젝트의 현재 작업 진입점입니다. 상세 범위·결정·검증은 연결된 실행계획이 권위 문서입니다.
 
-## 상태 계약
+## Picked Up
 
-- `Todo`: 선행 조건이 충족됐지만 아직 착수하지 않음
-- `Picked Up`: 현재 주 에이전트가 수행 중인 유일한 milestone
-- `Blocked`: 사용자 승인, credential, 운영환경 등 외부 입력 대기
-- `Done`: 구현·검증·상태 문서 갱신까지 완료
+- [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/active/0059-task-management-metadata-and-roadmap.md) — 계약·현재 계획 메타데이터·상태 색인을 반영 중
 
-작업 진행 중에는 정확히 하나의 milestone만 `Picked Up`으로 두고, 대기·완료 상태에서는 0개일 수 있다.
+## Todo
 
-## 현재 순서
+- [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 품질 원인 진단 범위를 선택
+- [F-001 · Feature — V3 LangGraph 에이전트 기본 골격](exec-plans/active/0055-v3-langgraph-agent-foundation.md) — 다음 행동: 미시작 Task 12~16의 착수 범위를 명시
+- [F-002 · Feature — 0012: 분산 질문 취소](exec-plans/todo/0012-distributed-question-cancellation.md) — 다음 행동: NVIDIA hosted NIM 기준으로 취소 설계를 현행화
+- [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](exec-plans/todo/0029-d-full-gold-on-demand.md) — 다음 행동: 실제 일반화·회귀 필요 시에만 착수
+- [E-003 · Experiment — 0031: 실험 D 평가 harness 통합](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: rubric·conflict detector·통합 CLI 착수 여부를 결정
+- [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](exec-plans/todo/0033-traffic-based-routing-calibration-review.md) — 다음 행동: 실 트래픽 축적 후 단일 QuestionRouter 정책을 재검토
+- [F-003 · Feature — 0042: 재순위를 실제 검색 경로에 연결](exec-plans/todo/0042-wire-reranking-into-live-search-path.md) — 다음 행동: 0041의 `source_kind` 신호를 확인하고 착수 범위를 결정
+- [F-004 · Feature — 0044: 공급자 중립 답변 모델 선택 계약](exec-plans/todo/0044-provider-neutral-answer-model-selection.md) — 다음 행동: `terra` 호환을 유지하는 provider/model 설정 계약을 설계
+- [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
+- [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 엣지케이스 범위를 확정
+- [E-005 · Experiment — 0058: v2 청킹 ablation](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
 
-| ID | 상태 | 작업 | 담당 | 수정 가능 범위 | 완료 조건 | 검증 |
-|---|---|---|---|---|---|---|
-| D-001 | Done | Discord 전용 agent overlay와 오류 ledger 도입 | 주 에이전트 | `AGENTS.md`, `discord-agents.md`, `docs/ROADMAP.md`, `docs/operations/discord-error-ledger.md` | 지정 thread에서만 적용되고 TODO·위임·보고·오류·검증 계약이 연결됨 | 문서 검사, `git diff --check`, parent diff 검토 |
-| D-002 | Blocked | 4단계 검색의 Production 실행계획과 병목 확인 | 주 에이전트 | `docs/exec-plans/active/0008-*`, 진단 산출물·관련 테스트(필요 시) | 읽기 전용 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`으로 단계별 인덱스·병목을 확인하고 다음 최적화를 증거로 결정 | 계획의 고정 질문·문서 검사·관련 테스트 |
-| D-003 | Done | 완료·중복 active 계획 정리 | 주 에이전트 | `docs/exec-plans/active/`, `completed/`, active index, 기술 부채 추적기 | `0013` 완료 상태와 `0012`/`0014` 역할이 실제 구현·외부 병목과 일치 | 문서 검사, 링크 검사, diff 검토 |
-| D-004 | Blocked | Supabase 분산 취소와 Realtime Broadcast 운영 연결 | DB/API/Web 에이전트(순차) | `0012`와 완료 계획 `0014`가 정한 migration/API/Web 범위 | 운영 migration 승인 후 2인스턴스 취소·소유자 격리·UX·부하 검증 통과 | API/Web 통합 테스트, schema 문서, Preview 검증 |
-| D-005 | Blocked | NVIDIA hosted NIM 실연결·법률 평가 | 주 에이전트 | provider 설정, 평가 산출물, 운영 문서 | API key와 정책 승인 후 hosted smoke·고정 평가셋·운영 계약 확인 | smoke, 고정 평가셋, fallback 회귀 |
-| D-006 | Done | 1년 만료 질문 이력 정리 함수와 감사 메트릭의 로컬 계약 | 주 에이전트 + 독립 검토 에이전트 | 신규 migration·계약 테스트·DB schema·운영/학습 문서 | 정리 함수가 만료 이력·종속 export·빈 conversation을 안전하게 정리하고 삭제 수·실행 상태를 감사 가능하게 기록 | migration 계약 테스트, PostgreSQL 17 실행, API 회귀, 문서 검사, parent diff 검토 |
-| D-007 | Done | `main` Python CI 수집 실패 복구 | 주 에이전트 | `.github/workflows/ci.yml`, 오류 ledger | API import 경로와 pytest async 설정을 CI에 명시해 기존 suite가 수집·통과 | CI 동일 명령 207 passed, workflow diff 검토 |
-| D-008 | Done | 통합 검토·PR·원격 CI 확인 | 주 에이전트 + 독립 reviewer | 현재 branch 전체 diff, GitHub PR | 독립 review finding 처리, commit/push/PR 후 CI green | immutable diff review, GitHub checks |
-| D-009 | Blocked | Production 질문 이력 scheduler 적용 | 운영 승인자 + 주 에이전트 | `0006` migration, 승인된 scheduler 설정 | 대상 Supabase 승인·extension 확인 후 일 1회 예약, 최초 실행 감사·경보 확인 | Production migration/schedule/감사 증거 |
-| D-010 | Done | [0057: 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) | 주 에이전트 | API 라우팅·응답·관측·테스트 | `legal_search`와 라우터 장애 AI 안내를 분리 | API 639 passed/3 skipped, core 26 passed, focused 43 passed |
+## Blocked
 
-## 최근 완료: D-010
+- [D-002 · Operations — 4단계 검색의 Production 실행계획과 병목 확인](exec-plans/completed/0008-four-stage-retrieval-latency-and-debugging.md) — 재개 조건: 승인된 비밀 설정 환경에서 읽기 전용 Production 진단을 실행
+- [D-004 · Feature — Supabase 분산 취소와 Realtime Broadcast 운영 연결](exec-plans/todo/0012-distributed-question-cancellation.md) — 재개 조건: 운영 migration 승인을 받은 뒤 2인스턴스 취소·소유자 격리·UX·부하를 검증
+- [D-005 · Operations — NVIDIA hosted NIM 실연결·법률 평가](exec-plans/completed/0013-nvidia-hosted-nim-integration.md) — 재개 조건: API key와 정책 승인 뒤 hosted smoke·고정 평가셋·운영 계약을 확인
+- [D-009 · Operations — Production 질문 이력 scheduler 적용](exec-plans/completed/0015-history-retention-job.md) — 재개 조건: 대상 Supabase 승인과 extension 확인 뒤 일 1회 scheduler·최초 실행 감사·경보를 확인
 
-- D-010은 단일 NVIDIA `QuestionRouter`, 정상 grounded sequence, `routing_unavailable` no-search AI fallback, 명명된 generation/validation stage와 `search_only_enabled=False` 불변조건을 구현·검증한 뒤 `main`에 병합했다. API는 `639 passed, 3 skipped, 1 warning`, core는 `26 passed`, focused D-010은 `43 passed, 1 warning`이며 D-010 assertion과 Ruff도 통과했다. Repository docs checker의 32개 broken link은 기존 문서 부채로 별도 기록한다.
+## Done
 
-## 차단 기록
-
-- D-002: 현재 Linux checkout에 `DATABASE_URL`과 `DIRECT_URL`이 없어 Production 읽기 전용 실행계획을 수집할 수 없다. credential을 채팅이나 Git으로 요청하지 않으며 승인된 비밀 설정 환경에서 재개한다.
+- [D-010 · Feature — 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) — 라우터와 실패 응답 계약을 완료
+- [0056: Python docstring과 Ruff D 규칙](exec-plans/completed/0056-python-docstrings-and-ruff-d.md) — 문서화 규칙을 정비
+- [0053: V2 LlamaIndex 검색 파이프라인](exec-plans/completed/0053-v2-llamaindex-retrieval-pipeline.md) — V2 검색 파이프라인을 완료
+- [0054: V2 준비 상태와 HNSW 운영](exec-plans/completed/0054-v2-readiness-and-hnsw.md) — 준비 상태와 HNSW 운영을 완료
+- [0045: Web/API 질문 timeout 예산 정렬](exec-plans/completed/0045-coordinated-question-timeout-budget.md) — 질문 timeout 예산을 정렬
+- [0046: terra 모드 search_only 폴백 제거 (always-generate)](exec-plans/completed/0046-terra-always-generate.md) — always-generate 계약으로 전환
+- [0043: 일반인 답변 계약 v2와 가독성 평가](exec-plans/completed/0043-layperson-answer-contract-v2.md) — 답변 계약 v2를 반영
+- [0039: 구조화된 API 오류 메시지 표시](exec-plans/completed/0039-error-detail-object-shown-as-object-object.md) — 구조화된 오류 표시를 반영
+- [0038: 모델 호출 없는 API는 전부 1초 이내 응답](exec-plans/completed/0038-non-model-endpoints-under-1s.md) — 비모델 API 응답 목표를 달성
+- [0030: D-10 전수 qrel과 사용자 adjudication](exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md) — D-10 Gold를 봉인

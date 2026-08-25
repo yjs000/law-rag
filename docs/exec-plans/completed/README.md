@@ -1,8 +1,9 @@
 # 완료된 실행 계획
 
-완료 조건이 검증된 실행 계획을 결과와 잔여 작업을 포함해 보관한다. 파일명과 계획 번호는 활성 상태에서 사용한 값을 유지한다.
+완료 조건이 검증된 실행계획을 결과와 잔여 작업을 포함해 보관합니다. 최근 상태는 [프로젝트 로드맵](../../ROADMAP.md)에서 확인하고, 파일명과 계획 번호는 활성 상태에서 사용한 값을 유지합니다.
 
-- [0001: MVP 기반 확정](0001-mvp-foundation.md)
+## 2026 Q3
+
 - [0016: 실험 A 일반 텍스트 조문 청킹](0016-experiment-a-plain-text-chunking.md)
 - [0017: 실험 B NVIDIA NIM 두 문장 임베딩과 유사도](0017-experiment-b-sentence-embeddings.md)
 - [0018: 실험 C 로컬 벡터 검색](0018-experiment-c-local-vector-search.md)
@@ -14,7 +15,17 @@
 - [0030: D-10 전수 qrel과 사용자 adjudication](0030-d-10-full-corpus-qrels-adjudication.md)
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](0038-non-model-endpoints-under-1s.md)
 - [0039: 구조화된 API 오류 메시지 표시](0039-error-detail-object-shown-as-object-object.md)
+- [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md)
 - [0045: Web/API 질문 timeout 예산 정렬](0045-coordinated-question-timeout-budget.md)
+- [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md)
+- [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md)
+- [0054: V2 준비 상태와 HNSW 운영](0054-v2-readiness-and-hnsw.md)
+- [0056: Python docstring과 Ruff D 규칙](0056-python-docstrings-and-ruff-d.md)
+- [0057: 단일 단계 라우터와 라우터 불가 AI 응답](0057-single-stage-router-and-failure-response.md)
+
+## 2026 Q2 및 이전
+
+- [0001: MVP 기반 확정](0001-mvp-foundation.md)
 - [0002: 실제 서비스 연결](0002-production-connections.md)
 - [0008: 4단계 검색 지연과 디버깅](0008-four-stage-retrieval-latency-and-debugging.md)
 - [0015: 질문 이력 보존 정리 작업](0015-history-retention-job.md)
@@ -22,8 +33,3 @@
 - [0025: 승인 질문에서 근거 기반 AI 답변까지](0025-approved-questions-to-grounded-answer-roadmap.md)
 - [0028: 검색 전 질문 라우팅과 조건부 query 보강](0028-pre-retrieval-question-routing.md)
 - [0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리](0036-account-modal-model-label.md)
-- [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md)
-- [0046: terra 모드 search_only 폴백 제거 (always-generate)](0046-terra-always-generate.md)
-- [0053: V2 LlamaIndex 검색 파이프라인](0053-v2-llamaindex-retrieval-pipeline.md)
-- [0054: V2 준비 상태와 HNSW 운영](0054-v2-readiness-and-hnsw.md)
-- [0056: Python docstring과 Ruff D 규칙](0056-python-docstrings-and-ruff-d.md)
