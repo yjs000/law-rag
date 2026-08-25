@@ -31,7 +31,7 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   report/progress history.
 - `fd31dd2 docs: record D-010 alignment commit` — records `21689e0` in the report and active-plan
   commit sequence.
-- `e2daefe docs: correct D-010 assertion evidence` — corrects the report/plan count to three
+- `e2daefe docs: correct D-010 assertion evidence` — corrects the report/plan count to four
   D-010 assertion functions and clarifies historical metadata preservation.
 - `e44497c docs: reconcile D-010 lifecycle evidence` — records the complete chronological Task 3
   sequence through `e2daefe` and removes the inaccurate single-follow-up phrasing.
@@ -40,10 +40,15 @@ The Task 3 documentation commits are recorded chronologically and by their actua
 - `a2a9c1d docs: align current D-010 contract records` — aligns current deployment, reliability,
   RAG, architecture, future-plan/debt, V3 proposal, design index, and generated-snapshot status;
   expands the D-010 docs assertion to cover those records.
+- `e632c86 docs: record D-010 contract alignment evidence` — records the final post-alignment
+  assertion, docs-checker, Ruff, and diff evidence in the lifecycle report.
 
-The active-plan and this report preserve the chronological Task 3 record through `a2a9c1d`; no
+The active-plan and this report preserve the chronological Task 3 record through `e632c86`; no
 “immediately after” ordering is implied for the earlier documentation commits. The current
-document-contract alignment is now recorded in that commit.
+document-contract alignment is recorded in `a2a9c1d`, and the final evidence metadata is recorded
+in `e632c86`.
+
+Final Task 3 evidence commit: `e632c86`.
 
 ## Files and contract alignment
 
