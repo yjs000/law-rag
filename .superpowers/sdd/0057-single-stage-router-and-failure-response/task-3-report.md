@@ -27,8 +27,14 @@ The Task 3 documentation commits are recorded chronologically and by their actua
 - `21689e0 docs: align superseded D-010 records` — updates the technology ADR, superseded
   always-generate design, settings comments, and historical fixture metadata without changing
   production behavior or historical result values.
+- `713d64f docs: record D-010 metadata commit` — records the lifecycle metadata correction in the
+  report/progress history.
+- `fd31dd2 docs: record D-010 alignment commit` — records `21689e0` in the report and active-plan
+  commit sequence.
+- `e2daefe docs: correct D-010 assertion evidence` — corrects the report/plan count to three
+  D-010 assertion functions and clarifies historical metadata preservation.
 
-The active-plan and this report now include the follow-up metadata commit `56ae8ab`; no
+The active-plan and this report preserve the chronological Task 3 record through `e2daefe`; no
 “immediately after” ordering is implied for the earlier documentation commits.
 
 ## Files and contract alignment
