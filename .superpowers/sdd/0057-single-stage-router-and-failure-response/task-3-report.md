@@ -37,10 +37,13 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   sequence through `e2daefe` and removes the inaccurate single-follow-up phrasing.
 - `10b72d4 docs: record final D-010 lifecycle SHA` — records the final lifecycle SHA in the
   active plan/report before this current-document alignment pass.
+- `a2a9c1d docs: align current D-010 contract records` — aligns current deployment, reliability,
+  RAG, architecture, future-plan/debt, V3 proposal, design index, and generated-snapshot status;
+  expands the D-010 docs assertion to cover those records.
 
-The active-plan and this report preserve the chronological Task 3 record through `10b72d4`; no
+The active-plan and this report preserve the chronological Task 3 record through `a2a9c1d`; no
 “immediately after” ordering is implied for the earlier documentation commits. The current
-document-contract alignment commit from this review loop is recorded below after it is created.
+document-contract alignment is now recorded in that commit.
 
 ## Files and contract alignment
 
@@ -51,8 +54,11 @@ document-contract alignment commit from this review loop is recorded below after
   E-10 tier1/tier2 experiment as historical evidence, while a dated current D-010 section
   supersedes that runtime description.
 - `scripts/check_docs.py` now checks both the current D-010 routing prose and the E-10 historical
-  boundary/current-section separation, plus the technology ADR and superseded always-generate
-  design markers.
+  boundary/current-section separation, plus the technology ADR, superseded always-generate design
+  markers, and current deployment/reliability/RAG/TODO/debt/V3/generated-snapshot records.
+- Current authoritative prose explicitly distinguishes router failure (`routing_unavailable`, no
+  search) from feature-gated `search_only`; old tiered runtime text remains only in marked
+  historical/superseded records.
 - `apps/api/app/settings.py` comments now describe the single router and fail-closed
   `routing_unavailable` behavior; no settings behavior changed.
 - `apps/api/evaluation/route-fixture-v1.json` and `route-fixture-v1-results.json` retain all case,
@@ -85,9 +91,11 @@ being classified as routing or feature-availability failures.
 
 ## Verification evidence
 
-- D-010 assertions and JSON metadata parsing:
-  `uv run --project apps/api python -c "import json; from pathlib import Path; [json.loads(Path(p).read_text(encoding='utf-8')) for p in ['apps/api/evaluation/route-fixture-v1.json','apps/api/evaluation/route-fixture-v1-results.json']]; from scripts.check_docs import check_d010_routing_contract, check_d010_active_experiment_contract, check_d010_superseded_designs; errors = check_d010_routing_contract() + check_d010_active_experiment_contract() + check_d010_superseded_designs(); print('d010 routing assertions passed' if not errors else '\\n'.join(errors)); raise SystemExit(bool(errors))"`
-  → exit 0, `d010 routing assertions passed`.
+- D-010 assertions and JSON metadata parsing (including the new current-contract assertion):
+  `uv run --project apps/api python -c "import json; from pathlib import Path; [json.loads(Path(p).read_text(encoding='utf-8')) for p in ['apps/api/evaluation/route-fixture-v1.json','apps/api/evaluation/route-fixture-v1-results.json']]; from scripts.check_docs import check_d010_routing_contract, check_d010_active_experiment_contract, check_d010_superseded_designs, check_d010_current_contract_docs; errors = check_d010_routing_contract() + check_d010_active_experiment_contract() + check_d010_superseded_designs() + check_d010_current_contract_docs(); print('d010 assertions passed' if not errors else '\\n'.join(errors)); raise SystemExit(bool(errors))"`
+  → exit 0, `d010 assertions passed`.
+- Current-doc alignment verification: `uv run --project apps/api ruff check scripts/check_docs.py`
+  → exit 0, `All checks passed!`; `git diff --check` → exit 0.
 - Full Ruff:
   `uv run --project apps/api ruff check apps/api/app apps/api/scripts apps/api/tests apps/api/migrations packages/law-rag-core/src packages/law-rag-core/tests`
   → exit 0, `All checks passed!`.
@@ -104,9 +112,11 @@ being classified as routing or feature-availability failures.
   → `26 passed` in 0.25s.
 - Repository docs checker:
   `uv run --project apps/api python scripts/check_docs.py`
-  → exit 1 with exactly 32 pre-existing broken-link reports. The three D-010 assertion functions
+  → exit 1 with exactly 32 pre-existing broken-link reports. All four D-010 assertion functions
   pass; no new D-010 link or current-contract error is reported, and unrelated documentation
   debt remains untouched.
+- Current review-loop rerun counted `docs_checker_exit=1 broken_link_reports=32`; the same 32
+  links are pre-existing documentation debt and remain outside this alignment scope.
 - `git diff --check` → exit 0.
 
 The NVIDIA-keyed fixture evaluator remains intentionally unrun because it would require a live
