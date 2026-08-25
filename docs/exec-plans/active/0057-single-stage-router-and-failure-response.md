@@ -152,7 +152,7 @@ git commit -m "refactor(api): use a single question router"
 - Consumes: `route_question`, `StageTimeoutError`, and a provider exception.
 - Produces: `RouteDecision(route="routing_unavailable", reason_code="routing_timeout" | "routing_provider_error", confidence=0.0)`; `QuestionResponse(mode="ai", route="routing_unavailable", action="unanswerable")`; safe route and timing events.
 
-- [ ] **Step 1: Write failing HTTP contracts for timeout, provider failure, and normal legal search**
+- [x] **Step 1: Write failing HTTP contracts for timeout, provider failure, and normal legal search**
 
 ```python
 class FailingRouter:
@@ -177,13 +177,13 @@ assert "provider body must not escape" not in caplog.text
 
 Add the equivalent timeout test with a router that awaits longer than `route_classifier_timeout_seconds`. Add a normal-router test that returns `legal_search`, then asserts exactly one embedder/repository call and records `answer_generation` followed by `answer_validation`. Add a failure test where unavailable-route guidance returns a cited or non-`unanswerable` draft; it must return the deterministic fallback instead. Set `settings.search_only_enabled=False` in every new routing-unavailable test and assert it remains false.
 
-- [ ] **Step 2: Run the routing/timeout tests and confirm existing fallback semantics fail the new contract**
+- [x] **Step 2: Run the routing/timeout tests and confirm existing fallback semantics fail the new contract**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_routing_pipeline.py tests/test_question_timeout_budget.py tests/test_search_only_feature.py -q`
 
 Expected: FAIL because router failure currently reports `legal_search`, invokes embedding/retrieval, uses `blocked_route_generation`, and raises or emits `search_only` fallback when the feature is disabled.
 
-- [ ] **Step 3: Implement safe routing-unavailable orchestration and explicit stage names**
+- [x] **Step 3: Implement safe routing-unavailable orchestration and explicit stage names**
 
 In `_answer_question`, make exactly one budgeted `route_question(payload.question, _question_router())` call. Construct only these failure decisions:
 
@@ -208,7 +208,7 @@ Rename the regular `generation` diagnostics/timing stage to `answer_generation`,
 
 Update `TimeoutStage`, `QuestionStageTimingStage`, diagnostics keys, cancellation tests, and structured log tests to the closed replacement names. Remove `RouterTier` and the route-event `tier` field; count route metrics by route and safe reason code. Extend `QuestionResponse.route` with `routing_unavailable`. Add an explicit `routing_unavailable` prompt branch in `build_blocked_route_messages` that requests only retry guidance and an `unanswerable` empty draft. Rename the deterministic helper in `answering.py` from `route_blocked_answer` to a guidance/fallback name that always returns `mode="ai"`.
 
-- [ ] **Step 4: Run the focused safety regression suite**
+- [x] **Step 4: Run the focused safety regression suite**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_routing_pipeline.py tests/test_question_timeout_budget.py tests/test_question_cancellation.py tests/test_security_boundaries.py tests/test_search_only_feature.py -q`
 
@@ -218,7 +218,7 @@ Run: `uv run --project apps/api ruff check apps/api/app/main.py apps/api/app/app
 
 Expected: `All checks passed!`
 
-- [ ] **Step 5: Commit the safe failure path**
+- [x] **Step 5: Commit the safe failure path**
 
 ```bash
 git add apps/api/app/main.py apps/api/app/application/answering.py apps/api/app/adapters/openai_answerer.py apps/api/app/application/request_budget.py apps/api/app/observability.py packages/law-rag-core/src/law_rag_core/domain/schemas.py apps/api/tests/test_routing_pipeline.py apps/api/tests/test_question_timeout_budget.py apps/api/tests/test_question_cancellation.py apps/api/tests/test_security_boundaries.py apps/api/tests/test_search_only_feature.py
