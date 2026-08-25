@@ -24,12 +24,14 @@
 | D-007 | Done | `main` Python CI 수집 실패 복구 | 주 에이전트 | `.github/workflows/ci.yml`, 오류 ledger | API import 경로와 pytest async 설정을 CI에 명시해 기존 suite가 수집·통과 | CI 동일 명령 207 passed, workflow diff 검토 |
 | D-008 | Done | 통합 검토·PR·원격 CI 확인 | 주 에이전트 + 독립 reviewer | 현재 branch 전체 diff, GitHub PR | 독립 review finding 처리, commit/push/PR 후 CI green | immutable diff review, GitHub checks |
 | D-009 | Blocked | Production 질문 이력 scheduler 적용 | 운영 승인자 + 주 에이전트 | `0006` migration, 승인된 scheduler 설정 | 대상 Supabase 승인·extension 확인 후 일 1회 예약, 최초 실행 감사·경보 확인 | Production migration/schedule/감사 증거 |
-| D-010 | Active | [0057: 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/active/0057-single-stage-router-and-failure-response.md) | 주 에이전트 | API 라우팅·응답·관측·테스트 | `legal_search`와 라우터 장애 AI 안내를 분리 | 라우팅 파이프라인 회귀, Ruff, 타입 검사 |
+| D-010 | Active | [0057: 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/active/0057-single-stage-router-and-failure-response.md) | 주 에이전트 | API 라우팅·응답·관측·테스트 | `legal_search`와 라우터 장애 AI 안내를 분리 | 라우팅 회귀·전체 Ruff·문서 검사·전체 로컬 pytest |
 
 ## 현재 Active: D-010
 
 - D-008은 독립 review 승인, PR #1 생성, GitHub Python/Web와 Vercel API/Web checks 통과로 완료됐다.
-- D-010은 승인된 설계와 상세 실행 계획이 active 상태다. 구현 전 `search_only_enabled=False` 불변조건을 유지한다.
+- D-010의 Task 1~2 구현과 focused safety regression은 완료됐다. 단일 NVIDIA `QuestionRouter`, 정상 grounded sequence, `routing_unavailable` no-search AI fallback, 명명된 generation/validation stage와 `search_only_enabled=False` 불변조건을 유지한다.
+- Task 3 문서 정렬과 D-010 assertion은 완료됐지만, 전체 API 회귀에는 11개 legacy fallback 계약 실패가 남아 최종 완료 판정은 보류한다. 해당 테스트들은 router fake를 주입하지 않아 새 single-router 경계를 통과하지 못하며, 이 Task 3 범위에서는 코드·테스트 동작을 바꾸지 않는다.
+- 로컬 검증은 NVIDIA provider·Docker·persistent service 없이 수행됐다. `NVIDIA_API_KEY`가 필요한 fixture 평가는 실행하지 않았다.
 - 다음 후보 D-002, D-004, D-005, D-009는 각각 Production credential·migration·정책 승인이 필요해 `Blocked`다.
 - 승인 전에는 Production DB, scheduler, 외부 provider를 변경하지 않는다.
 

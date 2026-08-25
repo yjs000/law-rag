@@ -26,7 +26,7 @@
 | [분산 질문 취소](distributed-question-cancellation.md) | 제안 | sticky routing 없는 영속 취소 신호와 상태 계약 |
 | [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
 | [답변 근거 검증](answer-grounding-validation.md) | 승인 | `DraftAnswer.action` 구조화 신호와 `validate_draft` 검증 강도 분기 |
-| [질문 사전 라우팅](pre-retrieval-question-routing.md) | 승인 | embedding·검색 전 tier1(결정적 규칙)·tier2(LLM judgment) 2단계 라우터 |
+| [질문 사전 라우팅](pre-retrieval-question-routing.md) | 대체됨 | 0028의 tier1/tier2 라우팅 근거와 한계를 보존한 역사 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
 | [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) | 승인 | 단일 NVIDIA 라우터, `routing_unavailable` 안전 fallback, 법령 답변·안내 생성 경계 |
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |

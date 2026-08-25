@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-2026-08-25: D-010([0057](exec-plans/active/0057-single-stage-router-and-failure-response.md))은 단일 라우터와 `routing_unavailable` 안전 응답의 상세 구현 계획을 확정했고, 구현은 아직 시작하지 않았다.
+2026-08-25: D-010([0057](exec-plans/active/0057-single-stage-router-and-failure-response.md))은 단일 NVIDIA 라우터, 정상 grounded sequence, `routing_unavailable` no-search AI 응답을 구현했고 focused safety regression과 문서 정렬을 마쳤다. 전체 API 회귀에는 새 router 경계와 맞지 않는 legacy fallback 계약 11개 실패가 남아 최종 완료 판정은 보류한다. 로컬 검증은 NVIDIA provider·Docker·persistent service 없이 수행했고, live fixture 평가는 실행하지 않았다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 
