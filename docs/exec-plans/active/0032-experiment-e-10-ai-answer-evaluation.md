@@ -2,10 +2,10 @@
 > 상태: `Todo`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
-> 선행 조건: 사용자가 최대 12회 호출 상한과 판정표 실행을 명시적으로 승인해야 한다.
+> 선행 조건: E-10 base 결과가 기록되어 있고, 재개 전 품질 원인 진단 범위를 선택해야 한다.
 > 참고 범위:
-> - `docs/exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md` L489-L498 — E-10 호출·비용·판정표와 사용자 승인 선행 조건
-> - `docs/exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md` L547-L555 — 필수 안전 gate와 D-full 전 평가 한계
+> - `apps/api/app/adapters/openai_answerer.py` L362-L377 — 구조 검증과 검색·재순위 품질 책임의 현재 진단 경계
+> - `docs/exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md` L600-L604 — E-10 안전 gate는 일반 품질·release 근거가 아니며 별도 범위 판단이 필요함
 
 # 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)
 
