@@ -60,6 +60,8 @@ repository-specific metadata를 정의하는 것이다.
   `todo/`에서 `active/`로 이동한다.
 - 구현과 요구 검증이 끝나면 실제 결과와 잔여 작업을 기록하고 같은 파일을 `completed/`로 이동한다.
 - 진행 기록이 있는 계획이라도 다음 milestone이 아직 시작되지 않았다면 상단 상태는 `Todo`로 둘 수 있다.
+- 정책 도입 시 초기 이행은 현재 `todo/`와 `active/` 계획에만 적용한다. 완료된 계획은 새 작업이
+  완료되거나 수정될 때부터 적용하며, 완료 계획 전체를 새 메타데이터로 일괄 라벨링하지 않는다.
 - `tech-debt-tracker.md`는 관찰된 결함·위험 원장이다. 부채 해결을 다음 작업으로 선택하더라도 TD 항목은
   원장에 유지하고 TODO 또는 active 계획에서 연결한다.
 - GitHub 프로젝트 `Backlog`은 외부 이슈 상태다. 저장소 TODO와 자동 동기화하지 않으며 사용자가 요청한
@@ -80,8 +82,9 @@ repository-specific metadata를 정의하는 것이다.
 7. 날짜가 포함된 진행 기록
 8. 미결정과 차단 요소
 
-**새로 작성하는 계획은 이 형식을 강제하지 않는다.** Superpowers `writing-plans`가 만드는 현재 plan
-템플릿을 그대로 쓴다 — 저장 위치(`docs/exec-plans/active/`)와 상태 lifecycle만 이 문서를 따르고,
-내부 형식은 Superpowers가 결정한다.
+**새로 작성하는 계획의 본문 형식은 Superpowers가 결정한다.** `writing-plans`가 만드는 현재 plan
+템플릿을 본문에 그대로 쓴다 — Superpowers가 결정하는 것은 본문 템플릿뿐이며, 위 여섯 필드 헤더는
+모든 새 계획과 상태가 전이되는 계획에 항상 필수다. 저장 위치(`docs/exec-plans/active/`)와 상태
+lifecycle은 이 문서를 따른다.
 
 계획은 살아 있는 문서다. 작업 중 체크박스, 발견, 결정, 범위 변화를 갱신한다. 완료 후 실제 결과, 검증 증거, 남은 부채를 기록하고 completed/로 이동한다. 현재 작업에서 새로 나온 비차단 아이디어는 현재 범위를 넓히지 않고 사용자가 후속 작업으로 채택했을 때만 todo/에 등록한다.
