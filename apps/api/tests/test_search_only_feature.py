@@ -6,11 +6,17 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.domain.catalog import SourceKind
+from app.domain.routing import RouteJudgment
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 from app.settings import Settings
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+
+
+class _LegalRouter:
+    async def route(self, question: str) -> RouteJudgment:
+        return RouteJudgment(route="legal_search", confidence=1.0, reason="legal")
 
 
 def test_search_only_feature_defaults_to_disabled_and_can_be_enabled(monkeypatch) -> None:
@@ -103,6 +109,7 @@ def test_disabled_search_only_feature_returns_503_after_generation_failure(monke
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module, "_answerer", lambda: FailingAnswerer())
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "nvapi-test")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")

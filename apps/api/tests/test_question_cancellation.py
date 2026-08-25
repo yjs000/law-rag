@@ -12,6 +12,7 @@ from starlette.requests import Request
 
 import app.main as main_module
 from app.domain.catalog import SourceKind
+from app.domain.routing import RouteJudgment
 from app.domain.schemas import QuestionRequest, SearchHit
 from app.domain.search_queries import SearchTrace
 
@@ -45,6 +46,11 @@ def _trace(candidate_count: int) -> SearchTrace:
 
 async def _allow_quota(*args, **kwargs) -> bool:
     return True
+
+
+class _LegalRouter:
+    async def route(self, question: str) -> RouteJudgment:
+        return RouteJudgment(route="legal_search", confidence=1.0, reason="legal")
 
 
 @pytest.mark.asyncio
@@ -125,6 +131,7 @@ async def test_active_generation_is_cancelled(monkeypatch) -> None:
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module, "_answerer", lambda: Answerer())
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
@@ -144,7 +151,9 @@ async def test_active_generation_is_cancelled(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cancelled_generation_stage_is_not_logged_as_succeeded(monkeypatch, caplog) -> None:
+async def test_cancelled_answer_generation_stage_is_not_logged_as_succeeded(
+    monkeypatch, caplog
+) -> None:
     # 0045 final review Finding 2 regression test: the `*_outcome` variables used to
     # default to "succeeded" before their `try` block, so a manual cancellation (which
     # raises `asyncio.CancelledError` - a `BaseException` that neither `except
@@ -152,7 +161,7 @@ async def test_cancelled_generation_stage_is_not_logged_as_succeeded(monkeypatch
     # `finally` and logged the stage as "succeeded" even though it never completed. The
     # fix defaults each `*_outcome` to "failed" and only flips it to "succeeded"
     # immediately after `budget.run(...)` returns. This test cancels an in-flight
-    # generation stage and asserts the emitted stage-timing event for it is never
+    # answer_generation stage and asserts the emitted stage-timing event for it is never
     # "succeeded".
     entered = asyncio.Event()
     cancelled = asyncio.Event()
@@ -195,6 +204,7 @@ async def test_cancelled_generation_stage_is_not_logged_as_succeeded(monkeypatch
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module, "_answerer", lambda: Answerer())
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
@@ -221,7 +231,7 @@ async def test_cancelled_generation_stage_is_not_logged_as_succeeded(monkeypatch
     generation_events = [
         event
         for event in stage_events
-        if event["request_id"] == request_id and event["stage"] == "generation"
+        if event["request_id"] == request_id and event["stage"] == "answer_generation"
     ]
     assert len(generation_events) == 1
     assert generation_events[0]["outcome"] == "failed"

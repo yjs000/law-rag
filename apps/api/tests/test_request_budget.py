@@ -18,8 +18,8 @@ def test_stage_timeout_rejects_work_when_only_response_reserve_remains() -> None
     budget = RequestBudget.start(52, 3, clock=lambda: now["value"])
     now["value"] = 149.0
     with pytest.raises(StageTimeoutError) as caught:
-        budget.stage_timeout_seconds(40, stage="generation")
-    assert caught.value.stage == "generation"
+        budget.stage_timeout_seconds(40, stage="answer_generation")
+    assert caught.value.stage == "answer_generation"
 
 
 @pytest.mark.asyncio

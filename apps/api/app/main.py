@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -23,11 +23,15 @@ from sqlalchemy import text
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
-from app.adapters.mock_route_classifier import MockRouteClassifier
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
-from app.adapters.nvidia_nim_route_classifier import NvidiaNimRouteClassifier
-from app.adapters.openai_answerer import build_messages_v2, select_generation_hits, validate_draft
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
+from app.adapters.openai_answerer import (
+    DraftAnswer,
+    build_messages_v2,
+    select_generation_hits,
+    validate_draft,
+)
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
@@ -38,7 +42,7 @@ from app.adapters.supabase_auth import (
 from app.application.answering import (
     clarification_resubmission_summary,
     post_generation_clarification_answer,
-    route_blocked_answer,
+    route_guidance_fallback,
     search_only_answer,
 )
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
@@ -55,7 +59,7 @@ from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
-from app.domain.routing import RouteDecision, route_tier1, route_tier2
+from app.domain.routing import RouteDecision, route_question
 from app.domain.schemas import (
     AiFallbackReason,
     ChecklistDocument,
@@ -487,8 +491,8 @@ async def _answer_question(
 ) -> QuestionResponse:
     """근거 우선 질문 답변 흐름을 라우팅·검색·생성 예산 안에서 실행한다.
 
-    search_only_enabled=true일 때만 생성 실패 또는 grounding 거부를 검증된 검색 전용
-    응답으로 fallback한다. false이면 503으로 실패를 명시한다.
+    정상 법령 경로의 생성 실패·grounding 거부는 기존 검색 전용 fallback 계약을 따른다.
+    라우터 불가 경로는 검색을 시작하지 않고 항상 AI-mode의 빈 unanswerable 응답으로 끝난다.
     """
     if payload.answer_mode == "search_only" and not settings.search_only_enabled:
         raise _search_only_disabled_error()
@@ -517,105 +521,109 @@ async def _answer_question(
             "dimensions": None,
         },
         "retrieval": {},
-        "generation": {"attempted": False, "status": "not_attempted"},
+        "evidence_source_validation": {"attempted": False, "status": "not_attempted"},
+        "answer_generation": {"attempted": False, "status": "not_attempted"},
+        "answer_validation": {"attempted": False, "status": "not_attempted"},
         "routing": {"attempted": False, "status": "not_attempted"},
-        "blocked_route_generation": {"attempted": False, "status": "not_attempted"},
+        "clarification_generation": {"attempted": False, "status": "not_attempted"},
+        "required_source_guidance_generation": {
+            "attempted": False,
+            "status": "not_attempted",
+        },
+        "blocked_answer_generation": {"attempted": False, "status": "not_attempted"},
+        "blocked_response_validation": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
     await _check_quota("ai" if use_ai else "search", user=user)
     await asyncio.sleep(0)
-    # 0028 M4.5: 라우팅은 embedding보다 먼저 실행한다. 지금은 use_ai(terra) 경로에만
-    # 적용한다 - search_only는 결과를 사용자가 직접 원문 대조하는 모드라 D-10에서 발견된
-    # "무관 법령이 AI 문맥에 섞이는" 문제가 애초에 발생하지 않는다. search_only까지
-    # 넓히는 건 별도 결정이 필요하다(범위를 넓히기 전에 기존 search_only 테스트 영향을
-    # 먼저 검토해야 한다).
+    # Routing applies only to Terra requests. Search-only requests intentionally retain
+    # their existing direct retrieval contract.
     route_decision: RouteDecision | None = None
     if use_ai:
         routing_stage = diagnostics["routing"]
-        assert isinstance(routing_stage, dict) #ask : 이거 왜 dict인지 확인해? dict가 아닐수도있어?
+        assert isinstance(routing_stage, dict)
         routing_stage.update({"attempted": True, "status": "started"})
-        route_decision = route_tier1(payload.question)  #todo : tier1 단계 없애
+        routing_started = time.monotonic()
+        routing_outcome: QuestionStageTimingOutcome = "failed"
         routing_timed_out = False
-        if route_decision is None:
-            routing_started = time.monotonic()
-            # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError
-            # (BaseException이라 아래 except 어느 쪽에도 걸리지 않는다)가 stage를 죽여도
-            # finally가 "succeeded"를 그대로 로깅해버린다(Finding 2, 0045 최종 리뷰).
-            routing_outcome: QuestionStageTimingOutcome = "failed"
-            try:
-                route_decision = await budget.run(
-                    "routing",
-                    lambda: route_tier2(payload.question, _route_classifier()), #todo : tier1을 없애면서 얘도 적절한이름으로 다시 설정해.
-                    cap_seconds=settings.route_classifier_timeout_seconds,
-                )
-                routing_outcome = "succeeded"
-            except StageTimeoutError:
-                # 라우팅 stage 예산을 다 썼다 - legal_search로 안전하게 진행한다(아래
-                # tier2_classifier_error와 같은 이유: 근거 없이 차단하는 쪽이 더 위험하다). #ask : 라우팅 stage예산을 다쓴게 뭐야?
-                routing_timed_out = True
-                routing_outcome = "timed_out"
-                route_decision = RouteDecision(
-                    route="legal_search",
-                    reason_code="tier2_timeout",
-                    tier=2,
-                    confidence=0.0,
-                )
-            except Exception:
-                # tier 2 실패(NVIDIA 오류 등)는 라우팅 실패로 전체 요청을 막지
-                # 않는다 - legal_search로 안전하게 진행한다(0028: 근거 없이 차단 쪽으로
-                # 기본값을 두면 답할 수 있는 질문을 막는 피해가 더 크다).
-                routing_outcome = "failed"
-                route_decision = RouteDecision(
-                    route="legal_search",
-                    reason_code="tier2_classifier_error",
-                    tier=2,
-                    confidence=0.0,
-                )
-            finally:
-                emit_question_stage_timing(
-                    str(payload.client_request_id),
-                    "routing",
-                    routing_outcome,
-                    _elapsed_ms(routing_started),
-                    _remaining_ms(budget),
-                )
-        # mock_classifier 설명은 디버그용 placeholder지 실제 판단 근거가 아니다 - 사용자
-        # 응답에도, 저장되는 diagnostics에도 남기지 않는다(NVIDIA_API_KEY 없는 로컬 개발
-        # 에서만 발생 가능).
+        try:
+            route_decision = await budget.run(
+                "routing",
+                lambda: route_question(payload.question, _question_router()),
+                cap_seconds=settings.route_classifier_timeout_seconds,
+            )
+            routing_outcome = "succeeded"
+        except StageTimeoutError:
+            routing_timed_out = True
+            routing_outcome = "timed_out"
+            route_decision = RouteDecision(
+                route="routing_unavailable",
+                reason_code="routing_timeout",
+                confidence=0.0,
+            )
+        except Exception:
+            routing_outcome = "failed"
+            route_decision = RouteDecision(
+                route="routing_unavailable",
+                reason_code="routing_provider_error",
+                confidence=0.0,
+            )
+        finally:
+            emit_question_stage_timing(
+                str(payload.client_request_id),
+                "routing",
+                routing_outcome,
+                _elapsed_ms(routing_started),
+                _remaining_ms(budget),
+            )
+        assert route_decision is not None
         real_explanation = (
-            route_decision.explanation
-            if route_decision.explanation
-            and not route_decision.explanation.startswith("mock_classifier:") # todo : mock관련된 설정은 외부에서 주입하도록해. 코드상에 이런식으로 mock의 if else처리를 하지말고. 그냥 주입되는데로 실행하도록. 그리고 주입하는곳에서 지금은 nvidia를 주입하도록.
-            else None
+            route_decision.explanation if route_decision.route != "routing_unavailable" else None
         )
-        routing_stage.update(# ask : 여기서 바로 db저장하는건가?
+        routing_stage.update(
             {
-                "status": "timed_out" if routing_timed_out else "resolved",
+                "status": (
+                    "timed_out"
+                    if routing_timed_out
+                    else "failed"
+                    if routing_outcome == "failed"
+                    else "resolved"
+                ),
                 "route": route_decision.route,
-                "tier": route_decision.tier,
                 "reason_code": route_decision.reason_code,
                 "confidence": route_decision.confidence,
-                # 2026-08-08 (사용자 요청 - tier2 calibration tracking): tier2 LLM의 판단
-                # 근거를 diagnostics에 남겨 인증 사용자 이력(_save_if_authenticated ->
-                # postgres_identity.save_question, 이미 동의된 저장소)에서 D-10처럼 사람이
-                # 표본 검토할 수 있게 한다. 새 저장소·새 동의 흐름을 만들지 않고 기존
-                # diagnostics 저장 경로를 그대로 재사용한다.
-                "explanation": real_explanation,
             }
         )
         emit_route_outcome(str(payload.client_request_id), route_decision)
         if route_decision.route != "legal_search":
-            blocked_fallback = route_blocked_answer(
+            guidance_stage: Literal[
+                "clarification_generation",
+                "required_source_guidance_generation",
+                "blocked_answer_generation",
+            ] = (
+                "blocked_answer_generation"
+                if route_decision.route == "routing_unavailable"
+                else "clarification_generation"
+                if route_decision.route == "clarification_required"
+                else "required_source_guidance_generation"
+            )
+            blocked_fallback = route_guidance_fallback(
                 payload,
                 route_decision.route,
                 missing_fields=route_decision.missing_fields,
                 explanation=real_explanation,
             )
             blocked_fallback.request_id = str(payload.client_request_id)
-            blocked_answer = await _generate_blocked_route_answer(
-                payload, route_decision, real_explanation, blocked_fallback, diagnostics, budget
+            route_answer = await _generate_blocked_answer(
+                payload,
+                route_decision,
+                real_explanation,
+                blocked_fallback,
+                diagnostics,
+                budget,
+                stage_name=guidance_stage,
             )
-            return await _save_if_authenticated(user, payload, blocked_answer, diagnostics)
+            return await _save_if_authenticated(user, payload, route_answer, diagnostics)
     query_embedding = None
     embedding_failed = False
     if use_ai and settings.embedding_enabled:
@@ -693,7 +701,18 @@ async def _answer_question(
             _elapsed_ms(retrieval_started),
             _remaining_ms(budget),
         )
+    original_hit_count = len(hits)
     hits = [hit for hit in hits if is_allowed_source_url(hit.source_url)]
+    source_validation_stage = diagnostics["evidence_source_validation"]
+    assert isinstance(source_validation_stage, dict)
+    source_validation_stage.update(
+        {
+            "attempted": True,
+            "status": "succeeded",
+            "input_count": original_hit_count,
+            "allowed_count": len(hits),
+        }
+    )
     diagnostics["retrieval"] = {
         **search_trace.as_dict(),
         "allowed_candidate_count": len(hits),
@@ -714,7 +733,7 @@ async def _answer_question(
     if route_decision is not None:
         fallback.route = route_decision.route
     if not use_ai:
-        generation_stage = diagnostics["generation"]
+        generation_stage = diagnostics["answer_generation"]
         assert isinstance(generation_stage, dict)
         generation_stage["status"] = (
             "skipped_search_only"
@@ -722,7 +741,7 @@ async def _answer_question(
             else "skipped_ai_disabled"
         )
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
-    generation_stage = diagnostics["generation"]
+    generation_stage = diagnostics["answer_generation"]
     assert isinstance(generation_stage, dict)
     generation_hits = select_generation_hits(hits, settings.answer_evidence_max_characters)
     generation_stage.update(
@@ -748,7 +767,7 @@ async def _answer_question(
     generation_outcome: QuestionStageTimingOutcome = "failed"
     try:
         draft = await budget.run(
-            "generation",
+            "answer_generation",
             lambda: _answerer().answer(payload, generation_hits),
             cap_seconds=settings.answer_timeout_seconds,
         )
@@ -781,19 +800,33 @@ async def _answer_question(
     finally:
         emit_question_stage_timing(
             str(payload.client_request_id),
-            "generation",
+            "answer_generation",
             generation_outcome,
             _elapsed_ms(generation_started),
             _remaining_ms(budget),
         )
-    if not validate_draft(draft, generation_hits):
+    validation_stage = diagnostics["answer_validation"]
+    assert isinstance(validation_stage, dict)
+    validation_stage.update({"attempted": True, "status": "started"})
+    validation_started = time.monotonic()
+    draft_is_valid = validate_draft(draft, generation_hits)
+    emit_question_stage_timing(
+        str(payload.client_request_id),
+        "answer_validation",
+        "succeeded" if draft_is_valid else "failed",
+        _elapsed_ms(validation_started),
+        _remaining_ms(budget),
+    )
+    if not draft_is_valid:
+        validation_stage["status"] = "succeeded" if draft_is_valid else "grounding_failed"
         if not settings.search_only_enabled:
             raise _generation_failed_error()
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
         return await _save_if_authenticated(user, payload, fallback, diagnostics)
+    validation_stage["status"] = "succeeded"
     # 2026-08-08: 모델이 스스로 판단한 action이 checklist 기반 추정(derive_answer_action)과
-    # 얼마나 일치하는지 diagnostics에 남긴다 - tier2 explanation을 저장한 것과 같은 이유로,
+    # 얼마나 일치하는지 diagnostics에 남긴다 - 라우터 설명을 저장하던 것과 같은 이유로,
     # D-10 표본 검토 때 이 자기보고 신호를 신뢰해도 되는지 나중에 확인하기 위해서다.
     generation_stage["model_action"] = draft.action
     generation_stage["checklist_derived_action"] = derive_answer_action(draft.checklist)
@@ -840,38 +873,42 @@ async def _answer_question(
     return await _save_if_authenticated(user, payload, answer, diagnostics)
 
 
-async def _generate_blocked_route_answer(
+async def _generate_blocked_answer(
     payload: QuestionRequest,
     route_decision: RouteDecision,
     explanation: str | None,
     blocked_fallback: QuestionResponse,
     diagnostics: dict[str, object],
     budget: RequestBudget,
+    *,
+    stage_name: Literal[
+        "clarification_generation",
+        "required_source_guidance_generation",
+        "blocked_answer_generation",
+    ],
 ) -> QuestionResponse:
-    """검색을 건너뛴 라우트에 맞는 AI 응답을 생성한다.
-
-    시간 초과·예외·grounding 거부에는 근거 없는 새 실패 모드를 만들지 않고 제공된 고정
-    fallback 응답을 반환한다.
-    """
-    stage = diagnostics["blocked_route_generation"]
+    """Generate guidance for a route that intentionally does not search."""
+    if route_decision.route == "routing_unavailable" and stage_name != "blocked_answer_generation":
+        raise ValueError("routing_unavailable requires blocked_answer_generation")
+    if route_decision.route != "routing_unavailable" and stage_name == "blocked_answer_generation":
+        raise ValueError("blocked_answer_generation is reserved for routing_unavailable")
+    stage = diagnostics[stage_name]
     assert isinstance(stage, dict)
     stage.update({"attempted": True, "status": "started"})
     started = time.monotonic()
     outcome: QuestionStageTimingOutcome = "failed"
     try:
         draft = await budget.run(
-            "blocked_route_generation",
+            stage_name,
             lambda: _answerer().answer_blocked_route(
                 payload, route_decision.route, explanation
             ),
             cap_seconds=settings.answer_timeout_seconds,
         )
         outcome = "succeeded"
-    except StageTimeoutError as exc:
+    except StageTimeoutError:
         outcome = "timed_out"
         stage["status"] = "timed_out"
-        if not settings.search_only_enabled:
-            raise _generation_failed_error() from exc
         return blocked_fallback
     except Exception as exc:
         outcome = "failed"
@@ -880,21 +917,40 @@ async def _generate_blocked_route_answer(
             global ai_quota_exhausted
             ai_quota_exhausted = True
         stage["status"] = "billing_or_quota_error" if status_code in {402, 429} else "failed"
-        if not settings.search_only_enabled:
-            raise _generation_failed_error() from exc
         return blocked_fallback
     finally:
         emit_question_stage_timing(
             str(payload.client_request_id),
-            "blocked_route_generation",
+            stage_name,
             outcome,
             _elapsed_ms(started),
             _remaining_ms(budget),
         )
+    if route_decision.route == "routing_unavailable":
+        validation_stage = diagnostics["blocked_response_validation"]
+        assert isinstance(validation_stage, dict)
+        validation_stage.update({"attempted": True, "status": "started"})
+        valid = _validate_blocked_response(draft)
+        validation_stage["status"] = "succeeded" if valid else "failed"
+        if not valid:
+            stage["status"] = "blocked_response_validation_failed"
+            return blocked_fallback
+        stage["status"] = "succeeded"
+        return QuestionResponse(
+            request_id=str(payload.client_request_id),
+            mode="ai",
+            summary=draft.summary,
+            scope="라우팅 분류 일시 중단 (검색 미실행)",
+            sections=[],
+            checklist=[],
+            citations=[],
+            limitations=["질문 분류를 완료하지 못해 법령 검색을 시작하지 않았습니다."],
+            requested_answer_mode=payload.answer_mode,
+            action="unanswerable",
+            route="routing_unavailable",
+        )
     if not validate_draft(draft, []):
-        stage["status"] = "grounding_failed"
-        if not settings.search_only_enabled:
-            raise _generation_failed_error()
+        stage["status"] = "validation_failed"
         return blocked_fallback
     stage["status"] = "succeeded"
     if draft.action == "clarification_required":
@@ -914,6 +970,11 @@ async def _generate_blocked_route_answer(
         action=draft.action,
         route=route_decision.route,
     )
+
+
+def _validate_blocked_response(draft: DraftAnswer) -> bool:
+    """Accept only an empty, explicitly unanswerable unavailable-route draft."""
+    return draft.action == "unanswerable" and not draft.sections and not draft.checklist
 
 
 @app.post("/v1/auth/mock/google", response_model=MockLoginResponse)
@@ -1262,18 +1323,13 @@ def _answerer() -> NvidiaNimAnswerer:
     )
 
 
-# 2026-08-08: NVIDIA API key가 배선되면 실제 NvidiaNimRouteClassifier를 쓴다. key가 없는
-# 환경(로컬 개발, 일부 테스트)에서는 MockRouteClassifier로 물러난다 - route_tier2 실패
-# 자체도 아래 라우팅 블록에서 legal_search로 안전하게 처리한다.
-def _route_classifier() -> MockRouteClassifier | NvidiaNimRouteClassifier:
-    if settings.nvidia_api_key:
-        return NvidiaNimRouteClassifier(
-            api_key=settings.nvidia_api_key,
-            base_url=settings.nvidia_base_url,
-            model=settings.nvidia_route_classifier_model,
-            timeout_seconds=settings.route_classifier_timeout_seconds,
-        )
-    return MockRouteClassifier()
+def _question_router() -> NvidiaNimQuestionRouter:
+    return NvidiaNimQuestionRouter(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_route_classifier_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
+    )
 
 
 def _ai_unavailable_reason() -> str | None:

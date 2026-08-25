@@ -298,6 +298,11 @@ def build_blocked_route_messages(
     프롬프트. 근거(SearchHit)가 전혀 없으므로 validate_draft도 이 스키마를 hits=[]
     경로로 검증한다 - 어떤 법적 주장도 만들면 안 된다."""
     route_guidance = {
+        "routing_unavailable": (
+            "질문 분류를 일시적으로 처리할 수 없어 법령 검색을 시작하지 못했다. action은 반드시 "
+            "'unanswerable'로 쓰고, summary에는 잠시 후 다시 시도하라는 안내만 담는다. "
+            "법률 결론, 법령명, 조문 번호, 기관명, 인용 또는 다른 확인 절차를 만들지 않는다."
+        ),
         "realtime_required": (
             "이 질문은 시점이나 개인 계정 상태에 따라 달라지는 정보(예: 올해 예산, "
             "현재 가격, 처리 상태)가 필요하다. 법령 corpus에는 이런 실시간 데이터가 "

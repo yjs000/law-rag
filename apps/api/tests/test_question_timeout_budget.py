@@ -12,7 +12,7 @@ import app.main as main_module
 from app.adapters.openai_answerer import DraftAnswer
 from app.application.request_budget import RequestBudget
 from app.domain.catalog import SourceKind
-from app.domain.routing import RouteDecision
+from app.domain.routing import RouteDecision, RouteJudgment
 from app.domain.schemas import (
     AiFallbackReason,
     AnswerSection,
@@ -80,7 +80,12 @@ def _fast_draft() -> DraftAnswer:
 
 
 def _legal_search_decision() -> RouteDecision:
-    return RouteDecision(route="legal_search", reason_code="test", tier=1, confidence=1.0)
+    return RouteDecision(route="legal_search", reason_code="router_judgment", confidence=1.0)
+
+
+class _LegalRouter:
+    async def route(self, question: str) -> RouteJudgment:
+        return RouteJudgment(route="legal_search", confidence=1.0, reason="legal")
 
 
 async def _allow_quota(*args: object, **kwargs: object) -> bool:
@@ -140,7 +145,7 @@ def test_generation_timeout_returns_search_fallback(client: TestClient, monkeypa
             await asyncio.sleep(0.1)
 
     monkeypatch.setattr(main_module.settings, "answer_timeout_seconds", 0.01)
-    monkeypatch.setattr(main_module, "route_tier1", lambda question: _legal_search_decision())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
@@ -159,30 +164,43 @@ def test_generation_timeout_returns_search_fallback(client: TestClient, monkeypa
     assert body["citations"]
 
 
-def test_routing_timeout_continues_as_legal_search(client: TestClient, monkeypatch) -> None:
-    hit = _hit()
+def test_routing_timeout_returns_unavailable_without_search(
+    client: TestClient, monkeypatch
+) -> None:
+    embedding_calls: list[object] = []
+    retrieval_calls: list[object] = []
 
-    class SlowClassifier:
-        async def classify(self, question: str, hint: object):
+    class SlowRouter:
+        async def route(self, question: str) -> RouteJudgment:
             await asyncio.sleep(0.1)
-
-    async def search(*args: object, **kwargs: object):
-        return [hit], _trace(1)
-
-    async def last_sync():
-        return None
+            raise AssertionError("router should be cancelled by the stage budget")
 
     class Embedder:
         async def embed(self, texts: list[str]) -> list[list[float]]:
-            return [[0.0] * 512]
+            embedding_calls.append(texts)
+            raise AssertionError("embedding must not run")
+
+    async def search(*args: object, **kwargs: object):
+        retrieval_calls.append((args, kwargs))
+        raise AssertionError("retrieval must not run")
+
+    class UnavailableAnswerer:
+        async def answer_blocked_route(self, payload, route, reason):
+            return DraftAnswer(
+                summary="다시 시도해 주세요.",
+                scope="라우팅 분류 일시 중단",
+                sections=[],
+                checklist=[],
+                limitations=[],
+                action="unanswerable",
+            )
 
     monkeypatch.setattr(main_module.settings, "route_classifier_timeout_seconds", 0.01)
-    monkeypatch.setattr(main_module, "_route_classifier", lambda: SlowClassifier())
+    monkeypatch.setattr(main_module, "_question_router", lambda: SlowRouter())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
-    monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
     monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
-    monkeypatch.setattr(main_module, "_answerer", lambda: _StubAnswerer())
+    monkeypatch.setattr(main_module, "_answerer", lambda: UnavailableAnswerer())
     monkeypatch.setattr(main_module.settings, "nvidia_api_key", "test-key")
     monkeypatch.setattr(main_module.settings, "ai_mode", "auto")
     monkeypatch.setattr(main_module, "ai_quota_exhausted", False)
@@ -193,7 +211,10 @@ def test_routing_timeout_continues_as_legal_search(client: TestClient, monkeypat
     )
 
     assert response.status_code == 200
-    assert response.json()["route"] == "legal_search"
+    assert response.json()["route"] == "routing_unavailable"
+    assert response.json()["mode"] == "ai"
+    assert embedding_calls == []
+    assert retrieval_calls == []
 
 
 class _StubAnswerer:
@@ -221,7 +242,7 @@ def test_embedding_timeout_falls_back_to_lexical_retrieval(
             return [[0.0] * 512]
 
     monkeypatch.setattr(main_module.settings, "question_embedding_timeout_seconds", 0.01)
-    monkeypatch.setattr(main_module, "route_tier1", lambda question: _legal_search_decision())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
@@ -259,7 +280,7 @@ async def test_generation_never_starts_when_only_reserve_remains(monkeypatch) ->
             generation_called = True
             return _fast_draft()
 
-    monkeypatch.setattr(main_module, "route_tier1", lambda question: _legal_search_decision())
+    monkeypatch.setattr(main_module, "_question_router", lambda: _LegalRouter())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module.repository, "last_sync", last_sync)
     monkeypatch.setattr(main_module.repository, "consume_quota", _allow_quota)
@@ -274,7 +295,7 @@ async def test_generation_never_starts_when_only_reserve_remains(monkeypatch) ->
 
     # Embedding and retrieval each see plenty of remaining budget; by the time
     # generation checks its own slice, only the response reserve is left.
-    clock_values = iter([900.0, 950.0, 998.0])
+    clock_values = iter([900.0, 900.0, 950.0, 998.0])
     budget = RequestBudget(
         deadline=1000.0, reserve_seconds=3.0, clock=lambda: next(clock_values)
     )
