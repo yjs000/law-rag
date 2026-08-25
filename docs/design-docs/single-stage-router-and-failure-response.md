@@ -16,7 +16,7 @@
 4. `answer_generation` — 검증된 검색 근거만 모델에 전달해 답변 초안을 생성한다.
 5. `answer_validation` — 초안의 구조, action, section·checklist 인용 ID가 생성에 제공한 근거를 가리키는지 검증한다.
 
-`answer_validation`이 실패하면 기존처럼 검색 근거를 보존한 search-only fallback을 반환한다. 이 fallback은 라우터 실패가 아니므로 D-010은 retrieval·generation 기존 실패 계약을 바꾸지 않는다.
+`answer_validation`이 실패하면 기존 fallback 계약을 유지한다. 이 fallback은 라우터 실패가 아니므로 D-010은 retrieval·generation 기존 실패 계약을 바꾸지 않는다.
 
 ## 단일 라우터 계약
 
@@ -34,7 +34,7 @@
 - 시스템이 질문 분류를 일시적으로 처리하지 못했으며 다시 시도해야 한다는 안내
 - 법률 결론, 법령 인용, section, checklist가 없는 `unanswerable` action
 
-`blocked_answer_generation`의 초안은 빈 근거로 answer validation을 통과해야 하며, timeout, provider 오류 또는 validation 실패 시에는 같은 의미의 결정적 `blocked_fallback`을 반환한다.
+`blocked_answer_generation`의 초안은 빈 근거로 answer validation을 통과해야 하며, timeout, provider 오류 또는 validation 실패 시에는 같은 의미의 결정적 `blocked_fallback`을 반환한다. 이 fallback은 `mode="ai"`, `action="unanswerable"`, 빈 citation·section·checklist를 사용한다.
 
 기존의 정상 사용자 요구 route는 장애가 아니므로 별도 명칭으로 유지한다.
 
@@ -46,7 +46,7 @@
 
 ## 외부 응답과 관측
 
-`QuestionResponse.route`는 `routing_unavailable`을 허용한다. 안전 reason code는 route outcome 구조화 이벤트와 인증된 요청 diagnostics에만 기록하며, raw 예외 문자열이나 traceback은 기록하지 않는다. 사용자 응답은 route와 검토된 안내 문구만 사용한다.
+`QuestionResponse.route`는 `routing_unavailable`을 허용한다. 안전 reason code는 route outcome 구조화 이벤트와 인증된 요청 diagnostics에만 기록하며, raw 예외 문자열이나 traceback은 기록하지 않는다. 사용자 응답은 route와 검토된 안내 문구만 사용한다. `search_only_enabled`는 계속 `False`로 유지하고, 어떤 route도 이 설정을 변경하거나 `search_only` mode를 응답에 사용하지 않는다.
 
 관측 stage 명칭은 `answer_generation`, `answer_validation`, `clarification_generation`, `required_source_guidance_generation`, `blocked_answer_generation`으로 분리한다. 기존 generic `generation`과 `blocked_route_generation`은 제거한다. `evidence_source_validation`은 검색 결과 필터의 명칭이며, D-010에서는 별도의 provider 호출·타이머를 추가하지 않는다.
 
