@@ -33,6 +33,8 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   commit sequence.
 - `e2daefe docs: correct D-010 assertion evidence` — corrects the report/plan count to three
   D-010 assertion functions and clarifies historical metadata preservation.
+- `e44497c docs: reconcile D-010 lifecycle evidence` — records the complete chronological Task 3
+  sequence through `e2daefe` and removes the inaccurate single-follow-up phrasing.
 
 The active-plan and this report preserve the chronological Task 3 record through `e2daefe`; no
 “immediately after” ordering is implied for the earlier documentation commits.
