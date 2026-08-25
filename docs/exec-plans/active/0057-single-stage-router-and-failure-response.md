@@ -262,7 +262,7 @@ by the documentation commit below.
 
 Keep the approved D-010 design link and active-plan pointers already recorded when this plan was promoted. Replace the 0028 runtime description in `ARCHITECTURE.md` and `pre-retrieval-question-routing.md` with the single NVIDIA router, the exact normal sequence, and `routing_unavailable` no-search behavior. Record that `evidence_source_validation` is an official-source filter, while `answer_validation` verifies answer structure/action/citation IDs after generation and `blocked_response_validation` checks only the unavailable-route empty shape. In this plan file, check completed boxes only after the corresponding command output is recorded, and add the final commit SHA plus exact test counts in a dated progress section. Do not change the historical fixture result JSON or claim live NVIDIA evaluation without user-authorized evidence.
 
-- [ ] **Step 4: Run complete local verification without persistent services**
+- [x] **Step 4: Run complete local verification without persistent services**
 
 Run: `uv run --project apps/api ruff check apps/api/app apps/api/scripts apps/api/tests apps/api/migrations packages/law-rag-core/src packages/law-rag-core/tests`
 
@@ -272,23 +272,26 @@ Run: `uv run --project apps/api ruff check --select D100,D101,D102,D103,D107,D20
 
 Expected: `All checks passed!`
 
-Run: `uv run --directory apps/api python -m pytest --basetemp C:\Users\Family\.codex\visualizations\2026\08\25\d010-pytest apps/api/tests packages/law-rag-core/tests -q`
+Run (API, from the API project directory; `tests` is intentionally project-relative):
+`$env:PYTHONPATH='.;..\..\packages\law-rag-core\src;..\collector\src'; uv run --directory apps/api python -m pytest --basetemp C:\Users\Family\.codex\visualizations\2026\08\25\d010-api-full-relative tests -q`
+
+Run (core package):
+`uv run --project packages/law-rag-core python -m pytest --basetemp C:\Users\Family\.codex\visualizations\2026\08\25\d010-core-full-final packages/law-rag-core/tests -q`
 
 Expected: PASS or only pre-existing, explicitly identified skips; no Docker or persistent database startup.
 
 Run: `uv run --project apps/api python scripts/check_docs.py`
 
-Expected: exit code 0.
+Expected: the D-010 assertion passes; the repository checker may still report only its known
+pre-existing broken-link inventory.
 
-Result: full Ruff and the focused D-010 suite pass, but the complete API suite remains blocked by
-11 legacy fallback-contract failures. The literal command above also has a path-root mismatch:
-`--directory apps/api` makes `apps/api/tests` resolve below `apps/api`. With the project-root
-paths corrected and elevated filesystem access for pytest temp files, the API suite reports
-`628 passed, 11 failed, 3 skipped, 1 warning` in 46.70s; the core suite reports `26 passed`.
-The failures are in old tests that do not inject a fake single router (mainly `test_ai_fallback.py`)
-or still expect pre-D-010 search-only behavior. A representative four-case fallback test passes
-unchanged on the pre-D-010 `main` worktree. No code or historical fixture result JSON is changed
-in Task 3 to hide this blocker.
+Result: full Ruff, the docstring Ruff selection, the focused D-010 suite, and both complete local
+suites pass. The API suite reports `639 passed, 3 skipped, 1 warning` in 44.63s; the core suite
+reports `26 passed` in 0.26s. The warning is the existing Starlette/httpx deprecation. The 11
+failures from the earlier run were resolved by a reusable successful `legal_search` router fixture
+for normal AI/grounding tests, explicit search-only enablement for the historical Supabase storage
+flow, and the search-only fixture on the temporal readiness case. No live provider or persistent
+service was used.
 
 - [x] **Step 5: Commit documentation and verification evidence**
 
@@ -305,13 +308,15 @@ git commit -m "docs: record single-stage routing contract"
 - Task 2 implementation and review-fix commits: `bd70103`, `7c9707d`; focused safety regression
   verification was `38 passed, 2 warnings`, plus `3 passed, 1 warning` for request-budget tests.
 - Task 3 documentation commit: `f58c5d4 docs: record single-stage routing contract`.
-- Task 3 executable D-010 assertion: exit 0 (`d010 routing assertions passed`). Full Ruff: exit 0
-  (`All checks passed!`). Focused D-010 suite: `43 passed, 1 warning` in 3.99s.
+- Task 3 evidence commits: `ea5fc59 docs: record D-010 Task 3 verification evidence` and
+  `cf0a066 docs: add D-010 Task 3 report`.
+- Task 3 executable D-010 assertions: exit 0 (`d010 routing assertions passed`). Full Ruff: exit 0
+  (`All checks passed!`). Focused D-010 suite: `43 passed, 1 warning` in 3.99s (before the
+  fixture-alignment changes); the final focused rerun is recorded in the Task 3 report.
 - Complete local verification used no Docker, persistent service, database, or live provider.
-  The API suite's 11 legacy failures keep Step 4 and the D-010 lifecycle status open. The
-  NVIDIA-keyed fixture evaluator remains intentionally unrun.
-- Repository docs checker: exit 1 with 32 pre-existing broken-link reports. The D-010 assertion
-  portion passes; unrelated documentation debt is not repaired in this task.
+  The NVIDIA-keyed fixture evaluator remains intentionally unrun.
+- Repository docs checker: exit 1 with 32 pre-existing broken-link reports. Both D-010 assertion
+  functions pass; unrelated documentation debt is not repaired in this task.
 
 ## Plan Self-Review
 

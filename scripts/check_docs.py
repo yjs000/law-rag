@@ -98,10 +98,35 @@ def check_d010_routing_contract() -> list[str]:
     return errors
 
 
+def check_d010_active_experiment_contract() -> list[str]:
+    """Keep the active E-10 plan clearly historical after D-010 superseded it."""
+    errors: list[str] = []
+    path = ROOT / "docs" / "exec-plans" / "active" / "0032-experiment-e-10-ai-answer-evaluation.md"
+    text = path.read_text(encoding="utf-8")
+    current_section = _section(text, "## 현재 D-010 실행 계약")
+    if not current_section:
+        errors.append(
+            "docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md: "
+            "current D-010 supersession section is missing"
+        )
+    elif re.search(r"\btier[12]\b", current_section, flags=re.IGNORECASE):
+        errors.append(
+            "docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md: "
+            "current D-010 section still describes tier1/tier2"
+        )
+    if "## 역사적 E-10 실행 기록" not in text:
+        errors.append(
+            "docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md: "
+            "historical E-10 boundary is missing"
+        )
+    return errors
+
+
 def main() -> int:
     errors = [error for path in markdown_files() for error in check_links(path)]
     errors.extend(check_freshness(date.today()))
     errors.extend(check_d010_routing_contract())
+    errors.extend(check_d010_active_experiment_contract())
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
