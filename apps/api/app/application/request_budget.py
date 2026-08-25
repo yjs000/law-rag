@@ -59,8 +59,11 @@ class RequestBudget:
         cap_seconds: float,
     ) -> T:
         timeout = self.stage_timeout_seconds(cap_seconds, stage=stage)
+        timeout_scope = asyncio.timeout(timeout)
         try:
-            async with asyncio.timeout(timeout):
+            async with timeout_scope:
                 return await operation()
         except TimeoutError as exc:
-            raise StageTimeoutError(stage) from exc
+            if timeout_scope.expired():
+                raise StageTimeoutError(stage) from exc
+            raise

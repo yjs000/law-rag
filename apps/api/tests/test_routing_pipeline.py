@@ -13,7 +13,13 @@ from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import DraftAnswer
 from app.domain.catalog import SourceKind
 from app.domain.routing import QuestionRouter, RouteJudgment
-from app.domain.schemas import AnswerSection, ChecklistItem, QuestionRequest, SearchHit
+from app.domain.schemas import (
+    AnswerSection,
+    ChecklistItem,
+    CorpusTemporalState,
+    QuestionRequest,
+    SearchHit,
+)
 from app.domain.search_queries import SearchTrace
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
@@ -139,6 +145,11 @@ class _FailingRouter:
         raise RuntimeError("provider body must not escape")
 
 
+class _ProviderTimeoutRouter:
+    async def route(self, question: str) -> RouteJudgment:
+        raise TimeoutError("provider timeout body must not become a route timeout")
+
+
 class _SlowRouter:
     async def route(self, question: str) -> RouteJudgment:
         await asyncio.sleep(0.1)
@@ -156,6 +167,7 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
     _configure_ai(monkeypatch)
     embedding_calls: list[object] = []
     retrieval_calls: list[object] = []
+    corpus_calls: list[object] = []
 
     class Embedder:
         async def embed(self, texts):
@@ -166,7 +178,18 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
         retrieval_calls.append((args, kwargs))
         raise AssertionError("retrieval must not run")
 
+    async def load_state(repository):
+        corpus_calls.append(repository)
+        return CorpusTemporalState(
+            ready=True,
+            supported_as_of_from=date(1900, 1, 1),
+            supported_as_of_through=date(2099, 12, 31),
+            corpus_snapshot_id="corpus-sha256:" + "a" * 64,
+            eligible_provision_count=1,
+        )
+
     monkeypatch.setattr(main_module, "_question_router", lambda: _FailingRouter())
+    monkeypatch.setattr(main_module, "_load_corpus_temporal_state", load_state)
     monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
     monkeypatch.setattr(main_module.repository, "search_with_trace", search)
     monkeypatch.setattr(main_module, "_answerer", lambda: _UnavailableAnswerer())
@@ -183,6 +206,7 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
     assert body["citations"] == []
     assert embedding_calls == []
     assert retrieval_calls == []
+    assert corpus_calls == []
     assert "provider body must not escape" not in response.text
     assert not main_module.settings.search_only_enabled
 
@@ -214,6 +238,24 @@ def test_router_timeout_returns_safe_no_search_ai_response(monkeypatch) -> None:
     assert embedding_calls == []
     assert retrieval_calls == []
     assert not main_module.settings.search_only_enabled
+
+
+def test_provider_timeout_is_reported_as_provider_error(monkeypatch, caplog) -> None:
+    _configure_ai(monkeypatch)
+
+    monkeypatch.setattr(main_module, "_question_router", lambda: _ProviderTimeoutRouter())
+    monkeypatch.setattr(main_module, "_answerer", lambda: _UnavailableAnswerer())
+
+    with caplog.at_level(logging.INFO, logger="law_rag.route_outcome"):
+        response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
+
+    assert response.status_code == 200
+    assert response.json()["route"] == "routing_unavailable"
+    route_events = [
+        record.message for record in caplog.records if record.name == "law_rag.route_outcome"
+    ]
+    assert any('"reason_code": "routing_provider_error"' in event for event in route_events)
+    assert all("provider timeout body" not in event for event in route_events)
 
 
 def test_legal_search_runs_generation_and_validation_after_retrieval(monkeypatch, caplog) -> None:

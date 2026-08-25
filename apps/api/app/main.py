@@ -354,7 +354,6 @@ async def _handle_question(
     # 실패 등 stage 시작 전 오류 포함)되면 이 값 그대로 finally에서 기록된다.
     outcome: QuestionStageTimingOutcome = "failed"
     try:
-        await _require_supported_as_of_date(payload.as_of_date, repository)
         user = await _optional_user(request.headers.get("authorization"))
         owner = _question_owner(request, user)
         task = asyncio.current_task()
@@ -497,9 +496,12 @@ async def _answer_question(
     if payload.answer_mode == "search_only" and not settings.search_only_enabled:
         raise _search_only_disabled_error()
     if not _ai_available() and not settings.search_only_enabled:
+        await _require_supported_as_of_date(payload.as_of_date, repository)
         raise _ai_unavailable_error()
 
     use_ai = payload.answer_mode == "terra" and _ai_available()
+    if not use_ai:
+        await _require_supported_as_of_date(payload.as_of_date, repository)
     fallback_reason = _initial_fallback_reason(payload)
     diagnostics: dict[str, object] = {
         "schema_version": "1",
@@ -624,6 +626,7 @@ async def _answer_question(
                 stage_name=guidance_stage,
             )
             return await _save_if_authenticated(user, payload, route_answer, diagnostics)
+        await _require_supported_as_of_date(payload.as_of_date, repository)
     query_embedding = None
     embedding_failed = False
     if use_ai and settings.embedding_enabled:

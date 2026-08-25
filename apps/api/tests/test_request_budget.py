@@ -28,3 +28,17 @@ async def test_run_converts_asyncio_timeout_to_stage_timeout() -> None:
     with pytest.raises(StageTimeoutError) as caught:
         await budget.run("retrieval", lambda: asyncio.sleep(1), cap_seconds=0.01)
     assert caught.value.stage == "retrieval"
+
+
+@pytest.mark.asyncio
+async def test_run_preserves_provider_timeout_error() -> None:
+    budget = RequestBudget.start(1, 0.005)
+
+    async def provider_timeout():
+        raise TimeoutError("provider timeout body")
+
+    with pytest.raises(TimeoutError) as caught:
+        await budget.run("routing", provider_timeout, cap_seconds=0.5)
+
+    assert type(caught.value) is TimeoutError
+    assert str(caught.value) == "provider timeout body"

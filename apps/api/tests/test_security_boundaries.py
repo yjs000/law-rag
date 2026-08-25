@@ -193,10 +193,9 @@ def test_stage_timing_event_is_closed_and_carries_no_secrets(caplog) -> None:
 
 
 def test_request_stage_timing_event_fires_on_early_validation_failure(caplog) -> None:
-    # 0045: `_require_supported_as_of_date` fails before `_optional_user`, task
-    # registration, or any budgeted stage runs - this is the earliest possible early
-    # return in `/v1/questions`. The outer `finally` in the endpoint must still emit
-    # exactly one safe `stage="request"` event for it.
+    # 0045: `_require_supported_as_of_date` fails before any search stage runs. The
+    # outer `finally` in the endpoint must still emit exactly one safe `stage="request"`
+    # event for this early validation failure.
     secret = "test-openai-secret-that-must-never-be-logged"
     question = "개인 사건 질문 전문"
     with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
