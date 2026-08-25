@@ -19,6 +19,8 @@ The Task 3 documentation commits are recorded chronologically and by their actua
 - `6dd410d fix(tests): align API fixtures with single-stage routing` — final review fix: reusable
   successful `legal_search` router fixture plus explicit search-only fixtures for the two tests
   whose intended path requires that feature.
+- `46e7040 docs: finalize D-010 verification evidence` — corrected active-plan commands, E-10
+  supersession/checker evidence, and the first complete green verification report.
 
 The active-plan and this report are the follow-up evidence update for `6dd410d`; no “immediately
 after” ordering is implied for the earlier documentation commits.

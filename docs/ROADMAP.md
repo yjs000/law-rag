@@ -30,7 +30,7 @@
 
 - D-008은 독립 review 승인, PR #1 생성, GitHub Python/Web와 Vercel API/Web checks 통과로 완료됐다.
 - D-010의 Task 1~2 구현과 focused safety regression은 완료됐다. 단일 NVIDIA `QuestionRouter`, 정상 grounded sequence, `routing_unavailable` no-search AI fallback, 명명된 generation/validation stage와 `search_only_enabled=False` 불변조건을 유지한다.
-- Task 3 문서 정렬과 D-010 assertion은 완료됐지만, 전체 API 회귀에는 11개 legacy fallback 계약 실패가 남아 최종 완료 판정은 보류한다. 해당 테스트들은 router fake를 주입하지 않아 새 single-router 경계를 통과하지 못하며, 이 Task 3 범위에서는 코드·테스트 동작을 바꾸지 않는다.
+- Task 3 문서 정렬·fixture alignment·최종 로컬 검증은 완료됐다. API는 `639 passed, 3 skipped, 1 warning`, core는 `26 passed`, focused D-010은 `43 passed, 1 warning`이며 D-010 assertion과 Ruff도 통과했다. 전체 계획은 parent-level integration decision을 위해 Active로 유지한다. Repository docs checker의 32개 broken link은 기존 문서 부채로 별도 기록한다.
 - 로컬 검증은 NVIDIA provider·Docker·persistent service 없이 수행됐다. `NVIDIA_API_KEY`가 필요한 fixture 평가는 실행하지 않았다.
 - 다음 후보 D-002, D-004, D-005, D-009는 각각 Production credential·migration·정책 승인이 필요해 `Blocked`다.
 - 승인 전에는 Production DB, scheduler, 외부 provider를 변경하지 않는다.

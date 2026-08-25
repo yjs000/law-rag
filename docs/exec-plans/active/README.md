@@ -4,7 +4,7 @@
 
 - [0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — E-10 base 실행 완료, 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건(품질 원인 미진단)
 - [0055: V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — Task 1~11 구현·독립 리뷰 완료; Task 12~16은 사용자 지시로 미시작·보류(0014 실제 DB 적용과 generated schema 반영은 미검증 후속 항목)
-- [0057: 단일 단계 라우터와 라우터 불가 응답](0057-single-stage-router-and-failure-response.md) — Task 1~2 구현·focused 회귀·문서 정렬 완료; 전체 API 회귀 11개 legacy fallback 실패로 최종 판정 보류
+- [0057: 단일 단계 라우터와 라우터 불가 응답](0057-single-stage-router-and-failure-response.md) — Task 1~3 구현·문서 정렬·최종 로컬 검증 완료(API 639 passed/3 skipped/1 warning, core 26 passed, focused D-010 43 passed/1 warning); parent-level integration decision으로 Active 유지
 
 2026-08-18: 0053(V2 LlamaIndex 검색 파이프라인)은 Task 1~14와 전체 브랜치
 통합 리뷰까지 마치고 [completed/](../completed/README.md)로 이동했다.

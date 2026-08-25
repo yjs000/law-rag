@@ -227,7 +227,7 @@ git commit -m "fix(api): isolate unavailable routing from legal search"
 
 ### Task 3: Align documentation, lifecycle records, and final verification
 
-상태: 문서 정렬 완료 · 전체 회귀 gate 보류 (2026-08-25)
+상태: 문서 정렬·최종 로컬 검증 완료 · parent-level integration decision 대기 (2026-08-25)
 
 **Files:**
 - Modify: `docs/design-docs/index.md`
@@ -287,11 +287,12 @@ pre-existing broken-link inventory.
 
 Result: full Ruff, the docstring Ruff selection, the focused D-010 suite, and both complete local
 suites pass. The API suite reports `639 passed, 3 skipped, 1 warning` in 44.63s; the core suite
-reports `26 passed` in 0.26s. The warning is the existing Starlette/httpx deprecation. The 11
-failures from the earlier run were resolved by a reusable successful `legal_search` router fixture
-for normal AI/grounding tests, explicit search-only enablement for the historical Supabase storage
-flow, and the search-only fixture on the temporal readiness case. No live provider or persistent
-service was used.
+reports `26 passed` in 0.26s. The warning is the existing Starlette/httpx deprecation. The earlier
+11-case failure run was resolved by a reusable successful `legal_search` router fixture for normal
+AI/grounding tests, explicit search-only enablement for the historical Supabase storage flow, and
+the search-only fixture on the temporal readiness case. D-010 assertion and Ruff checks pass. The
+repository docs checker still reports 32 pre-existing broken links; this is separate documentation
+debt, not a D-010 regression gate. No live provider or persistent service was used.
 
 - [x] **Step 5: Commit documentation and verification evidence**
 
@@ -307,16 +308,18 @@ git commit -m "docs: record single-stage routing contract"
   run.
 - Task 2 implementation and review-fix commits: `bd70103`, `7c9707d`; focused safety regression
   verification was `38 passed, 2 warnings`, plus `3 passed, 1 warning` for request-budget tests.
-- Task 3 documentation commit: `f58c5d4 docs: record single-stage routing contract`.
-- Task 3 evidence commits: `ea5fc59 docs: record D-010 Task 3 verification evidence` and
-  `cf0a066 docs: add D-010 Task 3 report`.
-- Task 3 executable D-010 assertions: exit 0 (`d010 routing assertions passed`). Full Ruff: exit 0
-  (`All checks passed!`). Focused D-010 suite: `43 passed, 1 warning` in 3.99s (before the
-  fixture-alignment changes); the final focused rerun is recorded in the Task 3 report.
+- Task 3 commit sequence: `f58c5d4 docs: record single-stage routing contract`; `ea5fc59 docs:
+  record D-010 Task 3 verification evidence`; `cf0a066 docs: add D-010 Task 3 report`;
+  `6dd410d fix(tests): align API fixtures with single-stage routing`; `46e7040 docs: finalize
+  D-010 verification evidence`.
+- Task 3 executable D-010 assertions: exit 0 (`d010 routing assertions passed`). Full Ruff and
+  docstring Ruff: exit 0 (`All checks passed!`). Final focused D-010 suite: `43 passed, 1 warning`;
+  final API suite: `639 passed, 3 skipped, 1 warning`; final core suite: `26 passed`.
 - Complete local verification used no Docker, persistent service, database, or live provider.
   The NVIDIA-keyed fixture evaluator remains intentionally unrun.
 - Repository docs checker: exit 1 with 32 pre-existing broken-link reports. Both D-010 assertion
-  functions pass; unrelated documentation debt is not repaired in this task.
+  functions pass; unrelated documentation debt is not repaired in this task. The overall plan
+  remains Active only for parent-level integration decision, not because of the solved API failures.
 
 ## Plan Self-Review
 
