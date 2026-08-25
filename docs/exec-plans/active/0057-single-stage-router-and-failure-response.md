@@ -58,7 +58,7 @@
 - Consumes: a question string and the production NVIDIA router or a test fake.
 - Produces: `QuestionRouter.route(question: str) -> RouteJudgment`; `route_question(question: str, router: QuestionRouter) -> RouteDecision`; `RouteDecision(route, reason_code, confidence, missing_fields, explanation)` with no tier field.
 
-- [ ] **Step 1: Replace tier-specific unit tests with the failing single-router contract**
+- [x] **Step 1: Replace tier-specific unit tests with the failing single-router contract**
 
 ```python
 class FakeRouter:
@@ -80,13 +80,13 @@ async def test_route_question_converts_single_router_judgment() -> None:
 
 Delete tests for keyword matchers, `route_tier1`, cosine similarity, nearest examples, tier fields, and hint prompts. Add a test that the router output schema rejects `routing_unavailable`, because it is an application-created failure route rather than a provider judgment.
 
-- [ ] **Step 2: Run the focused test and confirm the old interface fails**
+- [x] **Step 2: Run the focused test and confirm the old interface fails**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_routing.py -q`
 
 Expected: FAIL because `QuestionRouter`, `route_question`, and the tier-free `RouteDecision` interface do not exist yet.
 
-- [ ] **Step 3: Implement the single-router domain and NVIDIA adapter**
+- [x] **Step 3: Implement the single-router domain and NVIDIA adapter**
 
 ```python
 QuestionRoute = Literal[
@@ -116,7 +116,7 @@ async def route_question(question: str, router: QuestionRouter) -> RouteDecision
 
 Keep `RouteJudgment.route` restricted to the four provider-resolvable routes. Rename `NvidiaNimRouteClassifier` to `NvidiaNimQuestionRouter`, rename `classify` to `route`, remove the hint parameter and all nearest-example prompt text, and use one direct prompt containing only the closed route definitions and question. Delete the tier1 rules, the mock adapter, the Kiwi dictionary builder, and the `kiwipiepy` dependency. Change the fixture evaluator to require `NVIDIA_API_KEY`, call `QuestionRouter.route` once per case, emit no tier metrics, and do not run it during this task.
 
-- [ ] **Step 4: Run focused router tests and static checks**
+- [x] **Step 4: Run focused router tests and static checks**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_routing.py tests/test_routing_pipeline.py -q`
 
@@ -126,7 +126,7 @@ Run: `uv run --project apps/api ruff check apps/api/app/domain/routing.py apps/a
 
 Expected: `All checks passed!`
 
-- [ ] **Step 5: Commit the router-boundary change**
+- [x] **Step 5: Commit the router-boundary change**
 
 ```bash
 git add apps/api/app/domain/routing.py apps/api/app/adapters/nvidia_nim_route_classifier.py apps/api/app/adapters/mock_route_classifier.py apps/api/scripts/build_tier1_term_dictionary.py apps/api/scripts/evaluate_routing_fixture.py apps/api/pyproject.toml apps/api/tests/test_routing.py apps/api/tests/test_routing_pipeline.py uv.lock
