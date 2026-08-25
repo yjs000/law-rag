@@ -1,3 +1,11 @@
+> 작업 ID: `E-001`
+> 상태: `Todo`
+> 유형: `Experiment`
+> 보조 라벨: `Evaluation`
+> 선행 조건: 사용자가 최대 12회 호출 상한과 판정표 실행을 명시적으로 승인해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md` L97-L100 — 호출 상한·판정표 동의와 실행 승인 조건
+
 # 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)
 
 상태: `E-10 base 실행 완료(2026-08-08) — 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건

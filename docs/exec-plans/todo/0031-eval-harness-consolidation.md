@@ -1,3 +1,11 @@
+> 작업 ID: `E-003`
+> 상태: `Todo`
+> 유형: `Experiment`
+> 보조 라벨: `Evaluation`
+> 선행 조건: 사용자가 착수를 명시하고 대량 판정·정정 반복이 다시 문제라는 근거를 확인해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0031-eval-harness-consolidation.md` L60-L64 — 착수 승인과 재작업 비용 재발에 따른 승격 조건
+
 # 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI
 
 상태: `제안됨 · 항목 5(agent context diet) 반영 완료(2026-08-08) · 나머지(rubric·conflict

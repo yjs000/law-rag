@@ -1,3 +1,11 @@
+> 작업 ID: `F-004`
+> 상태: `Todo`
+> 유형: `Feature`
+> 보조 라벨: `Reliability`
+> 선행 조건: provider/model 프로필·공개 선택 범위를 확정하고 저장 데이터·공개 API 호환 마이그레이션 설계를 승인해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0044-provider-neutral-answer-model-selection.md` L48-L51 — provider/model 범위와 호환 마이그레이션 승인 조건
+
 # 0044: 공급자 중립 답변 모델 선택 계약
 
 상태: `제안됨 (2026-08-09)`

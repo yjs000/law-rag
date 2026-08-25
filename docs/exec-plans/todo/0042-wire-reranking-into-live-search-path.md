@@ -1,3 +1,11 @@
+> 작업 ID: `F-003`
+> 상태: `Todo`
+> 유형: `Feature`
+> 보조 라벨: `Evaluation`
+> 선행 조건: 사용자가 착수를 명시하고 source_kind 신호를 쓰면 0041 완료를 확인해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0042-wire-reranking-into-live-search-path.md` L55-L59 — 착수 승인과 0041 선행 완료 조건
+
 # 0042: 재순위를 실제 검색 경로에 연결
 
 상태: `제안됨 · 미착수`

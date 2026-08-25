@@ -1,3 +1,11 @@
+> 작업 ID: `E-004`
+> 상태: `Todo`
+> 유형: `Experiment`
+> 보조 라벨: `Performance`, `Evaluation`
+> 선행 조건: 단일 QuestionRouter 오분류 또는 D-10 수준 인증 표본이 실제로 누적되거나 사용자가 재검토를 요청해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md` L59-L65 — 트래픽·표본·사용자 요청에 따른 승격 조건
+
 # 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음
 
 상태: `역사적·superseded — D-010(0057) 단일 QuestionRouter로 대체됨; 실 트래픽/tracking 데이터 축적 후 정책 calibration만 재검토`

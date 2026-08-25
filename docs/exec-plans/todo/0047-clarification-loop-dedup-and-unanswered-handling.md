@@ -1,3 +1,11 @@
+> 작업 ID: `B-001`
+> 상태: `Todo`
+> 유형: `Bug`
+> 보조 라벨: `Reliability`, `UX`
+> 선행 조건: 답변하지 않음 판정 기준과 재질문 상한 도달 시 문구·후속 액션을 사용자가 승인해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md` L61-L66 — 미답변 판정과 상한 도달 동작의 승인 조건
+
 # 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리
 
 상태: `제안됨 (2026-08-10), 2026-08-18 갱신 — v2 아키텍처(LangGraph 기반 재작성)로 전환하며

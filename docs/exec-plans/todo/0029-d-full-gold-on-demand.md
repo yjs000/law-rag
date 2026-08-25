@@ -1,3 +1,11 @@
+> 작업 ID: `E-002`
+> 상태: `Todo`
+> 유형: `Experiment`
+> 보조 라벨: `Evaluation`
+> 선행 조건: D-full 일반화·release gate 필요성을 확인하고 대상 문항·인력·외부 호출 비용 상한을 다시 확정해야 한다.
+> 참고 범위:
+> - `docs/exec-plans/todo/0029-d-full-gold-on-demand.md` L35-L37 — active 승격의 필요성·범위·비용 재확정 조건
+
 # 0029: 필요 시 D-full Gold 제작
 
 상태: `보류 · 미착수`
