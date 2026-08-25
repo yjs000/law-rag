@@ -140,7 +140,7 @@ _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE = (
 def clarification_resubmission_summary(
     question: str, missing_fields: tuple[str, ...] | list[str]
 ) -> str:
-    """0028 "비용 최소화 결정"의 재제출 템플릿. route_blocked_answer(사전 라우팅)와
+    """0028 "비용 최소화 결정"의 재제출 템플릿. route_guidance_fallback(사전 라우팅)와
     post_generation_clarification_answer(생성 후 발견된 부족)가 같은 문구를 쓴다 - 사용자가
     보는 안내가 어느 단계에서 왔든 일관되게 한다.
     """
@@ -180,14 +180,14 @@ def post_generation_clarification_answer(
     )
 
 
-def route_blocked_answer(
+def route_guidance_fallback(
     request: QuestionRequest,
     route: str,
     *,
     missing_fields: tuple[str, ...] = (),
     explanation: str | None = None,
 ) -> QuestionResponse:
-    """0028 M4.5: terminal response for a route that never reaches search.
+    """Build the deterministic AI-mode fallback for a route without evidence.
 
     realtime_required and external_document_required end here with a deterministic
     block message (0 embedding/search/LLM calls - see 0028 "받지 않는 두 경로").
@@ -195,28 +195,33 @@ def route_blocked_answer(
     최소화 결정"): the caller resends the original question plus the missing facts in one
     message; the server never auto-merges turns.
 
-    2026-08-08: when tier 2 (LLM) made the decision, it already produced a natural-
-    language `explanation` of why - reused here (no extra LLM call) as a question-
-    specific supplement to the canned message, not a replacement for it. The canned
-    message stays the authoritative, reviewed structural content; the LLM text is purely
-    supplementary color, clearly labeled so it's never mistaken for a legal claim. tier 1
-    (deterministic keyword match) has no such text, so `explanation` is None there.
+    The fallback never presents a search-only response: route guidance is an AI-mode
+    response even when the optional guidance generation cannot run.
     """
-    if route == "realtime_required":
+    if route == "routing_unavailable":
+        summary = (
+            "질문 분류를 일시적으로 처리할 수 없습니다. 법령 검색을 시작하지 않았습니다. "
+            "잠시 후 다시 시도해 주세요."
+        )
+        action = "unanswerable"
+    elif route == "realtime_required":
         summary = _REALTIME_BLOCKED_MESSAGE
         if explanation:
             summary += f"\n\n(참고: {explanation})"
+        action = "unanswerable"
     elif route == "external_document_required":
         summary = _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE
         if explanation:
             summary += f"\n\n(참고: {explanation})"
+        action = "unanswerable"
     elif route == "clarification_required":
         summary = clarification_resubmission_summary(request.question, missing_fields)
+        action = "clarification_required"
     else:
-        raise ValueError(f"route_blocked_answer does not handle route={route!r}")
+        raise ValueError(f"route_guidance_fallback does not handle route={route!r}")
     return QuestionResponse(
         request_id=str(request.client_request_id),
-        mode="search_only",
+        mode="ai",
         summary=summary,
         scope=f"라우팅: {route} (검색 미실행)",
         sections=[],
@@ -226,4 +231,5 @@ def route_blocked_answer(
         result_status="no_results",
         requested_answer_mode=request.answer_mode,
         route=route,  # type: ignore[arg-type]
+        action=action,
     )

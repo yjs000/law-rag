@@ -171,6 +171,7 @@ def test_public_retrieval_routes_reject_dynamic_out_of_range_dates_before_work(
 def test_public_retrieval_routes_fail_closed_when_temporal_corpus_is_unready(
     monkeypatch: pytest.MonkeyPatch,
     route: str,
+    search_only_enabled: None,
 ) -> None:
     repository = _BoundaryOnlyRepository(
         CorpusTemporalState(

@@ -1,10 +1,20 @@
-# terra 모드에서 search_only 폴백 제거 (always-generate)
+# [역사 문서] terra 모드에서 search_only 폴백 제거 (always-generate)
 
-상태: 승인
+상태: 역사적·superseded — D-010(0057)으로 대체됨
 작성일: 2026-08-10
-최종 갱신: 2026-08-10
+최종 갱신: 2026-08-25
 
-관련 문서: [답변 근거 검증](answer-grounding-validation.md), [질문 사전 라우팅](pre-retrieval-question-routing.md), [AI 차별화](ai-differentiation.md)
+후속 현재 계약: [D-010 단일 단계 라우터](single-stage-router-and-failure-response.md),
+[D-010 실행 계획](../exec-plans/active/0057-single-stage-router-and-failure-response.md)
+
+> 이 문서는 2026-08-10 당시의 설계·실행 기록을 보존한다. 아래의 tier1/tier2,
+> `route_blocked_answer`, `mode="search_only"` 및 호출량 서술은 현재 런타임 계약이 아니다.
+> 현재 라우팅은 단일 NVIDIA `QuestionRouter`를 사용하며, 라우터 실패는 검색 없는
+> `routing_unavailable` AI 응답으로 끝난다. 현재 계약을 수정할 때는 위 D-010 문서를 기준으로
+> 한다.
+
+관련 역사 문서: [답변 근거 검증](answer-grounding-validation.md),
+[질문 사전 라우팅](pre-retrieval-question-routing.md), [AI 차별화](ai-differentiation.md)
 
 ## 배경
 

@@ -1,7 +1,7 @@
 # 에너지 법령 RAG 아키텍처
 
 상태: `MVP 구현 중`
-최종 갱신: 2026-08-09
+최종 갱신: 2026-08-25
 
 ## 목적
 
@@ -18,7 +18,7 @@
 | 배포와 데이터 흐름 | collector(수집)·Supabase(저장)·Vercel(API/Web)이 어떻게 나뉘어 도는지 | [기술 스택 ADR](docs/design-docs/technology-stack.md) · [Vercel·Supabase 운영 전환](docs/design-docs/vercel-supabase-deployment.md) |
 | 수집 계약 | 법제처 Open API에서 법령 원문을 어떻게 가져오는지 | [Open API 수집 계약](docs/design-docs/open-law-api-ingestion.md) |
 | 저장과 검색 | 조문을 어떻게 저장하고 질문에 맞는 근거를 어떻게 찾는지(벡터 검색 우선) | [RAG 파이프라인](docs/design-docs/rag-pipeline.md) · [검색 인덱스·임베딩 계보](docs/design-docs/retrieval-index-storage.md) · [근거 우선 검색 품질](docs/design-docs/evidence-first-retrieval-quality.md) · [시간 효력 모델](docs/design-docs/temporal-validity.md) |
-| 질문 사전 라우팅 | 검색 전에 "이 질문이 법령만으로 답이 되는가"부터 거르는 단계 | [질문 사전 라우팅 설계](docs/design-docs/pre-retrieval-question-routing.md) · [0028 실행 계획](docs/exec-plans/active/0028-pre-retrieval-question-routing.md) |
+| 질문 사전 라우팅 | 단일 NVIDIA 질문 라우터와 검색을 시작하지 않는 `routing_unavailable` 안전 경로 | [단일 단계 라우터와 라우터 불가 응답](docs/design-docs/single-stage-router-and-failure-response.md) · [0028 역사 기록](docs/design-docs/pre-retrieval-question-routing.md) · [0057 실행 계획](docs/exec-plans/active/0057-single-stage-router-and-failure-response.md) |
 | 답변 안전 게이트 | AI가 근거 없는 주장을 하지 못하게 막는 검증 절차 | [AI 차별화](docs/design-docs/ai-differentiation.md) · [답변 근거 검증](docs/design-docs/answer-grounding-validation.md) · [0032 실행 계획](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) |
 | 검색 품질 검증(실험 D) | 검색이 실제로 맞는 조문을 찾는지 사람이 표본으로 확인하는 절차 | [평가 전략](docs/design-docs/evaluation-strategy.md) · [D-10 수동 진단](docs/design-docs/experiment-d-10-manual-review.md) · [D-10 M2/M3 calibration](docs/design-docs/experiment-d-10-m3-calibration.md) · [D-10 전수 qrel](docs/design-docs/experiment-d-10-gold-adjudication.md) · [D-full 1,000문항](docs/design-docs/experiment-d-1000-evaluation.md) |
 | 인증과 계정 | 로그인·세션·계정 삭제가 어떻게 연결되는지 | [Google OAuth·Supabase Auth 연결](docs/design-docs/google-oauth-supabase-flow.md) |
@@ -97,17 +97,44 @@ MVP는 정확 명칭 허용 목록 9개만 수집한다. 법령은 `eflaw`, 행�
 `embeddings.jsonl`은 점검 반영 전 준비·운반 계층이며 runtime 검색 fallback이 아니다. 새 로컬 벡터는
 transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤에만 사용자 검색에 노출된다.
 
-## 질문 사전 라우팅 (0028)
+## 질문 사전 라우팅 (D-010)
 
-`terra`(AI) 답변 요청은 embedding·검색보다 먼저 2단계 라우터를 거친다. 목적은 "같은 주제인가"(임베딩이 재는 것)와 "지금 근거만으로 답할 수 있는가"(임베딩이 못 재는 화용론적 판단)를 분리하는 것이다. 자세한 문제 탐색·확정 근거는 [0028](docs/exec-plans/active/0028-pre-retrieval-question-routing.md)을 참고한다.
+`terra`(AI) 요청은 하나의 typed NVIDIA `QuestionRouter`가 질문을 판정한다. provider가
+반환할 수 있는 route는 `legal_search`, `clarification_required`,
+`realtime_required`, `external_document_required`이며, 현재 runtime에는 구형 다단계
+라우터, mock classifier, Kiwi 규칙, nearest-example embedding hint가 없다. 0028의 문제
+정의와 설계 실험은 [대체된 역사 기록](docs/design-docs/pre-retrieval-question-routing.md)에,
+현재 계약의 세부 결정은 [단일 단계 라우터 설계](docs/design-docs/single-stage-router-and-failure-response.md)에
+있다.
 
-- **tier1** (`app/domain/routing.py`의 `route_tier1`): 비용 0, 결정적 Kiwi 형태소 분석 기반 키워드/정규식 규칙. 승인된 질문은행 1,000문항 전수 분석으로 만든 사전([tier1-term-dictionary-analysis-v1.json](apps/api/evaluation/tier1-term-dictionary-analysis-v1.json))을 쓴다. "정말 답할 수 없는 것만 타이트하게 거른다"는 원칙으로, 위양성(답할 수 있는데 차단)을 줄이는 쪽으로 2026-08-08에 조정했다.
-- **tier2** (`route_tier2`, `app/adapters/nvidia_nim_route_classifier.py`): tier1이 못 잡으면 NVIDIA NIM LLM에게 라우팅 자체를 판단하게 한다. 원래는 임베딩 최근접 방식이었으나, "같은 주제 유사도"와 "이 근거로 답이 되는가"가 다른 질문이라는 게 드러나 2026-08-08에 LLM judgment로 교체했다. tier2 실패(timeout·오류)는 요청을 막지 않고 `legal_search`로 안전하게 넘어간다.
-- **tier3**: 미확정, 아직 미사용.
+성공한 `legal_search`만 다음 grounded sequence를 실행한다.
 
-판정은 4가지 route로 나온다: `legal_search`(검색·생성 정상 진행), `clarification_required`(설비용량 등 사용자 사실이 빠짐 — 텍스트로 재질문, 후속 대화 자동 수집 없음), `realtime_required`/`external_document_required`(법령 검색으로 원천적으로 답할 수 없음 — 결정적 차단 메시지, embedding·검색·LLM 호출 0회). `clarification_required`가 아닌 두 차단 route는 tier2가 판단했을 경우 LLM이 직접 생성한 `explanation`(왜 이 근거로는 안 되는지)을 그대로 사용자 안내 문구에 재사용한다 — 별도 LLM 호출을 추가하지 않고 이미 계산된 판단 근거를 노출하는 방식이다.
+1. `evidence_retrieval` — direct-path는 query embedding을 생략할 수 있고, 일반 질의는
+   embedding 후 법령 근거를 조회한다.
+2. `evidence_source_validation` — 국가법령정보 공식 HTTPS URL filter. 이 단계는 기존
+   filter이며 provider 호출이나 별도 timing event를 추가하지 않는다.
+3. `answer_generation` — 검증된 검색 근거만 모델에 전달해 초안을 만든다.
+4. `answer_validation` — generation 뒤 draft structure/action와 section·checklist의
+   citation ID가 제공된 근거를 가리키는지 확인한다. 이 단계는 evidence-source
+   validation과 다른 검증 경계다.
 
-라우팅 tier2가 "확인/대조" 같은 표현을 과대 해석해 `external_document_required`로 잘못 차단한 사례가 실측에서 발견됐다(TD-024). 트래픽이 쌓이면 [0033](docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md)에서 재검토한다.
+정상적인 안내 route도 명시된 generation stage를 사용한다. `clarification_required`는
+`clarification_generation`, `realtime_required`와 `external_document_required`는
+`required_source_guidance_generation`을 사용한다.
+
+라우터 timeout이나 provider error는 `routing_unavailable`과 `routing_timeout` 또는
+`routing_provider_error` 중 하나의 안전한 reason code로 종료한다. 이 경로는 corpus
+temporal query, embedding, retrieval, `evidence_source_validation`, 정상
+`answer_generation`, 정상 `answer_validation`을 실행하지 않으며, raw exception·provider
+body·질문 원문을 response나 diagnostics에 남기지 않는다. `blocked_answer_generation` 뒤
+`blocked_response_validation`만 실행하고, 생성 초안이 malformed이면
+`mode="ai"`, `action="unanswerable"`, 빈 sections/checklist/citations의 결정적
+fallback을 반환한다. `blocked_response_validation`은 정상 `answer_validation` stage가
+아니다.
+
+`search_only_enabled`는 계속 `False`다. 어떤 route도 이 설정을 변경하거나
+`mode="search_only"`를 반환하지 않는다. 라우터 장애는 검색으로 진행하는
+`legal_search`가 아니라 검색을 시작하지 않는 안전 경로로 관측·응답된다.
 
 ## 답변 안전 게이트
 
@@ -117,7 +144,7 @@ transaction B에서 DB에 복사되고 전체 검증과 commit을 통과한 뒤�
 2. 위 사전 라우팅을 통과([legal_search]인 경우만)하면 direct-path 또는 dense-only 검색으로 근거 후보를 구성하고, dense가 0건일 때만 독립 keyword fallback을 사용한다.
 3. provider adapter의 JSON schema 출력으로 답변·체크리스트·인용 ID와 함께, 모델이 스스로 판단한 완결성 신호 `action`(`fully_answerable`/`partially_answerable`/`clarification_required`/`unanswerable`)과 `missing_information`을 받는다. 검증기는 이 명시적 신호로 요구 수준을 정하며 summary 텍스트에서 확신도를 추측하지 않는다.
 4. 모든 실질 주장과 체크리스트에 존재하는 인용 ID가 있는지 검사한다. `action=unanswerable`이면 sections·checklist가 비어도 되지만 summary·limitations의 무근거 규범 주장(다른 법령·기관을 단정)은 계속 차단한다. `action=clarification_required`면 (사전 라우팅이 아니라 실제 검색·생성을 해본 뒤에야 드러난 부족함이므로) `missing_information`만 있으면 통과하고, 같은 재질문 응답 형식으로 사용자에게 반환한다.
-5. 로그인 계정 일일 quota 로직은 `account_quota_enabled`로 토글하며 현재 기본값은 `False`라 요청을 막지 않는다. 토글을 켰을 때만 AI 10회/일·검색 100회/일 한도를 적용한다. NVIDIA 생성 실패, provider가 반환한 결제·quota 402/429, 권한 오류, AI 비활성 시에는 다른 생성 모델로 자동 전환하지 않고 검색 전용 응답으로 전환한다.
+5. 로그인 계정 일일 quota 로직은 `account_quota_enabled`로 토글하며 현재 기본값은 `False`라 요청을 막지 않는다. 토글을 켰을 때만 AI 10회/일·검색 100회/일 한도를 적용한다. NVIDIA 생성 실패, provider가 반환한 결제·quota 402/429, 권한 오류, AI 비활성 시에는 다른 생성 모델로 자동 전환하지 않으며, 기본 `search_only_enabled=False`에서는 fail-closed한다. 명시적으로 검색 전용 feature를 켠 요청만 검색 전용 응답을 사용할 수 있다.
 
 현재 인용 게이트는 인용 ID 존재와 원문 반환을 보장한다. 주장-원문 의미 일치 자동평가와 법령 관계 확장은 다음 품질 게이트다. 검증 로직(`app/adapters/openai_answerer.py`의 `validate_draft`)은 근거 원문에서 조문 경로(`hit.path`)를 빠뜨려 정확한 조문 인용을 무근거 숫자로 오판하던 버그와, 한국어 겸양 표현("판단할 수 없다")이 법적 금지 주장과 표면 문법이 같아 오탐되던 버그를 2026-08-08에 고쳤다 — 상세 진단은 [0032](docs/exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)를 참고한다. 검증기 코드를 고칠 때마다 재확인을 위해 유료·rate-limited API를 다시 호출하는 낭비를 없애기 위해, 진단 스크립트(`scripts/diagnose_grounding_failures.py`)가 검색 근거(`SearchHit`) 원문을 통째로 저장하고, `scripts/replay_grounding_validation.py`가 그 저장분으로 `validate_draft()`만 새 API 호출 없이 재실행한다.
 
@@ -218,7 +245,7 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 | 2026-08-04 | 일 1회 로컬 bundle을 준비하고 변경이 있을 때만 `gate=false → 65초 drain → DIRECT_URL 단일 반영 transaction → gate=true`로 게시 | 드문 corpus 갱신을 위해 모든 운영 reader에 shared lock이나 고가용성 세대 전환을 추가하지 않고, 짧은 점검 중단으로 비용과 복잡도를 낮춤. writer lock과 실험 D lock은 유지 |
 | 2026-08-04 | 로컬 벡터는 준비·운반에만 사용하고 웹/API 검색은 DB에 검증·commit된 활성 벡터만 사용 | 미확정 파일과 사용자 검색 경계를 분리하고, 점검 transaction이 성공한 시점에만 새 벡터로 전환 |
 | 2026-08-07 | 실험 D의 현재 필수 범위를 사용자 확인 D-10 10문항 frozen calibration으로 축소하고 D-full Gold는 필요 시 재개 | 현재 의사결정 비용을 줄이되 10문항을 Gold·held-out·일반 release 근거로 과장하지 않고 기존 1,000문항 자산을 보존 |
-| 2026-08-08 | 질문 사전 라우팅을 tier1(Kiwi 결정적 키워드)+tier2(LLM judgment) 2단계로 확정하고 embedding·검색보다 먼저 실행([0028](docs/exec-plans/active/0028-pre-retrieval-question-routing.md)) | 임베딩 유사도는 "같은 주제인가"만 재고 "이 근거로 답이 되는가"라는 화용론적 판단은 못 함 - 공인 문헌(Self-RAG, Adaptive-RAG, FLARE 등) 조사 후 판단 자체를 LLM에 맡기기로 결정 |
+| 2026-08-08 | [대체됨] 질문 사전 라우팅을 tier1(Kiwi 결정적 키워드)+tier2(LLM judgment) 2단계로 확정하고 embedding·검색보다 먼저 실행([0028 역사 기록](docs/exec-plans/completed/0028-pre-retrieval-question-routing.md)) | 임베딩 유사도는 "같은 주제인가"만 재고 "이 근거로 답이 되는가"라는 화용론적 판단은 못 함 - 공인 문헌(Self-RAG, Adaptive-RAG, FLARE 등) 조사 후 판단 자체를 LLM에 맡기기로 결정 |
 | 2026-08-08 | tier2를 임베딩 최근접에서 NVIDIA NIM LLM judgment(`route_tier2`)로 교체 | threshold gate형 임베딩 유사도가 화용론적 충분성 판단에 구조적으로 부적합함을 실측(0201 오분류 사례)으로 확인 |
 | 2026-08-08 | tier1 사전을 승인된 질문은행 1,000문항 전수 분석으로 재구축하고, 위양성(답할 수 있는 질문 차단)을 줄이는 방향으로 타이트닝 | "정말 답할 수 없는 것만 걸러낸다"는 사용자 원칙 - 과차단이 과소차단보다 사용자 피해가 큼 |
 | 2026-08-08 | `realtime_required`/`external_document_required` 차단 응답에 tier2 LLM이 이미 생성한 `explanation`을 재사용해 노출 | 별도 LLM 호출 없이 "왜 이 근거로 안 되는지"를 사용자에게 그대로 안내 - 기존 계산 결과를 버리지 않음 |
@@ -231,3 +258,4 @@ Direct Precision@5와 MRR@10을 계산하고 Precision@5는 grade 1 보조 문�
 | 2026-08-09 | `Citation.source_kind`를 API 응답까지 전달 | DB·검색 결과에 있던 출처 종류를 제목 문자열 추측 없이 프런트가 사용하게 함 |
 | 2026-08-09 | `/v1/questions` 조정된 timeout 예산을 `52 < 55 < 60` 사슬로 고정한다: Vercel 함수 60초는 애플리케이션이 스스로 거는 timeout이 아니라 플랫폼이 강제로 연결을 끊는 kill switch로만 취급하고, API 서버측 전체 예산 52초를 하나의 요청 안에서 routing·embedding·retrieval·generation stage가 나눠 쓰며, provider 재시도(`ANSWER_GENERATION_MAX_ATTEMPTS`)는 생성 40초 slice 안에 갇혀 별도 예산을 받지 않는다. Web은 각 서버 요청을 55초로 끊어 새 `client_request_id`와 새 서버측 예산으로 처음부터 다시 시작하고, "3회"는 최초 시도를 포함한 총 Web 시도 횟수이지 최초 1회 + 추가 재시도 3회가 아니다. 생성 stage가 예산을 다 써도 이미 확보한 근거를 지우지 않고 검증된 `generation_error` 검색 전용 폴백으로 끝낸다 | 각 경계를 명시적 숫자·재시도 계약으로 고정해, API가 아직 안전한 검색 전용 폴백을 만들 수 있는데도 Vercel이 먼저 연결을 끊어 사용자가 원인 불명 오류만 보는 상황과, 뒤늦은 생성 stage timeout이 이미 검증된 근거를 지워버리는 상황을 둘 다 방지 |
 | 2026-08-18 | v1 운영·실험 D의 HNSW 금지는 유지하되, 별도 v2 LlamaIndex 테이블에 한해 사용자 승인된 운영자 `HnswIndexManager`를 허용 | v1/평가의 exhaustive exact 기준선을 보존하면서 v2의 독립 운영 실험을 ingestion·API 자동 변경 없이 명시적으로 통제하기 위함 |
+| 2026-08-25 | D-010에서 단일 NVIDIA `QuestionRouter`와 정상 grounded sequence(`evidence_retrieval` → `evidence_source_validation` → `answer_generation` → `answer_validation`)를 확정하고, 라우터 장애는 `routing_unavailable` no-search AI 응답으로 분리 | provider 장애를 `legal_search`로 위장하지 않고 검색·근거 검증·정상 답변 생성을 시작하지 않게 하며, 안전한 reason code와 빈 `unanswerable` fallback을 관측 가능하게 유지 |

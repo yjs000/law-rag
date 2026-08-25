@@ -1,5 +1,11 @@
 {
   "schema_version": "1",
+  "metadata": {
+    "status": "historical_superseded",
+    "historical_as_of": "2026-08-08",
+    "superseded_by": "D-010 / 0057 single-stage NVIDIA QuestionRouter",
+    "note": "보존된 tier1/tier2·mock fixture이다. 현재 라우팅 계약이나 live evaluation 결과로 사용하지 않는다."
+  },
   "purpose": "0028 M4.5 완료 조건의 '고정 평가 fixture' - 오분류율/불필요 검색률/tier별 호출 비율을 측정한다.",
   "provenance": "cases 1-10 = D-10 (experiment-d-10-questions.json)의 gold route(0028 계획 문서 4단계 기록). cases 11-14 = 2026-08-08 사용자 승인 하에 추가한 경계 사례 - 알려진 tier1/tier2 한계를 의도적으로 드러내기 위해 만들었다.",
   "caveat": "case 11-14의 tier 2 예측은 실제 LLM 판단이 아니라 app/adapters/mock_route_classifier.py(NVIDIA API key 미배선)로 낸 것이다. 이 fixture로 계산한 misclassification_rate와 tier2_resolution_rate는 잠정치이며, 실제 API key가 붙으면 다시 계산해야 한다.",

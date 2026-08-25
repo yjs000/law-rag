@@ -26,8 +26,9 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
 
 import app.main as main_module  # noqa: E402
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer  # noqa: E402
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter  # noqa: E402
 from app.adapters.openai_answerer import build_messages, build_messages_v2  # noqa: E402
-from app.domain.routing import route_tier1, route_tier2  # noqa: E402
+from app.domain.routing import route_question  # noqa: E402
 from app.domain.schemas import QuestionRequest  # noqa: E402
 
 FIXTURE_PATH = _API_ROOT / "evaluation" / "route-fixture-v1.json"
@@ -70,14 +71,22 @@ async def _with_retry(coro_fn):
     raise last_exc  # type: ignore[misc]
 
 
-async def run_one(case: dict, classifier, embedder) -> dict:
+def _router() -> NvidiaNimQuestionRouter:
+    settings = main_module.settings
+    return NvidiaNimQuestionRouter(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_route_classifier_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
+    )
+
+
+async def run_one(case: dict, router, embedder) -> dict:
     question = case["question"]
     request = QuestionRequest(question=question)
     record: dict[str, object] = {"id": case["id"], "question": question}
 
-    decision = route_tier1(question)
-    if decision is None:
-        decision = await _with_retry(lambda: route_tier2(question, classifier))
+    decision = await _with_retry(lambda: route_question(question, router))
     record["route"] = decision.route
     if decision.route != "legal_search":
         record["generation_attempted"] = False
@@ -129,14 +138,14 @@ async def run_one(case: dict, classifier, embedder) -> dict:
 
 async def main() -> None:
     cases = load_cases()
-    classifier = main_module._route_classifier()
+    router = _router()
     embedder = main_module._embedder()
 
     results = []
     for case in cases:
         print(f"running {case['id']}...")
         try:
-            results.append(await run_one(case, classifier, embedder))
+            results.append(await run_one(case, router, embedder))
         except Exception as exc:  # noqa: BLE001 - keep partial results on hard failure
             print(f"  {case['id']} failed permanently: {exc}", flush=True)
             results.append({"id": case["id"], "question": case["question"], "error": str(exc)})

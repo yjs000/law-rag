@@ -16,7 +16,9 @@ from app.domain.schemas import (
 )
 from app.domain.search_queries import SearchTrace
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
+pytestmark = pytest.mark.usefixtures(
+    "ready_corpus_temporal_state", "search_only_enabled", "legal_search_router"
+)
 
 
 def _with_trace(search):

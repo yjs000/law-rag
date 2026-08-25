@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.domain.routing import QuestionRoute, RouteDecision, RouterTier
+from app.domain.routing import QuestionRoute, RouteDecision, RoutingReasonCode
 from app.domain.schemas import AiFallbackReason, AnswerMode
 
 logger = logging.getLogger("law_rag.question_outcome")
@@ -14,11 +14,19 @@ route_logger = logging.getLogger("law_rag.route_outcome")
 stage_timing_logger = logging.getLogger("law_rag.question_stage_timing")
 
 QuestionStageTimingStage = Literal[
-    "routing", "embedding", "retrieval", "generation", "blocked_route_generation", "request"
+    "routing",
+    "embedding",
+    "retrieval",
+    "answer_generation",
+    "answer_validation",
+    "clarification_generation",
+    "required_source_guidance_generation",
+    "blocked_answer_generation",
+    "request",
 ]
 QuestionStageTimingOutcome = Literal["succeeded", "failed", "timed_out", "degraded"]
 _served_by_mode: Counter[str] = Counter()
-_route_by_route_tier: Counter[tuple[str, int]] = Counter()
+_route_by_route: Counter[str] = Counter()
 _route_by_reason: Counter[str] = Counter()
 _clarification_missing_fields: Counter[str] = Counter()
 _fallback_by_reason: Counter[str] = Counter()
@@ -69,8 +77,7 @@ def fallback_reason_metrics_snapshot() -> dict[str, int]:
 class RouteOutcomeEvent(BaseModel):
     request_id: str
     route: QuestionRoute
-    tier: RouterTier
-    reason_code: str
+    reason_code: RoutingReasonCode
     confidence: float
     missing_field_categories: tuple[str, ...] = ()
 
@@ -85,13 +92,12 @@ def emit_route_outcome(request_id: str, decision: RouteDecision) -> None:
     event = RouteOutcomeEvent(
         request_id=request_id,
         route=decision.route,
-        tier=decision.tier,
         reason_code=decision.reason_code,
         confidence=decision.confidence,
         missing_field_categories=decision.missing_fields,
     )
     with _metrics_lock:
-        _route_by_route_tier[(decision.route, decision.tier)] += 1
+        _route_by_route[decision.route] += 1
         _route_by_reason[decision.reason_code] += 1
         for field in decision.missing_fields:
             _clarification_missing_fields[field] += 1
@@ -99,20 +105,17 @@ def emit_route_outcome(request_id: str, decision: RouteDecision) -> None:
 
 
 def route_metrics_snapshot() -> dict[str, object]:
-    """route/tier/reason_code/missing-field 누계. 질문 원문은 절대 포함하지 않는다."""
+    """route/reason_code/missing-field 누계. 질문 원문은 절대 포함하지 않는다."""
     with _metrics_lock:
         return {
-            "by_route_and_tier": {
-                f"{route}:tier{tier}": count
-                for (route, tier), count in _route_by_route_tier.items()
-            },
+            "by_route": dict(_route_by_route),
             "by_reason_code": dict(_route_by_reason),
             "clarification_missing_field_categories": dict(_clarification_missing_fields),
         }
 
 
 class QuestionStageTimingEvent(BaseModel):
-    """0045: routing/embedding/retrieval/generation/request 각 stage의 예산 소비를
+    """0045: routing/embedding/retrieval/named-generation/request 각 stage의 예산 소비를
     구조화 이벤트로 남긴다. 필드는 닫힌 enum과 정수 밀리초뿐이다 - 질문 원문, 근거 내용,
     문서 제목, 예외 메시지, 사용자 식별자는 이 이벤트로 절대 전달할 수 없다(모델
     검증기가 임의 문자열을 거부한다).

@@ -18,7 +18,7 @@
 | 수집기 | Python 3.14, HTTPX, Pydantic Settings, SQLAlchemy 2 asyncio, asyncpg | 국가법령정보 공동활용 Open API 원문 수집·정규화·버전 반영 | 현재 사용 |
 | 영속 데이터 | Supabase PostgreSQL, Supabase private Storage | 법령 메타데이터·조문·계보·질문 이력과 원문 보관 | 운영 아키텍처 |
 | 검색 | pgvector, PGroonga | 기준일 유효 조문 dense 검색과 dense 0건/미준비 시 키워드 fallback | v1 현재 구현 |
-| 언어 처리 | Kiwi (`kiwipiepy`) | 검색 전 tier1 결정적 키워드·정규식 라우팅 | v1 현재 구현 |
+| 언어 처리 | 애플리케이션 도메인 정규화·PGroonga | 검색 질의 정규화와 키워드 보조 검색 | v1 현재 구현 |
 | 생성·임베딩 | NVIDIA NIM, `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/nemotron-3-embed-1b` | 근거 기반 답변/라우팅 판단과 임베딩 생성 | 현재 기본 provider |
 | 인증 | Supabase Auth, Google OAuth/OIDC | 운영 Google 로그인과 API 사용자 검증 | 운영 계약; 개발에서는 목업 가능 |
 | 배포·스케줄링 | Vercel, Windows 작업 스케줄러 | Web·stateless FastAPI 배포, 고정 공인 IP PC의 collector 정기 실행 | 운영 아키텍처 |
@@ -53,8 +53,12 @@ role에 직접 접근하지 않는다.
   현재는 dense와 keyword 점수를 섞거나 RRF를 적용하지 않는다.
 - 임베딩은 NVIDIA NIM의 2,048차원 출력 중 앞 512차원을 L2 재정규화해 저장하며, 모델·차원·입력
   유형을 profile로 추적한다.
-- 답변과 tier2 라우팅은 NVIDIA NIM을 사용한다. provider 오류·시간 초과·quota 상태에서는 다른
-  생성 모델로 자동 전환하지 않고, 검증된 검색 전용 결과로 안전하게 fallback한다.
+- 답변·임베딩·질문 라우팅은 NVIDIA NIM을 사용한다. 질문은 단일 `QuestionRouter`를 거쳐
+  성공한 `legal_search`만 임베딩·검색·답변 생성·검증으로 진행한다. 라우터 provider 오류나
+  시간 초과는 검색을 시작하지 않는 `routing_unavailable` AI-mode 안전 응답으로 끝난다.
+  기본 `search_only_enabled=False`에서는 provider·생성 실패가 검증된 `search_only` 결과로
+  자동 전환되지 않는다. 과거 tier1 키워드 라우팅에 사용했던 `kiwipiepy`는 D-010에서
+  제거했으며 런타임 의존성이 아니다.
 - 법령 원문은 국가법령정보 공동활용 Open API만 사용한다. HTML 크롤링, PDF 기반 청킹, 다른 법률
   사이트를 근거로 쓰지 않는다.
 

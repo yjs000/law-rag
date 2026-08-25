@@ -6,7 +6,15 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Literal, TypeVar
 
-TimeoutStage = Literal["routing", "embedding", "retrieval", "generation"]
+TimeoutStage = Literal[
+    "routing",
+    "embedding",
+    "retrieval",
+    "answer_generation",
+    "clarification_generation",
+    "required_source_guidance_generation",
+    "blocked_answer_generation",
+]
 T = TypeVar("T")
 
 
@@ -36,7 +44,7 @@ class RequestBudget:
         return max(0.0, self.deadline - self.clock())
 
     def stage_timeout_seconds(
-        self, cap_seconds: float, *, stage: TimeoutStage = "generation"
+        self, cap_seconds: float, *, stage: TimeoutStage = "answer_generation"
     ) -> float:
         timeout = min(cap_seconds, self.remaining_seconds() - self.reserve_seconds)
         if timeout <= 0:
@@ -51,8 +59,11 @@ class RequestBudget:
         cap_seconds: float,
     ) -> T:
         timeout = self.stage_timeout_seconds(cap_seconds, stage=stage)
+        timeout_scope = asyncio.timeout(timeout)
         try:
-            async with asyncio.timeout(timeout):
+            async with timeout_scope:
                 return await operation()
         except TimeoutError as exc:
-            raise StageTimeoutError(stage) from exc
+            if timeout_scope.expired():
+                raise StageTimeoutError(stage) from exc
+            raise

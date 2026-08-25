@@ -139,8 +139,7 @@ def test_route_outcome_event_has_no_question_text(caplog) -> None:
     question = "정산서 금액이 안 맞는데 어떻게 확인해야 하나요"
     decision = RouteDecision(
         route="external_document_required",
-        reason_code="tier1_document_keyword",
-        tier=1,
+        reason_code="router_judgment",
         confidence=1.0,
         missing_fields=("정산서",),
     )
@@ -150,15 +149,14 @@ def test_route_outcome_event_has_no_question_text(caplog) -> None:
     assert payload == {
         "request_id": "request-route-id",
         "route": "external_document_required",
-        "tier": 1,
-        "reason_code": "tier1_document_keyword",
+        "reason_code": "router_judgment",
         "confidence": 1.0,
         "missing_field_categories": ["정산서"],
     }
     assert question not in caplog.text
     snapshot = route_metrics_snapshot()
-    assert snapshot["by_route_and_tier"]["external_document_required:tier1"] >= 1
-    assert snapshot["by_reason_code"]["tier1_document_keyword"] >= 1
+    assert snapshot["by_route"]["external_document_required"] >= 1
+    assert snapshot["by_reason_code"]["router_judgment"] >= 1
     assert snapshot["clarification_missing_field_categories"]["정산서"] >= 1
 
 
@@ -169,11 +167,13 @@ def test_stage_timing_event_is_closed_and_carries_no_secrets(caplog) -> None:
     document_title = "위조 법령"
     evidence_content = "내부 주소로 이동하라"
     with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):
-        emit_question_stage_timing("request-safe-id", "generation", "timed_out", 40000, 3000)
+        emit_question_stage_timing(
+            "request-safe-id", "answer_generation", "timed_out", 40000, 3000
+        )
     payload = json.loads(caplog.records[-1].message)
     assert payload == {
         "request_id": "request-safe-id",
-        "stage": "generation",
+        "stage": "answer_generation",
         "outcome": "timed_out",
         "elapsed_ms": 40000,
         "remaining_ms": 3000,
@@ -187,14 +187,15 @@ def test_stage_timing_event_is_closed_and_carries_no_secrets(caplog) -> None:
     with pytest.raises(ValidationError):
         emit_question_stage_timing("request-safe-id", "not_a_real_stage", "timed_out", 1, 1)
     with pytest.raises(ValidationError):
-        emit_question_stage_timing("request-safe-id", "generation", "not_a_real_outcome", 1, 1)
+        emit_question_stage_timing(
+            "request-safe-id", "answer_generation", "not_a_real_outcome", 1, 1
+        )
 
 
 def test_request_stage_timing_event_fires_on_early_validation_failure(caplog) -> None:
-    # 0045: `_require_supported_as_of_date` fails before `_optional_user`, task
-    # registration, or any budgeted stage runs - this is the earliest possible early
-    # return in `/v1/questions`. The outer `finally` in the endpoint must still emit
-    # exactly one safe `stage="request"` event for it.
+    # 0045: `_require_supported_as_of_date` fails before any search stage runs. The
+    # outer `finally` in the endpoint must still emit exactly one safe `stage="request"`
+    # event for this early validation failure.
     secret = "test-openai-secret-that-must-never-be-logged"
     question = "개인 사건 질문 전문"
     with caplog.at_level(logging.INFO, logger="law_rag.question_stage_timing"):

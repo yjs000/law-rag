@@ -15,7 +15,7 @@ from app.adapters.supabase_auth import (
 )
 from app.domain.schemas import MockUser, QuestionHistoryEntry
 
-pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
+pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state", "search_only_enabled")
 
 OWNER_AUTH_ID = UUID("11111111-1111-4111-8111-111111111111")
 STRANGER_AUTH_ID = UUID("22222222-2222-4222-8222-222222222222")
