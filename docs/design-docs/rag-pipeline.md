@@ -80,13 +80,14 @@ BM25·hybrid·RRF·별도 reranker·고정 similarity cutoff는 현재 파이프
 |---|---|---|
 | 검색 결과 없음 | `no_results` 상태와 조문 경로 부재 또는 일반 근거 불일치 원인을 표시 | zero-result rate 및 원인별 비율 |
 | 검색 저장소 장애 | 생성하지 않고 일시 오류 | retrieval availability |
-| 모델 장애 | 근거 제목/요약 목록으로 성능 저하 | model error rate |
+| 라우터 timeout/provider 장애 | 검색 없이 `mode=ai`, `route=routing_unavailable`의 결정적 안전 안내로 fail-closed | routing provider error rate |
+| 답변 생성·검증 장애 | 기본 `search_only_enabled=false`에서는 fail-closed; 명시적 검색 전용 feature 요청에서만 확보한 근거를 반환 | `answer_generation`/`answer_validation` failure rate |
 | 인용 검증 실패 | 답변 차단 또는 축소 | citation validation rate |
 | 오래된 색인 | 기준 시점 경고 | index freshness lag |
 
-로그인 질문 이력에는 `input_validation`, `parsing`, `embedding`, `retrieval`, `generation`, `outcome` 단계를 JSONB로 저장한다. 후보 수, 실행 전략, 완화 여부와 실패 상태를 남기되 인증정보·키·오류 전문은 저장하지 않는다. 운영 분석은 `python -m scripts.analyze_question_history --email <email>`의 읽기 전용 JSON 출력으로 수행한다.
+로그인 질문 이력에는 `input_validation`, `parsing`, `routing`, `embedding`, `retrieval`, `evidence_source_validation`, `answer_generation`, `answer_validation`, `outcome` 단계를 JSONB로 저장한다. `routing_unavailable`은 검색·정상 답변 단계를 실행하지 않고 `blocked_answer_generation`/`blocked_response_validation` 경계를 사용한다. 후보 수, 실행 전략, 완화 여부와 실패 상태를 남기되 인증정보·키·오류 전문은 저장하지 않는다. 운영 분석은 `python -m scripts.analyze_question_history --email <email>`의 읽기 전용 JSON 출력으로 수행한다.
 
-Terra 요청이 검색 전용으로 저하되면 질문 응답은 요청 모드와 안전한 `fallback_reason`을 함께 반환한다. 오류 전문이나 계정·키 정보는 공개하지 않는다. `ai_available`은 무과금 상태 확인 API가 아니라 서버 설정과 현재 함수 인스턴스가 관측한 402/429 상태를 나타낸다.
+Terra 요청에서 라우터가 실패하면 검색을 시작하지 않고 `routing_unavailable`과 안전한 `reason_code`를 반환한다. 답변 생성·검증 실패는 기본 `search_only_enabled=false`에서 fail-closed하며, 검색 전용 응답은 명시적으로 해당 feature를 켠 요청에서만 허용한다. 오류 전문이나 계정·키 정보는 공개하지 않는다. `ai_available`은 무과금 상태 확인 API가 아니라 서버 설정과 현재 함수 인스턴스가 관측한 402/429 상태를 나타낸다.
 
 ## 결정 기록
 

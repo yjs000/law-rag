@@ -23,7 +23,8 @@
 
 ## 성능 저하 전략
 
-- 생성 모델 장애: 검색 결과와 원문 링크 제공
+- 라우터 timeout/provider 장애: 검색을 시작하지 않고 `mode=ai`, `route=routing_unavailable`의 결정적 안전 안내 반환
+- 답변 생성·검증 장애: 기본 `search_only_enabled=false`에서는 fail-closed; 명시적으로 검색 전용 feature를 켠 요청에서만 근거 검색 결과 제공
 - 재순위 장애: 기본 하이브리드 순위 사용 및 표시
 - 벡터 검색 장애: 키워드 검색으로 제한적 동작
 - 검색 전체 장애: 생성 답변 금지, 재시도 가능한 오류
@@ -45,10 +46,10 @@
 |---|---|
 | HTTP 502/503/504 | 재시도(새 `client_request_id`) |
 | 클라이언트 attempt timeout(55초, AbortError) | 서버에 취소 요청(최대 1초 대기) 후 재시도 |
-| 200 + `mode=search_only` + `fallback_reason=generation_error` | 재시도(생성만 다시 시도 - 이미 확보한 근거는 최종 fallback으로 보존) |
+| 200 + `mode=search_only` + `fallback_reason=generation_error` (명시적으로 검색 전용 feature가 켜진 요청) | 재시도(생성만 다시 시도 - 이미 확보한 근거는 최종 fallback으로 보존) |
 | 그 외 오류 또는 다른 `fallback_reason` | 재시도하지 않고 즉시 반환·실패 |
 
-각 stage 타이밍 이벤트(`emit_question_stage_timing`)는 `request_id`, 닫힌 `stage`(`routing`/`embedding`/`retrieval`/`generation`/`request`) enum, 닫힌 `outcome`(`succeeded`/`failed`/`timed_out`/`degraded`) enum, 정수 밀리초 `elapsed_ms`·`remaining_ms` 다섯 필드만 기록한다. 질문 원문, 근거 내용, 문서 제목, 예외 메시지, 사용자 식별자는 어떤 형태로도 이 이벤트에 담기지 않는다.
+각 stage 타이밍 이벤트(`emit_question_stage_timing`)는 `request_id`, 닫힌 `stage`(`routing`/`embedding`/`retrieval`/`answer_generation`/`answer_validation`/`clarification_generation`/`required_source_guidance_generation`/`blocked_answer_generation`/`request`) enum, 닫힌 `outcome`(`succeeded`/`failed`/`timed_out`/`degraded`) enum, 정수 밀리초 `elapsed_ms`·`remaining_ms` 다섯 필드만 기록한다. 질문 원문, 근거 내용, 문서 제목, 예외 메시지, 사용자 식별자는 어떤 형태로도 이 이벤트에 담기지 않는다. `routing_unavailable`은 정상 검색·답변 stage를 실행하지 않고 `blocked_answer_generation`과 `blocked_response_validation`만 사용한다.
 
 허용 기준: 각 hosted 요청은 API가 52초 안에 응답을 반환하거나 Web이 55초 안에 재시도를 시작해야 하며, 어떤 요청도 Vercel 60초 504로만 끝나지 않는다.
 

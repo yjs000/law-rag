@@ -39,7 +39,7 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 | `ENVIRONMENT` | `development` | `test` | `production` | Production에서 mock auth 경로 차단 |
 | `DATABASE_URL` | 선택 | staging/격리 DB | 운영 DB | Vercel은 Supavisor transaction URL 사용 |
 | `DIRECT_URL` | 선택 | staging session pooler | 운영 session pooler | Alembic migration 전용; Vercel runtime에는 불필요 |
-| `NVIDIA_API_KEY` | 선택 | 별도 제한 키 또는 미설정 | 운영 서버 키 | 미설정 시 검색 전용 |
+| `NVIDIA_API_KEY` | 선택 | 별도 제한 키 또는 미설정 | 운영 서버 키 | 미설정·provider 장애 시 `routing_unavailable`/AI fail-closed; 명시적 search-only feature만 검색 전용 |
 | `AI_MODE` | `auto`/`off` | 기본 `off` | `auto` | Preview 비용·오용 방지 |
 | `RATE_LIMIT_SECRET` | 개발용 난수 | Preview 전용 난수 | 운영 전용 난수 | 환경마다 다른 16자 이상 값 |
 | `WEB_ORIGIN` | `http://localhost:3000` | 정확한 Preview Web origin | 정확한 Production Web origin | wildcard 금지 |
@@ -57,7 +57,7 @@ Vercel이 자동 발급하는 `*.vercel.app` Production 주소를 사용한다. 
 |---|---:|---|
 | `QUESTION_REQUEST_TIMEOUT_SECONDS` | 52 | `/v1/questions` 서버측 전체 예산. Vercel 60초 강제 종료보다 먼저 끝낸다 |
 | `RESPONSE_RESERVE_SECONDS` | 3 | 마지막 stage가 끝난 뒤 응답 직렬화·저장에 남겨두는 여유 |
-| `ROUTE_CLASSIFIER_TIMEOUT_SECONDS` | 8 | tier2 LLM 라우팅 판단 stage 상한 |
+| `ROUTE_CLASSIFIER_TIMEOUT_SECONDS` | 8 | 단일 NVIDIA `QuestionRouter`의 `routing` stage 상한; timeout/provider failure는 `routing_unavailable` no-search AI 응답 |
 | `QUESTION_EMBEDDING_TIMEOUT_SECONDS` | 5 | 라이브 질문 1건을 예산 안에서 임베딩하는 stage 상한 |
 | `RETRIEVAL_TIMEOUT_SECONDS` | 8 | 검색 stage 상한 |
 | `ANSWER_TIMEOUT_SECONDS` | 40 | 생성 stage 상한. provider 재시도(`ANSWER_GENERATION_MAX_ATTEMPTS`)까지 이 slice 안에서 공유한다 |
@@ -202,7 +202,7 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 
 ### Terra 준비 상태의 의미
 
-`ai_available=true`는 NVIDIA 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 provider 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 잔여 사용량을 선제 보증하지 않는다. NVIDIA 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`, 이후 같은 인스턴스는 `quota_exhausted`로 검색 전용 폴백한다. 이는 `ACCOUNT_QUOTA_ENABLED`로 제어하는 로그인 계정 일일 한도와 별개인 provider 오류 안전 폴백이다.
+`ai_available=true`는 NVIDIA 키와 `AI_MODE` 설정이 준비되었고 현재 함수 인스턴스가 provider 결제·quota 오류를 아직 관측하지 않았다는 뜻이다. 잔여 사용량을 선제 보증하지 않는다. NVIDIA 호출에서 402/429를 받으면 해당 응답은 `billing_or_quota_error`로 기록하고, 이후 기본 `search_only_enabled=false`에서는 Terra 요청을 fail-closed로 처리한다. 검색 전용 응답은 명시적으로 해당 feature를 켠 요청에서만 허용된다. 이는 `ACCOUNT_QUOTA_ENABLED`로 제어하는 로그인 계정 일일 한도와 별개인 provider 오류 계약이다.
 
 ## 완료 조건
 
@@ -231,5 +231,5 @@ Vercel과 Supabase가 관리형 인프라를 제공해도 아래 책임은 이 �
 - 2026-07-14: legacy `SUPABASE_SERVICE_ROLE_KEY` 대신 `sb_secret_...` 형식의 `SUPABASE_SECRET_KEY`를 서버 전용으로 사용한다. 현재 FastAPI의 DB 연결에는 `DATABASE_URL`만 사용하고, secret key는 Auth/Storage 서버 어댑터에서만 사용한다.
 - 2026-07-15: Vercel Python 런타임은 `.python-version`의 마이너 버전 `3.14`로 선택한다. 패치 버전은 Vercel 관리형 런타임에 맡겨 지원되지 않는 정확한 패치 요구로 빌드가 중단되지 않게 한다.
 - 2026-07-15: collector `sync-current`는 session pooler와 `sb_secret_` API key를 사용해 private Storage와 PostgreSQL에 반영한다. opaque secret key는 JWT가 아니므로 Storage 요청의 `apikey` 헤더에만 둔다.
-- 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 로그인 계정 일일 quota는 삭제하지 않고 `ACCOUNT_QUOTA_ENABLED=false`로 현재 비활성화했다. 익명 일일 quota는 없으며, NVIDIA가 반환한 402/429는 계정 토글과 별도로 검색 전용 폴백 처리한다.
+- 2026-08-09: 답변 provider를 NVIDIA NIM 하나로 고정하고 OpenAI 설정·어댑터 분기를 제거했다. 로그인 계정 일일 quota는 삭제하지 않고 `ACCOUNT_QUOTA_ENABLED=false`로 현재 비활성화했다. 익명 일일 quota는 없으며, NVIDIA가 반환한 402/429는 계정 토글과 별도로 `billing_or_quota_error`로 기록한다. 기본 `search_only_enabled=false`에서는 암묵적 검색 전용 전환 없이 fail-closed한다.
 - 2026-08-09: 운영 `/v1/corpus/status`가 Vercel 기본 `iad1`에서 서울 Supabase까지 연결하며 반복 3.03~3.21초, 첫 요청 5.26초가 걸린 것을 확인했다. DB 연결을 요청당 3회에서 1회로 줄인 뒤에도 1초 목표를 넘겨, API Function을 데이터베이스와 같은 서울 `icn1` 단일 리전으로 고정했다. 다중 리전은 도입하지 않는다.

@@ -3,6 +3,11 @@
 상태: 제안됨 (2026-08-19)
 결정일: 2026-08-19
 
+> D-010(0057)이 v1의 현재 라우팅 계약을 단일 `QuestionRouter`와
+> `routing_unavailable`로 확정했다. 아래 v1 tier1/tier2 표현은 제안 작성 당시의 역사적
+> 비교이며 현재 runtime 계약이 아니다. 이 v3 제안은 구현 시 D-010 stage/failure contract에
+> 맞춰야 한다.
+
 ## 배경
 
 [V2 LlamaIndex 검색 파이프라인](v2-llamaindex-retrieval-pipeline-design.md)에서 세운
@@ -81,9 +86,9 @@ apps/api/
 
 - **route**: LangChain `ChatNVIDIA` + `with_structured_output`으로 한 번의 LLM 호출에서
   `legal_search` / `clarification_required` / `realtime_required` /
-  `external_document_required` 중 하나를 판단한다. v1의 tier1(결정적 키워드)+tier2(LLM)
-  2단계 대신 단일 호출로 단순화한다 — 비용 최적화는 이번 spec의 목표가 아니다(실험
-  단계).
+  `external_document_required` 중 하나를 판단한다. 역사적 v1의 tier1(결정적 키워드)+tier2(LLM)
+  2단계 비교는 D-010에서 이미 단일 `QuestionRouter`로 대체되었으며, 이 v3 제안도 같은
+  단일-router·fail-closed 경계를 따라야 한다.
 - **search**: `route=legal_search`일 때만 실행. `law_rag_llamaindex.retriever.search`를
   그대로 호출해 `SearchHit` 목록을 받는다. 이 노드는 새 로직을 담지 않는다 — 순수
   호출 래퍼다.
@@ -175,8 +180,10 @@ GET /v3/threads/{thread_id}/state
   spec의 목표가 아니며 후속에서 다룬다.
 - 2026-08-19: 검색은 새로 짜지 않는다 — `law_rag_llamaindex.retriever.search`를 그대로
   재사용한다.
-- 2026-08-19: 라우팅은 v1의 tier1+tier2 2단계 대신 LangChain `ChatNVIDIA` +
-  구조화 출력 1회 호출로 단순화한다.
+- 2026-08-19: (역사 기록) 라우팅은 v1의 tier1+tier2 2단계 대신 LangChain `ChatNVIDIA` +
+  구조화 출력 1회 호출로 단순화한다고 결정했다. 현재 v1 계약은 이후 D-010의 단일
+  `QuestionRouter`와 `routing_unavailable` fail-closed 경계로 대체되었으며, v3 구현도 이를
+  기준으로 삼는다.
 - 2026-08-19: 대화 영속화는 LangGraph Postgres 체크포인터를 유일한 소스로 쓴다.
   `question_history`/`conversations`는 폐기하지 않되 v3 대화에는 쓰지 않는다(v1/v2
   전용으로 유지). 과거 데이터 이관은 하지 않는다.

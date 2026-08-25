@@ -150,12 +150,119 @@ def check_d010_superseded_designs() -> list[str]:
     return errors
 
 
+def check_d010_current_contract_docs() -> list[str]:
+    """Reject stale tiered/fallback prose in current D-010 records."""
+    errors: list[str] = []
+
+    def read(relative: str) -> str:
+        return (ROOT / relative).read_text(encoding="utf-8")
+
+    def line_containing(text: str, needle: str) -> str:
+        return next((line for line in text.splitlines() if needle in line), "")
+
+    deployment = read("docs/design-docs/vercel-supabase-deployment.md")
+    key_line = line_containing(deployment, "`NVIDIA_API_KEY`")
+    route_timeout_line = line_containing(
+        deployment, "`ROUTE_CLASSIFIER_TIMEOUT_SECONDS`"
+    )
+    if not key_line or "routing_unavailable" not in key_line or "fail-closed" not in key_line:
+        errors.append(
+            "docs/design-docs/vercel-supabase-deployment.md: NVIDIA key failure contract is missing"
+        )
+    if "미설정 시 검색 전용" in key_line:
+        errors.append(
+            "docs/design-docs/vercel-supabase-deployment.md: missing NVIDIA key still claims search-only"
+        )
+    if (
+        not route_timeout_line
+        or "QuestionRouter" not in route_timeout_line
+        or "routing_unavailable" not in route_timeout_line
+        or re.search(r"tier[12]", route_timeout_line, flags=re.IGNORECASE)
+    ):
+        errors.append(
+            "docs/design-docs/vercel-supabase-deployment.md: route timeout is not the single-router contract"
+        )
+
+    reliability = read("docs/RELIABILITY.md")
+    reliability_degradation = line_containing(reliability, "라우터 timeout/provider 장애")
+    reliability_timing = line_containing(reliability, "각 stage 타이밍 이벤트")
+    if "routing_unavailable" not in reliability_degradation:
+        errors.append("docs/RELIABILITY.md: router failure contract is missing")
+    if (
+        "answer_generation" not in reliability_timing
+        or "answer_validation" not in reliability_timing
+        or "`generation`/`request`" in reliability_timing
+    ):
+        errors.append("docs/RELIABILITY.md: named D-010 timing stages are missing")
+    if "- 생성 모델 장애:" in reliability:
+        errors.append("docs/RELIABILITY.md: stale generic model-failure fallback remains active")
+
+    rag = read("docs/design-docs/rag-pipeline.md")
+    if "| 모델 장애 |" in rag:
+        errors.append("docs/design-docs/rag-pipeline.md: stale model-failure row remains active")
+    history_line = line_containing(rag, "로그인 질문 이력에는")
+    if (
+        "answer_generation" not in history_line
+        or "answer_validation" not in history_line
+        or ", `generation`," in history_line
+    ):
+        errors.append("docs/design-docs/rag-pipeline.md: named stage history contract is missing")
+    if "routing_unavailable" not in rag:
+        errors.append("docs/design-docs/rag-pipeline.md: routing_unavailable contract is missing")
+
+    design_index = read("docs/design-docs/index.md")
+    always_generate_row = line_containing(design_index, "always-generate-answer.md")
+    if "대체됨" not in always_generate_row or "승인" in always_generate_row:
+        errors.append(
+            "docs/design-docs/index.md: always-generate-answer is still marked current"
+        )
+
+    todo_index = read("docs/exec-plans/todo/README.md")
+    todo_0033_row = line_containing(todo_index, "0033-traffic-based-routing-calibration-review.md")
+    if "D-010" not in todo_0033_row or "QuestionRouter" not in todo_0033_row:
+        errors.append("docs/exec-plans/todo/README.md: 0033 is not reframed around D-010")
+    if "tier1 사전 확장" in todo_0033_row:
+        errors.append("docs/exec-plans/todo/README.md: removed tier expansion remains actionable")
+
+    todo_0033 = read("docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md")
+    if "역사적·superseded" not in todo_0033 or "D-010" not in todo_0033:
+        errors.append("docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md: historical boundary is missing")
+    if "현재 calibration 방향" not in todo_0033:
+        errors.append("docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md: current calibration direction is missing")
+
+    debt = read("docs/exec-plans/tech-debt-tracker.md")
+    td023 = line_containing(debt, "| TD-023 |")
+    td024 = line_containing(debt, "| TD-024 |")
+    td025 = line_containing(debt, "| TD-025 |")
+    if "answer_timeout_seconds=40" not in td023 or "60초는 역사적" not in td023:
+        errors.append("docs/exec-plans/tech-debt-tracker.md: TD-023 has stale timeout guidance")
+    if "단일 라우터" not in td024 or "D-010" not in td024 or "few-shot" in td024:
+        errors.append("docs/exec-plans/tech-debt-tracker.md: TD-024 still prescribes tier2 remediation")
+    if "ANSWER_TIMEOUT_SECONDS=40" not in td025 or "60초 값은 역사적" not in td025:
+        errors.append("docs/exec-plans/tech-debt-tracker.md: TD-025 has stale deployment timeout guidance")
+
+    v3 = read("docs/design-docs/v3-langgraph-agent-foundation-design.md")
+    if "D-010(0057)" not in v3 or "현재 runtime 계약이 아니다" not in v3:
+        errors.append("docs/design-docs/v3-langgraph-agent-foundation-design.md: tier history boundary is missing")
+    v3_route_match = re.search(r"\*\*route\*\*:.*?(?=\n- \*\*search\*\*:)", v3, flags=re.DOTALL)
+    v3_route = v3_route_match.group(0) if v3_route_match else ""
+    if "단일 `QuestionRouter`" not in v3_route:
+        errors.append("docs/design-docs/v3-langgraph-agent-foundation-design.md: route proposal lacks D-010 alignment")
+
+    generated = read("docs/generated/law-rag-question-pipeline-map.html")
+    if "역사적 snapshot" not in generated or "현재 계약이 아님" not in generated or "D-010(0057)" not in generated:
+        errors.append("docs/generated/law-rag-question-pipeline-map.html: historical snapshot banner is missing")
+
+    return errors
+
+
 def main() -> int:
     errors = [error for path in markdown_files() for error in check_links(path)]
     errors.extend(check_freshness(date.today()))
     errors.extend(check_d010_routing_contract())
     errors.extend(check_d010_active_experiment_contract())
     errors.extend(check_d010_superseded_designs())
+    errors.extend(check_d010_current_contract_docs())
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

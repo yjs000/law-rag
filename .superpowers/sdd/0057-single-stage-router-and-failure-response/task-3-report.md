@@ -35,9 +35,12 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   D-010 assertion functions and clarifies historical metadata preservation.
 - `e44497c docs: reconcile D-010 lifecycle evidence` — records the complete chronological Task 3
   sequence through `e2daefe` and removes the inaccurate single-follow-up phrasing.
+- `10b72d4 docs: record final D-010 lifecycle SHA` — records the final lifecycle SHA in the
+  active plan/report before this current-document alignment pass.
 
-The active-plan and this report preserve the chronological Task 3 record through `e2daefe`; no
-“immediately after” ordering is implied for the earlier documentation commits.
+The active-plan and this report preserve the chronological Task 3 record through `10b72d4`; no
+“immediately after” ordering is implied for the earlier documentation commits. The current
+document-contract alignment commit from this review loop is recorded below after it is created.
 
 ## Files and contract alignment
 
