@@ -227,6 +227,8 @@ git commit -m "fix(api): isolate unavailable routing from legal search"
 
 ### Task 3: Align documentation, lifecycle records, and final verification
 
+상태: 문서 정렬 완료 · 전체 회귀 gate 보류 (2026-08-25)
+
 **Files:**
 - Modify: `docs/design-docs/index.md`
 - Modify: `docs/design-docs/pre-retrieval-question-routing.md`
@@ -236,22 +238,27 @@ git commit -m "fix(api): isolate unavailable routing from legal search"
 - Modify: `docs/exec-plans/todo/README.md`
 - Modify: `docs/exec-plans/active/README.md`
 - Modify: `docs/exec-plans/active/0057-single-stage-router-and-failure-response.md`
+- Modify: `scripts/check_docs.py` (D-010 documentation assertions in the existing review workflow)
 
 **Interfaces:**
 - Consumes: the completed Task 1 and Task 2 route/stage names and test evidence.
 - Produces: documentation that names the single router, safe failure route, normal evidence/answer sequence, and active-plan status without claiming an unrun provider evaluation.
 
-- [ ] **Step 1: Write documentation assertions before editing prose**
+- [x] **Step 1: Write documentation assertions before editing prose**
 
 Add the following checks to the existing documentation review workflow: `docs/design-docs/index.md` links `single-stage-router-and-failure-response.md`; `ARCHITECTURE.md` contains `routing_unavailable`, `answer_generation`, and `answer_validation`; no current-contract prose describes a tier1/tier2 runtime path or says a router timeout proceeds as `legal_search`.
 
-- [ ] **Step 2: Run the documentation checker and observe the stale contract**
+- [x] **Step 2: Run the documentation checker and observe the stale contract**
 
 Run: `uv run --project apps/api python scripts/check_docs.py`
 
 Expected: the checker may pass before the prose update; manual `rg -n "tier1|tier2|routing_unavailable|blocked_route_generation|legal_search" ARCHITECTURE.md docs/design-docs` must show the old runtime wording that this task replaces.
 
-- [ ] **Step 3: Update authoritative documentation and active-plan metadata**
+Result: the executable D-010 contract assertion passes. The repository-wide checker still exits
+1 for 32 pre-existing broken links outside the D-010 current-contract prose; none is introduced
+by the documentation commit below.
+
+- [x] **Step 3: Update authoritative documentation and active-plan metadata**
 
 Keep the approved D-010 design link and active-plan pointers already recorded when this plan was promoted. Replace the 0028 runtime description in `ARCHITECTURE.md` and `pre-retrieval-question-routing.md` with the single NVIDIA router, the exact normal sequence, and `routing_unavailable` no-search behavior. Record that `evidence_source_validation` is an official-source filter, while `answer_validation` verifies answer structure/action/citation IDs after generation and `blocked_response_validation` checks only the unavailable-route empty shape. In this plan file, check completed boxes only after the corresponding command output is recorded, and add the final commit SHA plus exact test counts in a dated progress section. Do not change the historical fixture result JSON or claim live NVIDIA evaluation without user-authorized evidence.
 
@@ -273,12 +280,38 @@ Run: `uv run --project apps/api python scripts/check_docs.py`
 
 Expected: exit code 0.
 
-- [ ] **Step 5: Commit documentation and verification evidence**
+Result: full Ruff and the focused D-010 suite pass, but the complete API suite remains blocked by
+11 legacy fallback-contract failures. The literal command above also has a path-root mismatch:
+`--directory apps/api` makes `apps/api/tests` resolve below `apps/api`. With the project-root
+paths corrected and elevated filesystem access for pytest temp files, the API suite reports
+`628 passed, 11 failed, 3 skipped, 1 warning` in 46.70s; the core suite reports `26 passed`.
+The failures are in old tests that do not inject a fake single router (mainly `test_ai_fallback.py`)
+or still expect pre-D-010 search-only behavior. A representative four-case fallback test passes
+unchanged on the pre-D-010 `main` worktree. No code or historical fixture result JSON is changed
+in Task 3 to hide this blocker.
+
+- [x] **Step 5: Commit documentation and verification evidence**
 
 ```bash
 git add ARCHITECTURE.md docs/design-docs/index.md docs/design-docs/pre-retrieval-question-routing.md docs/ROADMAP.md docs/CURRENT_STATE.md docs/exec-plans/active/README.md docs/exec-plans/active/0057-single-stage-router-and-failure-response.md
 git commit -m "docs: record single-stage routing contract"
 ```
+
+## Task 3 progress — 2026-08-25
+
+- Task 1 implementation and review-fix commits: `9bcd965`, `88d8964`; focused router contract
+  verification was `7 passed` and the reviewed script checks passed. No live NVIDIA fixture was
+  run.
+- Task 2 implementation and review-fix commits: `bd70103`, `7c9707d`; focused safety regression
+  verification was `38 passed, 2 warnings`, plus `3 passed, 1 warning` for request-budget tests.
+- Task 3 documentation commit: `f58c5d4 docs: record single-stage routing contract`.
+- Task 3 executable D-010 assertion: exit 0 (`d010 routing assertions passed`). Full Ruff: exit 0
+  (`All checks passed!`). Focused D-010 suite: `43 passed, 1 warning` in 3.99s.
+- Complete local verification used no Docker, persistent service, database, or live provider.
+  The API suite's 11 legacy failures keep Step 4 and the D-010 lifecycle status open. The
+  NVIDIA-keyed fixture evaluator remains intentionally unrun.
+- Repository docs checker: exit 1 with 32 pre-existing broken-link reports. The D-010 assertion
+  portion passes; unrelated documentation debt is not repaired in this task.
 
 ## Plan Self-Review
 
