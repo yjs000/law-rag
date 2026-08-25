@@ -41,3 +41,21 @@ def search_only_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.main as main_module
 
     monkeypatch.setattr(main_module.settings, "search_only_enabled", True)
+
+
+@pytest.fixture
+def legal_search_router(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep normal AI-flow tests on the post-routing legal-search path."""
+    import app.main as main_module
+    from app.domain.routing import RouteJudgment
+
+    class LegalSearchRouter:
+        async def route(self, question: str) -> RouteJudgment:
+            return RouteJudgment(
+                route="legal_search",
+                confidence=1.0,
+                reason="test legal-search judgment",
+                missing_fields=(),
+            )
+
+    monkeypatch.setattr(main_module, "_question_router", lambda: LegalSearchRouter())
