@@ -4,7 +4,7 @@
 > 보조 라벨: `Evaluation`
 > 선행 조건: 사용자가 우선 조사할 엣지케이스 범위를 확정해야 한다.
 > 참고 범위:
-> - `docs/exec-plans/todo/0050-query-format-edge-case-regression-bank.md` L53-L55 — 조사 범위 확정에 따른 승격 조건
+> - `docs/exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md` L17-L26 — 실제 재질문 중복·누적 재현과 채워진 항목을 다시 묻지 않는 목표
 
 # 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축
 

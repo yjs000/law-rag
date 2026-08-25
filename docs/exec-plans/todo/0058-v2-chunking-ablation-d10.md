@@ -4,7 +4,8 @@
 > 보조 라벨: `Data`, `Evaluation`
 > 선행 조건: parser·chunk_size·overlap·호출 비용 상한·실험 DB 권한을 확정하고 입력 artifact와 운영 색인 격리 경로를 검증해야 한다.
 > 참고 범위:
-> - `docs/exec-plans/todo/0058-v2-chunking-ablation-d10.md` L68-L74 — 실험 파라미터·권한·artifact·격리 경로의 승격 조건
+> - `docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md` L105-L118 — v2 ingestion 입력과 원본 metadata 보존 계약
+> - `docs/design-docs/experiment-d-10-gold-adjudication.md` L9-L14 — D-10 calibration Gold의 10문항 범위와 D-full 분리
 
 # 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹
 
