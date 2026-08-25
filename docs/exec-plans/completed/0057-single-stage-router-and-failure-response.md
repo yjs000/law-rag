@@ -333,8 +333,8 @@ git commit -m "docs: record single-stage routing contract"
 - Complete local verification used no Docker, persistent service, database, or live provider.
   The NVIDIA-keyed fixture evaluator remains intentionally unrun.
 - Repository docs checker: exit 1 with 32 pre-existing broken-link reports. All four D-010 assertion
-  functions pass; unrelated documentation debt is not repaired in this task. The overall plan
-  remains Active only for parent-level integration decision, not because of the solved API failures.
+  functions pass; unrelated documentation debt is not repaired in this task. The overall plan is
+  complete and merged locally to `main`; the solved API failures are not a blocker.
 
 ## Plan Self-Review
 
