@@ -311,7 +311,7 @@ git commit -m "docs: record single-stage routing contract"
 - Task 3 commit sequence: `f58c5d4 docs: record single-stage routing contract`; `ea5fc59 docs:
   record D-010 Task 3 verification evidence`; `cf0a066 docs: add D-010 Task 3 report`;
   `6dd410d fix(tests): align API fixtures with single-stage routing`; `46e7040 docs: finalize
-  D-010 verification evidence`.
+  D-010 verification evidence`; `56ae8ab docs: align D-010 lifecycle status`.
 - Task 3 executable D-010 assertions: exit 0 (`d010 routing assertions passed`). Full Ruff and
   docstring Ruff: exit 0 (`All checks passed!`). Final focused D-010 suite: `43 passed, 1 warning`;
   final API suite: `639 passed, 3 skipped, 1 warning`; final core suite: `26 passed`.

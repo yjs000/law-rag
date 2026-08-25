@@ -21,9 +21,12 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   whose intended path requires that feature.
 - `46e7040 docs: finalize D-010 verification evidence` — corrected active-plan commands, E-10
   supersession/checker evidence, and the first complete green verification report.
+- `56ae8ab docs: align D-010 lifecycle status` — removed the solved regression-gate blocker from
+  lifecycle pointers and recorded the final green counts while preserving parent-level Active
+  integration status.
 
-The active-plan and this report are the follow-up evidence update for `6dd410d`; no “immediately
-after” ordering is implied for the earlier documentation commits.
+The active-plan and this report now include the follow-up metadata commit `56ae8ab`; no
+“immediately after” ordering is implied for the earlier documentation commits.
 
 ## Files and contract alignment
 
