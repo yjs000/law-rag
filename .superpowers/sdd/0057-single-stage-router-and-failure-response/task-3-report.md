@@ -24,6 +24,9 @@ The Task 3 documentation commits are recorded chronologically and by their actua
 - `56ae8ab docs: align D-010 lifecycle status` — removed the solved regression-gate blocker from
   lifecycle pointers and recorded the final green counts while preserving parent-level Active
   integration status.
+- Final whole-branch alignment commit (recorded in the follow-up metadata commit) updates the
+  technology ADR, superseded always-generate design, settings comments, and historical fixture
+  metadata without changing production behavior or historical result values.
 
 The active-plan and this report now include the follow-up metadata commit `56ae8ab`; no
 “immediately after” ordering is implied for the earlier documentation commits.
@@ -37,7 +40,12 @@ The active-plan and this report now include the follow-up metadata commit `56ae8
   E-10 tier1/tier2 experiment as historical evidence, while a dated current D-010 section
   supersedes that runtime description.
 - `scripts/check_docs.py` now checks both the current D-010 routing prose and the E-10 historical
-  boundary/current-section separation.
+  boundary/current-section separation, plus the technology ADR and superseded always-generate
+  design markers.
+- `apps/api/app/settings.py` comments now describe the single router and fail-closed
+  `routing_unavailable` behavior; no settings behavior changed.
+- `apps/api/evaluation/route-fixture-v1.json` and `route-fixture-v1-results.json` retain all case,
+  metric, and result values while adding explicit historical/superseded metadata.
 - `apps/api/tests/conftest.py` provides the clean `legal_search_router` fake. The AI fallback and
   grounding modules use it for normal downstream-path tests. The Supabase history module enables
   search-only explicitly because its fake environment intentionally has no NVIDIA key; the
@@ -66,8 +74,8 @@ being classified as routing or feature-availability failures.
 
 ## Verification evidence
 
-- D-010 assertions:
-  `uv run --project apps/api python -c "from scripts.check_docs import check_d010_routing_contract, check_d010_active_experiment_contract; errors = check_d010_routing_contract() + check_d010_active_experiment_contract(); print('d010 routing assertions passed' if not errors else '\\n'.join(errors)); raise SystemExit(bool(errors))"`
+- D-010 assertions and JSON metadata parsing:
+  `uv run --project apps/api python -c "import json; from pathlib import Path; [json.loads(Path(p).read_text(encoding='utf-8')) for p in ['apps/api/evaluation/route-fixture-v1.json','apps/api/evaluation/route-fixture-v1-results.json']]; from scripts.check_docs import check_d010_routing_contract, check_d010_active_experiment_contract, check_d010_superseded_designs; errors = check_d010_routing_contract() + check_d010_active_experiment_contract() + check_d010_superseded_designs(); print('d010 routing assertions passed' if not errors else '\\n'.join(errors)); raise SystemExit(bool(errors))"`
   → exit 0, `d010 routing assertions passed`.
 - Full Ruff:
   `uv run --project apps/api ruff check apps/api/app apps/api/scripts apps/api/tests apps/api/migrations packages/law-rag-core/src packages/law-rag-core/tests`
@@ -75,14 +83,14 @@ being classified as routing or feature-availability failures.
 - Docstring Ruff:
   `uv run --project apps/api ruff check --select D100,D101,D102,D103,D107,D200,D205,D209,D400,D401,D403 apps/api/app/main.py apps/api/app/adapters/llamaindex_repository.py`
   → exit 0, `All checks passed!`.
-- Focused D-010 suite (safe elevated pytest temp path): `43 passed, 1 warning` in 4.06s. The
+- Focused D-010 suite (safe elevated pytest temp path): `43 passed, 1 warning` in 3.89s. The
   warning is the existing Starlette/httpx deprecation.
 - Full API suite, with `tests` resolved from the API project directory:
   `$env:PYTHONPATH='.;..\..\packages\law-rag-core\src;..\collector\src'; uv run --directory apps/api python -m pytest --basetemp C:\Users\Family\.codex\visualizations\2026\08\25\d010-api-full-relative tests -q`
-  → `639 passed, 3 skipped, 1 warning` in 44.63s.
+  → `639 passed, 3 skipped, 1 warning` in 44.83s.
 - Full core suite:
   `uv run --project packages/law-rag-core python -m pytest --basetemp C:\Users\Family\.codex\visualizations\2026\08\25\d010-core-full-final packages/law-rag-core/tests -q`
-  → `26 passed` in 0.26s.
+  → `26 passed` in 0.25s.
 - Repository docs checker:
   `uv run --project apps/api python scripts/check_docs.py`
   → exit 1 with exactly 32 pre-existing broken-link reports. The two D-010 assertion functions

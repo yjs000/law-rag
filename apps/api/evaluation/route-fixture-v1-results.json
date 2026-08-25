@@ -1,4 +1,10 @@
 {
+  "metadata": {
+    "status": "historical_superseded",
+    "historical_as_of": "2026-08-08",
+    "superseded_by": "D-010 / 0057 single-stage NVIDIA QuestionRouter",
+    "note": "아래 수치와 tier/mock 필드는 당시 실행 결과를 보존한 immutable historical evidence이며 현재 라우터 평가 결과가 아니다."
+  },
   "fixture_size": 14,
   "resolved_count": 14,
   "pending_count": 0,

@@ -122,11 +122,40 @@ def check_d010_active_experiment_contract() -> list[str]:
     return errors
 
 
+def check_d010_superseded_designs() -> list[str]:
+    """Keep superseded pre-D-010 design and evaluation records visibly historical."""
+    errors: list[str] = []
+    technology_path = ROOT / "docs" / "design-docs" / "technology-stack.md"
+    always_generate_path = ROOT / "docs" / "design-docs" / "always-generate-answer.md"
+    technology_text = technology_path.read_text(encoding="utf-8")
+    always_generate_text = always_generate_path.read_text(encoding="utf-8")
+    technology_normalized = " ".join(technology_text.split())
+
+    if "routing_unavailable" not in technology_text or "단일 `QuestionRouter`" not in technology_text:
+        errors.append(
+            "docs/design-docs/technology-stack.md: current D-010 router contract is missing"
+        )
+    if "kiwipiepy`는 D-010에서 제거했으며 런타임 의존성이 아니다" not in technology_normalized:
+        errors.append(
+            "docs/design-docs/technology-stack.md: Kiwi runtime status is not explicit"
+        )
+    if "상태: 역사적·superseded — D-010(0057)으로 대체됨" not in always_generate_text:
+        errors.append(
+            "docs/design-docs/always-generate-answer.md: superseded status is missing"
+        )
+    if "single-stage-router-and-failure-response.md" not in always_generate_text:
+        errors.append(
+            "docs/design-docs/always-generate-answer.md: D-010 successor link is missing"
+        )
+    return errors
+
+
 def main() -> int:
     errors = [error for path in markdown_files() for error in check_links(path)]
     errors.extend(check_freshness(date.today()))
     errors.extend(check_d010_routing_contract())
     errors.extend(check_d010_active_experiment_contract())
+    errors.extend(check_d010_superseded_designs())
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

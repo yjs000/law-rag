@@ -27,15 +27,16 @@ class Settings(BaseSettings):
     ai_mode: Literal["auto", "off"] = "auto"
     # 검색 전용 응답과 AI 실패 시 그 응답으로 전환하는 fallback을 함께 제어한다.
     search_only_enabled: bool = False
-    # 2026-08-09: OpenAI 생성 설정과 선택 분기를 제거했다. 답변·임베딩·tier 2 라우팅은
-    # NVIDIA NIM만 사용하며, ai_mode=off 또는 NVIDIA_API_KEY 부재 시 검색 전용으로 동작한다.
+    # 2026-08-25: OpenAI 생성 설정과 선택 분기를 제거했다. 답변·임베딩·질문 라우팅은
+    # 단일 NVIDIA NIM 경로를 사용한다. 라우터 provider 실패·시간 초과는 검색 없는
+    # routing_unavailable AI 응답이며, NVIDIA_API_KEY 부재가 search_only 자동 전환을 뜻하지는
+    # 않는다(기본 search_only_enabled=false에서는 fail-closed).
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
-    # 0028 M4.5 tier 2: 답변 생성 모델과 분리된 소형 분류 전용 호출(설계상 요구사항 - 실패
-    # blast radius를 답변 생성과 나눈다). 지금은 무료 티어에서 실제 확인된 nemotron-3-ultra와
-    # 같은 모델을 재사용한다 - 더 작은 모델(nemotron-super-49b 등)이 이 카탈로그에서 실제로
-    # 무료인지 아직 확인 전이라, 확인되지 않은 모델로 바꾸는 대신 검증된 모델을 그대로 쓴다.
+    # D-010: 단일 QuestionRouter가 사용하는 NVIDIA 호환 모델 설정이다. tier 조합이나
+    # embedding hint를 전달하지 않으며, 라우팅 실패 판단은 애플리케이션이
+    # routing_unavailable 안전 응답으로 만든다.
     nvidia_route_classifier_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     question_request_timeout_seconds: float = Field(default=52, gt=0, le=55)
     response_reserve_seconds: float = Field(default=3, ge=1, le=10)
