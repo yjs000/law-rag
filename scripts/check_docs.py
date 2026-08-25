@@ -229,6 +229,16 @@ def check_d010_current_contract_docs() -> list[str]:
         errors.append("docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md: historical boundary is missing")
     if "현재 calibration 방향" not in todo_0033:
         errors.append("docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md: current calibration direction is missing")
+    diagnostics_line = line_containing(todo_0033, "`diagnostics`")
+    if (
+        "route/reason_code/confidence" not in diagnostics_line
+        or re.search(r"route\s*/\s*tier|tier\s*/\s*reason", diagnostics_line.lower())
+        or "explanation" in diagnostics_line.lower()
+    ):
+        errors.append(
+            "docs/exec-plans/todo/0033-traffic-based-routing-calibration-review.md: "
+            "current diagnostics still claims removed tier/explanation fields"
+        )
 
     debt = read("docs/exec-plans/tech-debt-tracker.md")
     td023 = line_containing(debt, "| TD-023 |")

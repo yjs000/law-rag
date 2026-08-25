@@ -42,13 +42,15 @@ The Task 3 documentation commits are recorded chronologically and by their actua
   expands the D-010 docs assertion to cover those records.
 - `e632c86 docs: record D-010 contract alignment evidence` — records the final post-alignment
   assertion, docs-checker, Ruff, and diff evidence in the lifecycle report.
+- `d35509f docs: close D-010 lifecycle metadata` — records the final lifecycle evidence commit
+  and closes the prior report/plan metadata correction.
 
-The active-plan and this report preserve the chronological Task 3 record through `e632c86`; no
+The active-plan and this report preserve the chronological Task 3 record through `d35509f`; no
 “immediately after” ordering is implied for the earlier documentation commits. The current
 document-contract alignment is recorded in `a2a9c1d`, and the final evidence metadata is recorded
-in `e632c86`.
+in `e632c86`; `d35509f` closes the lifecycle metadata.
 
-Final Task 3 evidence commit: `e632c86`.
+Final Task 3 evidence commit: `d35509f`.
 
 ## Files and contract alignment
 

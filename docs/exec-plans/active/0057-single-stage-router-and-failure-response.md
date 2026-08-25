@@ -324,7 +324,7 @@ git commit -m "docs: record single-stage routing contract"
   record D-010 alignment commit`; `e2daefe docs: correct D-010 assertion evidence`; final audit
   alignment commit `e44497c docs: reconcile D-010 lifecycle evidence`; `10b72d4 docs: record final
   D-010 lifecycle SHA`; `a2a9c1d docs: align current D-010 contract records`; `e632c86 docs:
-  record D-010 contract alignment evidence`.
+  record D-010 contract alignment evidence`; `d35509f docs: close D-010 lifecycle metadata`.
 - Task 3 executable D-010 assertions (routing, active E-10, superseded designs, current contract
   records): exit 0
   (`d010 routing assertions passed`). Full Ruff and docstring Ruff: exit 0 (`All checks passed!`).

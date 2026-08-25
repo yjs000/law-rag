@@ -34,7 +34,8 @@
 ### B. 인증·비인증 사용자 이력 검토
 
 - **인증 사용자**: `_save_if_authenticated()` → `postgres_identity.save_question()`이 이미
-  `diagnostics`(route/tier/reason_code/confidence/**explanation**, 2026-08-08 추가)를 저장한다.
+  안전한 `diagnostics`(route/reason_code/confidence, 2026-08-08 추가)를 저장한다. tier 필드나
+  설명 원문은 현재 계약에 포함하지 않는다.
   D-10 gold 검토와 같은 방식으로 사람이 표본 검토할 수 있다 - 새 인프라 불필요, 그대로 쓰면 된다.
 - **비인증 사용자**: 개인정보 불변조건상 질문 원문·설명 텍스트는 저장하지 않는다(의도된 설계,
   바꾸지 않는다). 대신 `emit_route_outcome()`/`emit_question_outcome()`(2026-08-08
