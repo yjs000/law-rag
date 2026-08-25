@@ -27,6 +27,7 @@
 | [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
 | [답변 근거 검증](answer-grounding-validation.md) | 승인 | `DraftAnswer.action` 구조화 신호와 `validate_draft` 검증 강도 분기 |
 | [질문 사전 라우팅](pre-retrieval-question-routing.md) | 승인 | embedding·검색 전 tier1(결정적 규칙)·tier2(LLM judgment) 2단계 라우터 |
+| [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) | 승인 | 단일 NVIDIA 라우터, `routing_unavailable` 안전 fallback, 법령 답변·안내 생성 경계 |
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |

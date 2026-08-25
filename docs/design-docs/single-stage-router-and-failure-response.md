@@ -34,7 +34,7 @@
 - 시스템이 질문 분류를 일시적으로 처리하지 못했으며 다시 시도해야 한다는 안내
 - 법률 결론, 법령 인용, section, checklist가 없는 `unanswerable` action
 
-`blocked_answer_generation`의 초안은 빈 근거로 answer validation을 통과해야 하며, timeout, provider 오류 또는 validation 실패 시에는 같은 의미의 결정적 `blocked_fallback`을 반환한다. 이 fallback은 `mode="ai"`, `action="unanswerable"`, 빈 citation·section·checklist를 사용한다.
+`blocked_answer_generation`의 초안은 빈 근거에 대한 `blocked_response_validation`을 통과해야 하며, timeout, provider 오류 또는 validation 실패 시에는 같은 의미의 결정적 `blocked_fallback`을 반환한다. 이 validation은 정상 `answer_validation` stage가 아니다. 이 fallback은 `mode="ai"`, `action="unanswerable"`, 빈 citation·section·checklist를 사용한다.
 
 기존의 정상 사용자 요구 route는 장애가 아니므로 별도 명칭으로 유지한다.
 

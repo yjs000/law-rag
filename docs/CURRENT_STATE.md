@@ -7,7 +7,11 @@
 ## 지금 무엇이 진행 중인가
 
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
-있다. 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
+있다.
+
+2026-08-25: D-010([0057](exec-plans/active/0057-single-stage-router-and-failure-response.md))은 단일 라우터와 `routing_unavailable` 안전 응답의 상세 구현 계획을 확정했고, 구현은 아직 시작하지 않았다.
+
+가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 
 ## 언제 더 읽어야 하는가
 
