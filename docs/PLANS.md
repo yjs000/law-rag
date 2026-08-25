@@ -13,12 +13,53 @@ repository-specific metadata를 정의하는 것이다.
 - 완료: docs/exec-plans/completed/
 - 알려진 장기 부채: docs/exec-plans/tech-debt-tracker.md
 
+## 작업 관리 메타데이터
+
+새 실행계획과 상태가 전이되는 실행계획의 상단에는 다음 여섯 필드를 둔다.
+
+```md
+> 작업 ID: `F-001`
+> 상태: `Todo`
+> 유형: `Feature`
+> 보조 라벨: `Data`, `Evaluation`
+> 선행 조건: 없음
+> 참고 범위:
+> - `apps/api/app/history.py` L42-L118 — 현재 이력 경계
+> - `docs/product-specs/history.md` L15-L38 — 사용자 요구
+```
+
+- 상태는 `Todo`, `Picked Up`, `Blocked`, `Done` 중 하나다.
+  - `Todo`: 선행 조건이 충족됐지만 아직 착수하지 않은 milestone.
+  - `Picked Up`: 현재 주 에이전트가 수행 중인 유일한 milestone. 없을 수는 있지만 둘 이상일 수 없다.
+  - `Blocked`: 사용자 승인, credential, 운영환경 등 외부 입력을 기다리는 milestone. 본문에 차단 사유와
+    재개 조건을 반드시 남긴다.
+  - `Done`: 구현·검증·상태 문서 갱신까지 끝난 milestone.
+- 유형은 `Feature`, `Bug`, `Tech Debt`, `Experiment`, `Operations`, `Documentation` 중 정확히 하나다.
+- 보조 라벨은 선택 사항이며 `Security`, `Reliability`, `Performance`, `Data`, `UX`, `Evaluation`만
+  사용한다. 새 보조 라벨은 필요한 실제 분류가 생겼을 때 이 문서를 먼저 갱신해 추가한다.
+- 작업 ID는 유형별 독립 시퀀스이며 접두사는 다음과 같다.
+  - `Feature`: `F-001`
+  - `Bug`: `B-001`
+  - `Tech Debt`: `TD-001`
+  - `Experiment`: `E-001`
+  - `Operations`: `O-001`
+  - `Documentation`: `DOC-001`
+  파일명의 기존 숫자 계획 ID는 바꾸지 않는다. 기존 `D-*` 로드맵 ID는 역사 식별자로 보존하며 새 ID로
+  소급 변환하지 않는다.
+- `참고 범위`의 각 항목은 저장소 상대 경로, 시작·끝 줄, 그 범위를 읽는 이유를 가진다. 줄을 고정 계약으로
+  사용하지 않으며, 해당 참조 파일 또는 계획을 수정하는 작업에서만 범위를 갱신한다. 안정적인 설계·결정
+  위치에는 섹션 앵커 링크를 우선할 수 있다.
+
 ## 작업 상태 계약
+
+실행계획 디렉터리(`todo/`, `active/`, `completed/`)는 계획 artifact의 lifecycle을 보존하고, 문서 상단
+`상태`는 현재 milestone의 운영 상태를 나타낸다.
 
 - 사용자가 다음 작업·추후 개선안으로 명시했지만 아직 착수하지 않은 일은 `todo/`에 등록한다.
 - 사용자가 착수를 요청하고 범위·완료 조건·외부 병목 점검이 끝나면 같은 번호와 파일명을 유지한 채
   `todo/`에서 `active/`로 이동한다.
 - 구현과 요구 검증이 끝나면 실제 결과와 잔여 작업을 기록하고 같은 파일을 `completed/`로 이동한다.
+- 진행 기록이 있는 계획이라도 다음 milestone이 아직 시작되지 않았다면 상단 상태는 `Todo`로 둘 수 있다.
 - `tech-debt-tracker.md`는 관찰된 결함·위험 원장이다. 부채 해결을 다음 작업으로 선택하더라도 TD 항목은
   원장에 유지하고 TODO 또는 active 계획에서 연결한다.
 - GitHub 프로젝트 `Backlog`은 외부 이슈 상태다. 저장소 TODO와 자동 동기화하지 않으며 사용자가 요청한

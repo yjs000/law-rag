@@ -20,8 +20,10 @@
    세션 전체를 미리 읽지 않는다.
 4. brainstorming·설계 승인·planning 필요 여부와 절차는 설치된 Superpowers skill의 trigger 조건을
    따른다. 이 저장소는 작업 규모로 그 여부를 다시 판단하지 않는다.
-5. 사용자가 이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다.
-   Superpowers `writing-plans`로 실행 계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
+5. `docs/ROADMAP.md`의 `Picked Up` 항목을 먼저 읽고, 해당 작업을 재개할 때만 연결된 실행계획을
+   확인한다. `Picked Up`이 없으면 `Todo`의 첫 항목을 사용한다. 사용자가 이전에 다음 작업으로 등록한
+   항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다. Superpowers `writing-plans`로 실행
+   계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
 6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
 
 ## Docker·로컬 DB 정책
@@ -50,8 +52,8 @@ Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`
 명시한다. 둘 중 하나라도 생략하여 부모 세션의 모델이나 reasoning effort를 암묵적으로 상속하게 해서는
 안 된다.
 
-- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `extra-high`
-- 일반 구현 : `gpt-5.6-luna`, `extra-high`
+- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `max`
+- 일반 구현 : `gpt-5.6-luna`, `max`
 - 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `medium`
 - 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-terra`, `high`
 - fix-loop escalation은 필요한 경우에만 한 단계 올리며, 최종 review가 아니라는 이유만으로
@@ -77,7 +79,7 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 ## Discord 전용 오버레이
 
 - Discord thread `1528216345924337805`에서 시작한 작업에만 루트 [discord-agents.md](discord-agents.md)를 추가로 읽고 적용한다.
-- 다른 Discord thread, DM, 로컬 CLI, 웹, Telegram 등에서는 해당 overlay와 [Discord 작업 보드](docs/ROADMAP.md), [Discord 오류 Ledger](docs/operations/discord-error-ledger.md)를 적용하지 않는다.
+- `1528216345924337805` thread 밖에서는 `discord-agents.md`와 `docs/operations/discord-error-ledger.md`만 적용하지 않는다. 공통 프로젝트 계약과 `docs/ROADMAP.md`는 모든 작업에 적용한다.
 - 공통 프로젝트 계약은 항상 이 파일이 우선하며 Discord overlay는 진행 보고, TODO/위임, 상태 보존과 오류 기록만 보강한다.
 
 ## 권위 문서
@@ -87,6 +89,7 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 - 시스템 구조와 의존성: `ARCHITECTURE.md`
 - 상세 기술 설계: `docs/design-docs/index.md`
 - 제품 요구사항: `docs/product-specs/index.md`
+- 현재 작업 우선순위 색인: `docs/ROADMAP.md`
 - 실행 계획 저장 위치·lifecycle: `docs/PLANS.md`
 - 사용자가 제안한 미착수 작업: `docs/exec-plans/todo/README.md`
 - UI 원칙: `docs/DESIGN.md`, `docs/FRONTEND.md`
