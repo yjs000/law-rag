@@ -93,7 +93,7 @@ being classified as routing or feature-availability failures.
   → `26 passed` in 0.25s.
 - Repository docs checker:
   `uv run --project apps/api python scripts/check_docs.py`
-  → exit 1 with exactly 32 pre-existing broken-link reports. The two D-010 assertion functions
+  → exit 1 with exactly 32 pre-existing broken-link reports. The three D-010 assertion functions
   pass; no new D-010 link or current-contract error is reported, and unrelated documentation
   debt remains untouched.
 - `git diff --check` → exit 0.
