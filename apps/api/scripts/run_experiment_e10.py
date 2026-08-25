@@ -1,10 +1,9 @@
 """0032 실행: 실험 E-10 base — D-10 10문항을 실제 파이프라인(routing + Postgres 검색 +
 NVIDIA 생성)으로 1회씩 통과시키고 원자적 JSON 결과를 게시한다.
 
-호출 수 상한(0032 사전 등록): 라우팅 tier2 최대 7회 + 답변 생성 최대 7회 = 최대 14회
-(사전 등록한 "최대 12회"는 tier1이 3문항을 잡는다는 가정이었는데, 실측 라우팅에서 tier1은
-0251/0605/0836 3문항만 잡고 나머지 7문항이 tier2로 간다 - 상한을 넘지 않는지 이 스크립트가
-직접 집계해 보고한다). NVIDIA 무료 티어라 금전 비용은 0원, 공유 worker pool 제한(503)에 걸리면
+호출 수 상한(0032 사전 등록): 단일 라우터 최대 10회 + 답변 생성 최대 6회 = 최대 16회.
+각 문항은 라우터를 정확히 한 번 호출하며, 법령 검색 route만 생성까지 진행한다. NVIDIA 무료
+티어라 금전 비용은 0원, 공유 worker pool 제한(503)에 걸리면
 `live_fixture_retry_runner.py`와 같은 방식으로 실패한 문항만 재시도한다.
 
 route-fixture-v1.json의 D-10 10개 케이스(lay-energy-* id)를 재사용해 질문 텍스트를 중복 정의
@@ -32,15 +31,16 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
 import app.main as main_module  # noqa: E402
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter  # noqa: E402
 from app.domain.answer_actions import derive_answer_action  # noqa: E402
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE  # noqa: E402
-from app.domain.routing import route_tier1, route_tier2  # noqa: E402
+from app.domain.routing import route_question  # noqa: E402
 from app.domain.schemas import QuestionRequest  # noqa: E402
 
 FIXTURE_PATH = _API_ROOT / "evaluation" / "route-fixture-v1.json"
 OUTPUT_PATH = _API_ROOT / "evaluation" / "experiment-e10-base-results.json"
-MAX_ROUTING_CALLS = 7
-MAX_GENERATION_CALLS = 7
+MAX_ROUTING_CALLS = 10
+MAX_GENERATION_CALLS = 6
 RETRY_INTERVAL_SECONDS = 10
 MAX_RETRIES = 30  # 5분 상한 - E-10은 무료 티어라 D-10 규모에서 30분 캡은 과하다
 
@@ -56,7 +56,17 @@ def _git_sha() -> str:
     ).stdout.strip()
 
 
-async def run_one(case: dict, classifier, embedder, answerer) -> dict:
+def _router() -> NvidiaNimQuestionRouter:
+    settings = main_module.settings
+    return NvidiaNimQuestionRouter(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_route_classifier_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
+    )
+
+
+async def run_one(case: dict, router, embedder, answerer) -> dict:
     question = case["question"]
     request = QuestionRequest(question=question)
     record: dict[str, object] = {
@@ -65,18 +75,12 @@ async def run_one(case: dict, classifier, embedder, answerer) -> dict:
     }
 
     t_route0 = time.monotonic()
-    decision = route_tier1(question)
-    tier2_called = False
-    if decision is None:
-        tier2_called = True
-        decision = await route_tier2(question, classifier)
+    decision = await route_question(question, router)
     record["route"] = decision.route
-    record["route_tier"] = decision.tier
     record["route_reason_code"] = decision.reason_code
     record["route_confidence"] = decision.confidence
     record["route_explanation"] = decision.explanation
     record["route_latency_seconds"] = round(time.monotonic() - t_route0, 2)
-    record["tier2_called"] = tier2_called
     record["route_correct"] = decision.route == case["expected_route"]
 
     if decision.route != "legal_search":
@@ -139,7 +143,7 @@ async def run_one(case: dict, classifier, embedder, answerer) -> dict:
 
 async def main() -> None:
     cases = load_d10_cases()
-    classifier = main_module._route_classifier()
+    router = _router()
     embedder = main_module._embedder()
     answerer = main_module._answerer()
 
@@ -151,7 +155,7 @@ async def main() -> None:
         still_pending: dict[str, dict] = {}
         for case_id, case in pending.items():
             try:
-                results[case_id] = await run_one(case, classifier, embedder, answerer)
+                results[case_id] = await run_one(case, router, embedder, answerer)
                 print(f"attempt {attempt}: {case_id} -> {results[case_id]['route']} done")
             except Exception as exc:
                 print(f"attempt {attempt}: {case_id} failed ({type(exc).__name__}: {exc}), retry")
@@ -161,7 +165,7 @@ async def main() -> None:
             await asyncio.sleep(RETRY_INTERVAL_SECONDS)
 
     ordered = [results[c["id"]] for c in cases if c["id"] in results]
-    routing_calls = sum(1 for r in ordered if r.get("tier2_called"))
+    routing_calls = len(ordered)
     generation_calls = sum(1 for r in ordered if r.get("generation_attempted"))
 
     safety_gates = {
