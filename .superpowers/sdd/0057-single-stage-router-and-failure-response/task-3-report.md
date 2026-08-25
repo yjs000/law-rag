@@ -24,9 +24,9 @@ The Task 3 documentation commits are recorded chronologically and by their actua
 - `56ae8ab docs: align D-010 lifecycle status` — removed the solved regression-gate blocker from
   lifecycle pointers and recorded the final green counts while preserving parent-level Active
   integration status.
-- Final whole-branch alignment commit (recorded in the follow-up metadata commit) updates the
-  technology ADR, superseded always-generate design, settings comments, and historical fixture
-  metadata without changing production behavior or historical result values.
+- `21689e0 docs: align superseded D-010 records` — updates the technology ADR, superseded
+  always-generate design, settings comments, and historical fixture metadata without changing
+  production behavior or historical result values.
 
 The active-plan and this report now include the follow-up metadata commit `56ae8ab`; no
 “immediately after” ordering is implied for the earlier documentation commits.
