@@ -54,11 +54,11 @@ Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`
 
 - 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `max`
 - 일반 구현 : `gpt-5.6-luna`, `max`
-- 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `medium`
-- 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-terra`, `high`
+- 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `xhigh`
+- 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-sol`, `medium`
 - fix-loop escalation은 필요한 경우에만 한 단계 올리며, 최종 review가 아니라는 이유만으로
   `gpt-5.6-terra`를 선택하지 않는다.
-- `gpt-5.6-sol`은 어떠한 경우에도 사용하지 않는다.
+- `gpt-5.6-sol`은 `medium` 이하에서만 사용하며, `high` 이상은 어떠한 경우에도 사용하지 않는다.
 
 명시적 모델 override와 호환되도록 subagent의 `fork_turns`는 `none` 또는 필요한 최근 turn 수로
 제한한다. 요청한 모델이나 effort를 사용할 수 없으면 다른 모델로 조용히 fallback하지 말고
