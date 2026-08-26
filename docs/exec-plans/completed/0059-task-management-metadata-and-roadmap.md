@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > 작업 ID: `DOC-001`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Documentation`
 > 보조 라벨: 없음
 > 선행 조건: [설계 승인](../../design-docs/task-management-metadata-and-roadmap.md)
@@ -56,7 +56,7 @@
 - Consumes: 설계의 메타데이터 계약과 로드맵 역할 (`docs/design-docs/task-management-metadata-and-roadmap.md:19-83`).
 - Produces: 모든 작업 관리 문서가 사용할 공통 상태·유형·ID·참고 범위 정의와 세션 시작 포인터.
 
-- [ ] **Step 1: 현재 계약이 Discord 보드와 로컬 exec-plan lifecycle을 분리하는지 확인한다.**
+- [x] **Step 1: 현재 계약이 Discord 보드와 로컬 exec-plan lifecycle을 분리하는지 확인한다.**
 
 Run:
 
@@ -66,15 +66,15 @@ rg -n "Discord 전용|작업 상태 계약|GitHub 프로젝트|세션 시작" AG
 
 Expected: `AGENTS.md`는 `ROADMAP.md`를 Discord 전용으로 제한하고, `PLANS.md`는 디렉터리 lifecycle만 정의한다.
 
-- [ ] **Step 2: `AGENTS.md`의 Discord 전용 오버레이를 오류 ledger 한정으로 바꾸고, 공통 `ROADMAP.md`와 `PLANS.md`를 권위 문서에 연결한다.**
+- [x] **Step 2: `AGENTS.md`의 Discord 전용 오버레이를 오류 ledger 한정으로 바꾸고, 공통 `ROADMAP.md`와 `PLANS.md`를 권위 문서에 연결한다.**
 
 Replace the second Discord-overlay bullet with text that excludes only `discord-agents.md` and `docs/operations/discord-error-ledger.md` outside thread `1528216345924337805`; do not exempt `docs/ROADMAP.md`. Add `docs/ROADMAP.md` as the current-priority index in the authoritative-documents list. In startup step 5, read the roadmap's `Picked Up` entry first and the linked plan only when resuming it; when there is no `Picked Up`, use the first `Todo` entry.
 
-- [ ] **Step 3: `docs/PLANS.md`에 표준 메타데이터와 이중 상태 의미를 추가한다.**
+- [x] **Step 3: `docs/PLANS.md`에 표준 메타데이터와 이중 상태 의미를 추가한다.**
 
 Insert a `## 작업 관리 메타데이터` section after `## 위치` containing the six required header fields, the four states, six primary types, allowed secondary labels, type prefixes, and the line-range maintenance rule. Keep `todo/active/completed` as the artifact lifecycle in `## 작업 상태 계약`, and explicitly say a plan with prior history can label its next milestone `Todo`.
 
-- [ ] **Step 4: GitHub 라벨 문서를 저장소 유형과 수동으로 맞춘다.**
+- [x] **Step 4: GitHub 라벨 문서를 저장소 유형과 수동으로 맞춘다.**
 
 Change the issue-label table to six exclusive type labels plus optional `status: blocked`:
 
@@ -89,11 +89,11 @@ Change the issue-label table to six exclusive type labels plus optional `status:
 
 Retain the existing requirement that `status: blocked` needs a stated reason and release condition; state that GitHub Project status remains authoritative for GitHub and no automatic synchronization is introduced.
 
-- [ ] **Step 5: `CURRENT_STATE.md`를 얇은 세션 포인터로 정리한다.**
+- [x] **Step 5: `CURRENT_STATE.md`를 얇은 세션 포인터로 정리한다.**
 
 Keep the initial `AGENTS.md` and `CURRENT_STATE.md` read requirement. Replace the detailed D-010 paragraph with a direct link to `docs/ROADMAP.md`, saying to open `Picked Up` first and otherwise the first `Todo`. Preserve the conditional-reading guidance and state that the roadmap is an index, not a request to read all plans.
 
-- [ ] **Step 6: 계약 문구를 검증한다.**
+- [x] **Step 6: 계약 문구를 검증한다.**
 
 Run:
 
@@ -103,7 +103,7 @@ rg -n "Picked Up|Tech Debt|type: experiment|자동 동기화|참고 범위" AGEN
 
 Expected: all four documents contain the applicable contract term; no statement leaves `ROADMAP.md` Discord-only.
 
-- [ ] **Step 7: 계약 문서 변경을 커밋한다.**
+- [x] **Step 7: 계약 문서 변경을 커밋한다.**
 
 ```powershell
 git add AGENTS.md docs/PLANS.md docs/GITHUB_WORKFLOW.md docs/CURRENT_STATE.md
@@ -129,7 +129,7 @@ git commit -m "docs: define task tracking contract"
 - Consumes: Task 1's header contract and the source plans' current purpose, dependency, and blocker sections.
 - Produces: readable current-plan headers without rewriting their historic bodies or completed plans.
 
-- [ ] **Step 1: inspect the first 40 lines of each current plan and record only the references that a worker must read before acting.**
+- [x] **Step 1: inspect the first 40 lines of each current plan and record only the references that a worker must read before acting.**
 
 Run:
 
@@ -141,7 +141,7 @@ Get-ChildItem docs/exec-plans/active,docs/exec-plans/todo -File -Filter '*.md' |
 
 Expected: each plan's existing goal, dependency, completion condition, and linked design document are visible without reading the full file.
 
-- [ ] **Step 2: add these exact primary IDs and labels before each plan title.**
+- [x] **Step 2: add these exact primary IDs and labels before each plan title.**
 
 | Plan file | ID | Status | Type | Secondary labels |
 |---|---|---|---|---|
@@ -159,11 +159,11 @@ Expected: each plan's existing goal, dependency, completion condition, and linke
 
 For each header, write `선행 조건` using the existing blocker or promotion condition. Write one to three `참고 범위` entries with exact `path Lstart-Lend — reason` values selected from the linked design and product documents. Do not create a reference merely for the metadata policy, and do not alter a completed plan.
 
-- [ ] **Step 3: add a header for this plan itself and retain it as the sole `Picked Up` item.**
+- [x] **Step 3: add a header for this plan itself and retain it as the sole `Picked Up` item.**
 
 Keep this plan's `DOC-001`, `Picked Up`, `Documentation` header unchanged while Tasks 1 through 3 are in progress. Its reference ranges are the approved design contract and the existing document boundaries listed at the top of this file.
 
-- [ ] **Step 4: validate the current-plan headers.**
+- [x] **Step 4: validate the current-plan headers.**
 
 Run:
 
@@ -182,7 +182,7 @@ if ($missing) { $missing; exit 1 }
 
 Expected: `validated 12 current-plan headers`; no missing metadata line.
 
-- [ ] **Step 5: commit the header migration.**
+- [x] **Step 5: commit the header migration.**
 
 ```powershell
 git add docs/exec-plans/active docs/exec-plans/todo
@@ -201,7 +201,7 @@ git commit -m "docs: label current execution plans"
 - Consumes: Task 1 status rules and Task 2 ID/header table.
 - Produces: a concise global roadmap with the current documentation milestone as its only `Picked Up` entry and folder indexes that do not duplicate roadmap detail.
 
-- [ ] **Step 1: verify the old roadmap is a long Discord-only table and its links resolve.**
+- [x] **Step 1: verify the old roadmap is a long Discord-only table and its links resolve.**
 
 Run:
 
@@ -212,7 +212,7 @@ Test-Path docs/exec-plans/completed/0057-single-stage-router-and-failure-respons
 
 Expected: the old table includes D-001 through D-010, and the D-010 plan path exists.
 
-- [ ] **Step 2: replace the roadmap with the four required status sections.**
+- [x] **Step 2: replace the roadmap with the four required status sections.**
 
 Create `# 프로젝트 로드맵` with a short statement that it is the common project entry point and linked plans are authoritative. Add sections in this exact order: `## Picked Up`, `## Todo`, `## Blocked`, `## Done`.
 
@@ -221,11 +221,11 @@ Create `# 프로젝트 로드맵` with a short statement that it is the common p
 - `Blocked` preserves the four external items as legacy IDs: `D-002 · Operations`, `D-004 · Feature`, `D-005 · Operations`, `D-009 · Operations`; each entry links to the existing plan where it exists and carries only its release condition.
 - `Done` preserves the latest completed legacy item `D-010 · Feature` linking to 0057, plus at most nine more recent completed items. Do not copy test counts or long implementation results into this index.
 
-- [ ] **Step 3: rewrite folder README files as focused indexes.**
+- [x] **Step 3: rewrite folder README files as focused indexes.**
 
 `active/README.md` lists active plan artifacts with each plan's new ID, status, and one-line current next milestone; it does not claim every active artifact is `Picked Up`. `todo/README.md` lists its eleven `Todo` plans with IDs and one-line next actions, retains its registration contract, and links to `ROADMAP.md` for global ordering. `completed/README.md` gains a `## 2026 Q3` recent section and a `## 2026 Q2 및 이전` archive section, retaining every existing plan link without adding headers to the completed plan files.
 
-- [ ] **Step 4: validate status order, link targets, and active-count constraint.**
+- [x] **Step 4: validate status order, link targets, and active-count constraint.**
 
 Run:
 
@@ -243,7 +243,7 @@ if ($broken) { $broken; exit 1 }
 
 Expected: one `Picked Up` item; section order and all local links validate.
 
-- [ ] **Step 5: commit the roadmap and index migration.**
+- [x] **Step 5: commit the roadmap and index migration.**
 
 ```powershell
 git add docs/ROADMAP.md docs/exec-plans/active/README.md docs/exec-plans/todo/README.md docs/exec-plans/completed/README.md
@@ -264,15 +264,15 @@ git commit -m "docs: make roadmap a status index"
 - Consumes: completed Tasks 1 through 3 and their validation results.
 - Produces: no `Picked Up` entry, a `Done` entry for `DOC-001`, a completed-plan result record, and a start pointer that falls back to the first Todo.
 
-- [ ] **Step 1: record concrete results and any remaining historical limitation in this plan.**
+- [x] **Step 1: record concrete results and any remaining historical limitation in this plan.**
 
 Add a dated result section to this plan: all current `todo/active` plans have headers; completed plans were intentionally not bulk-labeled; the roadmap keeps only a short Done index; and the executed validation commands with outputs are recorded. Do not claim a GitHub label was created or a remote board changed.
 
-- [ ] **Step 2: move the plan and update all indexes atomically.**
+- [x] **Step 2: move the plan and update all indexes atomically.**
 
 Use `git mv` to move this plan to `completed/`. Remove `DOC-001` from `Picked Up`, add it to `Done` with a one-line result, remove it from `active/README.md`, add it to the `2026 Q3` section in `completed/README.md`, and change `CURRENT_STATE.md` to say there is no Picked Up milestone and point to the first Todo.
 
-- [ ] **Step 3: run the full documentation verification.**
+- [x] **Step 3: run the full documentation verification.**
 
 Run:
 
@@ -295,9 +295,16 @@ if (($roadmap.IndexOf('## Picked Up')) -gt ($roadmap.IndexOf('## Todo')) -or
 git diff --check
 ```
 
+## 결과 및 잔여 작업 (2026-08-26)
+
+- 현재 `todo/`와 `active/` 실행계획 11개에 표준 메타데이터 헤더를 적용했다. DOC-001은 완료 계획으로 이동했으며, 기존 완료 계획은 정책에 따라 일괄 소급 라벨링하지 않았다.
+- 전역 로드맵을 상태별 얇은 링크 색인으로 전환하고, `Done`에는 최근 10개 항목만 유지했다.
+- GitHub 라벨·Project 보드는 수동 매핑 계약만 문서화했으며, 원격 라벨 생성이나 보드 변경은 수행하지 않았다.
+- 완료 전환 검증 결과: `validated 11 current-plan headers`, 로드맵 섹션 순서와 모든 로컬 링크가 유효했고, `git diff --check`도 통과했다.
+
 Expected: zero metadata omissions, the four roadmap sections in order, and no `git diff --check` output.
 
-- [ ] **Step 4: inspect the staged diff and commit the completion transition.**
+- [x] **Step 4: inspect the staged diff and commit the completion transition.**
 
 ```powershell
 git diff --check

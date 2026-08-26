@@ -4,7 +4,7 @@
 
 ## Picked Up
 
-- [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/active/0059-task-management-metadata-and-roadmap.md) — 계약·현재 계획 메타데이터·상태 색인을 반영 중
+현재 `Picked Up` milestone은 없습니다.
 
 ## Todo
 
@@ -29,6 +29,7 @@
 
 ## Done
 
+- [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/completed/0059-task-management-metadata-and-roadmap.md) — 작업 관리 계약, 현재 계획 메타데이터, 상태 색인을 완료
 - [D-010 · Feature — 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) — 라우터와 실패 응답 계약을 완료
 - [0056: Python docstring과 Ruff D 규칙](exec-plans/completed/0056-python-docstrings-and-ruff-d.md) — 문서화 규칙을 정비
 - [0053: V2 LlamaIndex 검색 파이프라인](exec-plans/completed/0053-v2-llamaindex-retrieval-pipeline.md) — V2 검색 파이프라인을 완료
@@ -38,4 +39,3 @@
 - [0043: 일반인 답변 계약 v2와 가독성 평가](exec-plans/completed/0043-layperson-answer-contract-v2.md) — 답변 계약 v2를 반영
 - [0039: 구조화된 API 오류 메시지 표시](exec-plans/completed/0039-error-detail-object-shown-as-object-object.md) — 구조화된 오류 표시를 반영
 - [0038: 모델 호출 없는 API는 전부 1초 이내 응답](exec-plans/completed/0038-non-model-endpoints-under-1s.md) — 비모델 API 응답 목표를 달성
-- [0030: D-10 전수 qrel과 사용자 adjudication](exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md) — D-10 Gold를 봉인
