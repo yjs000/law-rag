@@ -13,6 +13,7 @@
 - [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 엣지케이스 범위를 확정
 - [E-005 · Experiment — 0058: v2 청킹 ablation](0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
+- [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](0060-v2-dynamic-today-date-bound.md) — 다음 행동: F-005 실행계획에서 temporal contract task로 포함할지 독립 선행 수정으로 둘지 결정
 
 ## 등록 계약
 
