@@ -20,7 +20,7 @@
 - [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 엣지케이스 범위를 확정
 - [E-005 · Experiment — 0058: v2 청킹 ablation](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
-- [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](design-docs/v2-llamaindex-framework-redesign.md) — 예외 집계·최종 답변·외부 호출 timeout·100명 동시접속 계약까지 승인, 아직 구현 전; 다음 행동: 별도 실행계획 작성
+- [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](design-docs/v2-llamaindex-framework-redesign.md) — 기존 `/v2/questions`를 제거하는 authoritative execution 기반 prepare/core/finalize API, typed `next_action`, phase 멱등·timeout·100명 동시접속 계약까지 승인, 아직 구현 전; 다음 행동: 별도 실행계획 작성
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: F-005 실행계획에서 temporal contract task로 포함할지 독립 선행 수정으로 둘지 결정
 
 ## Blocked

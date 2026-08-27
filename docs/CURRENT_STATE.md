@@ -14,7 +14,8 @@
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 구현 전인 최신 승인 설계는
 [V2 LlamaIndex 프레임워크 파이프라인 개편](design-docs/v2-llamaindex-framework-redesign.md)이며,
-generation 색인·framework Router/QueryEngine/ResponseSynthesizer·문장별 grounding SSE를 다음 구현 후보로
+generation 색인·framework Router/QueryEngine/ResponseSynthesizer·서버 authoritative
+`question_execution` 기반 prepare/core/finalize 3단계 API·문장별 grounding SSE를 다음 구현 후보로
 기록한다. 현재 코드가 이미 이 구조로 동작한다는 뜻은 아니다.
 
 ## 언제 더 읽어야 하는가
