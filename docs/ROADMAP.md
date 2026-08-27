@@ -1,6 +1,7 @@
 # 프로젝트 로드맵
 
-공통 프로젝트의 현재 작업 진입점입니다. 상세 범위·결정·검증은 연결된 실행계획이 권위 문서입니다.
+공통 프로젝트의 현재 작업 진입점입니다. 상세 범위·결정·검증은 연결된 실행계획이 권위 문서이며,
+실행계획 작성 전인 승인 설계는 연결된 설계 문서를 따릅니다.
 
 ## Picked Up
 
@@ -19,6 +20,7 @@
 - [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 엣지케이스 범위를 확정
 - [E-005 · Experiment — 0058: v2 청킹 ablation](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
+- [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](design-docs/v2-llamaindex-framework-redesign.md) — 승인된 설계이며 아직 구현 전; 다음 행동: 설계 검토 뒤 별도 실행계획 작성
 
 ## Blocked
 

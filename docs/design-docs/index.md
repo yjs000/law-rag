@@ -32,7 +32,8 @@
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
 | [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 대체됨 | 역사적 tier1/tier2·`search_only` 설계 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
-| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 구현 중 | v1과 병행하는 신규 `law-rag-llamaindex` 워크스페이스, ingestion 준비 상태, `/v2/search`, 운영자 관리 HNSW와 LangGraph 확장 로드맵 |
+| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 대체됨 | 구현된 Phase 1의 역사 기록; 현재 개편 계약은 아래 후속 설계 |
+| [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 | generation 색인, engine 주입, Router·QueryEngine·ResponseSynthesizer와 문장별 grounding SSE |
 | [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
 | [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 제안됨 | v1/v2 재사용 없이 라우팅·생성·검증을 LangGraph 노드로 재구축, Postgres 체크포인터 대화 영속화, 스레드/run API |
