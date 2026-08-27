@@ -32,6 +32,10 @@
 - LlamaIndex `ResponseSynthesizer`가 생성 stream을 제공하되 raw token은 생성 계층 내부에서만 소비한다.
 - 기존 `POST /v2/questions`를 SSE 전용 endpoint로 변경한다. 별도 non-stream endpoint는 만들지 않는다.
 - 원자적인 법률 주장 단위로 grounding을 통과한 summary, section, checklist만 SSE로 공개한다.
+- route·검색·생성·grounding에서 발생한 복구 가능 오류를 요청 단위로 누적하고, 하나의 최종 답변
+  coordinator가 검증된 부분 답변·제한 답변·결정적 fallback 중 하나를 선택한다.
+- 로컬 bounded 계산에는 개별 timeout을 두지 않고 LLM·원격 embedding·DB 같은 외부 대기 경계와 전체
+  요청 deadline만 제한한다. 100명 동시접속 시에는 무제한 대기 대신 admission control을 적용한다.
 - 인증·quota·이력·안전 오류·공식 출처·기준일 계약은 유지한다.
 - 기존 v2 구현은 전환이 끝나면 병행 보존하지 않고 제거한다. rollback용 이전 색인 데이터는 유지한다.
 
@@ -334,8 +338,10 @@ checklist 항목도 검증을 통과하거나 결정적 fallback으로 바뀐 �
 ### 7.4 전송과 완료
 
 FastAPI handler는 경계 입력·인증·quota·readiness처럼 HTTP 상태 코드가 필요한 검사를 stream 시작 전에
-끝낸다. stream이 열린 뒤의 안전한 실패는 `error`, 사용자 취소는 `cancelled` event로 보낸다. provider
-body, raw exception, 질문 원문은 event나 log에 남기지 않는다.
+끝낸다. stream이 열린 뒤의 복구 가능 실패는 즉시 일반 `error`로 끝내지 않고 요청별
+`PipelineIssueCollector`에 기록한다. 이후 `FinalAnswerCoordinator`가 이미 검증된 내용과 남은 근거를
+기준으로 제한 답변 또는 결정적 fallback을 선택한다. fatal failure는 `error`, 사용자 취소는 `cancelled`
+event로 끝낸다. provider body, raw exception, 질문 원문은 event나 log에 남기지 않는다.
 
 `ResponseAssembler`는 이미 검증되어 공개한 domain event만 누적한다. 모든 단계가 끝나면 authoritative
 `QuestionResponse`를 이력에 먼저 저장하고 `complete` event에 최종 정본과 history ID를 넣는다. client는
@@ -346,6 +352,130 @@ body, raw exception, 질문 원문은 event나 log에 남기지 않는다.
 events = question_service.stream_answer(request, user)
 return StreamingResponse(sse_presenter.present(events))
 ```
+
+### 7.5 예외 수집과 최종 답변 결정
+
+모든 stage는 알려진 외부 실패를 raw exception으로 상위에 흘리지 않고 안정된 `PipelineIssue`로 변환한다.
+issue에는 stage, 공개 가능한 reason code, recoverable 여부와 fallback 선택에 필요한 최소 정보만 담는다.
+stack trace, provider body, DB 오류 전문과 질문 원문은 issue나 최종 LLM 입력에 넣지 않는다.
+
+```python
+# [직접 작성] 요청 단위 append-only 오류 원장
+issues = PipelineIssueCollector()
+
+route = await stage_boundary.capture(router.route(question), issues)
+retrieval = (
+    await stage_boundary.capture(retriever.retrieve(route), issues)
+    if route.allows_retrieval
+    else RetrievalResult.skipped(route.reason_code)
+)
+
+async for event in answer_pipeline.stream_verified(retrieval, issues):
+    yield event
+
+# [직접 작성] 유일한 정상/제한/fallback 완료 결정 지점
+terminal = final_answer_coordinator.finalize(
+    verified_content=assembler.snapshot(),
+    evidence=retrieval.evidence,
+    issues=issues.public_view(),
+    remaining_time=request_deadline.remaining(),
+)
+yield terminal
+```
+
+분류와 종료 흐름은 다음과 같다.
+
+```text
+route / retrieval / generation / grounding
+                  |
+                  v
+          stage exception boundary
+                  |
+       +----------+-----------+----------------+
+       |                      |                |
+       v                      v                v
+RecoverableIssue         FatalFailure       Cancelled
+       |                      |                |
+       v                      v                v
+PipelineIssueCollector   typed error        cancelled
+       |                 complete 없음       complete 없음
+       v
+검증된 content + evidence + 누적 issue
+       |
+       v
+FinalAnswerCoordinator
+       |
+       +-- 검증된 답변 있음 ------> 내용 유지 + 제한사항
+       |                            -> complete(outcome="degraded")
+       |
+       +-- 근거는 있으나 생성 실패 -> 남은 model budget 있음?
+       |                              +-- 예 -> 안전 생성 후 grounding
+       |                              +-- 아니오 -> 결정적 fallback
+       |
+       +-- 근거 없음/route 불가 ----> 법률 주장 없는 결정적 안내
+                                      -> complete(outcome="degraded")
+```
+
+`RecoverableIssue`에는 selector timeout/provider/schema 실패, 검색 timeout·근거 없음, 생성 provider 오류,
+문장 repair 실패와 선택 section/checklist 실패가 포함된다. selector 실패는 임의로 `legal_search`를 선택하지
+않고 기존 `routing_unavailable` no-search 경로로 보낸다. 이미 공개한 검증된 summary와 section은 후속 실패
+때 철회하지 않는다.
+
+`degraded_complete`라는 별도 SSE event를 추가하지 않는다. 정상과 복구 가능 fallback 모두 기존 `complete`
+event를 사용하고 최종 response의 `outcome`을 `normal` 또는 `degraded`로 구분한다. `error`와 `cancelled`는
+`complete`와 상호 배타적이다.
+
+`FatalFailure`에는 보안 경계 위반, 출처·데이터 무결성 위반, 프로그래밍 불변조건 위반과 알 수 없는 예외가
+포함된다. 이를 법률 답변으로 위장하지 않는다. authoritative response 저장이 실패해도 저장된 정본을
+약속하는 `complete`를 보내지 않고 typed `error`로 끝낸다. client disconnect와 cancellation은 오류 답변을
+새로 만들지 않고 resource를 반납한다. admission 거부는 stream 시작 전 HTTP `503 system_busy`로 반환한다.
+
+오류가 누적됐다는 이유만으로 마지막에 LLM을 반드시 한 번 더 호출하지 않는다. 검증된 내용과 근거가 있고
+전체 deadline 안에 model budget이 남았을 때만 안전 생성을 시도한다. model 호출 자체가 실패했거나 남은
+시간이 종료 reserve 이하면 승인된 결정적 문구로 종료한다.
+
+### 7.6 timeout과 100명 동시접속 계약
+
+로컬 파싱, typed 결과 변환, issue 수집, citation 조립, SSE 직렬화와 bounded 입력의 결정적 grounding
+검사에는 개별 `asyncio.timeout()`을 두지 않는다. 이 작업은 입력 크기 상한과 테스트로 실행 시간을
+제어한다. 계산 복잡도가 `O(1)` 또는 bounded라는 사실은 network, provider queue, DB lock과 connection
+pool 대기까지 보장하지 않으므로 외부 대기 경계는 별도로 제한한다.
+
+v2의 timeout 계약은 다음과 같다.
+
+| 경계 | 상한 | 적용 방식 |
+|---|---:|---|
+| Vercel Function hard limit | 60초 | 애플리케이션 timeout이 아닌 최후 kill switch |
+| API 요청 monotonic deadline | 52초 | 모든 stage가 공유하며 새 예산을 만들지 않음 |
+| 이력 저장·terminal event reserve | 5초 | 남은 시간이 이 값 이하면 새 model 호출 금지 |
+| Router LLM | 6초 | selector provider 호출에만 적용 |
+| 원격 query embedding | 5초 | `VectorStoreIndex` 내부 adapter의 provider 호출에 적용 |
+| 핵심 답변 LLM | 22초 | summary 생성과 첫 grounding/repair가 공유 |
+| repair LLM | 6초 | 핵심 답변 budget과 전체 deadline 안에서만 실행 |
+| 선택 section/checklist LLM | 항목당 8초 | 남은 시간 내에서만 실행, 초과 시 해당 항목 fallback |
+| admission 대기 | 1초 | 수용 불가 시 model 호출 전에 거부 |
+| admission 거부 응답 | 2초 이내 | stream 시작 전 HTTP `503 system_busy` |
+
+위 숫자는 서로 더해 별도 요청 시간을 만드는 할당량이 아니라 하나의 52초 deadline 안에서 각 외부 호출이
+가질 수 있는 상한이다. DB connection 획득·statement와 외부 HTTP는 해당 driver/client timeout을 사용하되,
+로컬 application stage 전체를 다시 timeout으로 감싸지 않는다. 재시도도 같은 stage와 전체 deadline을
+공유하며 reserve 이하에서는 시작하지 않는다.
+
+100명 동시접속은 100개의 LLM 호출을 무조건 동시에 실행한다는 뜻이 아니다. application은 주입된
+`ConcurrencyLimiter`로 provider별 실행 수를 제한하고 1초를 넘는 내부 대기열을 만들지 않는다. 실제
+동시 실행 수와 DB pool 크기는 NVIDIA quota와 부하 테스트 결과로 정한다. accepted SSE request는 브라우저가
+자동으로 전체 요청을 재시도하지 않는다. `accepted` 전 연결 실패만 같은 idempotency key로 최대 한 번
+재시도하며 서버는 중복 실행을 막는다.
+
+100개 동시 POST 부하 검증은 다음을 만족해야 한다.
+
+- accepted request가 52초를 넘거나 Vercel hard kill에 도달하지 않는다.
+- 용량 초과 request는 model·검색을 시작하지 않고 2초 안에 `503 system_busy`를 받는다.
+- recoverable failure는 검증된 내용 유지 또는 결정적 fallback을 거쳐
+  `complete(outcome="degraded")`로 끝난다.
+- fatal failure와 cancellation은 `complete`로 위장되지 않는다.
+- DB pool exhaustion과 무제한 task/queue 증가가 없고 cancellation 뒤 slot이 반환된다.
+- 하나의 사용자 요청이 client retry 때문에 여러 LLM pipeline으로 증폭되지 않는다.
 
 ## 8. 추상화와 모듈 경계
 
@@ -363,6 +493,9 @@ return StreamingResponse(sse_presenter.present(events))
 | `RouteQueryEngineFactory` | route별 QueryEngineTool 조립 | LlamaIndex custom factory |
 | `GroundedResponseSynthesizer` | component 생성 stream | LlamaIndex `ResponseSynthesizer` adapter |
 | `SentenceGroundingVerifier` | 문장 검사·repair·fallback | 프로젝트 안전 계층 |
+| `PipelineIssueCollector` | 요청별 recoverable issue 누적·공개 정보 제한 | 프로젝트 application 계층 |
+| `FinalAnswerCoordinator` | 검증된 내용·근거·issue로 terminal 결과 결정 | 프로젝트 application 계층 |
+| `ConcurrencyLimiter` | provider별 admission과 bounded 대기 | semaphore 기반 infrastructure adapter |
 | `AnswerEventPresenter` | domain event를 SSE로 직렬화 | FastAPI SSE adapter |
 
 교체 가능성은 불필요한 범용 factory가 아니라 실제 외부 경계에 둔다. 테스트에서는 reader, embedding,
@@ -377,13 +510,16 @@ FastAPI, NVIDIA 타입을 직접 import하지 않는다.
 - 검색 근거 없음: 근거 부족 domain response만 생성.
 - 문장 grounding 실패: 해당 문장 repair 후 fallback, 검증 전 내용은 미공개.
 - section 실패: 이미 공개된 summary 유지, 안전 section fallback 공개.
-- stream 후 예외: 안전한 typed `error` event, raw 예외 미노출.
+- stream 후 recoverable 예외: issue를 누적하고 이미 검증된 내용을 유지한
+  `complete(outcome="degraded")` 또는 결정적 fallback으로 종료.
+- stream 후 fatal·알 수 없는 예외: 안전한 typed `error`, raw 예외 미노출, `complete` 없음.
 - client disconnect/취소: request-scoped cancellation을 전달하고 `complete`가 없는 미완료 stream으로 종료.
+- admission 초과: SSE 시작 전 `503 system_busy`, model·검색 미실행.
 
 관측 stage는 source loading, change detection, vector copy, transformation, generation verification,
 active switch, routing, retrieval, citation freeze, summary generation/validation, section generation/validation,
-checklist generation/validation, history save, stream completion을 분리한다. 로그에는 질문 원문, 원문 전문,
-인증정보와 provider body를 남기지 않는다.
+checklist generation/validation, issue collection, terminal decision, admission wait/reject, history save, stream
+completion을 분리한다. 로그에는 질문 원문, 원문 전문, 인증정보와 provider body를 남기지 않는다.
 
 ## 10. v1 호환성과 전환
 
@@ -422,6 +558,11 @@ v2는 다음 호환성 변경을 의도적으로 수용한다.
 - raw LlamaIndex token이 SSE로 노출되지 않는 계약
 - summary/section/checklist가 citation registry를 직접 참조하고 검증 전에는 event가 없는 계약
 - 숫자·규범·과장 표현 실패, 문장별 repair 횟수, section fallback, authoritative `complete`
+- route·검색·생성·grounding의 복구 가능 issue 누적과 단일 `FinalAnswerCoordinator` 종료 결정
+- recoverable `complete(outcome="degraded")`, fatal typed `error`, cancelled, history 저장 실패의 상호 배타적
+  terminal 계약
+- 로컬 bounded 코드에 개별 timeout이 없고 model/embedding 외부 호출만 공유 deadline을 쓰는 계약
+- 100개 동시 POST에서 52초 deadline, 1초 admission wait, 2초 이내 `503 system_busy`, queue/slot 회수
 - stream 시작 전 HTTP 오류와 시작 후 typed error/cancelled, disconnect, 이력 저장 순서
 - v1 회귀와 web SSE 소비 end-to-end
 
@@ -434,7 +575,8 @@ v2는 다음 호환성 변경을 의도적으로 수용한다.
 - DB pool size, overflow와 전체 connection budget 수치
 - embedding batch size와 provider retry 간격
 - retrieval top-k와 generation evidence count의 초기값
-- repair budget의 시간·token 상한
+- repair token 상한
+- 부하 테스트로 확정할 provider별 `ConcurrencyLimiter` 동시 실행 수
 - SSE heartbeat 주기와 client reconnect 세부 처리
 - generation 보존 정리 시점과 운영 명령 이름
 
@@ -460,5 +602,11 @@ v2는 다음 호환성 변경을 의도적으로 수용한다.
 - 2026-08-27: 기존 `POST /v2/questions`를 SSE 전용으로 변경하고 별도 stream/non-stream 경로를 두지 않는다.
 - 2026-08-27: LlamaIndex raw generation token은 HTTP와 직결하지 않고 문장별 grounding을 통과한 summary,
   section, checklist domain event만 공개한다.
+- 2026-08-27: route·검색·생성·grounding의 복구 가능 오류는 요청별 `PipelineIssueCollector`에 누적하고
+  `FinalAnswerCoordinator` 하나가 검증된 부분 답변, 제한 답변, 결정적 fallback을 선택한다. fatal·취소·
+  admission 거부는 법률 답변으로 위장하지 않는다.
+- 2026-08-27: 로컬 bounded 코드에는 개별 timeout을 두지 않고, 52초 요청 deadline 안에서 LLM·원격
+  embedding과 DB·HTTP 외부 대기 경계만 제한한다. 100명 동시접속은 주입된 limiter, 1초 admission 대기,
+  2초 이내 `503 system_busy`와 부하 검증 계약으로 다룬다.
 - 2026-08-27: human-in-the-loop, realtime/attachment tool, agent workflow와 generation별 HNSW
   성능평가는 다음 목표로 분리한다.
