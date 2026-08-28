@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
@@ -40,9 +41,11 @@ from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import (
+    CoreDraft,
     DraftAnswer,
     build_messages_v2,
     select_generation_hits,
+    validate_core_draft,
     validate_draft,
 )
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
@@ -551,8 +554,14 @@ async def prepare_question_execution(
         if route == "legal_search"
         else ([], None)
     )
+    generation_hits = (
+        select_generation_hits(hits, settings.answer_evidence_max_characters)
+        if route == "legal_search" and payload.answer_mode == "terra"
+        else hits
+    )
     frozen_citations = tuple(
-        FrozenCitation(id=f"C{index}", quote=hit.content) for index, hit in enumerate(hits, 1)
+        FrozenCitation(id=f"C{index}", quote=hit.content)
+        for index, hit in enumerate(generation_hits, 1)
     )
     execution_capability = (
         _execution_capability(owner_scope, idempotency_key) if user is None else None
@@ -565,6 +574,7 @@ async def prepare_question_execution(
         private_payload={
             "request": payload.model_dump(mode="json"),
             "hits": [hit.model_dump(mode="json") for hit in hits],
+            "generation_hits": [hit.model_dump(mode="json") for hit in generation_hits],
             "corpus_as_of": corpus_as_of.isoformat() if corpus_as_of is not None else None,
             "route": route,
             "missing_fields": list(missing_fields),
@@ -628,41 +638,65 @@ async def _stream_execution_phase(
         raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
     if execution.status is ExecutionStatus.EXPIRED:
         raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.")
-    lease = await _admit_v2_provider_phase(execution, phase)
-
     coordinator = QuestionPhaseCoordinator(
         question_execution_repository,
         core=lambda execution: _run_v2_core(execution),
         finalize=lambda execution: _run_v2_finalize(execution, user),
         phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
     )
+    existing = question_phase_tasks.get(execution_id)
+    owns_task = existing is None or existing.done()
+    start_gate = asyncio.Event()
+
+    async def run_after_admission():
+        await start_gate.wait()
+        return await coordinator.run(
+            execution_id,
+            owner_scope,
+            phase=phase,
+            capability_hash=capability_hash,
+        )
+
+    task = asyncio.create_task(run_after_admission()) if owns_task else existing
+    assert task is not None
+    if owns_task:
+        question_phase_tasks[execution_id] = task
+    try:
+        lease = await _admit_v2_provider_phase(execution, phase) if owns_task else None
+    except BaseException:
+        if owns_task and question_phase_tasks.get(execution_id) is task:
+            del question_phase_tasks[execution_id]
+        task.cancel()
+        raise
+
+    async def release_when_done() -> None:
+        if owns_task and question_phase_tasks.get(execution_id) is task:
+            del question_phase_tasks[execution_id]
+        if owns_task and lease is not None:
+            await lease.release()
+
+    def schedule_release(_completed_task) -> None:
+        asyncio.create_task(release_when_done())
+
+    if owns_task:
+        task.add_done_callback(schedule_release)
+        start_gate.set()
 
     async def events():
-        task = asyncio.create_task(
-            coordinator.run(
-                execution_id,
-                owner_scope,
-                phase=phase,
-                capability_hash=capability_hash,
-            )
-        )
-        question_phase_tasks[execution_id] = task
         try:
-            persisted = await task
+            persisted = await asyncio.shield(task)
         except asyncio.CancelledError:
+            if not task.cancelled() and owns_task:
+                raise
+            if not task.cancelled():
+                raise
             persisted = (AnswerEvent.cancelled(),)
         except (ExecutionConflict, ValueError):
             persisted = (AnswerEvent.error("phase_not_ready"),)
         except ExecutionNotFound:
             persisted = (AnswerEvent.error("execution_not_found"),)
-        try:
-            for event in persisted:
-                yield _sse(event.event_type, dict(event.payload))
-        finally:
-            if question_phase_tasks.get(execution_id) is task:
-                del question_phase_tasks[execution_id]
-            if lease is not None:
-                await lease.release()
+        for event in persisted:
+            yield _sse(event.event_type, dict(event.payload))
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
@@ -763,6 +797,13 @@ def _execution_request_and_hits(
     )
 
 
+def _execution_generation_hits(execution, hits: list[SearchHit]) -> list[SearchHit]:
+    stored = execution.private_payload.get("generation_hits")
+    if isinstance(stored, list):
+        return [SearchHit.model_validate(item) for item in stored if isinstance(item, dict)]
+    return select_generation_hits(hits, settings.answer_evidence_max_characters)
+
+
 async def _v2_response_from_frozen_evidence(execution) -> QuestionResponse:
     """Generate only from the execution's persisted evidence; never re-retrieve."""
     payload, hits, corpus_as_of = _execution_request_and_hits(execution)
@@ -780,7 +821,7 @@ async def _v2_response_from_frozen_evidence(execution) -> QuestionResponse:
         )
     if payload.answer_mode != "terra" or not _ai_available():
         return fallback
-    generation_hits = select_generation_hits(hits, settings.answer_evidence_max_characters)
+    generation_hits = _execution_generation_hits(execution, hits)
     draft = await _answerer().answer(payload, generation_hits)
     if not validate_draft(draft, generation_hits):
         raise ValueError("generated answer did not satisfy the citation contract")
@@ -814,9 +855,44 @@ async def _v2_response_from_frozen_evidence(execution) -> QuestionResponse:
     )
 
 
+async def _v2_core_from_frozen_evidence(execution) -> tuple[CoreDraft, list[Citation]]:
+    """Generate the only client-visible core payload from frozen execution evidence."""
+    payload, hits, corpus_as_of = _execution_request_and_hits(execution)
+    fallback = search_only_answer(payload, hits, corpus_as_of)
+    route = execution.private_payload.get("route", "legal_search")
+    if route != "legal_search" or payload.answer_mode != "terra" or not _ai_available():
+        return (
+            CoreDraft(
+                summary=fallback.summary,
+                citation_ids=[citation.id for citation in fallback.citations],
+                action=fallback.action or "unanswerable",
+            ),
+            fallback.citations,
+        )
+    generation_hits = _execution_generation_hits(execution, hits)
+    draft = await _answerer().answer_core(payload, generation_hits)
+    if not validate_core_draft(draft, generation_hits):
+        raise ValueError("generated core did not satisfy the citation contract")
+    citations = [
+        Citation(
+            id=f"C{index}",
+            provision_id=hit.provision_id,
+            document_title=hit.document_title,
+            version_label=hit.version_label,
+            path=hit.path,
+            quote=hit.content,
+            source_url=hit.source_url,
+            source_kind=hit.source_kind,
+            law_type_code=hit.law_type_code,
+        )
+        for index, hit in enumerate(generation_hits, 1)
+    ]
+    return draft, citations
+
+
 async def _run_v2_core(execution) -> PhaseResult:
-    response = await _v2_response_from_frozen_evidence(execution)
-    if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
+    core, citations = await _v2_core_from_frozen_evidence(execution)
+    if not _v2_core_is_grounded(core, CitationRegistry(execution.frozen_citations)):
         return PhaseResult(
             target=ExecutionStatus.CORE_REPAIR_REQUIRED,
             events=(
@@ -829,13 +905,16 @@ async def _run_v2_core(execution) -> PhaseResult:
                 ),
             ),
         )
-    response_data = response.model_dump(mode="json")
+    core_data = core.model_dump(mode="json")
     return PhaseResult(
         target=ExecutionStatus.CORE_ANSWERED,
         events=(
             AnswerEvent(
                 event_type="summary",
-                payload={"summary": response.summary, "citations": response_data["citations"]},
+                payload={
+                    "summary": core.summary,
+                    "citations": [citation.model_dump(mode="json") for citation in citations],
+                },
             ),
             AnswerEvent(
                 event_type="phase_complete",
@@ -845,22 +924,32 @@ async def _run_v2_core(execution) -> PhaseResult:
                 },
             ),
         ),
-        private_payload={"verified_core_response": response_data},
+        private_payload={
+            "verified_core": core_data,
+            "verified_core_citations": [citation.model_dump(mode="json") for citation in citations],
+        },
     )
 
 
 async def _run_v2_finalize(execution, user: MockUser | None) -> PhaseResult:
     payload, _hits, _corpus_as_of = _execution_request_and_hits(execution)
-    stored_core = execution.private_payload.get("verified_core_response")
-    if isinstance(stored_core, dict):
-        response = QuestionResponse.model_validate(stored_core)
-    else:
+    stored_core = execution.private_payload.get("verified_core")
+    core = CoreDraft.model_validate(stored_core) if isinstance(stored_core, dict) else None
+    degraded = execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED
+    try:
         response = await _v2_response_from_frozen_evidence(execution)
-        if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
-            response = _v2_grounding_fallback(payload)
+    except Exception:
+        response = _v2_core_degraded_response(payload, core, execution.private_payload)
+        degraded = True
+    if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
+        response = _v2_core_degraded_response(payload, core, execution.private_payload)
+        degraded = True
+    elif core is not None:
+        response.summary = core.summary
+        response.action = core.action
     response = await _save_if_authenticated(user, payload, response)
     response_data = response.model_dump(mode="json")
-    outcome = "degraded" if execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED else "normal"
+    outcome = "degraded" if degraded else "normal"
     return PhaseResult(
         target=ExecutionStatus.COMPLETED,
         response=response_data,
@@ -868,21 +957,49 @@ async def _run_v2_finalize(execution, user: MockUser | None) -> PhaseResult:
     )
 
 
+def _v2_core_degraded_response(
+    payload: QuestionRequest, core: CoreDraft | None, private_payload
+) -> QuestionResponse:
+    if core is None:
+        return _v2_grounding_fallback(payload)
+    raw_citations = private_payload.get("verified_core_citations", [])
+    citations = [Citation.model_validate(item) for item in raw_citations if isinstance(item, dict)]
+    return QuestionResponse(
+        request_id=str(payload.client_request_id), mode="ai", summary=core.summary,
+        scope="상세 설명 검증 실패", sections=[], checklist=[], citations=citations,
+        limitations=["검증된 요약만 제공합니다.", "이 서비스는 법률 자문을 대체하지 않습니다."],
+        requested_answer_mode=payload.answer_mode, action=core.action, route="legal_search",
+    )
+
+
 def _v2_response_is_grounded(response: QuestionResponse, registry: CitationRegistry) -> bool:
     if not response.citations:
         return not response.sections and not response.checklist
     all_citations = tuple(citation.id for citation in response.citations)
-    if not registry.verify(GroundedSentence(response.summary, all_citations)):
+    if not _grounded_text(response.summary, all_citations, registry):
         return False
     for section in response.sections:
         citation_ids = tuple(section.citation_ids)
-        if not registry.verify(GroundedSentence(section.claim, citation_ids)):
+        if not _grounded_text(section.claim, citation_ids, registry):
             return False
-        if not registry.verify(GroundedSentence(section.explanation, citation_ids)):
+        if not _grounded_text(section.explanation, citation_ids, registry):
             return False
     return all(
-        registry.verify(GroundedSentence(item.label, tuple(item.citation_ids)))
+        _grounded_text(item.label, tuple(item.citation_ids), registry)
         for item in response.checklist
+    )
+
+
+def _v2_core_is_grounded(core: CoreDraft, registry: CitationRegistry) -> bool:
+    if not core.citation_ids:
+        return not registry.citations or core.action == "unanswerable"
+    return _grounded_text(core.summary, tuple(core.citation_ids), registry)
+
+
+def _grounded_text(text: str, citation_ids: tuple[str, ...], registry: CitationRegistry) -> bool:
+    sentences = tuple(part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip())
+    return bool(sentences) and all(
+        registry.verify(GroundedSentence(sentence, citation_ids)) for sentence in sentences
     )
 
 

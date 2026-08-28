@@ -8,7 +8,7 @@ type PreparedExecution = {
   execution_capability?: string;
 };
 
-type SseEvent = { event: string; data: Record<string, unknown> };
+export type V2ExecutionEvent = { event: string; data: Record<string, unknown> };
 
 export type V2ExecutionDependencies = {
   fetch: typeof fetch;
@@ -17,6 +17,8 @@ export type V2ExecutionDependencies = {
   idempotencyKey: () => string;
   reconnectDelayMs?: (attempt: number) => number;
   maxReconnects?: number;
+  phaseWaitMs?: number;
+  onEvent?: (event: V2ExecutionEvent) => void;
 };
 
 export class V2ExecutionHttpError extends Error {
@@ -100,9 +102,11 @@ async function reconnectablePhase(
   phase: "core" | "finalize",
   deps: V2ExecutionDependencies,
   signal?: AbortSignal,
-): Promise<SseEvent[]> {
+): Promise<V2ExecutionEvent[]> {
   const maxReconnects = deps.maxReconnects ?? DEFAULT_MAX_RECONNECTS;
-  for (let attempt = 0; attempt <= maxReconnects; attempt += 1) {
+  const deadline = Date.now() + (deps.phaseWaitMs ?? 57_000);
+  let failedReconnects = 0;
+  while (Date.now() < deadline) {
     try {
       const events = await streamPhase(prepared, phase, deps, signal);
       if (events.some((event) => ["phase_complete", "complete", "error", "cancelled"].includes(event.event))) {
@@ -110,12 +114,12 @@ async function reconnectablePhase(
       }
     } catch (error) {
       if (signal?.aborted || error instanceof V2ExecutionHttpError) throw error;
-      if (attempt === maxReconnects) throw error;
+      failedReconnects += 1;
+      if (failedReconnects > maxReconnects) throw error;
     }
-    if (attempt === maxReconnects) break;
-    await wait(deps.reconnectDelayMs?.(attempt) ?? 250 * 2 ** attempt, signal);
+    await wait(deps.reconnectDelayMs?.(failedReconnects) ?? 250 * 2 ** failedReconnects, signal);
   }
-  throw new Error("실행 phase 재연결 횟수를 초과했습니다.");
+  throw new Error("실행 phase 대기 시간이 만료되었습니다.");
 }
 
 async function streamPhase(
@@ -123,7 +127,7 @@ async function streamPhase(
   phase: "core" | "finalize",
   deps: V2ExecutionDependencies,
   signal?: AbortSignal,
-): Promise<SseEvent[]> {
+): Promise<V2ExecutionEvent[]> {
   const response = await deps.fetch(
     `${deps.apiUrl}/v2/question-executions/${encodeURIComponent(prepared.execution_id)}/${phase}`,
     {
@@ -136,8 +140,11 @@ async function streamPhase(
     throw new V2ExecutionHttpError(response.status, await response.json().catch(() => null));
   }
   if (!response.body) throw new Error("SSE 응답 본문이 없습니다.");
-  const events: SseEvent[] = [];
-  for await (const event of parseSse(response.body)) events.push(event);
+  const events: V2ExecutionEvent[] = [];
+  for await (const event of parseSse(response.body)) {
+    deps.onEvent?.(event);
+    events.push(event);
+  }
   return events;
 }
 
@@ -164,7 +171,7 @@ async function json<T>(response: Promise<Response>): Promise<T> {
   return resolved.json() as Promise<T>;
 }
 
-async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<SseEvent> {
+async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<V2ExecutionEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -188,7 +195,7 @@ async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<SseEv
   }
 }
 
-function parseFrame(frame: string): SseEvent | null {
+function parseFrame(frame: string): V2ExecutionEvent | null {
   const lines = frame.split(/\r?\n/);
   const event = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
   const data = lines.find((line) => line.startsWith("data:"))?.slice(5).trim();

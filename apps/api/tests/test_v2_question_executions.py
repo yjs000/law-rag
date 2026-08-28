@@ -1,8 +1,14 @@
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.adapters.openai_answerer import CoreDraft, DraftAnswer
+from app.domain.catalog import SourceKind
+from app.domain.grounding import FrozenCitation
+from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit
 
 
 async def _allow_supported_date(*args) -> None:
@@ -11,6 +17,21 @@ async def _allow_supported_date(*args) -> None:
 
 async def _legal_search_route(*args):
     return SimpleNamespace(route="legal_search", missing_fields=())
+
+
+def _v2_hit() -> SearchHit:
+    return SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        path="제1조",
+        content="전기사업자는 허가를 받아야 합니다.",
+        source_url="https://www.law.go.kr/법령/전기사업법/제1조",
+    )
 
 
 def test_v2_prepare_requires_an_idempotency_key() -> None:
@@ -65,6 +86,134 @@ def test_obsolete_v2_single_question_route_is_removed() -> None:
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_v2_core_persists_only_verified_summary_and_finalize_generates_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    repository = MemoryQuestionExecutionRepository()
+    execution = await repository.prepare_or_get(
+        owner_scope="anonymous:test",
+        prepare_idempotency_key="test-key",
+        generation_id=uuid4(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        private_payload={
+            "request": request.model_dump(mode="json"),
+            "hits": [hit.model_dump(mode="json")],
+            "route": "legal_search",
+        },
+        frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+    )
+
+    class Answerer:
+        detail_calls = 0
+
+        async def answer_core(self, *_args):
+            return CoreDraft(
+                summary="전기사업자는 허가를 받아야 합니다.",
+                citation_ids=["C1"],
+                action="fully_answerable",
+            )
+
+        async def answer(self, *_args):
+            self.detail_calls += 1
+            return DraftAnswer(
+                summary="상세 생성 요약은 core 요약으로 바뀌어야 합니다.",
+                scope="기준일 현재",
+                sections=[
+                    AnswerSection(
+                        claim="허가를 확인하세요.",
+                        explanation="원문에 허가 요건이 있습니다.",
+                        citation_ids=["C1"],
+                    )
+                ],
+                checklist=[
+                    {"label": "원문을 확인하세요.", "status": "check", "citation_ids": ["C1"]}
+                ],
+                action="fully_answerable",
+            )
+
+    answerer = Answerer()
+    monkeypatch.setattr(main_module, "_answerer", lambda: answerer)
+    monkeypatch.setattr(main_module, "_ai_available", lambda: True)
+
+    core = await main_module._run_v2_core(execution)
+
+    assert core.response is None
+    assert core.private_payload is not None
+    assert core.private_payload["verified_core"] == {
+        "summary": "전기사업자는 허가를 받아야 합니다.",
+        "citation_ids": ["C1"],
+        "action": "fully_answerable",
+    }
+    assert "sections" not in core.private_payload["verified_core"]
+
+    finalized = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={**execution.private_payload, **core.private_payload},
+            frozen_citations=execution.frozen_citations,
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert answerer.detail_calls == 1
+    assert finalized.response is not None
+    assert finalized.response["summary"] == "전기사업자는 허가를 받아야 합니다."
+    assert finalized.response["sections"]
+
+
+@pytest.mark.asyncio
+async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+
+    async def unavailable_detail(_execution):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", unavailable_detail)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "verified_core": {
+                    "summary": "전기사업자는 허가를 받아야 합니다.",
+                    "citation_ids": ["C1"],
+                    "action": "fully_answerable",
+                },
+                "verified_core_citations": [
+                    {
+                        "id": "C1",
+                        "provision_id": str(hit.provision_id),
+                        "document_title": hit.document_title,
+                        "version_label": hit.version_label,
+                        "path": hit.path,
+                        "quote": hit.content,
+                        "source_url": hit.source_url,
+                        "source_kind": hit.source_kind.value,
+                    }
+                ],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["summary"] == "전기사업자는 허가를 받아야 합니다."
+    assert result.events[0].payload["outcome"] == "degraded"
 
 
 def test_prepare_core_finalize_replays_authoritative_phase_events(

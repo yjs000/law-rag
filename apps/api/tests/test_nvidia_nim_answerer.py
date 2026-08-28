@@ -10,7 +10,9 @@ from pydantic import ValidationError
 
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.openai_answerer import (
+    CoreDraft,
     build_blocked_route_messages,
+    build_core_messages,
     build_messages,
     build_messages_v2,
 )
@@ -80,6 +82,39 @@ async def test_nvidia_nim_uses_guided_schema_and_validates_answer() -> None:
     assert captured["max_tokens"] == 4096
     assert captured["extra_body"]["chat_template_kwargs"] == {"enable_thinking": False}
     assert captured["extra_body"]["guided_json"]["type"] == "object"
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_core_generation_uses_summary_only_contract() -> None:
+    answerer = _answerer()
+    captured: dict[str, object] = {}
+    payload = {
+        "summary": "전기사업에 관한 근거입니다.",
+        "citation_ids": ["C1"],
+        "action": "fully_answerable",
+    }
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    request = QuestionRequest(question="전기사업 근거")
+    hits = [_hit()]
+
+    core = await answerer.answer_core(request, hits)
+
+    assert core == CoreDraft.model_validate(payload)
+    assert captured["messages"] == build_core_messages(request, hits)
+    assert set(captured["extra_body"]["guided_json"]["properties"]) == {
+        "summary",
+        "citation_ids",
+        "action",
+    }
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ import {
   CONTEXT_ROLLOVER_NOTICE,
   DEFAULT_INPUT_CONTEXT_TOKENS,
   MESSAGE_TOKEN_OVERHEAD,
+  applyLiveCoreSummary,
   appendPendingTurn,
   completePendingTurn,
   createChatSession,
@@ -72,6 +73,21 @@ describe("chat titles", () => {
     expect(ellipsizeChatTitle("법령🔎검색", 4)).toBe("법령🔎…");
     expect(ellipsizeChatTitle("짧은 제목", 20)).toBe("짧은 제목");
     expect(() => ellipsizeChatTitle("제목", 0)).toThrow(RangeError);
+  });
+});
+
+describe("live execution state", () => {
+  it("replaces only the matching pending turn with a verified core summary", () => {
+    const pending = appendPendingTurn(createChatSession("chat-1"), pendingInput(1)).session;
+
+    const updated = applyLiveCoreSummary(pending, "request-1", response);
+
+    expect(updated.messages.at(-1)).toMatchObject({
+      requestId: "request-1",
+      status: "streaming",
+      response,
+    });
+    expect(applyLiveCoreSummary(updated, "other-request", response)).toEqual(updated);
   });
 });
 

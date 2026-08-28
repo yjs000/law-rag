@@ -8,7 +8,11 @@ import type {
   QuestionResponse,
 } from "./contracts";
 import { createClient } from "./supabase/client";
-import { runV2Execution, V2ExecutionHttpError } from "./v2-execution";
+import {
+  runV2Execution,
+  V2ExecutionHttpError,
+  type V2ExecutionEvent,
+} from "./v2-execution";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CONSENT_KEY = "law-rag-pending-consent";
@@ -108,6 +112,7 @@ export function getCorpusStatus(): Promise<CorpusStatus> {
 export async function askQuestion(
   input: QuestionInput,
   signal?: AbortSignal,
+  onEvent?: (event: V2ExecutionEvent) => void,
 ): Promise<QuestionResponse> {
   try {
     return await runV2Execution(input, {
@@ -115,6 +120,7 @@ export async function askQuestion(
       apiUrl: API,
       headers: await authHeaders(),
       idempotencyKey: () => crypto.randomUUID(),
+      onEvent,
     }, signal);
   } catch (error) {
     if (error instanceof V2ExecutionHttpError) {

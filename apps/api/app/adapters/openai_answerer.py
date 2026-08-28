@@ -27,6 +27,16 @@ class DraftAnswer(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
 
 
+class CoreDraft(BaseModel):
+    """The deliberately small, publishable result of the v2 core phase."""
+
+    summary: str
+    citation_ids: list[str]
+    action: Literal[
+        "fully_answerable", "partially_answerable", "clarification_required", "unanswerable"
+    ]
+
+
 MAX_GENERATION_ARTICLES = 5
 
 
@@ -58,6 +68,16 @@ def select_generation_hits(
         if used >= max_characters or len(selected) >= max_articles:
             break
     return selected
+
+
+def validate_core_draft(draft: CoreDraft, hits: list[SearchHit]) -> bool:
+    """Reject a publishable core summary that names evidence it did not receive."""
+    allowed = {f"C{index}" for index, _hit in enumerate(hits, 1)}
+    if not draft.summary.strip():
+        return False
+    if not set(draft.citation_ids).issubset(allowed):
+        return False
+    return bool(draft.citation_ids) or draft.action == "unanswerable"
 
 
 # 2026-08-09: OpenAIAnswerer 실행 코드는 의도적으로 비활성화했다. 이 모듈에는 NVIDIA
@@ -202,6 +222,22 @@ def build_messages_v2(request: QuestionRequest, hits: list[SearchHit]) -> list[d
             ),
         }
     )
+    return messages
+
+
+def build_core_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict[str, str]]:
+    """Build the first v2 generation prompt without requesting unpublished detail."""
+    messages = build_messages_v2(request, hits)
+    system = messages[0]["content"]
+    messages[0] = {
+        "role": "system",
+        "content": (
+            system
+            + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action만 "
+            "출력한다. sections, checklist, scope, limitations은 생성하거나 암시하지 않는다. "
+            "citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 C번호만 넣는다."
+        ),
+    }
     return messages
 
 

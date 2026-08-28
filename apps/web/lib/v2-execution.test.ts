@@ -54,6 +54,7 @@ describe("runV2Execution", () => {
 
   it("incrementally parses split frames and bounds a live-phase reconnect", async () => {
     let coreAttempts = 0;
+    const observed: string[] = [];
     const fetch = async (url: string, init?: RequestInit) => {
       if (url.endsWith("/v2/question-executions")) {
         return Response.json({
@@ -79,9 +80,11 @@ describe("runV2Execution", () => {
         headers: {},
         idempotencyKey: () => "key",
         reconnectDelayMs: () => 0,
+        onEvent: (event) => observed.push(event.event),
       },
     )).resolves.toEqual(response);
     expect(coreAttempts).toBe(2);
+    expect(observed).toEqual(["summary", "phase_complete", "complete"]);
   });
 
   it("cancels the issued v2 execution when the caller aborts", async () => {
