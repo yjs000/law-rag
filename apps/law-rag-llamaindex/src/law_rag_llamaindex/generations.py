@@ -309,3 +309,34 @@ class PostgresGenerationRepository:
                 query, {"generation_id": generation_id, "failure_code": failure_code}
             )
             result.scalar_one()
+
+    async def active(self) -> RetrievalGeneration | None:
+        """Read the generation selected by the singleton active pointer."""
+
+        query = text(
+            """
+            SELECT g.generation_id,g.physical_table_name,g.source_fingerprint,
+                   g.transform_fingerprint,g.status,g.source_count,g.node_count,
+                   g.failure_code,g.created_at,g.verified_at,g.published_at
+            FROM llamaindex_retrieval_generations AS g
+            JOIN llamaindex_active_generation AS active
+              ON active.generation_id = g.generation_id
+            """
+        )
+        async with self._engine.connect() as connection:
+            row = (await connection.execute(query)).mappings().one_or_none()
+        if row is None:
+            return None
+        return RetrievalGeneration(
+            id=row["generation_id"],
+            table_name=row["physical_table_name"],
+            source_fingerprint=row["source_fingerprint"],
+            transform_fingerprint=row["transform_fingerprint"],
+            status=row["status"],
+            source_count=row["source_count"],
+            node_count=row["node_count"],
+            failure_code=row["failure_code"],
+            created_at=row["created_at"],
+            verified_at=row["verified_at"],
+            published_at=row["published_at"],
+        )

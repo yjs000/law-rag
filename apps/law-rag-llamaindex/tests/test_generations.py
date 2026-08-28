@@ -168,3 +168,49 @@ async def test_postgres_catalog_records_failure_without_touching_active_pointer(
     assert "SET status = 'failed', failure_code = :failure_code" in sql
     assert "WHERE generation_id = :generation_id AND status IN ('building','verified')" in sql
     assert "llamaindex_active_generation" not in sql
+
+
+class _ActiveResult:
+    def mappings(self):
+        return self
+
+    def one_or_none(self):
+        return {
+            "generation_id": UUID("12345678-1234-5678-1234-567812345678"),
+            "physical_table_name": "law_rag_li_12345678123456781234567812345678",
+            "source_fingerprint": "a" * 64,
+            "transform_fingerprint": "b" * 64,
+            "status": "active",
+            "source_count": 1,
+            "node_count": 1,
+            "failure_code": None,
+            "created_at": None,
+            "verified_at": None,
+            "published_at": None,
+        }
+
+
+class _ReadConnection:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        return None
+
+    async def execute(self, query):
+        assert "JOIN llamaindex_active_generation" in query.text
+        return _ActiveResult()
+
+
+class _ReadEngine:
+    def connect(self) -> _ReadConnection:
+        return _ReadConnection()
+
+
+@pytest.mark.asyncio
+async def test_postgres_catalog_reads_active_generation_from_pointer() -> None:
+    generation = await PostgresGenerationRepository(_ReadEngine()).active()
+
+    assert generation is not None
+    assert generation.status == "active"
+    assert generation.table_name == "law_rag_li_12345678123456781234567812345678"
