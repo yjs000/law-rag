@@ -31,6 +31,8 @@ coverage/
 
 # Ephemeral Graphify query state
 /graphify-out/cache/last_query_stamp
+/graphify-out/cache/ast/
+/graphify-out/[0-9]*/
 
 # Personal Claude Code overrides
 .claude/settings.local.json
