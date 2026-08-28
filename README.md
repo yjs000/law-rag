@@ -66,7 +66,7 @@ adjudication 대기 상태다. 승인 전에는 Gold 지표를 계산하지 않�
 - [설계 문서](docs/design-docs/index.md)
 - [학습 노트](docs/learning/index.md)
 - [사용자가 제안한 예정 작업](docs/exec-plans/todo/README.md)
-- [현재 실행 계획](docs/exec-plans/active/0002-production-connections.md)
+- [완료된 실제 서비스 연결 계획](docs/exec-plans/completed/0002-production-connections.md)
 - [완료된 MVP 계획](docs/exec-plans/completed/0001-mvp-foundation.md)
 - [GitHub 이슈와 PR 운영](docs/GITHUB_WORKFLOW.md)
 

@@ -727,7 +727,7 @@ git commit -m "feat(web): add source_url link to citation card (0043)"
 0043 항목 줄을 다음으로 바꾼다(1~4번 구현 완료, 실제 비교는 후속 항목으로 분리됐음을 표시). **이 파일은 실행 시점에 다른 세션이 병행 수정했을 수 있으니, 편집 전 실제 내용을 다시 읽고 0043 줄만 정확히 바꾼다:**
 
 ```markdown
-- [0043: 일반인 답변 계약 v2와 가독성 평가](../active/0043-layperson-answer-contract-v2.md) — active로 이동, 1~4번(프롬프트 v2·프로필·결정적 테스트·원문 링크 UI) 구현 완료, 5번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수
+- [0043: 일반인 답변 계약 v2와 가독성 평가](0043-layperson-answer-contract-v2.md) — active로 이동, 1~4번(프롬프트 v2·프로필·결정적 테스트·원문 링크 UI) 구현 완료, 5번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수
 ```
 
 - [ ] **Step 3: `docs/exec-plans/active/README.md`에 0043 줄을 추가한다**

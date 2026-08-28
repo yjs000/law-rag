@@ -5,7 +5,7 @@
 최종 갱신: 2026-08-25
 
 후속 현재 계약: [D-010 단일 단계 라우터](single-stage-router-and-failure-response.md),
-[D-010 실행 계획](../exec-plans/active/0057-single-stage-router-and-failure-response.md)
+[D-010 실행 계획](../exec-plans/completed/0057-single-stage-router-and-failure-response.md)
 
 > 이 문서는 2026-08-10 당시의 설계·실행 기록을 보존한다. 아래의 tier1/tier2,
 > `route_blocked_answer`, `mode="search_only"` 및 호출량 서술은 현재 런타임 계약이 아니다.
@@ -22,10 +22,10 @@
 2026-08-10)로 요청해도, 다음 세 경로는 지금까지 LLM을 한 번도 호출하지 않고 고정 템플릿으로
 끝났다.
 
-1. 검색 후 근거 0건 (`no_matching_evidence`, `embedding_failed`) — [main.py:515](../../apps/api/app/main.py:515)
+1. 검색 후 근거 0건 (`no_matching_evidence`, `embedding_failed`) — [main.py:515](../../apps/api/app/main.py#L515)
 2. 사전 라우팅 차단 `realtime_required` / `external_document_required` — tier1(키워드,
    0028 "비용 최소화 결정")과 tier2(LLM 분류, 이미 자연어 이유가 있음) 모두
-   — [main.py:417](../../apps/api/app/main.py:417)
+   — [main.py:417](../../apps/api/app/main.py#L417)
 3. `clarification_required` — tier1/tier2 사전 차단 + 생성 후 발견
    (`post_generation_clarification_answer`)
 
@@ -47,7 +47,7 @@ LLM을 호출할 수 없는 상태이므로 이번 변경의 대상이 아니다
 
 ## 변경 지점
 
-### 1. `validate_draft` 완화 ([openai_answerer.py:289](../../apps/api/app/adapters/openai_answerer.py:289))
+### 1. `validate_draft` 완화 ([openai_answerer.py:289](../../apps/api/app/adapters/openai_answerer.py#L289))
 
 현재 `if not hits: return False`가 최상단에 있어 근거 0건이면 모델이 무엇을 답하든 무조건
 구조 검증에서 탈락한다. 이를 다음으로 바꾼다.
@@ -71,7 +71,7 @@ if not hits:
 여전히 거부된다 — "근거 없이 만든 법적 주장"은 계속 막는다. `hits`가 있을 때의 기존 검증
 (인용 ID 존재 여부 등)은 변경하지 않는다.
 
-### 2. 검색 후 0건 경로 ([main.py:515-533](../../apps/api/app/main.py:515))
+### 2. 검색 후 0건 경로 ([main.py:515-533](../../apps/api/app/main.py#L515))
 
 `if not use_ai or not hits: return fallback`에서 `not hits` 조건을 제거한다. `use_ai`가
 참이면 `hits`가 비어 있어도 `generation_hits=[]`로 생성 단계까지 진행한다. `use_ai`가
@@ -81,7 +81,7 @@ if not hits:
 `checklist`를 비운다"는 지시를 명시적으로 추가한다(현재 프롬프트는 근거가 항상 1건 이상
 있다고 암묵적으로 가정하고 있어, 빈 근거에 대한 동작이 문서화돼 있지 않다).
 
-### 3. 사전 라우팅 차단 경로 ([main.py:417-425](../../apps/api/app/main.py:417))
+### 3. 사전 라우팅 차단 경로 ([main.py:417-425](../../apps/api/app/main.py#L417))
 
 `route_decision.route != "legal_search"`일 때 바로 `route_blocked_answer`로 끝내지 않고,
 검색 없이 LLM을 호출하는 새 경로 `generate_blocked_route_answer()`를 추가한다. 근거 없이

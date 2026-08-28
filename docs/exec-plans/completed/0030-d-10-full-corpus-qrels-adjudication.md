@@ -117,7 +117,7 @@ corpus identity만 기록한다.
 - [x] 최종 상태를 `approved_gold`로 바꾸고 D-10 calibration Gold임을 명시한다.
       `dataset.json.evaluation_status=approved_gold`, `gold_scope=calibration_only_not_held_out`.
 - [x] 기존 10문항에 이미 조정한 검색기는 held-out으로 평가하지 않는다. [plan 0025 "튜닝 데이터와 측정
-      데이터"](../active/0025-approved-questions-to-grounded-answer-roadmap.md#튜닝-데이터와-측정-데이터)에 영구
+      데이터"](0025-approved-questions-to-grounded-answer-roadmap.md#튜닝-데이터와-측정-데이터)에 영구
       규칙으로 명문화했다.
 
 ## 완료 조건
@@ -188,7 +188,7 @@ uv run python scripts/check_docs.py
   반환했다. `sealed/dataset.json`은 `evaluation_status=approved_gold`,
   `gold_scope=calibration_only_not_held_out`, `independent_human_gold=false`와 `prohibited_claims`(
   independent_human_gold·held_out_performance·population_generalization·production_release_gate)를
-  포함한다. 이어서 [plan 0025 M3](../active/0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)를
+  포함한다. 이어서 [plan 0025 M3](0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)를
   실행해 이 sealed Gold로 R1 새 top 5의 미판정 후보 9개가 전부 relevance 0임을 확인하고 M3를 완료했다.
 
 ## 실제 결과와 잔여 작업
@@ -200,7 +200,7 @@ uv run python scripts/check_docs.py
 - 잔여 작업: 이 D-10 Gold는 계속 calibration 전용이며 별도 승격 절차가 없다(plan 0025 영구 규칙).
   나머지 990문항 Gold·D-full held-out은 여전히 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)
   보류 상태다. 이 계획의 범위는 여기서 끝나며, 후속 사용(M3~M4)은
-  [plan 0025](../active/0025-approved-questions-to-grounded-answer-roadmap.md)가 담당한다.
+  [plan 0025](0025-approved-questions-to-grounded-answer-roadmap.md)가 담당한다.
 
 ## v3 추가 기록 — 2026-08-07 (완료 이후 정정)
 
@@ -222,6 +222,6 @@ seal 완료 뒤 사용자가 [0026 수동 검토](0026-experiment-d-10-manual-re
 절](../../design-docs/experiment-d-10-gold-adjudication.md#회고--v1에서-놓친-것과-다음-평가에서-고려할-점)에
 정리했다.
 
-이 정정은 [plan 0025 M3](../active/0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)의
+이 정정은 [plan 0025 M3](0025-approved-questions-to-grounded-answer-roadmap.md#m3--d-10-rawr1-소표본-calibration--완료2026-08-07)의
 이미 발행된 raw/R1 수치에도 영향을 준다(`0601`이 새로 hit, `0561`은 원래 0026 기준으로 과대평가돼 있던
 것이 정확한 값으로 낮아짐) — M3 결과도 v3 기준으로 재계산해 갱신했다.

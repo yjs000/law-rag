@@ -6,7 +6,7 @@
 
 이 문서는 0028에서 검토한 사전 라우팅 문제와 당시의 tier1/tier2 설계를 보존하는
 역사 기록이다. 현재 런타임 계약과 실패 안전 경계는 [단일 단계 라우터와 라우터 불가
-응답](single-stage-router-and-failure-response.md)과 [D-010 실행 계획](../exec-plans/active/0057-single-stage-router-and-failure-response.md)을
+응답](single-stage-router-and-failure-response.md)과 [D-010 실행 계획](../exec-plans/completed/0057-single-stage-router-and-failure-response.md)을
 기준으로 한다.
 
 ## 현재 계약 (D-010)

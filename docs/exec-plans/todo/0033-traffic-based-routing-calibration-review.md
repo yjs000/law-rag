@@ -30,7 +30,7 @@
 ### A. (역사 기록) tier 1 사전 확장 재검토
 
 - `scripts/build_tier1_term_dictionary.py`가 v1 질문은행 1,000문항 중 BUILD 200개만 분석했다
-  (2026-08-08, [0028](../active/0028-pre-retrieval-question-routing.md) 참고) - 나머지 EVAL 800개는
+  (2026-08-08, [0028](../completed/0028-pre-retrieval-question-routing.md) 참고) - 나머지 EVAL 800개는
   커버리지 확인에만 썼지 사전에 반영하지 않았다.
 - `emit_route_outcome()`의 `_route_by_route_tier`/`_route_by_reason`/
   `_clarification_missing_fields` counter(2026-08-07 tier1 구현 시 추가)가 쌓이면, 실제 tier1이

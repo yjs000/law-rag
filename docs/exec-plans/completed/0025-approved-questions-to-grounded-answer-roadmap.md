@@ -486,13 +486,13 @@ NVIDIA adapter는 이미 있으므로 새 provider 계층을 만들지 않는다
 
 실험 E 통과 전에는 Production AI를 기본 활성화하지 않는다.
 
-## M6 — 실험 E-10: AI 답변 소표본 평가 — 계획 확정(2026-08-08, [0032](0032-experiment-e-10-ai-answer-evaluation.md))
+## M6 — 실험 E-10: AI 답변 소표본 평가 — 계획 확정(2026-08-08, [0032](../active/0032-experiment-e-10-ai-answer-evaluation.md))
 
 실제 호출 전에 별도 active 실행 계획을 만들고 10문항의 호출 수·비용·판정표를 사전 등록한다. E-10은
 사용자 확인 진단이며 일반 release gate가 아니다. 10문항 밖 품질 일반화가 필요하면 예정 작업 0029를
 먼저 활성화한다.
 
-**2026-08-08**: 위 요구사항에 따라 [0032](0032-experiment-e-10-ai-answer-evaluation.md)를 만들어
+**2026-08-08**: 위 요구사항에 따라 [0032](../active/0032-experiment-e-10-ai-answer-evaluation.md)를 만들어
 E0 + D-10 기반 E-10 base(최대 12회 NVIDIA 호출, 무료 티어)로 범위를 확정하고 안전 gate를
 사전 등록했다. E1/E2/E3(D-full 50/200/800)는 0029 미착수라 범위 밖. 실제 실행은 사용자 승인
 대기 중이다.

@@ -7,7 +7,7 @@
 - [F-002 · Feature — 0012: 분산 질문 취소](0012-distributed-question-cancellation.md) — 다음 행동: NVIDIA hosted NIM 기준으로 취소 설계를 현행화
 - [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](0029-d-full-gold-on-demand.md) — 다음 행동: 실제 일반화·회귀 필요 시에만 착수
 - [E-003 · Experiment — 0031: 실험 D 평가 harness 통합](0031-eval-harness-consolidation.md) — 다음 행동: rubric·conflict detector·통합 CLI 착수 여부를 결정
-- [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 다음 행동: 실 트래픽 축적 후 단일 QuestionRouter 정책을 재검토
+- [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](0033-traffic-based-routing-calibration-review.md) — 다음 행동: 실 트래픽 축적 후 D-010 단일 QuestionRouter 정책을 재검토
 - [F-003 · Feature — 0042: 재순위를 실제 검색 경로에 연결](0042-wire-reranking-into-live-search-path.md) — 다음 행동: 0041의 `source_kind` 신호를 확인하고 착수 범위를 결정
 - [F-004 · Feature — 0044: 공급자 중립 답변 모델 선택 계약](0044-provider-neutral-answer-model-selection.md) — 다음 행동: `terra` 호환을 유지하는 provider/model 설정 계약을 설계
 - [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영

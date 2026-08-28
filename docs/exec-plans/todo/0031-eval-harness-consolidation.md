@@ -13,7 +13,7 @@ detector·통합 CLI·정확한 token 계산·decision 정규화) 미착수`
 
 제안 출처: 2026-08-07 사용자가 외부(ChatGPT) harness 설계 검토를 공유하고 그 방향으로 최적화를
 요청했다. 저비용 항목(rubric/calibration 버전 분리, WORK_CONTRACT scope 제한, learning 문서 갱신
-완화)은 같은 날 [plan 0025](../active/0025-approved-questions-to-grounded-answer-roadmap.md)에 바로
+완화)은 같은 날 [plan 0025](../completed/0025-approved-questions-to-grounded-answer-roadmap.md)에 바로
 반영했다. 이 항목은 그중 실제 코드 인프라가 필요한 나머지를 별도 작업으로 등록한다.
 
 ## 목적
@@ -54,7 +54,7 @@ D-10 v1→v2→v3처럼 "판정 하나 정정 → 전체 재문서화" 패턴이
   걷어낸다.
 - LLM 판정을 rubric 자동화로 전부 대체하는 것 — 애매한 "이 조항이 이 facet을 직접 뒷받침하나?" 류
   판단은 여전히 사람/LLM이 한다. 자동화 대상은 명백한 구조·정합성 검증뿐이다.
-- M4.5 라우터 구현(별도 [0028](../active/0028-pre-retrieval-question-routing.md) 범위).
+- M4.5 라우터 구현(별도 [0028](../completed/0028-pre-retrieval-question-routing.md) 범위).
 
 ## 승격 조건
 

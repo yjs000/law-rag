@@ -54,5 +54,5 @@ uv run ruff check app tests
 
 ## 완료 결과
 
-이 계획에서 외부 승인 없이 가능한 polling 제거와 생성 근거 예산 제한을 구현·검증했다. Supabase 운영 연결은 [분산 질문 취소 실행 계획](../active/0012-distributed-question-cancellation.md), NVIDIA 실호출과 정책 검토는 기술 부채 `TD-014`, `TD-019`가 단일 권위가 된다. 같은 차단 작업을 두 active 계획에서 중복 관리하지 않도록 이 계획을 완료 처리한다.
+이 계획에서 외부 승인 없이 가능한 polling 제거와 생성 근거 예산 제한을 구현·검증했다. Supabase 운영 연결은 [분산 질문 취소 실행 계획](../todo/0012-distributed-question-cancellation.md), NVIDIA 실호출과 정책 검토는 기술 부채 `TD-014`, `TD-019`가 단일 권위가 된다. 같은 차단 작업을 두 active 계획에서 중복 관리하지 않도록 이 계획을 완료 처리한다.
 

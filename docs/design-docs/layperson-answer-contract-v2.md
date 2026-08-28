@@ -2,14 +2,14 @@
 
 상태: 승인 전 초안
 작성일: 2026-08-09
-관련: [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md), [DESIGN.md](../DESIGN.md), [답변 근거 검증](answer-grounding-validation.md)
+관련: [0043 실행 계획](../exec-plans/completed/0043-layperson-answer-contract-v2.md), [DESIGN.md](../DESIGN.md), [답변 근거 검증](answer-grounding-validation.md)
 
 ## 맥락
 
 현재 답변 생성 프롬프트(`answer-system-prompt-v1`)는 인용·근거 안전 규칙은 상세하지만 독자 수준,
 전문용어 설명 방식, 정보 우선순위, 문장 길이를 정하지 않는다. 그 결과 `summary`·`sections`·
 `checklist`·`limitations`가 법률 조사 보고서 문체로 나와 처음 보는 사용자가 핵심 행동보다 전문
-용어를 먼저 보게 된다. [0043](../exec-plans/active/0043-layperson-answer-contract-v2.md)이 이 문제의
+용어를 먼저 보게 된다. [0043](../exec-plans/completed/0043-layperson-answer-contract-v2.md)이 이 문제의
 목적·범위·완료 조건을 이미 정의했고, 이 문서는 그 실행 설계다.
 
 오늘 세션에서 사용자가 추가로 요청한 "원문은 링크 방식" 요구는 UI 변경이라 0043 원문의 비범위
@@ -101,7 +101,7 @@ API 서버측 전체 예산 52초·Web attempt 55초·최초 시도 포함 최�
 이미 전달했다(계약 요약은 [RELIABILITY.md](../RELIABILITY.md) "조정된 질문 timeout 예산 (0045)"
 참고). 이 설계와 뒤따르는 실행 계획은 **1~4번(프롬프트 v2, 프로필,
 결정적 테스트, 원문 링크 UI)까지만 구현·검증**하고, "실제 비교를 무엇으로·몇 번·어떤 승인으로
-실행할지"는 [0043 실행 계획](../exec-plans/active/0043-layperson-answer-contract-v2.md)에 후속 항목으로
+실행할지"는 [0043 실행 계획](../exec-plans/completed/0043-layperson-answer-contract-v2.md)에 후속 항목으로
 남긴다 — 0045가 전달한 timeout 계약 위에서, 호출 제한 설계가 끝난 뒤 별도로 착수한다. 실행 결과는
 아래 "결정 기록" 2026-08-10 항목에 기록한다.
 

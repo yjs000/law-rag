@@ -213,4 +213,4 @@
 - API·공용 코어 54개, collector 29개, web 11개 테스트와 린트·타입 검사·프로덕션 빌드가 통과했다.
 - 공식 삭제 목록 `delHst`의 법령·행정규칙 동시 조회, JSON 우선/XML 폴백, 체크포인트 중첩 수집, 실패 격리와 원자 출처 상태 반영을 fixture 계약으로 검증했다. `delHst`는 법적 폐지와 분리하며 효력 종료일을 추론하지 않는다.
 - 실제 브라우저에서 익명 질문, 검색 전용 답변·인용, 로그인 유도, ESC 포커스 복귀, 목업 로그인과 질문 이력을 확인했다.
-- 잔여 실제 Supabase·Google OAuth·OpenAI·클라우드 연결은 [실행 계획 0002](../active/0002-production-connections.md)로 분리했다.
+- 잔여 실제 Supabase·Google OAuth·OpenAI·클라우드 연결은 [실행 계획 0002](0002-production-connections.md)로 분리했다.

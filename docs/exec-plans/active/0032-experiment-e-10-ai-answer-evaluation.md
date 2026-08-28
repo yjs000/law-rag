@@ -15,7 +15,7 @@
 
 착수일: 2026-08-08
 
-제안 출처: [0025 M6](0025-approved-questions-to-grounded-answer-roadmap.md#m6--실험-e-10-ai-답변-소표본-평가)
+제안 출처: [0025 M6](../completed/0025-approved-questions-to-grounded-answer-roadmap.md#m6--실험-e-10-ai-답변-소표본-평가)
 "실제 호출 전에 별도 active 실행 계획을 만들고 10문항의 호출 수·비용·판정표를 사전 등록한다"는
 로드맵 요구에 따라 2026-08-08 사용자가 계획 수립을 지시했다.
 
@@ -71,7 +71,7 @@ D-010(0057)이 현재 런타임 계약이다. 질문은 단일 NVIDIA `QuestionR
   NVIDIA 호출. 실제로는 tier2가 일부를 `clarification_required`/`realtime_required`/
   `external_document_required`로 판정하면 그만큼 생성 호출이 줄어든다.
 - **비용**: NVIDIA 무료 티어라 금전 비용은 0원이다. 다만 공유 worker pool 동시성 제한(32건,
-  2026-08-08 조사 - [0028 결정 기록](0028-pre-retrieval-question-routing.md) 참고)에 걸릴 수
+  2026-08-08 조사 - [0028 결정 기록](../completed/0028-pre-retrieval-question-routing.md) 참고)에 걸릴 수
   있어, 필요하면 `scripts/live_fixture_retry_runner.py`와 같은 방식(10초 간격 재시도, 실패한
   케이스만)으로 재시도한다.
 - **반복성**: 0025 E3 방식(사전 봉인 10~20문항 3회 반복)은 D-full 규모용이다. 지금은 10문항

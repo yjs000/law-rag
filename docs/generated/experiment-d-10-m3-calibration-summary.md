@@ -83,7 +83,7 @@ R1 재정렬 뒤 원래 6~10위였다가 새 top 5에 들어온 후보 9개(6문
 ## 해석 한계
 
 - 이 결과는 D-10 10문항 calibration이며 held-out 성능·모집단 일반화·release gate로 사용하지 않는다
-  ([plan 0025 "튜닝 데이터와 측정 데이터"](../exec-plans/active/0025-approved-questions-to-grounded-answer-roadmap.md#튜닝-데이터와-측정-데이터) 참고).
+  ([plan 0025 "튜닝 데이터와 측정 데이터"](../exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md#튜닝-데이터와-측정-데이터) 참고).
 - known irrelevant@5는 v3 Gold의 relevance 0 라벨을 top 5 후보에 직접 적용해 재계산한 값이다(0026의
   별도 `irrelevant_top5_provision_ids` 주석과는 다른 산출 방식) — 문항마다 다른 라운드의 기준을 섞지
   않기 위해 v3 하나로 통일했다.

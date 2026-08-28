@@ -216,7 +216,7 @@ Expected: the old table includes D-001 through D-010, and the D-010 plan path ex
 
 Create `# 프로젝트 로드맵` with a short statement that it is the common project entry point and linked plans are authoritative. Add sections in this exact order: `## Picked Up`, `## Todo`, `## Blocked`, `## Done`.
 
-- `Picked Up` contains only `[DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/active/0059-task-management-metadata-and-roadmap.md)` and the next action `계약·현재 계획 메타데이터·상태 색인을 반영 중`.
+- `Picked Up` contains only `[DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](0059-task-management-metadata-and-roadmap.md)` and the next action `계약·현재 계획 메타데이터·상태 색인을 반영 중`.
 - `Todo` contains the 11 Task 2 plans as links, ordered `E-001`, `F-001`, `F-002`, `E-002`, `E-003`, `E-004`, `F-003`, `F-004`, `B-001`, `B-002`, `E-005`, each with the existing README one-line next action.
 - `Blocked` preserves the four external items as legacy IDs: `D-002 · Operations`, `D-004 · Feature`, `D-005 · Operations`, `D-009 · Operations`; each entry links to the existing plan where it exists and carries only its release condition.
 - `Done` preserves the latest completed legacy item `D-010 · Feature` linking to 0057, plus at most nine more recent completed items. Do not copy test counts or long implementation results into this index.
