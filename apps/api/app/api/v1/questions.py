@@ -11,6 +11,7 @@ from law_rag_core.ports.repository import LegalRepository
 
 from app.api.dependencies import _optional_user, main_module
 from app.application.request_budget import RequestBudget
+from app.application.v1.dependencies import V1AnsweringError
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
 from app.domain.schemas import QuestionRequest, QuestionResponse
 from app.observability import QuestionStageTimingOutcome, emit_question_stage_timing
@@ -43,6 +44,8 @@ async def _handle_question(
             await asyncio.sleep(0)
             async with asyncio.timeout(budget.remaining_seconds()):
                 response = await main._answer_question(payload, request, user, budget, repository)
+        except V1AnsweringError as exc:
+            raise _answering_http_error(main, exc) from exc
         except asyncio.CancelledError as exc:
             raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
         except TimeoutError as exc:
@@ -87,3 +90,18 @@ def _request_outcome_for_response(response: QuestionResponse) -> QuestionStageTi
     """Classify a validated fallback as degraded rather than failed."""
 
     return "degraded" if response.fallback_reason is not None else "succeeded"
+
+
+def _answering_http_error(main: object, error: V1AnsweringError) -> HTTPException:
+    """Render application failures through the unchanged v1 HTTP contract."""
+
+    details = {
+        "search_only_disabled": "검색 전용 기능이 비활성화되어 있습니다.",
+        "ai_unavailable": "AI 답변을 현재 사용할 수 없습니다.",
+        "generation_failed": "AI 답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        "retrieval_timeout": "법령 검색 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+        "retrieval_unavailable": "법령 검색을 일시적으로 사용할 수 없습니다.",
+    }
+    if error.code == "corpus_unready":
+        return main._corpus_unready_http_error()  # type: ignore[attr-defined]
+    return HTTPException(status_code=503, detail=details[error.code])

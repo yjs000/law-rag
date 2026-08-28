@@ -73,6 +73,11 @@ class NvidiaNimAnswerer:
             build_blocked_route_messages(request, route, reason), DraftAnswer
         )
 
+    async def aclose(self) -> None:
+        """Release the process-owned NVIDIA HTTP client."""
+
+        await self.client.close()
+
     async def _generate(
         self, messages: list[dict[str, str]], schema: type[StructuredAnswer]
     ) -> StructuredAnswer:

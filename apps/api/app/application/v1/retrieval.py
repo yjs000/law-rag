@@ -7,7 +7,7 @@ from datetime import datetime
 
 from law_rag_core.ports.repository import LegalRepository
 
-from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
+from app.application.v1.dependencies import QueryEmbeddingCapability
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.schemas import QuestionRequest, SearchHit
 from app.domain.search_queries import SearchTrace
@@ -42,7 +42,7 @@ def remaining_ms(budget: object) -> int:
     return max(0, round((budget.deadline - time.monotonic()) * 1000))
 
 
-def requires_legacy_query_embedding(repository: LegalRepository) -> bool:
-    """V1 retrieval alone owns application-generated query embeddings."""
+def requires_legacy_query_embedding(capability: QueryEmbeddingCapability) -> bool:
+    """Ask the injected retrieval capability whether a query vector is required."""
 
-    return not isinstance(repository, LlamaIndexLegalRepository)
+    return capability.requires_application_query_embedding()

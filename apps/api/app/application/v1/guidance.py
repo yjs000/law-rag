@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import time
-from typing import Literal
+from typing import Any, Literal
 
-from app.adapters.openai_answerer import DraftAnswer, validate_draft
-from app.api.dependencies import main_module
 from app.application.answering import clarification_resubmission_summary
 from app.application.request_budget import RequestBudget, StageTimeoutError
+from app.application.v1.dependencies import V1AnswerDependencies
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
 from app.domain.routing import RouteDecision
 from app.domain.schemas import QuestionRequest, QuestionResponse
@@ -22,6 +21,7 @@ async def generate_blocked_answer(
     blocked_fallback: QuestionResponse,
     diagnostics: dict[str, object],
     budget: RequestBudget,
+    dependencies: V1AnswerDependencies,
     *,
     stage_name: Literal[
         "clarification_generation",
@@ -31,7 +31,6 @@ async def generate_blocked_answer(
 ) -> QuestionResponse:
     """Generate validation-safe guidance when the router intentionally skipped search."""
 
-    main = main_module()
     if route_decision.route == "routing_unavailable" and stage_name != "blocked_answer_generation":
         raise ValueError("routing_unavailable requires blocked_answer_generation")
     if route_decision.route != "routing_unavailable" and stage_name == "blocked_answer_generation":
@@ -44,10 +43,8 @@ async def generate_blocked_answer(
     try:
         draft = await budget.run(
             stage_name,
-            lambda: main._answerer().answer_blocked_route(
-                payload, route_decision.route, explanation
-            ),
-            cap_seconds=main.settings.answer_timeout_seconds,
+            lambda: dependencies.answer_blocked_route(payload, route_decision.route, explanation),
+            cap_seconds=dependencies.answer_timeout_seconds,
         )
         outcome = "succeeded"
     except StageTimeoutError:
@@ -57,7 +54,7 @@ async def generate_blocked_answer(
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         if status_code in {402, 429}:
-            main.ai_quota_exhausted = True
+            dependencies.mark_ai_quota_exhausted()
         stage["status"] = "billing_or_quota_error" if status_code in {402, 429} else "failed"
         return blocked_fallback
     finally:
@@ -91,7 +88,7 @@ async def generate_blocked_answer(
             action="unanswerable",
             route="routing_unavailable",
         )
-    if not validate_draft(draft, []):
+    if not dependencies.validate_draft(draft, []):
         stage["status"] = "validation_failed"
         return blocked_fallback
     stage["status"] = "succeeded"
@@ -115,7 +112,7 @@ async def generate_blocked_answer(
     )
 
 
-def validate_blocked_response(draft: DraftAnswer) -> bool:
+def validate_blocked_response(draft: Any) -> bool:
     """Only an empty explicit no-answer draft may describe routing failure."""
 
     return draft.action == "unanswerable" and not draft.sections and not draft.checklist

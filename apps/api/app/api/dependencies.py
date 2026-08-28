@@ -19,11 +19,15 @@ _request_app_dependencies: ContextVar[Any | None] = ContextVar(
 _COMPOSITION_ATTRIBUTES = {
     "collector_load_errors": "collector_load_errors",
     "llamaindex_settings": "llamaindex_settings",
+    "nvidia_answerer": "nvidia_answerer",
+    "nvidia_embedder": "nvidia_embedder",
+    "nvidia_question_router": "nvidia_question_router",
     "postgres_identity": "postgres_identity",
     "question_execution_repository": "question_executions",
     "question_phase_limiter": "question_phase_limiter",
     "repository": "repository",
     "supabase_auth": "supabase_auth",
+    "v1_query_embedding_capability": "v1_query_embedding_capability",
     "v2_question_execution_service": "v2_service",
 }
 

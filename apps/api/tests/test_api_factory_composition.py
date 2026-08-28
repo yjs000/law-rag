@@ -133,3 +133,30 @@ def test_question_route_uses_the_runtime_main_answer_seam(
 
     assert response.status_code == 200
     assert response.json()["summary"] == "Answer supplied through app.main seam."
+
+
+@pytest.mark.asyncio
+async def test_app_lifespan_closes_each_long_lived_nvidia_adapter_once() -> None:
+    """Catch a composition root that leaks a process-owned NVIDIA HTTP client."""
+
+    class Adapter:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    embedder = Adapter()
+    answerer = Adapter()
+    router = Adapter()
+    app_dependencies = replace(
+        main_module.dependencies,
+        nvidia_embedder=embedder,
+        nvidia_answerer=answerer,
+        nvidia_question_router=router,
+    )
+
+    async with app_dependencies.lifespan(object()):
+        pass
+
+    assert (embedder.close_calls, answerer.close_calls, router.close_calls) == (1, 1, 1)

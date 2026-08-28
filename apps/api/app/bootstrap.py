@@ -41,6 +41,7 @@ from app.adapters.postgres_identity import PostgresIdentityRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import SupabaseAuth
+from app.application.v1.dependencies import QueryEmbeddingCapability, V1AnswerDependencies
 from app.application.v2.dependencies import V2ExecutionDependencies
 from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
@@ -78,6 +79,16 @@ class V2LlamaIndexResources:
 
 
 @dataclass(frozen=True)
+class LegacyQueryEmbeddingCapability:
+    """Composition-owned policy for v1 query-vector generation."""
+
+    required: bool
+
+    def requires_application_query_embedding(self) -> bool:
+        return self.required
+
+
+@dataclass(frozen=True)
 class AppDependencies:
     """Long-lived application adapters assembled once for one API process."""
 
@@ -87,6 +98,10 @@ class AppDependencies:
     v2_service: V2QuestionExecutionService
     llamaindex_settings: Any
     v2_resources: V2LlamaIndexResources
+    v1_query_embedding_capability: QueryEmbeddingCapability
+    nvidia_embedder: NvidiaNimEmbedder | None
+    nvidia_answerer: NvidiaNimAnswerer | None
+    nvidia_question_router: NvidiaNimQuestionRouter | None
     supabase_auth: SupabaseAuth | None
     postgres_identity: PostgresIdentityRepository | None
     collector_load_errors: tuple[str, ...]
@@ -98,6 +113,13 @@ class AppDependencies:
         yield
         if self.supabase_auth:
             await self.supabase_auth.aclose()
+        for adapter in (
+            self.nvidia_embedder,
+            self.nvidia_answerer,
+            self.nvidia_question_router,
+        ):
+            if adapter:
+                await adapter.aclose()
         await self.v2_resources.aclose()
 
 
@@ -124,6 +146,63 @@ class V2ApplicationCallbacks:
     admit_phase: Callable[[QuestionExecutionRecord, Literal["core", "finalize"]], Awaitable[Any]]
     run_core: Callable[[QuestionExecutionRecord], Awaitable[Any]]
     run_finalize: Callable[[QuestionExecutionRecord, MockUser | None], Awaitable[Any]]
+
+
+@dataclass(frozen=True)
+class V1ApplicationCallbacks:
+    """Application seams supplied by the entry point for v1 answer execution."""
+
+    ai_available: Callable[[], bool]
+    ai_unavailable_reason: Callable[[], str | None]
+    initial_fallback_reason: Callable[[QuestionRequest], Any]
+    check_quota: Callable[[str, MockUser | None], Awaitable[None]]
+    require_supported_date: Callable[[Any, LegalRepository], Awaitable[None]]
+    route: Callable[[str], Awaitable[Any]]
+    embed: Callable[[list[str]], Awaitable[list[list[float]]]]
+    retrieve_evidence: Callable[
+        [QuestionRequest, list[float] | None, LegalRepository], Awaitable[Any]
+    ]
+    answer: Callable[[QuestionRequest, list[SearchHit]], Awaitable[Any]]
+    answer_blocked_route: Callable[[QuestionRequest, str, str | None], Awaitable[Any]]
+    save_response: Callable[
+        [MockUser | None, QuestionRequest, QuestionResponse, dict[str, object]],
+        Awaitable[QuestionResponse],
+    ]
+    mark_ai_quota_exhausted: Callable[[], None]
+
+
+def build_v1_answer_dependencies(
+    settings: Settings,
+    *,
+    query_embedding_capability: QueryEmbeddingCapability,
+    callbacks: V1ApplicationCallbacks,
+) -> V1AnswerDependencies:
+    """Assemble the v1 use case without exposing its adapter implementations."""
+
+    return V1AnswerDependencies(
+        search_only_enabled=settings.search_only_enabled,
+        embedding_enabled=settings.embedding_enabled,
+        answer_evidence_max_characters=settings.answer_evidence_max_characters,
+        route_classifier_timeout_seconds=settings.route_classifier_timeout_seconds,
+        question_embedding_timeout_seconds=settings.question_embedding_timeout_seconds,
+        retrieval_timeout_seconds=settings.retrieval_timeout_seconds,
+        answer_timeout_seconds=settings.answer_timeout_seconds,
+        ai_available=callbacks.ai_available,
+        ai_unavailable_reason=callbacks.ai_unavailable_reason,
+        initial_fallback_reason=callbacks.initial_fallback_reason,
+        check_quota=callbacks.check_quota,
+        require_supported_date=callbacks.require_supported_date,
+        route=callbacks.route,
+        query_embedding_capability=query_embedding_capability,
+        embed=callbacks.embed,
+        retrieve_evidence=callbacks.retrieve_evidence,
+        answer=callbacks.answer,
+        answer_blocked_route=callbacks.answer_blocked_route,
+        select_generation_hits=select_generation_hits,
+        validate_draft=validate_draft,
+        save_response=callbacks.save_response,
+        mark_ai_quota_exhausted=callbacks.mark_ai_quota_exhausted,
+    )
 
 
 def build_v2_execution_dependencies(
@@ -215,6 +294,9 @@ def build_app_dependencies(
         )
 
     llamaindex_settings = get_llamaindex_settings()
+    nvidia_embedder = build_nvidia_embedder(settings) if settings.ai_enabled else None
+    nvidia_answerer = build_nvidia_answerer(settings) if settings.ai_enabled else None
+    nvidia_question_router = build_nvidia_question_router(settings) if settings.ai_enabled else None
     v2_resources = V2LlamaIndexResources(
         lambda: build_llamaindex_resources(
             settings.database_url,
@@ -230,6 +312,10 @@ def build_app_dependencies(
         v2_service=V2QuestionExecutionService(v2_dependency_provider),
         llamaindex_settings=llamaindex_settings,
         v2_resources=v2_resources,
+        v1_query_embedding_capability=build_v1_query_embedding_capability(repository),
+        nvidia_embedder=nvidia_embedder,
+        nvidia_answerer=nvidia_answerer,
+        nvidia_question_router=nvidia_question_router,
         supabase_auth=supabase_auth,
         postgres_identity=postgres_identity,
         collector_load_errors=tuple(collector_load_errors),
@@ -245,6 +331,16 @@ def build_nvidia_embedder(settings: Settings) -> NvidiaNimEmbedder:
         model=settings.nvidia_embedding_model,
         dimensions=settings.embedding_dimensions,
         timeout_seconds=settings.embedding_timeout_seconds,
+    )
+
+
+def build_v1_query_embedding_capability(
+    repository: LegalRepository,
+) -> QueryEmbeddingCapability:
+    """Keep framework-specific v1 embedding policy at the composition boundary."""
+
+    return LegacyQueryEmbeddingCapability(
+        required=not isinstance(repository, LlamaIndexLegalRepository)
     )
 
 

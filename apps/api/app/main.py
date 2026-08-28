@@ -15,9 +15,6 @@ from law_rag_llamaindex.retriever import search_index as llamaindex_search_index
 from sqlalchemy import text
 
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
-from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
-from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
-from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.api.dependencies import (
     _authenticated_user,
     _optional_user,
@@ -42,7 +39,7 @@ from app.api.v2.executions import (
 )
 from app.api.v2.sse import _admit_v2_provider_phase, _sse, _stream_execution_phase
 from app.application.question_tasks import QuestionTaskRegistry
-from app.application.v1.answering import _answer_question
+from app.application.v1.answering import answer_question
 from app.application.v1.retrieval import (
     elapsed_ms as _elapsed_ms,
 )
@@ -50,19 +47,16 @@ from app.application.v1.retrieval import (
     remaining_ms as _remaining_ms,
 )
 from app.application.v1.retrieval import (
-    requires_legacy_query_embedding as _requires_legacy_query_embedding,
-)
-from app.application.v1.retrieval import (
     retrieve_question_evidence as _retrieve_question_evidence,
 )
 from app.bootstrap import (
     AppDependencies,
+    V1ApplicationCallbacks,
     V2ApplicationCallbacks,
     build_app_dependencies,
     build_llamaindex_resources,
-    build_nvidia_answerer,
-    build_nvidia_embedder,
-    build_nvidia_question_router,
+    build_v1_answer_dependencies,
+    build_v1_query_embedding_capability,
     build_v2_execution_dependencies,
     normalize_async_database_url,
     normalize_sync_database_url,
@@ -124,6 +118,7 @@ v2_question_execution_service = dependencies.v2_service
 supabase_auth = dependencies.supabase_auth
 postgres_identity = dependencies.postgres_identity
 collector_load_errors = dependencies.collector_load_errors
+v1_query_embedding_capability = dependencies.v1_query_embedding_capability
 
 
 @lru_cache(maxsize=1)
@@ -251,8 +246,13 @@ async def _require_supported_as_of_date(
         ) from exc
 
 
-def _embedder() -> NvidiaNimEmbedder:
-    return build_nvidia_embedder(settings)
+def _embedder() -> Any:
+    """Return the composition-owned legacy embedding adapter."""
+
+    adapter = main_module().nvidia_embedder
+    if adapter is None:
+        raise RuntimeError("NVIDIA embedding adapter is unavailable")
+    return adapter
 
 
 async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
@@ -287,12 +287,22 @@ def _question_owner(request: Any, user: MockUser | None) -> str:
     return "anonymous:" + daily_subject_hash(subject, settings.rate_limit_secret, date.today())
 
 
-def _answerer() -> NvidiaNimAnswerer:
-    return build_nvidia_answerer(settings)
+def _answerer() -> Any:
+    """Return the composition-owned answer-generation adapter."""
+
+    adapter = main_module().nvidia_answerer
+    if adapter is None:
+        raise RuntimeError("NVIDIA answer adapter is unavailable")
+    return adapter
 
 
-def _question_router() -> NvidiaNimQuestionRouter:
-    return build_nvidia_question_router(settings)
+def _question_router() -> Any:
+    """Return the composition-owned question-routing adapter."""
+
+    adapter = main_module().nvidia_question_router
+    if adapter is None:
+        raise RuntimeError("NVIDIA question router is unavailable")
+    return adapter
 
 
 def _ai_unavailable_reason() -> str | None:
@@ -310,6 +320,60 @@ def _initial_fallback_reason(payload: QuestionRequest) -> Any:
     from app.domain.schemas import AiFallbackReason
 
     return AiFallbackReason(reason) if reason else None
+
+
+def _v1_answer_dependencies():
+    """Bind the v1 use case to runtime seams without exposing HTTP types to it."""
+
+    main = main_module()
+    return build_v1_answer_dependencies(
+        settings,
+        query_embedding_capability=main.v1_query_embedding_capability,
+        callbacks=V1ApplicationCallbacks(
+            ai_available=main._ai_available,
+            ai_unavailable_reason=main._ai_unavailable_reason,
+            initial_fallback_reason=main._initial_fallback_reason,
+            check_quota=lambda kind, user: main._check_quota(kind, user=user),
+            require_supported_date=main._require_supported_as_of_date,
+            route=lambda question: main.route_question(question, main._question_router()),
+            embed=lambda texts: main._embedder().embed(texts),
+            retrieve_evidence=_retrieve_question_evidence,
+            answer=lambda payload, hits: main._answerer().answer(payload, hits),
+            answer_blocked_route=(
+                lambda payload, route, reason: main._answerer().answer_blocked_route(
+                    payload, route, reason
+                )
+            ),
+            save_response=main._save_if_authenticated,
+            mark_ai_quota_exhausted=lambda: setattr(main, "ai_quota_exhausted", True),
+        ),
+    )
+
+
+async def _answer_question(
+    payload: QuestionRequest,
+    _request: Any,
+    user: MockUser | None,
+    budget: Any,
+    current_repository: LegalRepository,
+) -> Any:
+    """Compatibility facade retaining the historical v1 answer-call signature."""
+
+    return await answer_question(
+        payload,
+        user,
+        budget,
+        current_repository,
+        _v1_answer_dependencies(),
+    )
+
+
+def _requires_legacy_query_embedding(current_repository: LegalRepository) -> bool:
+    """Compatibility facade for callers that still provide a repository object."""
+
+    return build_v1_query_embedding_capability(
+        current_repository
+    ).requires_application_query_embedding()
 
 
 def create_app(app_dependencies: AppDependencies) -> FastAPI:
