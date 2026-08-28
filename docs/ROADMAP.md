@@ -31,6 +31,7 @@
 - [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/completed/0059-task-management-metadata-and-roadmap.md) — 작업 관리 계약, 현재 계획 메타데이터, 상태 색인을 완료
 - [D-010 · Feature — 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) — 라우터와 실패 응답 계약을 완료
 - [0056: Python docstring과 Ruff D 규칙](exec-plans/completed/0056-python-docstrings-and-ruff-d.md) — 문서화 규칙을 정비
+- [TD-001 · Tech Debt — 0062: API main 모듈화](exec-plans/completed/0062-api-main-modularization.md) — URL 등록을 책임별 router로 분리하고 HTTP 계약을 회귀 검증
 - [0053: V2 LlamaIndex 검색 파이프라인](exec-plans/completed/0053-v2-llamaindex-retrieval-pipeline.md) — V2 검색 파이프라인을 완료
 - [0054: V2 준비 상태와 HNSW 운영](exec-plans/completed/0054-v2-readiness-and-hnsw.md) — 준비 상태와 HNSW 운영을 완료
 - [0045: Web/API 질문 timeout 예산 정렬](exec-plans/completed/0045-coordinated-question-timeout-budget.md) — 질문 timeout 예산을 정렬
