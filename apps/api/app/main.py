@@ -560,6 +560,10 @@ async def _stream_execution_phase(execution_id: UUID, request: Request, phase: s
                 yield _sse("summary", {"response": response})
                 yield _sse("complete", complete_payload)
                 return
+            current = await question_execution_repository.get_owned(execution_id, owner_scope)
+            if current.status is ExecutionStatus.CORE_RUNNING:
+                yield _sse("status", {"status": current.status.value, "next_action": None})
+                return
         if current.status is ExecutionStatus.COMPLETED:
             for event in await question_execution_repository.events_for(
                 execution_id, owner_scope, phase="core"
