@@ -21,6 +21,9 @@ node_modules/
 coverage/
 *.tsbuildinfo
 
+# This workspace uses the root pnpm lockfile.
+/apps/web/package-lock.json
+
 # Local ingestion artifacts
 .data/
 .collector-state/
