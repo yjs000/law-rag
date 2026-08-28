@@ -242,3 +242,33 @@ def test_law_type_classification_migration_adds_legal_documents_columns(monkeypa
     assert "ALTER TABLE legal_documents" in sql
     assert "ADD COLUMN law_type_name text" in sql
     assert "ADD COLUMN law_type_code text" in sql
+
+
+def test_v2_generation_migration_has_catalog_and_atomic_active_pointer(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1]
+        / "migrations"
+        / "versions"
+        / "0015_v2_retrieval_generations.py"
+    )
+    spec = importlib.util.spec_from_file_location("v2_generation_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0015"
+    assert migration.down_revision == "0014"
+    assert "CREATE TABLE llamaindex_retrieval_generations" in sql
+    assert "physical_table_name text NOT NULL UNIQUE" in sql
+    assert "transform_fingerprint text NOT NULL" in sql
+    assert "status IN ('building','verified','active','rollback','failed')" in sql
+    assert "CREATE TABLE llamaindex_active_generation" in sql
+    assert "singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton)" in sql
+    assert "generation_id uuid NOT NULL UNIQUE" in sql
+    assert "CREATE TABLE llamaindex_generation_sources" in sql
+    assert "PRIMARY KEY(generation_id,provision_id)" in sql
