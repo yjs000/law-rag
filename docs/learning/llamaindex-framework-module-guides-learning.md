@@ -96,7 +96,7 @@ nodes.append(
 )
 ~~~
 
-실제 위치: [build_nodes](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py:72)  
+실제 위치: [build_nodes](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py#L72)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/loading/documents_and_nodes/>
 </details>
 
@@ -129,7 +129,7 @@ return NVIDIAEmbedding(
 )
 ~~~
 
-실제 위치: [build_embedder](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/embedding.py:8)  
+실제 위치: [build_embedder](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/embedding.py#L8)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/models/embeddings/>
 </details>
 
@@ -172,7 +172,7 @@ return PGVectorStore.from_params(
 )
 ~~~
 
-실제 위치: [build_vector_store](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/store.py:9)  
+실제 위치: [build_vector_store](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/store.py#L9)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/storing/vector_stores/>
 </details>
 
@@ -209,7 +209,7 @@ result = await vector_store.aquery(
 조회 뒤에는 effective_to까지 애플리케이션에서 다시 검사하고, limit에 도달하면 반환한다. 결과가 비어도
 v1 검색을 다시 호출하지 않는다.
 
-실제 위치: [search](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/retriever.py:17)  
+실제 위치: [search](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/retriever.py#L17)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/querying/retriever/>
 </details>
 
@@ -239,7 +239,7 @@ candidate_nodes = splitter.get_nodes_from_documents(documents)
 
 현재 실제 코드는 이 Parser를 쓰지 않는다. 조문 1개를 Node 1개로 명시 생성한다.
 
-현재 관련 위치: [build_nodes](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py:72)  
+현재 관련 위치: [build_nodes](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py#L72)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/loading/node_parsers/modules/>
 </details>
 
@@ -275,7 +275,7 @@ embeddings = embedder.get_text_embedding_batch(texts)
 vector_store.add(nodes)
 ~~~
 
-실제 위치: [run_ingestion](C:/development/git/law-rag/apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py:114)  
+실제 위치: [run_ingestion](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/ingest.py#L114)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/loading/ingestion_pipeline/>
 </details>
 
@@ -326,7 +326,7 @@ dispatcher = get_dispatcher(__name__)
 stage별 자체 timing 이벤트를 기록한다. 외부 관측 도구를 도입하려면 질문 전문, 법령 원문 전문, 인증정보가
 전송·저장되지 않음을 먼저 확인해야 한다.
 
-실제 위치: [emit_question_stage_timing](C:/development/git/law-rag/apps/api/app/observability.py:133)  
+실제 위치: [emit_question_stage_timing](../../apps/api/app/observability.py#L133)<br>
 공식 참조: <https://developers.llamaindex.ai/python/framework/module_guides/observability/instrumentation/>
 </details>
 

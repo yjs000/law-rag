@@ -11,8 +11,8 @@
 상태: `제안됨 (2026-08-10)`
 
 제안 출처: 사용자가 [0047](0047-clarification-loop-dedup-and-unanswered-handling.md),
-[0048](0048-article-subclause-query-only-returns-parent-article.md),
-[0049](0049-abbreviated-article-reference-routes-to-search-only.md)와 같은 실제 fetch
+`0048`(article subclause query-only returns parent article),
+`0049`(abbreviated article reference routes to search-only)와 같은 실제 fetch
 로그 기반 버그를 연달아 보고한 뒤, 이런 종류의 질의 형식 엣지케이스를 개별 제보에
 의존하지 않고 먼저 찾아내어 테스트로 등록해 둘 필요가 있다고 지시했다.
 
@@ -45,8 +45,8 @@
 - 조사한 엣지케이스 목록과 각 항목의 현재 동작·기대 동작이 문서로 정리된다.
 - 목록의 각 항목이 실행 가능한 회귀 테스트로 등록되어 CI에서 반복 검증된다.
 - [0047](0047-clarification-loop-dedup-and-unanswered-handling.md),
-  [0048](0048-article-subclause-query-only-returns-parent-article.md),
-  [0049](0049-abbreviated-article-reference-routes-to-search-only.md)에서 정의한 재현
+  `0048`(article subclause query-only returns parent article),
+  `0049`(abbreviated article reference routes to search-only)에서 정의한 재현
   시나리오가 이 뱅크에 포함된다.
 
 ## 승격 조건

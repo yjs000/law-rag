@@ -191,7 +191,7 @@ Expected: 새 테스트 FAIL ("근거가 비어 있으면" 문구가 아직 없�
 - [ ] **Step 3: 프롬프트에 지시 추가**
 
 `build_messages_v2`의 system 메시지에서 "근거에 없는 일반 절차·기관·법률을 쉬운 설명이라는
-이유로 추가하지 않는다." 문장 바로 뒤([openai_answerer.py:157-159](../../apps/api/app/adapters/openai_answerer.py:157))에 다음 문장을 추가한다.
+이유로 추가하지 않는다." 문장 바로 뒤([openai_answerer.py:157-159](../../../apps/api/app/adapters/openai_answerer.py#L157))에 다음 문장을 추가한다.
 
 ```python
                 " 근거에 없는 일반 절차·기관·법률을 쉬운 설명이라는 이유로 추가하지 "
@@ -640,7 +640,7 @@ def test_no_hits_generation_failure_still_falls_back_to_search_only(monkeypatch)
 ```
 
 또한 기존 `test_embedding_failure_with_no_keyword_evidence_is_explained`
-([test_ai_fallback.py:207](../../apps/api/tests/test_ai_fallback.py:207))를 다음으로
+([test_ai_fallback.py:207](../../../apps/api/tests/test_ai_fallback.py#L207))를 다음으로
 교체한다 - 지금은 임베딩 실패 → 즉시 `fallback_reason=embedding_error`였지만, 이제는 임베딩이
 실패해도 `hits=[]`로 생성 단계까지 진행하므로 `_answerer`를 stub해야 하고, 생성이 성공하면
 `mode=ai`가 된다(임베딩 실패 원인은 diagnostics에는 남지만 공개 `fallback_reason` 필드는
@@ -1014,7 +1014,7 @@ from app.application.answering import (
 )
 ```
 
-`_answer_question` 안의 초기 `diagnostics` 딕셔너리([main.py:311-334](../../apps/api/app/main.py:311))에
+`_answer_question` 안의 초기 `diagnostics` 딕셔너리([main.py:311-334](../../../apps/api/app/main.py#L311))에
 `"routing": {...}` 항목 바로 아래에 새 키를 추가한다.
 
 ```python
@@ -1023,7 +1023,7 @@ from app.application.answering import (
         "outcome": {},
 ```
 
-[main.py:417-425](../../apps/api/app/main.py:417)의 다음 블록을
+[main.py:417-425](../../../apps/api/app/main.py#L417)의 다음 블록을
 
 ```python
         if route_decision.route != "legal_search":
