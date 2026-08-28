@@ -126,6 +126,24 @@ def test_catalog_rolls_back_only_to_a_retained_generation() -> None:
     assert restored.id == previous.id
     assert restored.status == "active"
     assert catalog.get(active.id).status == "rollback"
+
+
+def test_catalog_retires_older_rollback_generations() -> None:
+    catalog = GenerationCatalog()
+    first = catalog.start("source-v1", "transform-v1")
+    catalog.verify(first.id, source_count=1, node_count=1)
+    catalog.publish(first.id)
+    second = catalog.start("source-v2", "transform-v1")
+    catalog.verify(second.id, source_count=1, node_count=1)
+    catalog.publish(second.id)
+    third = catalog.start("source-v3", "transform-v1")
+    catalog.verify(third.id, source_count=1, node_count=1)
+    catalog.publish(third.id)
+
+    assert catalog.get(first.id).status == "retired"
+    assert catalog.get(second.id).status == "rollback"
+    with pytest.raises(GenerationStateError, match="rollback"):
+        catalog.rollback(first.id)
 class _Result:
     def __init__(self, generation_id: UUID) -> None:
         self._generation_id = generation_id

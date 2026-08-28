@@ -228,6 +228,9 @@ class GenerationCatalog:
         generation = self.get(generation_id)
         if generation.status != "verified":
             raise GenerationStateError("generation must be verified before publish")
+        for retained in self._generations.values():
+            if retained.status == "rollback":
+                self._generations[retained.id] = replace(retained, status="retired")
         if self._active_id is not None:
             previous = self.get(self._active_id)
             self._generations[previous.id] = replace(previous, status="rollback")
@@ -400,6 +403,13 @@ class PostgresGenerationRepository:
             WHERE status = 'active' AND generation_id <> :generation_id
             """
         )
+        retire_older_rollback = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'retired'
+            WHERE status = 'rollback'
+            """
+        )
         pointer = text(
             """
             INSERT INTO llamaindex_active_generation (singleton,generation_id,updated_at)
@@ -410,9 +420,10 @@ class PostgresGenerationRepository:
         )
         async with self._engine.begin() as connection:
             await connection.execute(lock)
+            await connection.execute(retire_older_rollback)
+            await connection.execute(retire_previous, {"generation_id": generation_id})
             result = await connection.execute(activate, {"generation_id": generation_id})
             result.scalar_one()
-            await connection.execute(retire_previous, {"generation_id": generation_id})
             await connection.execute(pointer, {"generation_id": generation_id})
 
     async def fail(self, generation_id: UUID, failure_code: str) -> None:
@@ -452,6 +463,13 @@ class PostgresGenerationRepository:
             WHERE status = 'active' AND generation_id <> :generation_id
             """
         )
+        retire_older_rollback = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'retired'
+            WHERE status = 'rollback' AND generation_id <> :generation_id
+            """
+        )
         pointer = text(
             """
             INSERT INTO llamaindex_active_generation (singleton,generation_id,updated_at)
@@ -462,9 +480,10 @@ class PostgresGenerationRepository:
         )
         async with self._engine.begin() as connection:
             await connection.execute(lock)
+            await connection.execute(retire_older_rollback, {"generation_id": generation_id})
+            await connection.execute(retire, {"generation_id": generation_id})
             result = await connection.execute(activate, {"generation_id": generation_id})
             result.scalar_one()
-            await connection.execute(retire, {"generation_id": generation_id})
             await connection.execute(pointer, {"generation_id": generation_id})
 
     async def active(self) -> RetrievalGeneration | None:

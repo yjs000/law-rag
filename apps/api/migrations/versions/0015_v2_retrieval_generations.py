@@ -23,7 +23,7 @@ def upgrade() -> None:
           transform_fingerprint text NOT NULL
             CHECK(transform_fingerprint ~ '^[a-f0-9]{64}$'),
           status text NOT NULL
-            CHECK(status IN ('building','verified','active','rollback','failed')),
+            CHECK(status IN ('building','verified','active','rollback','retired','failed')),
           source_count integer NOT NULL DEFAULT 0 CHECK(source_count >= 0),
           node_count integer NOT NULL DEFAULT 0 CHECK(node_count >= 0),
           failure_code text,
@@ -32,7 +32,7 @@ def upgrade() -> None:
           published_at timestamptz,
           CHECK((status = 'failed') = (failure_code IS NOT NULL)),
           CHECK(status NOT IN ('verified','active','rollback') OR verified_at IS NOT NULL),
-          CHECK(status NOT IN ('active','rollback') OR published_at IS NOT NULL)
+          CHECK(status NOT IN ('active','rollback','retired') OR published_at IS NOT NULL)
         )
         """,
         """
