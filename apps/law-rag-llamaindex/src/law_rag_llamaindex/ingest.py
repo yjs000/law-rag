@@ -2,6 +2,7 @@ import asyncio
 import re
 from dataclasses import dataclass
 
+from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core.schema import TextNode
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -89,6 +90,13 @@ def build_nodes(provisions: list[ProvisionRecord]) -> list[TextNode]:
             )
         )
     return nodes
+
+
+def run_generation_pipeline(provisions: list[ProvisionRecord], embedder) -> list[TextNode]:
+    """Compute generation nodes through LlamaIndex without a vector/docstore side effect."""
+
+    pipeline = IngestionPipeline(transformations=[embedder])
+    return list(pipeline.run(nodes=build_nodes(provisions)))
 
 
 async def existing_hashes(engine: AsyncEngine, table_name: str) -> dict[str, str]:
@@ -199,11 +207,8 @@ async def run_generation_ingestion(
     copied_node_count = 0
     stage = "node_build"
     try:
-        nodes = build_nodes(changed_provisions)
         stage = "embedding"
-        embeddings = embedder.get_text_embedding_batch([node.text for node in nodes])
-        for node, embedding in zip(nodes, embeddings, strict=True):
-            node.embedding = embedding
+        nodes = run_generation_pipeline(changed_provisions, embedder)
         stage = "vector_write"
         vector_store_for_generation(generation).add(nodes)
         if active_generation is not None and unchanged_ids:

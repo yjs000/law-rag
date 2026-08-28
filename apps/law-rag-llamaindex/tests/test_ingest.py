@@ -20,6 +20,7 @@ from law_rag_llamaindex.ingest import (
     existing_hashes,
     main,
     run_generation_ingestion,
+    run_generation_pipeline,
     run_ingestion,
     verify_generation_vectors,
 )
@@ -32,6 +33,15 @@ def _replace_physical_generation_verifier(monkeypatch):
         return None
 
     monkeypatch.setattr("law_rag_llamaindex.ingest.verify_generation_vectors", verifier)
+
+    def pipeline(provisions, embedder):
+        nodes = build_nodes(provisions)
+        embeddings = embedder.get_text_embedding_batch([node.text for node in nodes])
+        for node, embedding in zip(nodes, embeddings, strict=True):
+            node.embedding = embedding
+        return nodes
+
+    monkeypatch.setattr("law_rag_llamaindex.ingest.run_generation_pipeline", pipeline)
 
 
 def _record(provision_id: str, content: str) -> dict:
@@ -75,6 +85,29 @@ def test_build_nodes_sets_id_text_and_metadata():
     assert node.text == build_passage_text(provisions[0])
     assert node.metadata["content"] == "본문 A"
     assert "source_text_sha256" in node.metadata
+
+
+def test_generation_pipeline_computes_embeddings_without_vector_or_docstore(monkeypatch):
+    observed: dict[str, object] = {}
+
+    class Pipeline:
+        def __init__(self, *, transformations):
+            observed["transformations"] = transformations
+
+        def run(self, *, nodes):
+            observed["nodes"] = nodes
+            for node in nodes:
+                node.embedding = [0.1, 0.2]
+            return nodes
+
+    embedder = object()
+    monkeypatch.setattr("law_rag_llamaindex.ingest.IngestionPipeline", Pipeline)
+
+    nodes = run_generation_pipeline([_record("a", "본문 A")], embedder)
+
+    assert observed["transformations"] == [embedder]
+    assert len(nodes) == 1
+    assert nodes[0].embedding == [0.1, 0.2]
 
 
 class _ConnectionContext:
