@@ -106,7 +106,7 @@ class GenerationIngestionService:
                 )
 
             stage = "generation_source_lineage"
-            node_counts = _node_counts(provisions, active_sources)
+            node_counts = _node_counts(provisions, active_sources, unchanged_ids)
             await self._repository.record_sources(
                 generation.id,
                 generation_source_records(
@@ -294,12 +294,13 @@ def _changed_provisions(
 
 
 def _node_counts(
-    provisions: list[ProvisionRecord], active_sources: dict[str, Any]
+    provisions: list[ProvisionRecord], active_sources: dict[str, Any], unchanged_ids: list[str]
 ) -> dict[str, int]:
+    unchanged = set(unchanged_ids)
     return {
         provision["provision_id"]: (
             active_sources[provision["provision_id"]].node_count
-            if provision["provision_id"] in active_sources
+            if provision["provision_id"] in unchanged
             else 1
         )
         for provision in provisions

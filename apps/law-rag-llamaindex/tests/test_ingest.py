@@ -404,6 +404,54 @@ async def test_run_generation_ingestion_copies_unchanged_vectors_from_active_gen
 
 
 @pytest.mark.asyncio
+async def test_run_generation_ingestion_records_new_node_count_for_changed_source(
+    monkeypatch,
+):
+    events: list[str] = []
+
+    class RepositoryWithChangedActiveSource(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "a" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=2)
+            self.catalog.publish(active.id)
+            self.recorded_sources = []
+
+        async def sources(self, generation_id):
+            return [
+                GenerationSource(
+                    provision_id="a",
+                    source_fingerprint=provision_fingerprint(_record("a", "old content")),
+                    node_count=2,
+                )
+            ]
+
+        async def record_sources(self, generation_id, sources) -> None:
+            self.recorded_sources = list(sources)
+            await super().record_sources(generation_id, self.recorded_sources)
+
+    repository = RepositoryWithChangedActiveSource(events)
+    changed_provision = _record("a", "new content")
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions",
+        lambda _engine: _single_provision(events, changed_provision),
+    )
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: _VectorStore(events),
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.embedded_count == 1
+    assert result.skipped_count == 0
+    assert repository.recorded_sources[0]["node_count"] == 1
+    assert repository.recorded_sources[0]["copied_from_generation_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_run_generation_ingestion_reembeds_when_transform_changes(monkeypatch):
     events: list[str] = []
 
