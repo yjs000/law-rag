@@ -145,7 +145,7 @@ class _Connection:
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         return None
 
-    async def execute(self, query, parameters):
+    async def execute(self, query, parameters=None):
         self.statements.append((query.text, parameters))
         return _Result(self.generation_id)
 
@@ -175,6 +175,7 @@ async def test_postgres_catalog_publishes_verified_generation_and_pointer_atomic
     assert "WHERE generation_id = :generation_id AND status = 'verified'" in sql
     assert "status = 'rollback'" in sql
     assert "ON CONFLICT(singleton) DO UPDATE" in sql
+    assert "pg_advisory_xact_lock" in sql
 
 
 @pytest.mark.asyncio

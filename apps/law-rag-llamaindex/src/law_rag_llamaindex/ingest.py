@@ -238,13 +238,13 @@ async def run_generation_ingestion(
         )
         stage = "generation_verify"
         total_node_count = len(nodes) + copied_node_count
-        if verify_generation is not None:
-            await verify_generation(
-                engine,
-                generation,
-                source_count=len(provisions),
-                node_count=total_node_count,
-            )
+        verifier = verify_generation or verify_generation_vectors
+        await verifier(
+            engine,
+            generation,
+            source_count=len(provisions),
+            node_count=total_node_count,
+        )
         await generation_repository.verify(
             generation.id,
             source_count=len(provisions),

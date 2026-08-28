@@ -61,6 +61,11 @@ def upgrade() -> None:
         ON llamaindex_retrieval_generations(status,created_at DESC)
         """,
         """
+        CREATE UNIQUE INDEX llamaindex_retrieval_generations_one_active
+        ON llamaindex_retrieval_generations(status)
+        WHERE status = 'active'
+        """,
+        """
         CREATE INDEX llamaindex_generation_sources_source_fingerprint
         ON llamaindex_generation_sources(source_fingerprint)
         """,

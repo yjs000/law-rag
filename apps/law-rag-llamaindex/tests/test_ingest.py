@@ -26,6 +26,14 @@ from law_rag_llamaindex.ingest import (
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
 
 
+@pytest.fixture(autouse=True)
+def _replace_physical_generation_verifier(monkeypatch):
+    async def verifier(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr("law_rag_llamaindex.ingest.verify_generation_vectors", verifier)
+
+
 def _record(provision_id: str, content: str) -> dict:
     return {
         "provision_id": provision_id,

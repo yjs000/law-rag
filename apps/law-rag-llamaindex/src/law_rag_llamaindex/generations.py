@@ -383,6 +383,8 @@ class PostgresGenerationRepository:
     async def publish(self, generation_id: UUID) -> None:
         """Switch active pointer only if the candidate has been verified."""
 
+        lock = text("SELECT pg_advisory_xact_lock(hashtext('llamaindex_active_generation'))")
+
         activate = text(
             """
             UPDATE llamaindex_retrieval_generations
@@ -407,6 +409,7 @@ class PostgresGenerationRepository:
             """
         )
         async with self._engine.begin() as connection:
+            await connection.execute(lock)
             result = await connection.execute(activate, {"generation_id": generation_id})
             result.scalar_one()
             await connection.execute(retire_previous, {"generation_id": generation_id})
@@ -432,6 +435,8 @@ class PostgresGenerationRepository:
     async def rollback(self, generation_id: UUID) -> None:
         """Atomically restore an explicitly retained rollback generation."""
 
+        lock = text("SELECT pg_advisory_xact_lock(hashtext('llamaindex_active_generation'))")
+
         activate = text(
             """
             UPDATE llamaindex_retrieval_generations
@@ -456,6 +461,7 @@ class PostgresGenerationRepository:
             """
         )
         async with self._engine.begin() as connection:
+            await connection.execute(lock)
             result = await connection.execute(activate, {"generation_id": generation_id})
             result.scalar_one()
             await connection.execute(retire, {"generation_id": generation_id})
