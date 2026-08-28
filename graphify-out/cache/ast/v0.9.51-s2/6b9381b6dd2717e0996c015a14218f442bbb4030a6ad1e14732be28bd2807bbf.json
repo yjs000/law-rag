@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_apps_collector_ops_invoke_collector_ps1", "label": "Invoke-Collector.ps1", "file_type": "code", "source_file": "apps/collector/ops/Invoke-Collector.ps1", "source_location": "L1"}], "edges": [], "raw_calls": []}
