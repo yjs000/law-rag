@@ -46,6 +46,24 @@ override한다.
 프로젝트의 도메인, 데이터, 보안, 개인정보, 아키텍처 및 검증 불변조건(아래 "변경 불변조건")은
 Superpowers workflow 중에도 항상 유지한다.
 
+## 실행 지속성 계약
+
+- Superpowers가 요구하는 설계 승인을 사용자가 한 뒤에는, 승인된 완료조건이 최신 검증 증거로 충족될
+  때까지 에이전트가 구현·디버깅·테스트·리뷰 반영·로컬 커밋을 자율적으로 계속한다.
+- 중간 테스트 실패, 리뷰 지적, 커밋, 마일스톤 완료, 진행 보고는 멈춤 사유가 아니다. 이들은
+  `commentary`로만 보고하며, 작업을 끝낸 것처럼 `final` 응답을 보내거나 다음 단계 승인을 요구하지
+  않는다.
+- 현재 완료조건에 필요하지 않은 개선점이나 별도 작업은 현재 작업을 넓히지 않는다. 후속 작업으로
+  기록하고, 현재 완료조건을 먼저 끝낸다.
+- 다음 경우에만 사용자 입력을 요청하고 작업을 멈춘다.
+  1. 외부 쓰기·배포·구매·파괴적 작업처럼 별도 승인이 필요한 경우
+  2. 승인된 완료조건을 실질적으로 바꾸는 사용자 선택이 필요한 경우
+  3. 조사와 최소 검증으로 승인된 완료조건을 충족할 수 없다는 사실이 확인된 경우
+- `final` 응답은 다음이 모두 충족될 때만 보낸다.
+  1. 승인된 완료조건 전체가 충족됨
+  2. 필요한 검증 명령의 최신 성공 증거가 있음
+  3. 활성 실행계획의 해당 작업에 미완료 항목이 없음
+
 ## Subagent 모델·reasoning 정책
 
 Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`과 `reasoning_effort`를 항상
@@ -147,3 +165,16 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 - 원격 데이터나 DB를 파괴하는 명령을 승인 없이 실행
 - 인용 검증을 우회해 답변 품질을 높이는 것처럼 보이게 하는 변경
 - 근거 없는 기술·법률 요구사항을 임의로 확정
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

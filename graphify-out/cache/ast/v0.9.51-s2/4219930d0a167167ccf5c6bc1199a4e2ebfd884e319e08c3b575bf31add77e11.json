@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_apps_collector_ops_register_collectortask_ps1", "label": "Register-CollectorTask.ps1", "file_type": "code", "source_file": "apps/collector/ops/Register-CollectorTask.ps1", "source_location": "L1"}], "edges": [], "raw_calls": []}
