@@ -388,6 +388,7 @@ async def main() -> None:
                 chunker_version="law-chunker-v1",
                 embedding_provider="nvidia",
                 embedding_model=settings.nvidia_embedding_model,
+                embedding_profile="truncate=end",
                 embed_dim=settings.embed_dim,
             ),
             verify_generation=verify_generation_vectors,

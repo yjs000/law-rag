@@ -124,17 +124,29 @@ def generation_source_records(
 
 
 def transform_fingerprint(
-    *, chunker_version: str, embedding_provider: str, embedding_model: str, embed_dim: int
+    *,
+    chunker_version: str,
+    embedding_provider: str,
+    embedding_model: str,
+    embed_dim: int,
+    embedding_profile: str = "default",
 ) -> str:
     """Fingerprint the transformation contract that defines vector compatibility."""
 
-    if not chunker_version or not embedding_provider or not embedding_model or embed_dim < 1:
+    if (
+        not chunker_version
+        or not embedding_provider
+        or not embedding_model
+        or not embedding_profile
+        or embed_dim < 1
+    ):
         raise ValueError("transform fingerprint requires a complete transformation contract")
     return _sha256_json(
         {
             "chunker_version": chunker_version,
             "embedding_provider": embedding_provider,
             "embedding_model": embedding_model,
+            "embedding_profile": embedding_profile,
             "embed_dim": embed_dim,
         }
     )
@@ -223,6 +235,20 @@ class GenerationCatalog:
         self._generations[generation_id] = published
         self._active_id = generation_id
         return published
+
+    def rollback(self, generation_id: UUID) -> RetrievalGeneration:
+        """Restore one retained rollback generation as the active pointer target."""
+
+        generation = self.get(generation_id)
+        if generation.status != "rollback":
+            raise GenerationStateError("only a retained rollback generation can be restored")
+        if self._active_id is not None:
+            active = self.get(self._active_id)
+            self._generations[active.id] = replace(active, status="rollback")
+        restored = replace(generation, status="active", published_at=datetime.now(UTC))
+        self._generations[generation_id] = restored
+        self._active_id = generation_id
+        return restored
 
     def active(self) -> RetrievalGeneration | None:
         """Return the active generation, if any has been published."""
@@ -402,6 +428,38 @@ class PostgresGenerationRepository:
                 query, {"generation_id": generation_id, "failure_code": failure_code}
             )
             result.scalar_one()
+
+    async def rollback(self, generation_id: UUID) -> None:
+        """Atomically restore an explicitly retained rollback generation."""
+
+        activate = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'active', published_at = now()
+            WHERE generation_id = :generation_id AND status = 'rollback'
+            RETURNING generation_id
+            """
+        )
+        retire = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'rollback'
+            WHERE status = 'active' AND generation_id <> :generation_id
+            """
+        )
+        pointer = text(
+            """
+            INSERT INTO llamaindex_active_generation (singleton,generation_id,updated_at)
+            VALUES (true,:generation_id,now())
+            ON CONFLICT(singleton) DO UPDATE
+            SET generation_id = excluded.generation_id, updated_at = excluded.updated_at
+            """
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.execute(activate, {"generation_id": generation_id})
+            result.scalar_one()
+            await connection.execute(retire, {"generation_id": generation_id})
+            await connection.execute(pointer, {"generation_id": generation_id})
 
     async def active(self) -> RetrievalGeneration | None:
         """Read the generation selected by the singleton active pointer."""

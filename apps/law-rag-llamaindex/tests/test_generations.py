@@ -100,11 +100,32 @@ def test_transform_fingerprint_changes_for_embedding_or_chunker_contract() -> No
     assert baseline != transform_fingerprint(
         chunker_version="law-chunker-v1",
         embedding_provider="nvidia",
+        embedding_model="nvidia/nemotron-3-embed-1b",
+        embedding_profile="truncate=start",
+        embed_dim=2048,
+    )
+    assert baseline != transform_fingerprint(
+        chunker_version="law-chunker-v1",
+        embedding_provider="nvidia",
         embedding_model="other-model",
         embed_dim=2048,
     )
 
 
+def test_catalog_rolls_back_only_to_a_retained_generation() -> None:
+    catalog = GenerationCatalog()
+    previous = catalog.start("source-v1", "transform-v1")
+    catalog.verify(previous.id, source_count=1, node_count=1)
+    catalog.publish(previous.id)
+    active = catalog.start("source-v2", "transform-v1")
+    catalog.verify(active.id, source_count=1, node_count=1)
+    catalog.publish(active.id)
+
+    restored = catalog.rollback(previous.id)
+
+    assert restored.id == previous.id
+    assert restored.status == "active"
+    assert catalog.get(active.id).status == "rollback"
 class _Result:
     def __init__(self, generation_id: UUID) -> None:
         self._generation_id = generation_id
