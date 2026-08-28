@@ -52,8 +52,12 @@ class LlamaIndexLegalRepository:
         생성해 검색 구현 경계를 유지한다.
         """
         started = perf_counter()
+        vector_store = self._vector_store
+        active = getattr(vector_store, "active", None)
+        if active is not None:
+            vector_store = (await active()).store
         hits = await llamaindex_search(
-            self._vector_store,
+            vector_store,
             self._embedder,
             query,
             as_of_date,

@@ -14,11 +14,15 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from law_rag_core.ports.repository import LegalRepository
+from law_rag_llamaindex.active_index import ActiveGenerationIndexProvider
 from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
 from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
+from law_rag_llamaindex.generations import PostgresGenerationRepository
 from law_rag_llamaindex.retriever import search as llamaindex_search
-from law_rag_llamaindex.store import build_vector_store as build_llamaindex_vector_store
-from sqlalchemy import text
+from law_rag_llamaindex.store import build_generation_vector_store
+from llama_index.core import VectorStoreIndex
+from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_repository import repository as memory_repository
@@ -111,10 +115,50 @@ def _build_llamaindex_resources(
     if not database_url or not nvidia_api_key:
         return None
 
-    vector_store = build_llamaindex_vector_store(llamaindex_settings)
     embedder = build_llamaindex_embedder(llamaindex_settings)
-    v2_repository = LlamaIndexLegalRepository(repository, vector_store, embedder)
-    return vector_store, embedder, v2_repository
+    async_engine = create_async_engine(_llamaindex_async_database_url(database_url))
+    sync_engine = create_engine(_llamaindex_sync_database_url(database_url))
+
+    async def close_engines() -> None:
+        sync_engine.dispose()
+        await async_engine.dispose()
+
+    provider = ActiveGenerationIndexProvider(
+        PostgresGenerationRepository(async_engine),
+        lambda generation: build_generation_vector_store(
+            llamaindex_settings,
+            generation,
+            engine=sync_engine,
+            async_engine=async_engine,
+            perform_setup=False,
+        ),
+        lambda vector_store: VectorStoreIndex.from_vector_store(vector_store, embed_model=embedder),
+        close=close_engines,
+    )
+    v2_repository = LlamaIndexLegalRepository(repository, provider, embedder)
+    return provider, embedder, v2_repository
+
+
+def _llamaindex_async_database_url(database_url: str) -> str:
+    """Normalize the shared URL for the active-generation async catalog reader."""
+
+    if database_url.startswith("postgresql+asyncpg://"):
+        return database_url
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return database_url
+
+
+def _llamaindex_sync_database_url(database_url: str) -> str:
+    """Normalize the shared URL for the active generation's PGVector store."""
+
+    if database_url.startswith("postgresql+psycopg://"):
+        return database_url
+    if database_url.startswith("postgresql+asyncpg://"):
+        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
 
 
 def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:
@@ -141,6 +185,8 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
 
     llamaindex_vector_store, llamaindex_embedder, llamaindex_repository = resources
     return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
+
+
 supabase_auth = (
     SupabaseAuth(
         settings.supabase_url,
@@ -166,6 +212,8 @@ async def lifespan(_: FastAPI):
     yield
     if supabase_auth:
         await supabase_auth.aclose()
+    if isinstance(llamaindex_vector_store, ActiveGenerationIndexProvider):
+        await llamaindex_vector_store.aclose()
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
@@ -284,7 +332,7 @@ def _v2_not_ready_http_error() -> HTTPException:
 
 
 async def _v2_index_ready() -> bool:
-    """가장 최근 v2 색인 작업의 완료 상태를 fail-closed 방식으로 확인한다."""
+    """active pointer가 가리키는 검증된 generation만 fail-closed로 허용한다."""
     if not settings.database_url:
         return False
     try:
@@ -292,14 +340,16 @@ async def _v2_index_ready() -> bool:
             row = (
                 await connection.execute(
                     text(
-                        "SELECT status FROM law_rag_llamaindex_ingestion_runs "
-                        "ORDER BY started_at DESC, id DESC LIMIT 1"
+                        "SELECT generation.status "
+                        "FROM llamaindex_active_generation AS active "
+                        "JOIN llamaindex_retrieval_generations AS generation "
+                        "ON generation.generation_id = active.generation_id"
                     )
                 )
             ).first()
     except Exception:
         return False
-    return row is not None and row[0] == "completed"
+    return row is not None and row[0] == "active"
 
 
 async def _v2_ready() -> bool:
@@ -324,6 +374,12 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
         raise _v2_not_ready_http_error()
     if not await _v2_ready():
         raise _v2_not_ready_http_error()
+    active = getattr(vector_store, "active", None)
+    if active is not None:
+        try:
+            vector_store = (await active()).store
+        except Exception:
+            raise _v2_not_ready_http_error() from None
     hits = await llamaindex_search(
         vector_store,
         embedder,

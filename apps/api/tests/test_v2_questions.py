@@ -2,9 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def test_v2_resources_factory_builds_each_resource_once(
+def test_v2_resources_factory_uses_active_generation_provider_not_legacy_table(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from law_rag_llamaindex.active_index import ActiveGenerationIndexProvider
+
     import app.main as main_module
 
     monkeypatch.setattr(main_module.settings, "database_url", "postgresql://factory.example/law")
@@ -16,29 +18,24 @@ def test_v2_resources_factory_builds_each_resource_once(
         nvidia_api_key = "nvidia-test-key"
 
     monkeypatch.setattr(main_module, "llamaindex_settings", LlamaIndexSettings())
-    store = object()
     embedder = object()
-    build_calls = {"store": 0, "embedder": 0, "repository": 0}
 
-    def build_store(settings) -> object:
-        build_calls["store"] += 1
-        return store
+    def build_generation_store(*args, **kwargs) -> object:
+        raise AssertionError("v2 reads must resolve the active generation, never legacy table")
 
     def build_embedder(settings) -> object:
-        build_calls["embedder"] += 1
         return embedder
 
     class RepositoryDouble:
         pass
 
     def build_repository(delegate, vector_store, repository_embedder) -> RepositoryDouble:
-        build_calls["repository"] += 1
         assert delegate is main_module.repository
-        assert vector_store is store
+        assert isinstance(vector_store, ActiveGenerationIndexProvider)
         assert repository_embedder is embedder
         return RepositoryDouble()
 
-    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", build_store)
+    monkeypatch.setattr(main_module, "build_generation_vector_store", build_generation_store)
     monkeypatch.setattr(main_module, "build_llamaindex_embedder", build_embedder)
     monkeypatch.setattr(main_module, "LlamaIndexLegalRepository", build_repository)
     main_module._build_llamaindex_resources.cache_clear()
@@ -52,10 +49,10 @@ def test_v2_resources_factory_builds_each_resource_once(
 
     assert first is not None
     assert second is first
-    assert build_calls == {"store": 1, "embedder": 1, "repository": 1}
+    assert isinstance(first[0], ActiveGenerationIndexProvider)
     resolved = main_module._llamaindex_resources()
     assert resolved is not None
-    assert resolved[0] is store
+    assert resolved[0] is first[0]
     assert resolved[1] is embedder
     assert resolved[2] is first[2]
     main_module._build_llamaindex_resources.cache_clear()
@@ -76,18 +73,16 @@ def test_v2_resources_factory_retries_after_transient_initialization_failure(
 
     monkeypatch.setattr(main_module, "llamaindex_settings", LlamaIndexSettings())
     attempts = 0
-    store = object()
     embedder = object()
 
-    def build_store(settings) -> object:
+    def build_embedder(settings) -> object:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
             raise RuntimeError("temporary initialization failure")
-        return store
+        return embedder
 
-    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", build_store)
-    monkeypatch.setattr(main_module, "build_llamaindex_embedder", lambda settings: embedder)
+    monkeypatch.setattr(main_module, "build_llamaindex_embedder", build_embedder)
     monkeypatch.setattr(
         main_module,
         "LlamaIndexLegalRepository",
@@ -143,9 +138,17 @@ def test_v2_questions_returns_503_when_resource_factory_fails(
     import app.main as main_module
 
     monkeypatch.setattr(main_module.settings, "database_url", "postgresql://db.example/law")
-    monkeypatch.setattr(main_module, "llamaindex_settings", type("Settings", (), {
-        "nvidia_api_key": "nvidia-test-key",
-    })())
+    monkeypatch.setattr(
+        main_module,
+        "llamaindex_settings",
+        type(
+            "Settings",
+            (),
+            {
+                "nvidia_api_key": "nvidia-test-key",
+            },
+        )(),
+    )
     monkeypatch.setattr(main_module, "llamaindex_vector_store", None)
     monkeypatch.setattr(main_module, "llamaindex_embedder", None)
     monkeypatch.setattr(main_module, "llamaindex_repository", None)
@@ -153,7 +156,7 @@ def test_v2_questions_returns_503_when_resource_factory_fails(
     def fail_build(settings) -> object:
         raise RuntimeError("database credentials and DDL details must stay private")
 
-    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", fail_build)
+    monkeypatch.setattr(main_module, "build_llamaindex_embedder", fail_build)
     main_module._build_llamaindex_resources.cache_clear()
     response = TestClient(main_module.app).post(
         "/v2/questions",
