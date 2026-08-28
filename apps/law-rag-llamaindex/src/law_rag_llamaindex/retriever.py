@@ -70,21 +70,24 @@ def _filter_hits(nodes, as_of_date: date, limit: int) -> list[SearchHit]:
     hits: list[SearchHit] = []
     for node, similarity in nodes:
         metadata = node.metadata
-        hit = SearchHit(
-            provision_id=metadata["provision_id"],
-            document_id=metadata["document_id"],
-            document_title=metadata["document_title"],
-            source_kind=metadata["source_kind"],
-            version_label=metadata["version_label"],
-            effective_from=metadata["effective_from"],
-            effective_to=metadata["effective_to"],
-            path=metadata["path"],
-            heading=metadata["heading"],
-            content=metadata["content"],
-            source_url=metadata["source_url"],
-            score=similarity,
-            law_type_code=metadata["law_type_code"],
-        )
+        try:
+            hit = SearchHit(
+                provision_id=metadata["provision_id"],
+                document_id=metadata["document_id"],
+                document_title=metadata["document_title"],
+                source_kind=metadata["source_kind"],
+                version_label=metadata["version_label"],
+                effective_from=metadata["effective_from"],
+                effective_to=metadata["effective_to"],
+                path=metadata["path"],
+                heading=metadata["heading"],
+                content=metadata["content"],
+                source_url=metadata["source_url"],
+                score=similarity,
+                law_type_code=metadata["law_type_code"],
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
         if hit.effective_from is None or hit.effective_from > as_of_date:
             continue
         if hit.effective_to is not None and hit.effective_to <= as_of_date:

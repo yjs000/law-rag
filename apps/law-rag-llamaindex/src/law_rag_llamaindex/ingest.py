@@ -162,6 +162,7 @@ async def run_generation_ingestion(
     embedder,
     *,
     transform_fingerprint: str,
+    verify_generation=None,
 ) -> IngestionResult:
     """Build a new immutable generation and publish only after all writes verify.
 
@@ -194,6 +195,7 @@ async def run_generation_ingestion(
     generation = await generation_repository.start(
         source_fingerprint(provisions), transform_fingerprint
     )
+    copied_node_count = 0
     stage = "node_build"
     try:
         nodes = build_nodes(changed_provisions)
@@ -213,6 +215,7 @@ async def run_generation_ingestion(
             )
             if copied_count != expected_copied_count:
                 raise ValueError("copied vector count does not match source lineage")
+            copied_node_count = copied_count
         stage = "generation_source_lineage"
         unchanged_id_set = set(unchanged_ids)
         node_counts = {
@@ -233,8 +236,18 @@ async def run_generation_ingestion(
             ),
         )
         stage = "generation_verify"
+        total_node_count = len(nodes) + copied_node_count
+        if verify_generation is not None:
+            await verify_generation(
+                engine,
+                generation,
+                source_count=len(provisions),
+                node_count=total_node_count,
+            )
         await generation_repository.verify(
-            generation.id, source_count=len(provisions), node_count=len(nodes)
+            generation.id,
+            source_count=len(provisions),
+            node_count=total_node_count,
         )
         stage = "generation_publish"
         await generation_repository.publish(generation.id)
@@ -279,6 +292,39 @@ async def copy_generation_vectors(
     async with engine.begin() as connection:
         result = await connection.execute(query, {"node_ids": node_ids})
     return result.rowcount
+
+
+async def verify_generation_vectors(
+    engine: AsyncEngine,
+    generation,
+    *,
+    source_count: int,
+    node_count: int,
+) -> None:
+    """Reject a candidate whose physical table cannot prove complete source coverage."""
+
+    table_name = _generation_data_table_name(generation.table_name)
+    query = text(
+        f'''SELECT count(*) AS node_count,
+                   count(DISTINCT node_id) AS distinct_node_count,
+                   count(DISTINCT metadata_->>'provision_id') AS source_count,
+                   count(*) FILTER (
+                     WHERE metadata_->>'provision_id' IS NULL
+                        OR metadata_->>'document_id' IS NULL
+                        OR metadata_->>'source_url' IS NULL
+                        OR metadata_->>'effective_from' IS NULL
+                   ) AS invalid_metadata_count
+            FROM "{table_name}"'''
+    )
+    async with engine.connect() as connection:
+        row = (await connection.execute(query)).mappings().one()
+    if (
+        row["node_count"] != node_count
+        or row["distinct_node_count"] != node_count
+        or row["source_count"] != source_count
+        or row["invalid_metadata_count"] != 0
+    ):
+        raise ValueError("generation vector table failed source coverage validation")
 
 
 def _async_database_url(database_url: str) -> str:
@@ -344,6 +390,7 @@ async def main() -> None:
                 embedding_model=settings.nvidia_embedding_model,
                 embed_dim=settings.embed_dim,
             ),
+            verify_generation=verify_generation_vectors,
         )
         print(
             f"ingestion complete: total={result.total_provisions} "

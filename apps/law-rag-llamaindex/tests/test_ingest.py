@@ -21,6 +21,7 @@ from law_rag_llamaindex.ingest import (
     main,
     run_generation_ingestion,
     run_ingestion,
+    verify_generation_vectors,
 )
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
 
@@ -124,6 +125,35 @@ class _CopyEngine:
         self.connection = connection
 
     def begin(self):
+        return self.connection
+
+
+class _VerificationResult:
+    def __init__(self, row: dict[str, int]) -> None:
+        self.row = row
+
+    def mappings(self):
+        return self
+
+    def one(self):
+        return self.row
+
+
+class _VerificationConnection(_ConnectionContext):
+    def __init__(self, row: dict[str, int]) -> None:
+        self.row = row
+        self.statement = None
+
+    async def execute(self, statement):
+        self.statement = statement
+        return _VerificationResult(self.row)
+
+
+class _VerificationEngine:
+    def __init__(self, connection: _VerificationConnection) -> None:
+        self.connection = connection
+
+    def connect(self):
         return self.connection
 
 
@@ -329,6 +359,7 @@ async def test_run_generation_ingestion_copies_unchanged_vectors_from_active_gen
     assert result.skipped_count == 1
     assert copied["source_table"] == repository.active_generation.table_name
     assert copied["node_ids"] == ["a"]
+    assert repository.catalog.active().node_count == 1
 
 
 @pytest.mark.asyncio
@@ -532,6 +563,40 @@ async def test_copy_generation_vectors_uses_allowlisted_tables_and_bound_node_id
     assert connection.parameters == {"node_ids": ["a", "b"]}
     with pytest.raises(ValueError, match="allowlisted"):
         await copy_generation_vectors(_CopyEngine(connection), "untrusted", target, ["a"])
+
+
+@pytest.mark.asyncio
+async def test_verify_generation_vectors_rejects_incomplete_physical_generation():
+    generation = GenerationCatalog().start("a" * 64, "b" * 64)
+    connection = _VerificationConnection(
+        {
+            "node_count": 1,
+            "distinct_node_count": 1,
+            "source_count": 1,
+            "invalid_metadata_count": 0,
+        }
+    )
+
+    await verify_generation_vectors(
+        _VerificationEngine(connection), generation, source_count=1, node_count=1
+    )
+    assert "count(DISTINCT node_id)" in connection.statement.text
+    with pytest.raises(ValueError, match="source coverage"):
+        await verify_generation_vectors(
+            _VerificationEngine(
+                _VerificationConnection(
+                    {
+                        "node_count": 1,
+                        "distinct_node_count": 1,
+                        "source_count": 0,
+                        "invalid_metadata_count": 0,
+                    }
+                )
+            ),
+            generation,
+            source_count=1,
+            node_count=1,
+        )
 
 
 pytestmark_db = pytest.mark.skipif(

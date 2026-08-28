@@ -542,6 +542,12 @@ def _generation_failed_error() -> HTTPException:
     )
 
 
+def _requires_legacy_query_embedding(search_repository: LegalRepository) -> bool:
+    """Only v1 retrieval consumes the application-owned query embedding."""
+
+    return not isinstance(search_repository, LlamaIndexLegalRepository)
+
+
 async def _answer_question(
     payload: QuestionRequest,
     request: Request,
@@ -690,7 +696,7 @@ async def _answer_question(
         await _require_supported_as_of_date(payload.as_of_date, repository)
     query_embedding = None
     embedding_failed = False
-    if use_ai and settings.embedding_enabled:
+    if use_ai and settings.embedding_enabled and _requires_legacy_query_embedding(repository):
         embedding_stage = diagnostics["embedding"]
         assert isinstance(embedding_stage, dict)
         embedding_stage.update({"attempted": True, "status": "started"})

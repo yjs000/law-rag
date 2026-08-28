@@ -196,3 +196,20 @@ async def test_search_index_uses_llamaindex_retriever_with_one_date_filter() -> 
     filter_ = index.kwargs["filters"].filters[0]
     assert filter_.key == "effective_from"
     assert filter_.operator is FilterOperator.LTE
+
+
+@pytest.mark.asyncio
+async def test_search_excludes_nodes_with_incomplete_metadata() -> None:
+    malformed = TextNode(
+        id_="malformed",
+        text="broken",
+        metadata={"provision_id": "10000000-0000-0000-0000-000000000008"},
+    )
+    current = _node(provision_id="10000000-0000-0000-0000-000000000009")
+    vector_store = _FakeVectorStore([malformed, current], [0.99, 0.98])
+
+    hits = await search(vector_store, _FakeEmbedder(), "전기사업", date(2026, 2, 1), 5)
+
+    assert [str(hit.provision_id) for hit in hits] == [
+        "10000000-0000-0000-0000-000000000009"
+    ]

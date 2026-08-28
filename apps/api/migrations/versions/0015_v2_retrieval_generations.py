@@ -39,7 +39,7 @@ def upgrade() -> None:
         CREATE TABLE llamaindex_generation_sources (
           generation_id uuid NOT NULL
             REFERENCES llamaindex_retrieval_generations(generation_id) ON DELETE CASCADE,
-          provision_id uuid NOT NULL REFERENCES provisions(id),
+          provision_id uuid NOT NULL,
           source_fingerprint text NOT NULL
             CHECK(source_fingerprint ~ '^[a-f0-9]{64}$'),
           node_count integer NOT NULL CHECK(node_count >= 0),

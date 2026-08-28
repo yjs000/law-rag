@@ -272,3 +272,4 @@ def test_v2_generation_migration_has_catalog_and_atomic_active_pointer(monkeypat
     assert "generation_id uuid NOT NULL UNIQUE" in sql
     assert "CREATE TABLE llamaindex_generation_sources" in sql
     assert "PRIMARY KEY(generation_id,provision_id)" in sql
+    assert "provision_id uuid NOT NULL REFERENCES provisions(id)" not in sql

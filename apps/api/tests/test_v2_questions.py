@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -57,6 +59,15 @@ def test_v2_resources_factory_uses_active_generation_provider_not_legacy_table(
     assert resolved[2] is first[2]
     main_module._build_llamaindex_resources.cache_clear()
 
+
+def test_v2_repository_does_not_request_legacy_query_embedding() -> None:
+    import app.main as main_module
+    from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
+
+    v2_repository = LlamaIndexLegalRepository(MagicMock(), object(), object())
+
+    assert main_module._requires_legacy_query_embedding(v2_repository) is False
+    assert main_module._requires_legacy_query_embedding(MagicMock()) is True
 
 def test_v2_resources_factory_retries_after_transient_initialization_failure(
     monkeypatch: pytest.MonkeyPatch,
