@@ -4,7 +4,6 @@ import asyncio
 import base64
 import hashlib
 import json
-import re
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
@@ -16,26 +15,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from law_rag_core.ports.repository import LegalRepository
-from law_rag_llamaindex.active_index import ActiveGenerationIndexProvider
-from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
 from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
-from law_rag_llamaindex.generations import PostgresGenerationRepository
 from law_rag_llamaindex.retriever import search as llamaindex_search
 from law_rag_llamaindex.retriever import search_index as llamaindex_search_index
-from law_rag_llamaindex.store import build_generation_vector_store
-from llama_index.core import VectorStoreIndex
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy import text
 
-from app.adapters.capacity_leases import (
-    MemoryConcurrencyLimiter,
-    PostgresCapacityLeaseStore,
-    PostgresConcurrencyLimiter,
-)
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
-from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
-from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
@@ -48,11 +33,9 @@ from app.adapters.openai_answerer import (
     validate_core_draft,
     validate_draft,
 )
-from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
-from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
+from app.adapters.postgres_identity import ConsentRequiredError
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
-    SupabaseAuth,
     SupabaseAuthError,
     SupabaseAuthUnavailableError,
 )
@@ -63,9 +46,21 @@ from app.application.answering import (
     search_only_answer,
 )
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
-from app.application.question_phase_coordinator import PhaseResult, QuestionPhaseCoordinator
+from app.application.question_phase_coordinator import PhaseResult
 from app.application.question_tasks import QuestionTaskRegistry
 from app.application.request_budget import RequestBudget, StageTimeoutError
+from app.application.v2.dependencies import (
+    PhaseRequest,
+    PreparedExecution,
+    PrepareQuestion,
+    V2ExecutionDependencies,
+)
+from app.bootstrap import (
+    build_app_dependencies,
+    build_llamaindex_resources,
+    normalize_async_database_url,
+    normalize_sync_database_url,
+)
 from app.domain.answer_actions import derive_answer_action
 from app.domain.answer_events import AnswerEvent
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
@@ -77,10 +72,9 @@ from app.domain.corpus_temporal_contract import (
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
-from app.domain.grounding import CitationRegistry, FrozenCitation, GroundedSentence
 from app.domain.pipeline_issues import ExecutionPhase
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
-from app.domain.question_execution import ExecutionSnapshot, ExecutionStatus, next_action_for
+from app.domain.question_execution import ExecutionStatus
 from app.domain.routing import RouteDecision, route_question
 from app.domain.schemas import (
     AiFallbackReason,
@@ -112,90 +106,91 @@ from app.observability import (
 from app.ports.question_execution import ExecutionConflict, ExecutionNotFound, SystemBusy
 from app.settings import get_settings
 
+_DEFAULT_LLAMAINDEX_EMBEDDER_FACTORY = build_llamaindex_embedder
+_DEFAULT_LLAMAINDEX_REPOSITORY_FACTORY = LlamaIndexLegalRepository
+
 settings = get_settings()
 ai_quota_exhausted = False
 question_tasks = QuestionTaskRegistry()
-repository = (
-    PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
-)
-question_execution_repository = (
-    PostgresQuestionExecutionRepository(repository.engine)
-    if isinstance(repository, PostgresLegalRepository)
-    else MemoryQuestionExecutionRepository()
-)
-question_phase_limiter = (
-    PostgresConcurrencyLimiter(
-        provider="ultra",
-        slots=settings.v2_provider_slots,
-        lease_store=PostgresCapacityLeaseStore(repository.engine),
+
+
+def _v2_service_dependencies() -> V2ExecutionDependencies:
+    """Bind the v2 use case to the current composition-root adapters.
+
+    Global names are deliberate compatibility seams: legacy tests patch them
+    directly while production values remain the immutable bootstrap bundle.
+    """
+
+    return V2ExecutionDependencies(
+        executions=question_execution_repository,
+        resolve_repository=_v2_repository,
+        active_provider=_v2_active_provider,
+        retrieve_evidence=_retrieve_pinned_v2_evidence,
+        route=lambda question: route_question(question, _question_router()),
+        answerer=_answerer,
+        ai_available=_ai_available,
+        check_quota=_check_v2_quota,
+        require_supported_date=_require_supported_as_of_date,
+        save_authenticated=_save_if_authenticated,
+        select_generation_hits=select_generation_hits,
+        validate_core=validate_core_draft,
+        validate_response=validate_draft,
+        make_core_draft=lambda summary, citation_ids, action: CoreDraft(
+            summary=summary, citation_ids=citation_ids, action=action
+        ),
+        answer_evidence_max_characters=settings.answer_evidence_max_characters,
+        phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
+        provider_budget=timedelta(seconds=settings.v2_provider_budget_seconds),
+        now=lambda: datetime.now(UTC),
+        execution_capability=_execution_capability,
+        capability_hash=_capability_hash,
+        admit_phase=_admit_v2_provider_phase,
     )
-    if isinstance(repository, PostgresLegalRepository)
-    else MemoryConcurrencyLimiter(provider="ultra", slots=settings.v2_provider_slots)
-)
-question_phase_tasks: dict[UUID, asyncio.Task[object]] = {}
-llamaindex_settings = get_llamaindex_settings()
+
+
+dependencies = build_app_dependencies(settings, v2_dependency_provider=_v2_service_dependencies)
+repository = dependencies.repository
+question_execution_repository = dependencies.question_executions
+question_phase_limiter = dependencies.question_phase_limiter
+question_phase_tasks = dependencies.v2_service._phase_tasks
+llamaindex_settings = dependencies.llamaindex_settings
 llamaindex_vector_store = None
 llamaindex_embedder = None
 llamaindex_repository = None
+v2_question_execution_service = dependencies.v2_service
 
 
 @lru_cache(maxsize=1)
 def _build_llamaindex_resources(
     database_url: str | None, nvidia_api_key: str | None
 ) -> tuple[object, object, LlamaIndexLegalRepository] | None:
-    """v2 검색에 필요한 리소스를 모두 구성하거나 미구성 상태를 반환한다.
+    """Compatibility facade over bootstrap's sole LlamaIndex resource builder."""
 
-    데이터베이스 URL 또는 NVIDIA 키가 없으면 외부 초기화를 시도하지 않는다.
-    """
-    if not database_url or not nvidia_api_key:
-        return None
-
-    embedder = build_llamaindex_embedder(llamaindex_settings)
-    async_engine = create_async_engine(
-        _llamaindex_async_database_url(database_url), poolclass=NullPool
+    if (
+        build_llamaindex_embedder is _DEFAULT_LLAMAINDEX_EMBEDDER_FACTORY
+        and LlamaIndexLegalRepository is _DEFAULT_LLAMAINDEX_REPOSITORY_FACTORY
+    ):
+        return dependencies.llamaindex_resource_builder(database_url, nvidia_api_key, repository)
+    return build_llamaindex_resources(
+        database_url,
+        nvidia_api_key,
+        llamaindex_settings=llamaindex_settings,
+        delegate=repository,
+        embedder_factory=build_llamaindex_embedder,
+        repository_factory=LlamaIndexLegalRepository,
     )
-    sync_engine = create_engine(_llamaindex_sync_database_url(database_url), poolclass=NullPool)
-
-    async def close_engines() -> None:
-        sync_engine.dispose()
-        await async_engine.dispose()
-
-    provider = ActiveGenerationIndexProvider(
-        PostgresGenerationRepository(async_engine),
-        lambda generation: build_generation_vector_store(
-            llamaindex_settings,
-            generation,
-            engine=sync_engine,
-            async_engine=async_engine,
-            perform_setup=False,
-        ),
-        lambda vector_store: VectorStoreIndex.from_vector_store(vector_store, embed_model=embedder),
-        close=close_engines,
-    )
-    v2_repository = LlamaIndexLegalRepository(repository, provider, embedder)
-    return provider, embedder, v2_repository
 
 
 def _llamaindex_async_database_url(database_url: str) -> str:
-    """Normalize the shared URL for the active-generation async catalog reader."""
+    """Backward-compatible name for bootstrap URL normalization."""
 
-    if database_url.startswith("postgresql+asyncpg://"):
-        return database_url
-    if database_url.startswith("postgresql://"):
-        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return database_url
+    return normalize_async_database_url(database_url)
 
 
 def _llamaindex_sync_database_url(database_url: str) -> str:
-    """Normalize the shared URL for the active generation's PGVector store."""
+    """Backward-compatible name for bootstrap URL normalization."""
 
-    if database_url.startswith("postgresql+psycopg://"):
-        return database_url
-    if database_url.startswith("postgresql+asyncpg://"):
-        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-    if database_url.startswith("postgresql://"):
-        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return database_url
+    return normalize_sync_database_url(database_url)
 
 
 def _llamaindex_resources() -> tuple[object | None, object | None, object | None] | None:
@@ -224,23 +219,9 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
     return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
 
 
-supabase_auth = (
-    SupabaseAuth(
-        settings.supabase_url,
-        settings.supabase_secret_key,
-        settings.request_timeout_seconds,
-    )
-    if settings.supabase_url and settings.supabase_secret_key
-    else None
-)
-postgres_identity = (
-    PostgresIdentityRepository(repository.engine)
-    if isinstance(repository, PostgresLegalRepository) and supabase_auth
-    else None
-)
-collector_load_errors: list[str] = []
-if repository is memory_repository:
-    _, collector_load_errors = memory_repository.load_collector_state(settings.collector_state_dir)
+supabase_auth = dependencies.supabase_auth
+postgres_identity = dependencies.postgres_identity
+collector_load_errors = dependencies.collector_load_errors
 
 
 @asynccontextmanager
@@ -249,7 +230,7 @@ async def lifespan(_: FastAPI):
     yield
     if supabase_auth:
         await supabase_auth.aclose()
-    if isinstance(llamaindex_vector_store, ActiveGenerationIndexProvider):
+    if hasattr(llamaindex_vector_store, "aclose"):
         await llamaindex_vector_store.aclose()
 
 
@@ -512,6 +493,15 @@ async def _v2_repository() -> LegalRepository:
     return v2_repository
 
 
+def _v2_active_provider():
+    """Return the active-generation adapter through the v2 readiness seam."""
+
+    resources = _llamaindex_resources()
+    if resources is None or resources[0] is None:
+        raise _v2_not_ready_http_error()
+    return resources[0]
+
+
 def _sse(event_type: str, payload: dict[str, object]) -> bytes:
     return f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
 
@@ -525,81 +515,26 @@ async def prepare_question_execution(
     """Freeze the active generation and evidence before any provider phase starts."""
     user = await _optional_user(request.headers.get("authorization"))
     owner_scope = _question_owner(request, user)
-    await question_execution_repository.expire(datetime.now(UTC))
-    existing = await question_execution_repository.find_by_prepare_key(owner_scope, idempotency_key)
-    if existing is not None:
-        return _prepared_execution_response(
-            existing,
-            execution_capability=(
-                _execution_capability(owner_scope, idempotency_key) if user is None else None
-            ),
+    prepared = await v2_question_execution_service.prepare(
+        PrepareQuestion(
+            payload=payload,
+            owner_scope=owner_scope,
+            idempotency_key=idempotency_key,
+            user=user,
         )
-    v2_repository = await _v2_repository()
-    await _check_quota("ai" if payload.answer_mode == "terra" else "search", user=user)
-    await _require_supported_as_of_date(payload.as_of_date, v2_repository)
-    route = "legal_search"
-    missing_fields: tuple[str, ...] = ()
-    if payload.answer_mode == "terra":
-        try:
-            decision = await route_question(payload.question, _question_router())
-            route = decision.route
-            missing_fields = decision.missing_fields
-        except Exception:
-            route = "routing_unavailable"
-    resources = _llamaindex_resources()
-    assert resources is not None
-    active = await resources[0].active()
-    hits, corpus_as_of = (
-        await _retrieve_pinned_v2_evidence(payload, active, v2_repository)
-        if route == "legal_search"
-        else ([], None)
     )
-    generation_hits = (
-        select_generation_hits(hits, settings.answer_evidence_max_characters)
-        if route == "legal_search" and payload.answer_mode == "terra"
-        else hits
-    )
-    frozen_citations = tuple(
-        FrozenCitation(id=f"C{index}", quote=hit.content)
-        for index, hit in enumerate(generation_hits, 1)
-    )
-    execution_capability = (
-        _execution_capability(owner_scope, idempotency_key) if user is None else None
-    )
-    execution = await question_execution_repository.prepare_or_get(
-        owner_scope=owner_scope,
-        prepare_idempotency_key=idempotency_key,
-        generation_id=active.generation.id,
-        capability_hash=_capability_hash(execution_capability),
-        private_payload={
-            "request": payload.model_dump(mode="json"),
-            "hits": [hit.model_dump(mode="json") for hit in hits],
-            "generation_hits": [hit.model_dump(mode="json") for hit in generation_hits],
-            "corpus_as_of": corpus_as_of.isoformat() if corpus_as_of is not None else None,
-            "route": route,
-            "missing_fields": list(missing_fields),
-        },
-        frozen_citations=frozen_citations,
-        expires_at=datetime.now(UTC) + timedelta(minutes=10),
-    )
-    emit_execution_phase(str(execution.execution_id), "prepare", "prepared")
-    return _prepared_execution_response(execution, execution_capability=execution_capability)
+    emit_execution_phase(str(prepared.execution.execution_id), "prepare", "prepared")
+    return v2_question_execution_service.prepared_response(prepared)
 
 
 def _prepared_execution_response(
     execution, *, execution_capability: str | None = None
 ) -> dict[str, object]:
-    next_action = next_action_for(
-        ExecutionSnapshot(status=execution.status, version=execution.version)
+    """Compatibility facade for callers that previously imported this helper."""
+
+    return v2_question_execution_service.prepared_response(
+        PreparedExecution(execution=execution, execution_capability=execution_capability)
     )
-    response: dict[str, object] = {
-        "execution_id": str(execution.execution_id),
-        "status": execution.status.value,
-        "next_action": next_action.value if next_action else "complete",
-    }
-    if execution_capability is not None:
-        response["execution_capability"] = execution_capability
-    return response
 
 
 def _capability_hash(value: str | None) -> str | None:
@@ -629,69 +564,25 @@ async def _stream_execution_phase(
     user = await _optional_user(request.headers.get("authorization"))
     owner_scope = _question_owner(request, user)
     capability_hash = _capability_hash(execution_capability) if user is None else None
-    await question_execution_repository.expire(datetime.now(UTC))
     try:
-        execution = await question_execution_repository.get_owned(
-            execution_id, owner_scope, capability_hash=capability_hash
+        phase_request = PhaseRequest(
+            execution_id=execution_id,
+            owner_scope=owner_scope,
+            capability_hash=capability_hash,
+            user=user,
+        )
+        run = (
+            await v2_question_execution_service.begin_core(phase_request)
+            if phase == "core"
+            else await v2_question_execution_service.begin_finalize(phase_request)
         )
     except ExecutionNotFound as exc:
         raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
-    if execution.status is ExecutionStatus.EXPIRED:
-        raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.")
-    coordinator = QuestionPhaseCoordinator(
-        question_execution_repository,
-        core=lambda execution: _run_v2_core(execution),
-        finalize=lambda execution: _run_v2_finalize(execution, user),
-        phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
-    )
-    existing = question_phase_tasks.get(execution_id)
-    owns_task = existing is None or existing.done()
-    start_gate = asyncio.Event()
-
-    async def run_after_admission():
-        await start_gate.wait()
-        return await coordinator.run(
-            execution_id,
-            owner_scope,
-            phase=phase,
-            capability_hash=capability_hash,
-        )
-
-    task = asyncio.create_task(run_after_admission()) if owns_task else existing
-    assert task is not None
-    if owns_task:
-        question_phase_tasks[execution_id] = task
-    try:
-        lease = await _admit_v2_provider_phase(execution, phase) if owns_task else None
-    except BaseException:
-        if owns_task and question_phase_tasks.get(execution_id) is task:
-            del question_phase_tasks[execution_id]
-        task.cancel()
-        raise
-
-    async def release_when_done() -> None:
-        if owns_task and question_phase_tasks.get(execution_id) is task:
-            del question_phase_tasks[execution_id]
-        if owns_task and lease is not None:
-            await lease.release()
-
-    def schedule_release(_completed_task) -> None:
-        asyncio.create_task(release_when_done())
-
-    if owns_task:
-        task.add_done_callback(schedule_release)
-        start_gate.set()
 
     async def events():
         try:
-            persisted = await asyncio.shield(task)
-        except asyncio.CancelledError:
-            if not task.cancelled() and owns_task:
-                raise
-            if not task.cancelled():
-                raise
-            persisted = (AnswerEvent.cancelled(),)
-        except (ExecutionConflict, ValueError):
+            persisted = await v2_question_execution_service.await_phase(run)
+        except ExecutionConflict, ValueError:
             persisted = (AnswerEvent.error("phase_not_ready"),)
         except ExecutionNotFound:
             persisted = (AnswerEvent.error("execution_not_found"),)
@@ -707,13 +598,10 @@ async def _admit_v2_provider_phase(execution, phase: Literal["core", "finalize"]
     if not isinstance(request_data, dict):
         return None
     request_payload = QuestionRequest.model_validate(request_data)
-    will_start = (
-        (phase == "core" and execution.status is ExecutionStatus.PREPARED)
-        or (
-            phase == "finalize"
-            and execution.status
-            in {ExecutionStatus.CORE_ANSWERED, ExecutionStatus.CORE_REPAIR_REQUIRED}
-        )
+    will_start = (phase == "core" and execution.status is ExecutionStatus.PREPARED) or (
+        phase == "finalize"
+        and execution.status
+        in {ExecutionStatus.CORE_ANSWERED, ExecutionStatus.CORE_REPAIR_REQUIRED}
     )
     if not will_start or request_payload.answer_mode != "terra":
         return None
@@ -760,15 +648,16 @@ async def cancel_question_execution(
 ) -> dict[str, bool]:
     user = await _optional_user(request.headers.get("authorization"))
     try:
-        await question_execution_repository.cancel(
-            execution_id,
-            _question_owner(request, user),
-            capability_hash=_capability_hash(execution_capability) if user is None else None,
+        await v2_question_execution_service.cancel(
+            PhaseRequest(
+                execution_id=execution_id,
+                owner_scope=_question_owner(request, user),
+                capability_hash=_capability_hash(execution_capability) if user is None else None,
+                user=user,
+            )
         )
     except ExecutionNotFound as exc:
         raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
-    if task := question_phase_tasks.get(execution_id):
-        task.cancel()
     return {"cancelled": True}
 
 
@@ -781,243 +670,31 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
     return {"cancelled": True}
 
 
-def _execution_request_and_hits(
-    execution,
-) -> tuple[QuestionRequest, list[SearchHit], datetime | None]:
-    payload = execution.private_payload
-    request_data = payload.get("request")
-    hit_data = payload.get("hits")
-    if not isinstance(request_data, dict) or not isinstance(hit_data, list):
-        raise ValueError("execution payload is incomplete")
-    corpus_as_of = payload.get("corpus_as_of")
-    return (
-        QuestionRequest.model_validate(request_data),
-        [SearchHit.model_validate(item) for item in hit_data if isinstance(item, dict)],
-        datetime.fromisoformat(corpus_as_of) if isinstance(corpus_as_of, str) else None,
-    )
-
-
-def _execution_generation_hits(execution, hits: list[SearchHit]) -> list[SearchHit]:
-    stored = execution.private_payload.get("generation_hits")
-    if isinstance(stored, list):
-        return [SearchHit.model_validate(item) for item in stored if isinstance(item, dict)]
-    return select_generation_hits(hits, settings.answer_evidence_max_characters)
-
-
 async def _v2_response_from_frozen_evidence(execution) -> QuestionResponse:
-    """Generate only from the execution's persisted evidence; never re-retrieve."""
-    payload, hits, corpus_as_of = _execution_request_and_hits(execution)
-    fallback = search_only_answer(payload, hits, corpus_as_of)
-    fallback.request_id = str(payload.client_request_id)
-    route = execution.private_payload.get("route", "legal_search")
-    if route != "legal_search":
-        missing_fields = execution.private_payload.get("missing_fields", [])
-        return route_guidance_fallback(
-            payload,
-            str(route),
-            missing_fields=tuple(item for item in missing_fields if isinstance(item, str))
-            if isinstance(missing_fields, list)
-            else (),
-        )
-    if payload.answer_mode != "terra" or not _ai_available():
-        return fallback
-    generation_hits = _execution_generation_hits(execution, hits)
-    draft = await _answerer().answer(payload, generation_hits)
-    if not validate_draft(draft, generation_hits):
-        raise ValueError("generated answer did not satisfy the citation contract")
-    citations = [
-        Citation(
-            id=f"C{index}",
-            provision_id=hit.provision_id,
-            document_title=hit.document_title,
-            version_label=hit.version_label,
-            path=hit.path,
-            quote=hit.content,
-            source_url=hit.source_url,
-            source_kind=hit.source_kind,
-            law_type_code=hit.law_type_code,
-        )
-        for index, hit in enumerate(generation_hits, 1)
-    ]
-    return QuestionResponse(
-        request_id=str(payload.client_request_id),
-        mode="ai",
-        summary=draft.summary,
-        scope=draft.scope,
-        sections=draft.sections,
-        checklist=draft.checklist,
-        citations=citations,
-        limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
-        corpus_as_of=corpus_as_of,
-        requested_answer_mode=payload.answer_mode,
-        action=draft.action,
-        route="legal_search",
-    )
+    """Compatibility facade for the extracted frozen-evidence service."""
+
+    return await v2_question_execution_service.response_from_frozen_evidence(execution)
 
 
 async def _v2_core_from_frozen_evidence(execution) -> tuple[CoreDraft, list[Citation]]:
-    """Generate the only client-visible core payload from frozen execution evidence."""
-    payload, hits, corpus_as_of = _execution_request_and_hits(execution)
-    fallback = search_only_answer(payload, hits, corpus_as_of)
-    route = execution.private_payload.get("route", "legal_search")
-    if route != "legal_search" or payload.answer_mode != "terra" or not _ai_available():
-        return (
-            CoreDraft(
-                summary=fallback.summary,
-                citation_ids=[citation.id for citation in fallback.citations],
-                action=fallback.action or "unanswerable",
-            ),
-            fallback.citations,
-        )
-    generation_hits = _execution_generation_hits(execution, hits)
-    draft = await _answerer().answer_core(payload, generation_hits)
-    if not validate_core_draft(draft, generation_hits):
-        raise ValueError("generated core did not satisfy the citation contract")
-    citations = [
-        Citation(
-            id=f"C{index}",
-            provision_id=hit.provision_id,
-            document_title=hit.document_title,
-            version_label=hit.version_label,
-            path=hit.path,
-            quote=hit.content,
-            source_url=hit.source_url,
-            source_kind=hit.source_kind,
-            law_type_code=hit.law_type_code,
-        )
-        for index, hit in enumerate(generation_hits, 1)
-    ]
-    return draft, citations
+    """Compatibility facade for the extracted frozen-evidence service."""
+
+    return await v2_question_execution_service.core_from_frozen_evidence(execution)
 
 
 async def _run_v2_core(execution) -> PhaseResult:
-    core, citations = await _v2_core_from_frozen_evidence(execution)
-    if not _v2_core_is_grounded(core, CitationRegistry(execution.frozen_citations)):
-        return PhaseResult(
-            target=ExecutionStatus.CORE_REPAIR_REQUIRED,
-            events=(
-                AnswerEvent(
-                    event_type="phase_complete",
-                    payload={
-                        "status": ExecutionStatus.CORE_REPAIR_REQUIRED.value,
-                        "next_action": "repair_core",
-                    },
-                ),
-            ),
-        )
-    core_data = core.model_dump(mode="json")
-    return PhaseResult(
-        target=ExecutionStatus.CORE_ANSWERED,
-        events=(
-            AnswerEvent(
-                event_type="summary",
-                payload={
-                    "summary": core.summary,
-                    "citations": [citation.model_dump(mode="json") for citation in citations],
-                },
-            ),
-            AnswerEvent(
-                event_type="phase_complete",
-                payload={
-                    "status": ExecutionStatus.CORE_ANSWERED.value,
-                    "next_action": "generate_detail",
-                },
-            ),
-        ),
-        private_payload={
-            "verified_core": core_data,
-            "verified_core_citations": [citation.model_dump(mode="json") for citation in citations],
-        },
-    )
+    """Compatibility facade for tests that call the former module helper."""
+
+    return await v2_question_execution_service.run_core(execution)
 
 
 async def _run_v2_finalize(execution, user: MockUser | None) -> PhaseResult:
-    payload, _hits, _corpus_as_of = _execution_request_and_hits(execution)
-    stored_core = execution.private_payload.get("verified_core")
-    core = CoreDraft.model_validate(stored_core) if isinstance(stored_core, dict) else None
-    degraded = execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED
-    try:
-        response = await _v2_response_from_frozen_evidence(execution)
-    except Exception:
-        response = _v2_core_degraded_response(payload, core, execution.private_payload)
-        degraded = True
-    if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
-        response = _v2_core_degraded_response(payload, core, execution.private_payload)
-        degraded = True
-    elif core is not None:
-        response.summary = core.summary
-        response.action = core.action
-    response = await _save_if_authenticated(user, payload, response)
-    response_data = response.model_dump(mode="json")
-    outcome = "degraded" if degraded else "normal"
-    return PhaseResult(
-        target=ExecutionStatus.COMPLETED,
-        response=response_data,
-        events=(AnswerEvent.complete({"response": response_data, "outcome": outcome}),),
-    )
+    """Compatibility facade retaining the patch point used by existing tests."""
 
-
-def _v2_core_degraded_response(
-    payload: QuestionRequest, core: CoreDraft | None, private_payload
-) -> QuestionResponse:
-    if core is None:
-        return _v2_grounding_fallback(payload)
-    raw_citations = private_payload.get("verified_core_citations", [])
-    citations = [Citation.model_validate(item) for item in raw_citations if isinstance(item, dict)]
-    return QuestionResponse(
-        request_id=str(payload.client_request_id), mode="ai", summary=core.summary,
-        scope="상세 설명 검증 실패", sections=[], checklist=[], citations=citations,
-        limitations=["검증된 요약만 제공합니다.", "이 서비스는 법률 자문을 대체하지 않습니다."],
-        requested_answer_mode=payload.answer_mode, action=core.action, route="legal_search",
-    )
-
-
-def _v2_response_is_grounded(response: QuestionResponse, registry: CitationRegistry) -> bool:
-    if not response.citations:
-        return not response.sections and not response.checklist
-    all_citations = tuple(citation.id for citation in response.citations)
-    if not _grounded_text(response.summary, all_citations, registry):
-        return False
-    for section in response.sections:
-        citation_ids = tuple(section.citation_ids)
-        if not _grounded_text(section.claim, citation_ids, registry):
-            return False
-        if not _grounded_text(section.explanation, citation_ids, registry):
-            return False
-    return all(
-        _grounded_text(item.label, tuple(item.citation_ids), registry)
-        for item in response.checklist
-    )
-
-
-def _v2_core_is_grounded(core: CoreDraft, registry: CitationRegistry) -> bool:
-    if not core.citation_ids:
-        return not registry.citations or core.action == "unanswerable"
-    return _grounded_text(core.summary, tuple(core.citation_ids), registry)
-
-
-def _grounded_text(text: str, citation_ids: tuple[str, ...], registry: CitationRegistry) -> bool:
-    sentences = tuple(part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip())
-    return bool(sentences) and all(
-        registry.verify(GroundedSentence(sentence, citation_ids)) for sentence in sentences
-    )
-
-
-def _v2_grounding_fallback(payload: QuestionRequest) -> QuestionResponse:
-    """A legal-claim-free terminal response used only after failed repair."""
-    return QuestionResponse(
-        request_id=str(payload.client_request_id),
-        mode="ai",
-        summary="검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요.",
-        scope="근거 검증 실패",
-        sections=[],
-        checklist=[],
-        citations=[],
-        limitations=["이 서비스는 법률 자문을 대체하지 않습니다."],
-        result_status="no_results",
-        requested_answer_mode=payload.answer_mode,
-        action="unanswerable",
-        route="legal_search",
+    return await v2_question_execution_service.run_finalize(
+        execution,
+        user,
+        response_from_frozen_evidence=_v2_response_from_frozen_evidence,
     )
 
 
@@ -1897,6 +1574,12 @@ async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
     )
     if not await postgres_identity.consume_quota(user.id, date.today(), kind, account_limit):
         raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
+
+
+async def _check_v2_quota(kind: str, user: MockUser | None) -> None:
+    """Adapt the shared quota helper to the v2 application's explicit port."""
+
+    await _check_quota(kind, user=user)
 
 
 def _ai_available() -> bool:
