@@ -8,6 +8,7 @@ import type {
   QuestionResponse,
 } from "./contracts";
 import { createClient } from "./supabase/client";
+import { runV2Execution, V2ExecutionHttpError } from "./v2-execution";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CONSENT_KEY = "law-rag-pending-consent";
@@ -104,13 +105,29 @@ export function getCorpusStatus(): Promise<CorpusStatus> {
   return request("/v1/corpus/status");
 }
 
-export function askQuestion(input: QuestionInput, signal?: AbortSignal): Promise<QuestionResponse> {
-  return request("/v2/questions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    signal,
-  });
+export async function askQuestion(
+  input: QuestionInput,
+  signal?: AbortSignal,
+): Promise<QuestionResponse> {
+  try {
+    return await runV2Execution(input, {
+      fetch,
+      apiUrl: API,
+      headers: await authHeaders(),
+      idempotencyKey: () => crypto.randomUUID(),
+    }, signal);
+  } catch (error) {
+    if (error instanceof V2ExecutionHttpError) {
+      const detail = (error.detail as { detail?: unknown } | null)?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : typeof (detail as { message?: unknown } | null)?.message === "string"
+          ? (detail as { message: string }).message
+          : "요청을 처리하지 못했습니다.";
+      throw new ApiError(message, error.status);
+    }
+    throw error;
+  }
 }
 
 export function cancelQuestion(clientRequestId: string): Promise<{ cancelled: boolean }> {

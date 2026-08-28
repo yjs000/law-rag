@@ -64,7 +64,15 @@ describe("Supabase authenticated question workflow", () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/v1/auth/me")) return Response.json({ id: "user-1", email: "researcher@example.com", display_name: "법령 연구자", auth_provider: "google", created_at: "2026-07-14T00:00:00Z" });
-      if (url.endsWith("/v2/questions") && init?.method === "POST") return Response.json(answer);
+      if (url.endsWith("/v2/question-executions") && init?.method === "POST") {
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      if (url.endsWith("/v2/question-executions/exec-1/core")) {
+        return new Response('event: phase_complete\ndata: {"next_action":"generate_detail"}\n\n');
+      }
+      if (url.endsWith("/v2/question-executions/exec-1/finalize")) {
+        return new Response(`event: complete\ndata: {"response":${JSON.stringify(answer)}}\n\n`);
+      }
       if (url.endsWith("/v1/questions/history")) return Response.json([history]);
       if (url.includes("/v1/conversations?")) return Response.json({ items: [{ id: "chat-1", title: "허가를 확인해줘", created_at: history.created_at, updated_at: history.created_at, turn_count: 1, last_turn_id: history.id }], has_more: false, next_cursor: null });
       if (url.includes("/v1/conversations/chat-1/turns?")) return Response.json({ items: [history], has_more: false, next_cursor: null });
@@ -81,7 +89,7 @@ describe("Supabase authenticated question workflow", () => {
     expect(auth.getSession).toHaveBeenCalledTimes(1);
     const controller = new AbortController();
     expect((await askQuestion(history.request, controller.signal)).request_id).toBe("history-1");
-    const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/questions"));
+    const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/question-executions"));
     expect(questionCall?.[1]?.signal).toBe(controller.signal);
     expect(await listQuestionHistory()).toEqual([history]);
     expect((await listConversations()).items[0].title).toBe("허가를 확인해줘");
