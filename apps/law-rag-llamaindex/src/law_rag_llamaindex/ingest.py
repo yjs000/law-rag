@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 
 from llama_index.core.schema import TextNode
-from sqlalchemy import inspect, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from law_rag_llamaindex.generations import source_fingerprint
@@ -208,6 +208,18 @@ def _async_database_url(database_url: str) -> str:
     return database_url
 
 
+def _sync_database_url(database_url: str) -> str:
+    """Normalize the shared database URL for the builder's sync PGVectorStore engine."""
+
+    if database_url.startswith("postgresql+psycopg://"):
+        return database_url
+    if database_url.startswith("postgresql+asyncpg://"):
+        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 async def main() -> None:
     """CLI entrypoint: `python -m law_rag_llamaindex.ingest`.
 
@@ -217,7 +229,8 @@ async def main() -> None:
     """
     from law_rag_llamaindex.config import get_settings
     from law_rag_llamaindex.embedding import build_embedder
-    from law_rag_llamaindex.store import build_vector_store
+    from law_rag_llamaindex.generations import PostgresGenerationRepository, transform_fingerprint
+    from law_rag_llamaindex.store import build_generation_vector_store
 
     settings = get_settings()
     if not settings.database_url:
@@ -226,16 +239,34 @@ async def main() -> None:
         raise SystemExit("NVIDIA_API_KEY is not configured")
 
     engine = create_async_engine(_async_database_url(settings.database_url))
+    sync_engine = create_engine(_sync_database_url(settings.database_url))
     try:
-        vector_store = build_vector_store(settings)
         embedder = build_embedder(settings)
-        result = await run_ingestion(engine, vector_store, embedder, settings.vector_table_name)
+        result = await run_generation_ingestion(
+            engine,
+            PostgresGenerationRepository(engine),
+            lambda generation: build_generation_vector_store(
+                settings,
+                generation,
+                engine=sync_engine,
+                async_engine=engine,
+                perform_setup=True,
+            ),
+            embedder,
+            transform_fingerprint=transform_fingerprint(
+                chunker_version="law-chunker-v1",
+                embedding_provider="nvidia",
+                embedding_model=settings.nvidia_embedding_model,
+                embed_dim=settings.embed_dim,
+            ),
+        )
         print(
             f"ingestion complete: total={result.total_provisions} "
             f"embedded={result.embedded_count} skipped={result.skipped_count}"
         )
     finally:
         await engine.dispose()
+        sync_engine.dispose()
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from law_rag_llamaindex.generations import GenerationCatalog
 from law_rag_llamaindex.ingest import (
     _async_database_url,
+    _sync_database_url,
     build_nodes,
     changed_provision_ids,
     existing_hashes,
@@ -374,6 +375,17 @@ def test_async_database_url_adds_asyncpg_driver_to_plain_postgresql_url():
 def test_async_database_url_leaves_asyncpg_url_unchanged():
     url = "postgresql+asyncpg://user:pass@host:5432/db"
     assert _async_database_url(url) == url
+
+
+def test_sync_database_url_uses_psycopg_for_plain_or_asyncpg_urls():
+    assert (
+        _sync_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        _sync_database_url("postgresql+asyncpg://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
 
 
 @pytest.mark.asyncio
