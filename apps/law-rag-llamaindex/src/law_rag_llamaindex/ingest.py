@@ -1,11 +1,16 @@
 import asyncio
+import re
 from dataclasses import dataclass
 
 from llama_index.core.schema import TextNode
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from law_rag_llamaindex.generations import generation_source_records, source_fingerprint
+from law_rag_llamaindex.generations import (
+    generation_source_records,
+    provision_fingerprint,
+    source_fingerprint,
+)
 from law_rag_llamaindex.passage import (
     ProvisionRecord,
     build_node_metadata,
@@ -167,22 +172,65 @@ async def run_generation_ingestion(
     from law_rag_llamaindex.source import fetch_provisions
 
     provisions = await fetch_provisions(engine)
+    active_generation = await generation_repository.active()
+    active_sources = {}
+    if (
+        active_generation is not None
+        and active_generation.transform_fingerprint == transform_fingerprint
+    ):
+        active_sources = {
+            source.provision_id: source
+            for source in await generation_repository.sources(active_generation.id)
+        }
+    unchanged_ids = [
+        str(provision["provision_id"])
+        for provision in provisions
+        if (source := active_sources.get(str(provision["provision_id"]))) is not None
+        and source.source_fingerprint == provision_fingerprint(provision)
+    ]
+    changed_provisions = [
+        provision for provision in provisions if str(provision["provision_id"]) not in unchanged_ids
+    ]
     generation = await generation_repository.start(
         source_fingerprint(provisions), transform_fingerprint
     )
     stage = "node_build"
     try:
-        nodes = build_nodes(provisions)
+        nodes = build_nodes(changed_provisions)
         stage = "embedding"
         embeddings = embedder.get_text_embedding_batch([node.text for node in nodes])
         for node, embedding in zip(nodes, embeddings, strict=True):
             node.embedding = embedding
         stage = "vector_write"
         vector_store_for_generation(generation).add(nodes)
+        if active_generation is not None and unchanged_ids:
+            stage = "vector_copy"
+            copied_count = await copy_generation_vectors(
+                engine, active_generation.table_name, generation.table_name, unchanged_ids
+            )
+            expected_copied_count = sum(
+                active_sources[provision_id].node_count for provision_id in unchanged_ids
+            )
+            if copied_count != expected_copied_count:
+                raise ValueError("copied vector count does not match source lineage")
         stage = "generation_source_lineage"
-        node_counts = {str(node.id_): 1 for node in nodes}
+        unchanged_id_set = set(unchanged_ids)
+        node_counts = {
+            str(provision["provision_id"]): active_sources[
+                str(provision["provision_id"])
+            ].node_count
+            if str(provision["provision_id"]) in unchanged_id_set
+            else 1
+            for provision in provisions
+        }
         await generation_repository.record_sources(
-            generation.id, generation_source_records(provisions, node_counts=node_counts)
+            generation.id,
+            generation_source_records(
+                provisions,
+                node_counts=node_counts,
+                copied_provision_ids=unchanged_id_set,
+                copied_from_generation_id=active_generation.id if active_generation else None,
+            ),
         )
         stage = "generation_verify"
         await generation_repository.verify(
@@ -197,8 +245,40 @@ async def run_generation_ingestion(
             pass
         raise
     return IngestionResult(
-        total_provisions=len(provisions), embedded_count=len(provisions), skipped_count=0
+        total_provisions=len(provisions),
+        embedded_count=len(changed_provisions),
+        skipped_count=len(unchanged_ids),
     )
+
+
+_GENERATION_TABLE_NAME = re.compile(r"^law_rag_li_[a-f0-9]{32}$")
+
+
+def _generation_data_table_name(table_name: str) -> str:
+    """Return a safely derived physical vector table identifier."""
+
+    if _GENERATION_TABLE_NAME.fullmatch(table_name) is None:
+        raise ValueError("generation table name is not allowlisted")
+    return f"data_{table_name}"
+
+
+async def copy_generation_vectors(
+    engine: AsyncEngine, source_table_name: str, target_table_name: str, node_ids: list[str]
+) -> int:
+    """Copy compatible vectors DB-to-DB without loading embeddings into the process."""
+
+    if not node_ids:
+        return 0
+    source_table = _generation_data_table_name(source_table_name)
+    target_table = _generation_data_table_name(target_table_name)
+    query = text(
+        f'''INSERT INTO "{target_table}" (text,metadata_,node_id,embedding)
+            SELECT text,metadata_,node_id,embedding FROM "{source_table}"
+            WHERE node_id = ANY(:node_ids)'''
+    )
+    async with engine.begin() as connection:
+        result = await connection.execute(query, {"node_ids": node_ids})
+    return result.rowcount
 
 
 def _async_database_url(database_url: str) -> str:

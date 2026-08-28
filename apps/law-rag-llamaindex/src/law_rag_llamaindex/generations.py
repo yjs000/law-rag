@@ -37,6 +37,16 @@ class RetrievalGeneration:
     published_at: datetime | None
 
 
+@dataclass(frozen=True)
+class GenerationSource:
+    """One source row retained to audit and reuse a generation's vectors."""
+
+    provision_id: str
+    source_fingerprint: str
+    node_count: int
+    copied_from_generation_id: UUID | None = None
+
+
 def generation_table_name(generation_id: UUID) -> str:
     """Return the server-derived, SQL-identifier-safe vector table name."""
 
@@ -82,10 +92,16 @@ def source_fingerprint(records: Iterable[Mapping[str, object]]) -> str:
 
 
 def generation_source_records(
-    records: Iterable[Mapping[str, object]], *, node_counts: Mapping[str, int]
+    records: Iterable[Mapping[str, object]],
+    *,
+    node_counts: Mapping[str, int],
+    copied_provision_ids: set[str] | None = None,
+    copied_from_generation_id: UUID | None = None,
 ) -> list[dict[str, object]]:
     """Return one auditable source-lineage row for each provision in a generation."""
 
+    if copied_provision_ids and copied_from_generation_id is None:
+        raise ValueError("copied generation sources require their origin generation")
     sources = []
     for record in records:
         provision_id = str(record["provision_id"])
@@ -97,6 +113,11 @@ def generation_source_records(
                 "provision_id": provision_id,
                 "source_fingerprint": provision_fingerprint(record),
                 "node_count": node_count,
+                "copied_from_generation_id": (
+                    copied_from_generation_id
+                    if copied_provision_ids and provision_id in copied_provision_ids
+                    else None
+                ),
             }
         )
     return sources
@@ -290,9 +311,9 @@ class PostgresGenerationRepository:
         query = text(
             """
             INSERT INTO llamaindex_generation_sources (
-              generation_id,provision_id,source_fingerprint,node_count
+              generation_id,provision_id,source_fingerprint,node_count,copied_from_generation_id
             ) VALUES (
-              :generation_id,:provision_id,:source_fingerprint,:node_count
+              :generation_id,:provision_id,:source_fingerprint,:node_count,:copied_from_generation_id
             )
             ON CONFLICT(generation_id,provision_id) DO NOTHING
             """
@@ -306,8 +327,32 @@ class PostgresGenerationRepository:
                         "provision_id": source["provision_id"],
                         "source_fingerprint": source["source_fingerprint"],
                         "node_count": source["node_count"],
+                        "copied_from_generation_id": source.get("copied_from_generation_id"),
                     },
                 )
+
+    async def sources(self, generation_id: UUID) -> list[GenerationSource]:
+        """Read the stored lineage required to select safe vector copies."""
+
+        query = text(
+            """
+            SELECT provision_id,source_fingerprint,node_count,copied_from_generation_id
+            FROM llamaindex_generation_sources
+            WHERE generation_id = :generation_id
+            ORDER BY provision_id
+            """
+        )
+        async with self._engine.connect() as connection:
+            rows = (await connection.execute(query, {"generation_id": generation_id})).mappings()
+            return [
+                GenerationSource(
+                    provision_id=str(row["provision_id"]),
+                    source_fingerprint=row["source_fingerprint"],
+                    node_count=row["node_count"],
+                    copied_from_generation_id=row["copied_from_generation_id"],
+                )
+                for row in rows
+            ]
 
     async def publish(self, generation_id: UUID) -> None:
         """Switch active pointer only if the candidate has been verified."""

@@ -179,6 +179,7 @@ async def test_postgres_catalog_records_each_generation_source_before_verificati
         "provision_id": "a",
         "source_fingerprint": "a" * 64,
         "node_count": 1,
+        "copied_from_generation_id": None,
     }
 
 

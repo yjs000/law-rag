@@ -6,12 +6,17 @@ from llama_index.core.schema import TextNode
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from law_rag_llamaindex.generations import GenerationCatalog
+from law_rag_llamaindex.generations import (
+    GenerationCatalog,
+    GenerationSource,
+    provision_fingerprint,
+)
 from law_rag_llamaindex.ingest import (
     _async_database_url,
     _sync_database_url,
     build_nodes,
     changed_provision_ids,
+    copy_generation_vectors,
     existing_hashes,
     main,
     run_generation_ingestion,
@@ -99,6 +104,29 @@ class _Engine:
         return self._connection
 
 
+class _CopyResult:
+    rowcount = 2
+
+
+class _CopyConnection(_ConnectionContext):
+    def __init__(self) -> None:
+        self.statement = None
+        self.parameters = None
+
+    async def execute(self, statement, parameters):
+        self.statement = statement
+        self.parameters = parameters
+        return _CopyResult()
+
+
+class _CopyEngine:
+    def __init__(self, connection: _CopyConnection) -> None:
+        self.connection = connection
+
+    def begin(self):
+        return self.connection
+
+
 class _LifecycleResult:
     def __init__(self, run_id: str) -> None:
         self._run_id = run_id
@@ -179,6 +207,12 @@ class _GenerationRepository:
         self.events.append("generation-record-sources")
         assert [source["provision_id"] for source in sources] == ["a"]
 
+    async def active(self):
+        return self.catalog.active()
+
+    async def sources(self, generation_id):
+        return []
+
     async def publish(self, generation_id) -> None:
         self.events.append("generation-publish")
         self.catalog.publish(generation_id)
@@ -238,9 +272,152 @@ async def test_run_generation_ingestion_marks_candidate_failed_without_active_po
     assert repository.catalog.active() is None
 
 
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_copies_unchanged_vectors_from_active_generation(
+    monkeypatch,
+):
+    events: list[str] = []
+
+    class RepositoryWithActiveSource(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "a" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+            self.active_generation = active
+            self.active_source = GenerationSource(
+                provision_id="a", source_fingerprint="", node_count=1
+            )
+
+        async def sources(self, generation_id):
+            return [
+                GenerationSource(
+                    provision_id="a",
+                    source_fingerprint=self.active_source.source_fingerprint,
+                    node_count=1,
+                )
+            ]
+
+    repository = RepositoryWithActiveSource(events)
+    provision = _record("a", "본문 A")
+    repository.active_source = GenerationSource(
+        provision_id="a",
+        source_fingerprint=provision_fingerprint(provision),
+        node_count=1,
+    )
+    copied: dict[str, object] = {}
+
+    async def copy_vectors(engine, source_table, target_table, node_ids):
+        copied.update(source_table=source_table, target_table=target_table, node_ids=node_ids)
+        return len(node_ids)
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions",
+        lambda _engine: _single_provision(events, provision),
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", copy_vectors)
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: _VectorStore(events),
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.embedded_count == 0
+    assert result.skipped_count == 1
+    assert copied["source_table"] == repository.active_generation.table_name
+    assert copied["node_ids"] == ["a"]
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_reembeds_when_transform_changes(monkeypatch):
+    events: list[str] = []
+
+    class RepositoryWithDifferentTransform(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "b" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+
+    repository = RepositoryWithDifferentTransform(events)
+
+    async def fail_copy(*args, **kwargs):
+        raise AssertionError("a transform change must force re-embedding")
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", fail_copy)
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: _VectorStore(events),
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.embedded_count == 1
+    assert result.skipped_count == 0
+    assert "vector-write" in events
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_rejects_partial_vector_copy(monkeypatch):
+    events: list[str] = []
+
+    class RepositoryWithActiveSource(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "a" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+            self.active_generation = active
+
+        async def sources(self, generation_id):
+            return [
+                GenerationSource(
+                    provision_id="a",
+                    source_fingerprint=provision_fingerprint(provision),
+                    node_count=1,
+                )
+            ]
+
+    provision = _record("a", "본문 A")
+    repository = RepositoryWithActiveSource(events)
+
+    async def partial_copy(*args, **kwargs):
+        return 0
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions",
+        lambda _engine: _single_provision(events, provision),
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", partial_copy)
+
+    with pytest.raises(ValueError, match="copied vector count"):
+        await run_generation_ingestion(
+            object(),
+            repository,
+            lambda _generation: _VectorStore(events),
+            _Embedder(),
+            transform_fingerprint="a" * 64,
+        )
+
+    assert "generation-fail:vector_copy_failed" in events
+
+
 async def _provisions(events: list[str]) -> list[dict]:
     events.append("retrieve")
     return [_record("a", "본문 A")]
+
+
+async def _single_provision(events: list[str], provision: dict) -> list[dict]:
+    events.append("retrieve")
+    return [provision]
 
 
 @pytest.mark.asyncio
@@ -339,6 +516,22 @@ async def test_existing_hashes_distinguishes_missing_table_from_query_failure():
     failing_query_engine = cast(AsyncEngine, _Engine(_ExistingTableFailingQueryConnection()))
     with pytest.raises(OperationalError, match="connection lost"):
         await existing_hashes(failing_query_engine, "law_rag_llamaindex")
+
+
+@pytest.mark.asyncio
+async def test_copy_generation_vectors_uses_allowlisted_tables_and_bound_node_ids():
+    connection = _CopyConnection()
+    source = "law_rag_li_12345678123456781234567812345678"
+    target = "law_rag_li_87654321876543218765432187654321"
+
+    copied = await copy_generation_vectors(_CopyEngine(connection), source, target, ["a", "b"])
+
+    assert copied == 2
+    assert f'INSERT INTO "data_{target}"' in connection.statement.text
+    assert f'FROM "data_{source}"' in connection.statement.text
+    assert connection.parameters == {"node_ids": ["a", "b"]}
+    with pytest.raises(ValueError, match="allowlisted"):
+        await copy_generation_vectors(_CopyEngine(connection), "untrusted", target, ["a"])
 
 
 pytestmark_db = pytest.mark.skipif(
