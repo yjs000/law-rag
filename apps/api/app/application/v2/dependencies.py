@@ -10,6 +10,7 @@ from uuid import UUID
 
 from law_rag_core.ports.repository import LegalRepository
 
+from app.application.question_phase_coordinator import PhaseResult
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
 
@@ -62,13 +63,14 @@ class V2ExecutionDependencies:
     make_core_draft: Callable[[str, list[str], str], Any]
     answer_evidence_max_characters: int
     phase_timeout: timedelta
-    provider_budget: timedelta
     now: Callable[[], datetime]
     execution_capability: Callable[[str, str], str]
     capability_hash: Callable[[str | None], str | None]
     admit_phase: Callable[
         [QuestionExecutionRecord, Literal["core", "finalize"]], Awaitable[PhaseLease | None]
     ]
+    run_core: Callable[[QuestionExecutionRecord], Awaitable[PhaseResult]]
+    run_finalize: Callable[[QuestionExecutionRecord, MockUser | None], Awaitable[PhaseResult]]
 
 
 @dataclass(frozen=True)

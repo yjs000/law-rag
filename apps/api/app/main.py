@@ -5,7 +5,6 @@ import base64
 import hashlib
 import json
 import time
-from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
@@ -22,15 +21,10 @@ from sqlalchemy import text
 
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.mock_identity import identity_repository
-from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
-from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
-from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import (
     CoreDraft,
     DraftAnswer,
-    build_messages_v2,
     select_generation_hits,
-    validate_core_draft,
     validate_draft,
 )
 from app.adapters.postgres_identity import ConsentRequiredError
@@ -56,8 +50,13 @@ from app.application.v2.dependencies import (
     V2ExecutionDependencies,
 )
 from app.bootstrap import (
+    V2ApplicationCallbacks,
     build_app_dependencies,
     build_llamaindex_resources,
+    build_nvidia_answerer,
+    build_nvidia_embedder,
+    build_nvidia_question_router,
+    build_v2_execution_dependencies,
     normalize_async_database_url,
     normalize_sync_database_url,
 )
@@ -121,30 +120,25 @@ def _v2_service_dependencies() -> V2ExecutionDependencies:
     directly while production values remain the immutable bootstrap bundle.
     """
 
-    return V2ExecutionDependencies(
+    return build_v2_execution_dependencies(
+        settings,
         executions=question_execution_repository,
-        resolve_repository=_v2_repository,
-        active_provider=_v2_active_provider,
-        retrieve_evidence=_retrieve_pinned_v2_evidence,
-        route=lambda question: route_question(question, _question_router()),
-        answerer=_answerer,
-        ai_available=_ai_available,
-        check_quota=_check_v2_quota,
-        require_supported_date=_require_supported_as_of_date,
-        save_authenticated=_save_if_authenticated,
-        select_generation_hits=select_generation_hits,
-        validate_core=validate_core_draft,
-        validate_response=validate_draft,
-        make_core_draft=lambda summary, citation_ids, action: CoreDraft(
-            summary=summary, citation_ids=citation_ids, action=action
+        callbacks=V2ApplicationCallbacks(
+            resolve_repository=_v2_repository,
+            active_provider=_v2_active_provider,
+            retrieve_evidence=_retrieve_pinned_v2_evidence,
+            route=lambda question: route_question(question, _question_router()),
+            answerer=_answerer,
+            ai_available=_ai_available,
+            check_quota=_check_v2_quota,
+            require_supported_date=_require_supported_as_of_date,
+            save_authenticated=_save_if_authenticated,
+            execution_capability=_execution_capability,
+            capability_hash=_capability_hash,
+            admit_phase=_admit_v2_provider_phase,
+            run_core=_run_v2_core,
+            run_finalize=_run_v2_finalize,
         ),
-        answer_evidence_max_characters=settings.answer_evidence_max_characters,
-        phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
-        provider_budget=timedelta(seconds=settings.v2_provider_budget_seconds),
-        now=lambda: datetime.now(UTC),
-        execution_capability=_execution_capability,
-        capability_hash=_capability_hash,
-        admit_phase=_admit_v2_provider_phase,
     )
 
 
@@ -166,11 +160,6 @@ def _build_llamaindex_resources(
 ) -> tuple[object, object, LlamaIndexLegalRepository] | None:
     """Compatibility facade over bootstrap's sole LlamaIndex resource builder."""
 
-    if (
-        build_llamaindex_embedder is _DEFAULT_LLAMAINDEX_EMBEDDER_FACTORY
-        and LlamaIndexLegalRepository is _DEFAULT_LLAMAINDEX_REPOSITORY_FACTORY
-    ):
-        return dependencies.llamaindex_resource_builder(database_url, nvidia_api_key, repository)
     return build_llamaindex_resources(
         database_url,
         nvidia_api_key,
@@ -207,8 +196,16 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
         return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
 
     try:
-        resources = _build_llamaindex_resources(
-            settings.database_url, llamaindex_settings.nvidia_api_key
+        uses_default_factories = (
+            build_llamaindex_embedder is _DEFAULT_LLAMAINDEX_EMBEDDER_FACTORY
+            and LlamaIndexLegalRepository is _DEFAULT_LLAMAINDEX_REPOSITORY_FACTORY
+        )
+        resources = (
+            dependencies.v2_resources.resolve()
+            if uses_default_factories
+            else _build_llamaindex_resources(
+                settings.database_url, llamaindex_settings.nvidia_api_key
+            )
         )
     except Exception:
         return None
@@ -224,17 +221,7 @@ postgres_identity = dependencies.postgres_identity
 collector_load_errors = dependencies.collector_load_errors
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """애플리케이션 종료 시 선택적 외부 인증 리소스를 정리한다."""
-    yield
-    if supabase_auth:
-        await supabase_auth.aclose()
-    if hasattr(llamaindex_vector_store, "aclose"):
-        await llamaindex_vector_store.aclose()
-
-
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=dependencies.lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.web_origins,
@@ -1554,14 +1541,8 @@ async def _require_supported_as_of_date(
         ) from exc
 
 
-def _embedder() -> NvidiaNimEmbedder:
-    return NvidiaNimEmbedder(
-        api_key=settings.nvidia_api_key or "",
-        base_url=settings.nvidia_base_url,
-        model=settings.nvidia_embedding_model,
-        dimensions=settings.embedding_dimensions,
-        timeout_seconds=settings.embedding_timeout_seconds,
-    )
+def _embedder():
+    return build_nvidia_embedder(settings)
 
 
 async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
@@ -1597,30 +1578,17 @@ def _question_owner(request: Request, user: MockUser | None) -> str:
     return "anonymous:" + daily_subject_hash(subject, settings.rate_limit_secret, date.today())
 
 
-def _answerer() -> NvidiaNimAnswerer:
+def _answerer():
     # 2026-08-09: OpenAI 생성 분기와 어댑터는 운영 비교·fallback으로 사용하지 않기로 한
     # 결정을 코드에도 반영해 비활성화했다. 복구가 필요하면 Git 이력에서 별도 결정으로 되살린다.
     # 2026-08-10 (0043): hosted v1/v2 비교(experiment-0043-v1-v2-compare-results.json)에서
     # v2가 근거 없는 주장을 추가하지 않으면서(action 판정 v1=v2) 안내문 문체·행동형
     # 체크리스트로 더 나은 결과를 보여 기본 경로를 v2로 전환했다.
-    return NvidiaNimAnswerer(
-        api_key=settings.nvidia_api_key or "",
-        base_url=settings.nvidia_base_url,
-        model=settings.nvidia_answer_model,
-        timeout_seconds=settings.answer_timeout_seconds,
-        max_output_tokens=settings.answer_max_output_tokens,
-        max_attempts=settings.answer_generation_max_attempts,
-        message_builder=build_messages_v2,
-    )
+    return build_nvidia_answerer(settings)
 
 
-def _question_router() -> NvidiaNimQuestionRouter:
-    return NvidiaNimQuestionRouter(
-        api_key=settings.nvidia_api_key or "",
-        base_url=settings.nvidia_base_url,
-        model=settings.nvidia_route_classifier_model,
-        timeout_seconds=settings.route_classifier_timeout_seconds,
-    )
+def _question_router():
+    return build_nvidia_question_router(settings)
 
 
 def _ai_unavailable_reason() -> str | None:

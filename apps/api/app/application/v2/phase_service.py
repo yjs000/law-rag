@@ -75,7 +75,7 @@ class V2QuestionExecutionService:
         await dependencies.require_supported_date(request.payload.as_of_date, repository)
 
         route, missing_fields = await self._route(
-            request.payload.question, request.payload.answer_mode
+            dependencies, request.payload.question, request.payload.answer_mode
         )
         active = await dependencies.active_provider().active()
         hits, corpus_as_of = await self._retrieve_if_legal(
@@ -331,8 +331,8 @@ class V2QuestionExecutionService:
 
         coordinator = QuestionPhaseCoordinator(
             dependencies.executions,
-            core=self.run_core,
-            finalize=lambda current: self.run_finalize(current, request.user),
+            core=dependencies.run_core,
+            finalize=lambda current: dependencies.run_finalize(current, request.user),
             phase_timeout=dependencies.phase_timeout,
         )
         existing = self._phase_tasks.get(request.execution_id)
@@ -378,11 +378,16 @@ class V2QuestionExecutionService:
         if owns_task and self._phase_tasks.get(execution_id) is task:
             del self._phase_tasks[execution_id]
 
-    async def _route(self, question: str, answer_mode: str) -> tuple[str, tuple[str, ...]]:
+    async def _route(
+        self,
+        dependencies: V2ExecutionDependencies,
+        question: str,
+        answer_mode: str,
+    ) -> tuple[str, tuple[str, ...]]:
         if answer_mode != "terra":
             return "legal_search", ()
         try:
-            decision = await self._dependencies().route(question)
+            decision = await dependencies.route(question)
             return decision.route, decision.missing_fields
         except Exception:
             return "routing_unavailable", ()

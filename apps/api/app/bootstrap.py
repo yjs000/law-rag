@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 from law_rag_core.ports.repository import LegalRepository
 from law_rag_llamaindex.active_index import ActiveGenerationIndexProvider
@@ -25,13 +27,54 @@ from app.adapters.capacity_leases import (
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.memory_repository import repository as memory_repository
+from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
+from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
+from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
+from app.adapters.openai_answerer import (
+    CoreDraft,
+    build_messages_v2,
+    select_generation_hits,
+    validate_core_draft,
+    validate_draft,
+)
 from app.adapters.postgres_identity import PostgresIdentityRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import SupabaseAuth
 from app.application.v2.dependencies import V2ExecutionDependencies
 from app.application.v2.phase_service import V2QuestionExecutionService
+from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
+from app.ports.question_execution import QuestionExecutionRecord
 from app.settings import Settings
+
+
+class V2LlamaIndexResources:
+    """Lazily create and own the active-generation adapter bundle."""
+
+    def __init__(
+        self,
+        build: Callable[[], tuple[object, object, LlamaIndexLegalRepository] | None],
+    ) -> None:
+        self._build = build
+        self._resources: tuple[object, object, LlamaIndexLegalRepository] | None = None
+        self._initialized = False
+
+    def resolve(self) -> tuple[object, object, LlamaIndexLegalRepository] | None:
+        """Build at first use; retain the single shared framework bundle afterwards."""
+
+        if not self._initialized:
+            self._resources = self._build()
+            self._initialized = True
+        return self._resources
+
+    async def aclose(self) -> None:
+        """Dispose the provider and its engines when the API process ends."""
+
+        if self._resources is None:
+            return
+        provider = self._resources[0]
+        if hasattr(provider, "aclose"):
+            await provider.aclose()
 
 
 @dataclass(frozen=True)
@@ -43,13 +86,82 @@ class AppDependencies:
     question_phase_limiter: Any
     v2_service: V2QuestionExecutionService
     llamaindex_settings: Any
-    llamaindex_resource_builder: Callable[
-        [str | None, str | None, LegalRepository],
-        tuple[object, object, LlamaIndexLegalRepository] | None,
-    ]
+    v2_resources: V2LlamaIndexResources
     supabase_auth: SupabaseAuth | None
     postgres_identity: PostgresIdentityRepository | None
     collector_load_errors: tuple[str, ...]
+
+    @asynccontextmanager
+    async def lifespan(self, _app: Any) -> AsyncIterator[None]:
+        """Close resources created by this composition root exactly once."""
+
+        yield
+        if self.supabase_auth:
+            await self.supabase_auth.aclose()
+        await self.v2_resources.aclose()
+
+
+@dataclass(frozen=True)
+class V2ApplicationCallbacks:
+    """Application policy and compatibility seams supplied outside bootstrap."""
+
+    resolve_repository: Callable[[], Awaitable[LegalRepository]]
+    active_provider: Callable[[], Any]
+    retrieve_evidence: Callable[
+        [QuestionRequest, Any, LegalRepository],
+        Awaitable[tuple[list[SearchHit], datetime | None]],
+    ]
+    route: Callable[[str], Awaitable[Any]]
+    answerer: Callable[[], Any]
+    ai_available: Callable[[], bool]
+    check_quota: Callable[[str, MockUser | None], Awaitable[None]]
+    require_supported_date: Callable[[Any, LegalRepository], Awaitable[None]]
+    save_authenticated: Callable[
+        [MockUser | None, QuestionRequest, QuestionResponse], Awaitable[QuestionResponse]
+    ]
+    execution_capability: Callable[[str, str], str]
+    capability_hash: Callable[[str | None], str | None]
+    admit_phase: Callable[[QuestionExecutionRecord, Literal["core", "finalize"]], Awaitable[Any]]
+    run_core: Callable[[QuestionExecutionRecord], Awaitable[Any]]
+    run_finalize: Callable[[QuestionExecutionRecord, MockUser | None], Awaitable[Any]]
+
+
+def build_v2_execution_dependencies(
+    settings: Settings,
+    *,
+    executions: Any,
+    callbacks: V2ApplicationCallbacks,
+) -> V2ExecutionDependencies:
+    """Assemble the v2 use case while retaining explicit transport seams."""
+
+    return V2ExecutionDependencies(
+        executions=executions,
+        resolve_repository=callbacks.resolve_repository,
+        active_provider=callbacks.active_provider,
+        retrieve_evidence=callbacks.retrieve_evidence,
+        route=callbacks.route,
+        answerer=callbacks.answerer,
+        ai_available=callbacks.ai_available,
+        check_quota=callbacks.check_quota,
+        require_supported_date=callbacks.require_supported_date,
+        save_authenticated=callbacks.save_authenticated,
+        select_generation_hits=select_generation_hits,
+        validate_core=validate_core_draft,
+        validate_response=validate_draft,
+        make_core_draft=lambda summary, citation_ids, action: CoreDraft(
+            summary=summary,
+            citation_ids=citation_ids,
+            action=action,
+        ),
+        answer_evidence_max_characters=settings.answer_evidence_max_characters,
+        phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
+        now=lambda: datetime.now(UTC),
+        execution_capability=callbacks.execution_capability,
+        capability_hash=callbacks.capability_hash,
+        admit_phase=callbacks.admit_phase,
+        run_core=callbacks.run_core,
+        run_finalize=callbacks.run_finalize,
+    )
 
 
 def build_app_dependencies(
@@ -103,23 +215,61 @@ def build_app_dependencies(
         )
 
     llamaindex_settings = get_llamaindex_settings()
+    v2_resources = V2LlamaIndexResources(
+        lambda: build_llamaindex_resources(
+            settings.database_url,
+            llamaindex_settings.nvidia_api_key,
+            llamaindex_settings=llamaindex_settings,
+            delegate=repository,
+        )
+    )
     return AppDependencies(
         repository=repository,
         question_executions=question_executions,
         question_phase_limiter=question_phase_limiter,
         v2_service=V2QuestionExecutionService(v2_dependency_provider),
         llamaindex_settings=llamaindex_settings,
-        llamaindex_resource_builder=lambda database_url, nvidia_api_key, delegate: (
-            build_llamaindex_resources(
-                database_url,
-                nvidia_api_key,
-                llamaindex_settings=llamaindex_settings,
-                delegate=delegate,
-            )
-        ),
+        v2_resources=v2_resources,
         supabase_auth=supabase_auth,
         postgres_identity=postgres_identity,
         collector_load_errors=tuple(collector_load_errors),
+    )
+
+
+def build_nvidia_embedder(settings: Settings) -> NvidiaNimEmbedder:
+    """Create the legacy embedding adapter from the single API configuration."""
+
+    return NvidiaNimEmbedder(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_embedding_model,
+        dimensions=settings.embedding_dimensions,
+        timeout_seconds=settings.embedding_timeout_seconds,
+    )
+
+
+def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
+    """Create the shared v1/v2 answer adapter with the selected prompt version."""
+
+    return NvidiaNimAnswerer(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_answer_model,
+        timeout_seconds=settings.answer_timeout_seconds,
+        max_output_tokens=settings.answer_max_output_tokens,
+        max_attempts=settings.answer_generation_max_attempts,
+        message_builder=build_messages_v2,
+    )
+
+
+def build_nvidia_question_router(settings: Settings) -> NvidiaNimQuestionRouter:
+    """Create the shared question-routing adapter from API configuration."""
+
+    return NvidiaNimQuestionRouter(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_route_classifier_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
     )
 
 
