@@ -151,6 +151,19 @@ class MemoryQuestionExecutionRepository:
             self._events[key] = event
             return event
 
+    async def events_for(
+        self, execution_id: UUID, owner_scope: str, *, phase: str
+    ) -> tuple[AnswerEvent, ...]:
+        async with self._lock:
+            self._get_owned(execution_id, owner_scope)
+            return tuple(
+                event
+                for (event_execution_id, event_phase, _sequence), event in sorted(
+                    self._events.items(), key=lambda item: item[0][2]
+                )
+                if event_execution_id == execution_id and event_phase == phase
+            )
+
     async def append_issue(
         self,
         execution_id: UUID,

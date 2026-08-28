@@ -5,7 +5,7 @@ import base64
 import json
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 from uuid import UUID
@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
+from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.mock_identity import identity_repository
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
@@ -39,6 +40,7 @@ from app.adapters.openai_answerer import (
     validate_draft,
 )
 from app.adapters.postgres_identity import ConsentRequiredError, PostgresIdentityRepository
+from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import (
     SupabaseAuth,
@@ -55,6 +57,7 @@ from app.application.checklist_exports import render_csv, render_markdown, rende
 from app.application.question_tasks import QuestionTaskRegistry
 from app.application.request_budget import RequestBudget, StageTimeoutError
 from app.domain.answer_actions import derive_answer_action
+from app.domain.answer_events import AnswerEvent
 from app.domain.auth_schemas import MockGoogleLoginRequest, MockLoginResponse
 from app.domain.corpus_temporal_contract import (
     UnsupportedCorpusDateError,
@@ -65,6 +68,7 @@ from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
+from app.domain.question_execution import ExecutionStatus
 from app.domain.routing import RouteDecision, route_question
 from app.domain.schemas import (
     AiFallbackReason,
@@ -99,6 +103,11 @@ ai_quota_exhausted = False
 question_tasks = QuestionTaskRegistry()
 repository = (
     PostgresLegalRepository(settings.database_url) if settings.database_url else memory_repository
+)
+question_execution_repository = (
+    PostgresQuestionExecutionRepository(repository.engine)
+    if isinstance(repository, PostgresLegalRepository)
+    else MemoryQuestionExecutionRepository()
 )
 llamaindex_settings = get_llamaindex_settings()
 llamaindex_vector_store = None
@@ -460,12 +469,7 @@ async def question(payload: QuestionRequest, request: Request) -> QuestionRespon
     return await _handle_question(payload, request, repository)
 
 
-@app.post("/v2/questions", response_model=QuestionResponse)
-async def question_v2(payload: QuestionRequest, request: Request) -> QuestionResponse:
-    """준비된 v2 검색 저장소로 법령 질문에 응답한다.
-
-    v2 리소스 또는 색인 준비 상태를 확인할 수 없으면 질문을 처리하지 않고 503을 반환한다.
-    """
+async def _v2_repository() -> LegalRepository:
     resources = _llamaindex_resources()
     if resources is None:
         raise _v2_not_ready_http_error()
@@ -474,7 +478,107 @@ async def question_v2(payload: QuestionRequest, request: Request) -> QuestionRes
         raise _v2_not_ready_http_error()
     if not await _v2_ready():
         raise _v2_not_ready_http_error()
-    return await _handle_question(payload, request, v2_repository)
+    return v2_repository
+
+
+def _sse(event_type: str, payload: dict[str, object]) -> bytes:
+    return f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
+
+
+@app.post("/v2/question-executions")
+async def prepare_question_execution(
+    payload: QuestionRequest,
+    request: Request,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+) -> dict[str, object]:
+    """Freeze one pinned v2 evidence response before any phase stream begins."""
+    user = await _optional_user(request.headers.get("authorization"))
+    owner_scope = _question_owner(request, user)
+    v2_repository = await _v2_repository()
+    resources = _llamaindex_resources()
+    assert resources is not None
+    active = await resources[0].active()
+    hits, _, corpus_as_of = await _retrieve_question_evidence(payload, None, v2_repository)
+    response = search_only_answer(payload, hits, corpus_as_of)
+    response.request_id = str(payload.client_request_id)
+    execution = await question_execution_repository.prepare_or_get(
+        owner_scope=owner_scope,
+        prepare_idempotency_key=idempotency_key,
+        generation_id=active.generation.id,
+        private_payload={"response": response.model_dump(mode="json")},
+        expires_at=datetime.now().astimezone() + timedelta(minutes=10),
+    )
+    return {
+        "execution_id": str(execution.execution_id),
+        "status": execution.status.value,
+        "next_action": (
+            "generate_core" if execution.status is ExecutionStatus.PREPARED else "complete"
+        ),
+    }
+
+
+async def _stream_execution_phase(execution_id: UUID, request: Request, phase: str):
+    user = await _optional_user(request.headers.get("authorization"))
+    owner_scope = _question_owner(request, user)
+    execution = await question_execution_repository.get_owned(execution_id, owner_scope)
+
+    async def events():
+        current = execution
+        if current.status is ExecutionStatus.PREPARED and phase == "core":
+            claim = await question_execution_repository.claim_phase(
+                execution_id,
+                owner_scope,
+                expected_version=current.version,
+                target=ExecutionStatus.CORE_RUNNING,
+            )
+            if claim.started:
+                response = claim.execution.private_payload["response"]
+                answered = await question_execution_repository.transition_phase(
+                    execution_id,
+                    owner_scope,
+                    expected_version=claim.execution.version,
+                    target=ExecutionStatus.CORE_ANSWERED,
+                )
+                completed = await question_execution_repository.complete(
+                    execution_id,
+                    owner_scope,
+                    expected_version=answered.version,
+                    response=response,
+                )
+                await question_execution_repository.append_event(
+                    execution_id, owner_scope, phase="core", sequence=0,
+                    event=AnswerEvent(event_type="summary", payload={"response": response}),
+                )
+                complete_payload = {"response": completed.verified_response, "outcome": "normal"}
+                await question_execution_repository.append_event(
+                    execution_id,
+                    owner_scope,
+                    phase="core",
+                    sequence=1,
+                    event=AnswerEvent.complete(complete_payload),
+                )
+                yield _sse("summary", {"response": response})
+                yield _sse("complete", complete_payload)
+                return
+        if current.status is ExecutionStatus.COMPLETED:
+            for event in await question_execution_repository.events_for(
+                execution_id, owner_scope, phase="core"
+            ):
+                yield _sse(event.event_type, dict(event.payload))
+            return
+        yield _sse("error", {"reason_code": "phase_not_ready"})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@app.post("/v2/question-executions/{execution_id}/core")
+async def core_question_execution(execution_id: UUID, request: Request) -> StreamingResponse:
+    return await _stream_execution_phase(execution_id, request, "core")
+
+
+@app.post("/v2/question-executions/{execution_id}/finalize")
+async def finalize_question_execution(execution_id: UUID, request: Request) -> StreamingResponse:
+    return await _stream_execution_phase(execution_id, request, "finalize")
 
 
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)

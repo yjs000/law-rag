@@ -63,6 +63,10 @@ class QuestionExecutionRepository(Protocol):
         self, execution_id: UUID, owner_scope: str, event: AnswerEvent
     ) -> AnswerEvent: ...
 
+    async def events_for(
+        self, execution_id: UUID, owner_scope: str, *, phase: str
+    ) -> tuple[AnswerEvent, ...]: ...
+
     async def append_issue(
         self, execution_id: UUID, owner_scope: str, issue: PipelineIssue
     ) -> PipelineIssue: ...

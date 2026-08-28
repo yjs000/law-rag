@@ -229,6 +229,32 @@ class PostgresQuestionExecutionRepository:
                 raise ExecutionConflict("event sequence is already occupied")
             return event
 
+    async def events_for(
+        self, execution_id: UUID, owner_scope: str, *, phase: str
+    ) -> tuple[AnswerEvent, ...]:
+        async with self._engine.connect() as connection:
+            _require_owned(
+                await _select_owned_for_update(connection, execution_id, owner_scope), None
+            )
+            rows = (
+                await connection.execute(
+                    text(
+                        """SELECT event_type,public_payload FROM question_execution_events
+                        WHERE execution_id=:execution_id AND phase=:phase ORDER BY sequence"""
+                    ),
+                    {"execution_id": execution_id, "phase": phase},
+                )
+            ).mappings().all()
+        return tuple(
+            AnswerEvent(
+                event_type=str(row["event_type"]),
+                payload=_json_mapping(row["public_payload"]),
+                terminal=str(row["event_type"]) in {"complete", "error", "cancelled"},
+                is_complete=str(row["event_type"]) == "complete",
+            )
+            for row in rows
+        )
+
     async def append_issue(
         self,
         execution_id: UUID,
@@ -395,11 +421,6 @@ def _require_owned(
 
 
 def _record_from_row(row: Mapping[str, object]) -> StoredQuestionExecution:
-    def as_mapping(value: object) -> Mapping[str, object]:
-        if isinstance(value, str):
-            value = json.loads(value)
-        return value if isinstance(value, Mapping) else {}
-
     def as_citations(value: object) -> tuple[FrozenCitation, ...]:
         if isinstance(value, str):
             value = json.loads(value)
@@ -423,10 +444,10 @@ def _record_from_row(row: Mapping[str, object]) -> StoredQuestionExecution:
         generation_id=UUID(str(row["generation_id"])),
         status=ExecutionStatus(str(row["status"])),
         version=int(row["version"]),
-        private_payload=as_mapping(row["private_payload"]),
+        private_payload=_json_mapping(row["private_payload"]),
         frozen_citations=as_citations(row["frozen_citations"]),
         verified_response=(
-            as_mapping(row["verified_response"])
+            _json_mapping(row["verified_response"])
             if row["verified_response"] is not None
             else None
         ),
@@ -434,3 +455,9 @@ def _record_from_row(row: Mapping[str, object]) -> StoredQuestionExecution:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
+
+
+def _json_mapping(value: object) -> Mapping[str, object]:
+    if isinstance(value, str):
+        value = json.loads(value)
+    return value if isinstance(value, Mapping) else {}
