@@ -56,6 +56,7 @@ from app.adapters.supabase_auth import (
     SupabaseAuthError,
     SupabaseAuthUnavailableError,
 )
+from app.api.routes import ApiEndpoints, register_routes
 from app.application.answering import (
     clarification_resubmission_summary,
     post_generation_clarification_answer,
@@ -343,13 +344,11 @@ async def _authenticated_user(
     return user
 
 
-@app.get("/health")
 async def health() -> dict[str, str]:
     """서비스 상태를 반환한다."""
     return {"status": "ok"}
 
 
-@app.post("/v1/search", response_model=list[SearchHit])
 async def search(payload: SearchRequest, request: Request) -> list[SearchHit]:
     """v1 저장소에서 허용된 법령 검색 결과만 반환한다."""
     await _require_supported_as_of_date(payload.as_of_date, repository)
@@ -404,7 +403,6 @@ async def _v2_ready() -> bool:
         return False
 
 
-@app.post("/v2/search", response_model=list[SearchHit])
 async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]:
     """준비된 v2 인덱스에서 허용된 법령 검색 결과만 반환한다.
 
@@ -494,7 +492,6 @@ async def _handle_question(
         )
 
 
-@app.post("/v1/questions", response_model=QuestionResponse)
 async def question(payload: QuestionRequest, request: Request) -> QuestionResponse:
     """v1 검색 저장소로 법령 질문에 응답한다."""
     return await _handle_question(payload, request, repository)
@@ -516,7 +513,6 @@ def _sse(event_type: str, payload: dict[str, object]) -> bytes:
     return f"event: {event_type}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode()
 
 
-@app.post("/v2/question-executions")
 async def prepare_question_execution(
     payload: QuestionRequest,
     request: Request,
@@ -734,7 +730,6 @@ async def _admit_v2_provider_phase(execution, phase: Literal["core", "finalize"]
         raise HTTPException(status_code=503, detail="system_busy") from exc
 
 
-@app.post("/v2/question-executions/{execution_id}/core")
 async def core_question_execution(
     execution_id: UUID,
     request: Request,
@@ -743,7 +738,6 @@ async def core_question_execution(
     return await _stream_execution_phase(execution_id, request, "core", execution_capability)
 
 
-@app.post("/v2/question-executions/{execution_id}/finalize")
 async def finalize_question_execution(
     execution_id: UUID,
     request: Request,
@@ -752,7 +746,6 @@ async def finalize_question_execution(
     return await _stream_execution_phase(execution_id, request, "finalize", execution_capability)
 
 
-@app.delete("/v2/question-executions/{execution_id}", status_code=202)
 async def cancel_question_execution(
     execution_id: UUID,
     request: Request,
@@ -772,7 +765,6 @@ async def cancel_question_execution(
     return {"cancelled": True}
 
 
-@app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
 async def cancel_question(client_request_id: UUID, request: Request) -> dict[str, bool]:
     """같은 요청 소유자가 실행 중인 질문을 취소한다."""
     user = await _optional_user(request.headers.get("authorization"))
@@ -1585,7 +1577,6 @@ def _validate_blocked_response(draft: DraftAnswer) -> bool:
     return draft.action == "unanswerable" and not draft.sections and not draft.checklist
 
 
-@app.post("/v1/auth/mock/google", response_model=MockLoginResponse)
 async def mock_google_login(payload: MockGoogleLoginRequest) -> MockLoginResponse:
     """비운영 환경에서 목업 Google 로그인 세션을 발급한다."""
     _require_mock_auth()
@@ -1593,7 +1584,6 @@ async def mock_google_login(payload: MockGoogleLoginRequest) -> MockLoginRespons
     return MockLoginResponse(access_token=token, user=user)
 
 
-@app.get("/v1/auth/me", response_model=MockUser)
 async def current_user(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> MockUser:
@@ -1601,7 +1591,6 @@ async def current_user(
     return user
 
 
-@app.post("/v1/auth/logout", status_code=204)
 async def logout(authorization: Annotated[str | None, Header()] = None) -> Response:
     """현재 인증 세션을 검증하고 목업 세션을 종료한다."""
     if supabase_auth and postgres_identity:
@@ -1622,7 +1611,6 @@ async def logout(authorization: Annotated[str | None, Header()] = None) -> Respo
     return Response(status_code=204)
 
 
-@app.delete("/v1/account", status_code=204)
 async def delete_account(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> Response:
@@ -1638,7 +1626,6 @@ async def delete_account(
     return Response(status_code=204)
 
 
-@app.get("/v1/questions/history", response_model=list[QuestionHistoryEntry])
 async def question_history(
     user: Annotated[MockUser, Depends(_authenticated_user)],
 ) -> list[QuestionHistoryEntry]:
@@ -1648,7 +1635,6 @@ async def question_history(
     return identity_repository.list_history(user.id)
 
 
-@app.get("/v1/conversations", response_model=ConversationPage)
 async def conversations(
     user: Annotated[MockUser, Depends(_authenticated_user)],
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
@@ -1669,7 +1655,6 @@ async def conversations(
     return ConversationPage(items=items, has_more=has_more, next_cursor=next_cursor)
 
 
-@app.get("/v1/conversations/{conversation_id}/turns", response_model=ConversationTurnPage)
 async def conversation_turns(
     conversation_id: UUID,
     user: Annotated[MockUser, Depends(_authenticated_user)],
@@ -1694,7 +1679,6 @@ async def conversation_turns(
     return ConversationTurnPage(items=items, has_more=has_more, next_cursor=next_cursor)
 
 
-@app.delete("/v1/conversations/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: UUID,
     user: Annotated[MockUser, Depends(_authenticated_user)],
@@ -1710,7 +1694,6 @@ async def delete_conversation(
     return Response(status_code=204)
 
 
-@app.get("/v1/questions/history/{history_id}", response_model=QuestionHistoryEntry)
 async def question_history_detail(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> QuestionHistoryEntry:
@@ -1718,7 +1701,6 @@ async def question_history_detail(
     return await _owned_history(history_id, user)
 
 
-@app.delete("/v1/questions/history/{history_id}", status_code=204)
 async def delete_question_history(
     history_id: UUID, user: Annotated[MockUser, Depends(_authenticated_user)]
 ) -> Response:
@@ -1733,7 +1715,6 @@ async def delete_question_history(
     return Response(status_code=204)
 
 
-@app.get("/v1/questions/history/{history_id}/checklist")
 async def export_checklist(
     history_id: UUID,
     user: Annotated[MockUser, Depends(_authenticated_user)],
@@ -1769,7 +1750,6 @@ async def export_checklist(
     )
 
 
-@app.get("/v1/provisions/{provision_id}", response_model=ProvisionResponse)
 async def provision(provision_id: UUID, as_of_date: date | None = None) -> ProvisionResponse:
     """검증된 기준일에 유효한 단일 법령 조문을 반환한다."""
     requested_date = as_of_date or _current_korea_date()
@@ -1783,7 +1763,6 @@ async def provision(provision_id: UUID, as_of_date: date | None = None) -> Provi
     return ProvisionResponse(hit=hit)
 
 
-@app.get("/v1/documents/{document_id}/changes", response_model=DocumentChangesResponse)
 async def changes(document_id: UUID, from_date: date, to_date: date) -> DocumentChangesResponse:
     """문서 연혁 비교의 현재 지원 상태를 반환한다."""
     return DocumentChangesResponse(
@@ -1796,7 +1775,6 @@ async def changes(document_id: UUID, from_date: date, to_date: date) -> Document
     )
 
 
-@app.get("/v1/corpus/status", response_model=CorpusStatus)
 async def corpus_status() -> CorpusStatus:
     """검색 가능 corpus와 AI 가용성 상태를 반환한다."""
     if isinstance(repository, PostgresLegalRepository):
@@ -2038,3 +2016,33 @@ async def _owned_history(history_id: UUID, user: MockUser) -> QuestionHistoryEnt
         # 존재 여부를 숨겨 다른 사용자의 ID 열거를 막는다.
         raise HTTPException(status_code=404, detail="질문 이력을 찾을 수 없습니다")
     return entry
+
+
+register_routes(
+    app,
+    ApiEndpoints(
+        health=health,
+        search=search,
+        search_v2=search_v2,
+        provision=provision,
+        changes=changes,
+        corpus_status=corpus_status,
+        question=question,
+        prepare_question_execution=prepare_question_execution,
+        core_question_execution=core_question_execution,
+        finalize_question_execution=finalize_question_execution,
+        cancel_question_execution=cancel_question_execution,
+        cancel_question=cancel_question,
+        mock_google_login=mock_google_login,
+        current_user=current_user,
+        logout=logout,
+        delete_account=delete_account,
+        question_history=question_history,
+        conversations=conversations,
+        conversation_turns=conversation_turns,
+        delete_conversation=delete_conversation,
+        question_history_detail=question_history_detail,
+        delete_question_history=delete_question_history,
+        export_checklist=export_checklist,
+    ),
+)
