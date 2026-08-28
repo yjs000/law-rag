@@ -1,0 +1,204 @@
+{
+  "node_count": 5236,
+  "unverified_node_count": 0,
+  "raw_edge_count": 13234,
+  "non_object_edges": 0,
+  "missing_endpoint_edges": 0,
+  "dangling_endpoint_edges": 1139,
+  "self_loop_edges": 1,
+  "valid_candidate_edges": 12095,
+  "exact_duplicate_edges": 157,
+  "directed_unique_endpoint_pairs": 11356,
+  "directed_same_endpoint_collapsed_edges": 739,
+  "undirected_unique_endpoint_pairs": 11309,
+  "undirected_same_endpoint_collapsed_edges": 786,
+  "same_endpoint_group_count": 582,
+  "relation_variant_groups": 461,
+  "source_file_variant_groups": 0,
+  "source_location_variant_groups": 9,
+  "context_variant_groups": 61,
+  "post_build_graph_type": "Graph",
+  "post_build_node_count": 5236,
+  "post_build_edge_count": 11308,
+  "post_build_error": "",
+  "producer_suppression": {
+    "path": "C:\\Users\\Family\\AppData\\Roaming\\uv\\tools\\graphifyy\\Lib\\site-packages\\graphify\\extract.py",
+    "total_sites": 12,
+    "sites": [
+      {
+        "line": 1172,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1438,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1440,
+        "name": "seen_doc_refs",
+        "tuple_arity": 0,
+        "sample": "seen_doc_refs: set[str] = set()"
+      },
+      {
+        "line": 1800,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1947,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n.get(\"id\") for n in nodes}"
+      },
+      {
+        "line": 2565,
+        "name": "seen_keys",
+        "tuple_arity": 0,
+        "sample": "seen_keys: set[tuple] = set()"
+      },
+      {
+        "line": 2734,
+        "name": "seen_keys",
+        "tuple_arity": 0,
+        "sample": "seen_keys: set[tuple] = set()"
+      },
+      {
+        "line": 4230,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 4338,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 4417,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 4932,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 4933,
+        "name": "seen_edges",
+        "tuple_arity": 4,
+        "sample": "seen_edges: set[tuple[str, str, str, str | None]] = set()"
+      }
+    ],
+    "error": ""
+  },
+  "examples": [
+    {
+      "source": "apps_api_scripts_experiment_d_local_rerank_run_local_rerank",
+      "target": "apps_api_scripts_experiment_d_local_rerank_py_path",
+      "edge_count": 6,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "apps/api/scripts/experiment_d_local_rerank.py"
+      ],
+      "source_locations": [
+        "L570"
+      ],
+      "contexts": [
+        "generic_arg",
+        "parameter_type"
+      ]
+    },
+    {
+      "source": "apps_law_rag_agent_src_law_rag_agent_graph_build_graph",
+      "target": "apps_law_rag_agent_src_law_rag_agent_graph_py_any",
+      "edge_count": 6,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "apps/law-rag-agent/src/law_rag_agent/graph.py"
+      ],
+      "source_locations": [
+        "L27"
+      ],
+      "contexts": [
+        "generic_arg",
+        "parameter_type",
+        "return_type"
+      ]
+    },
+    {
+      "source": "apps_api_scripts_evaluate_experiment_d_gold_load_gold_artifacts",
+      "target": "apps_api_scripts_evaluate_experiment_d_gold_py_path",
+      "edge_count": 5,
+      "relations": [
+        "calls",
+        "references"
+      ],
+      "source_files": [
+        "apps/api/scripts/evaluate_experiment_d_gold.py"
+      ],
+      "source_locations": [
+        "L309",
+        "L337"
+      ],
+      "contexts": [
+        "call",
+        "parameter_type"
+      ]
+    },
+    {
+      "source": "apps_collector_src_law_rag_collector_ports_collectorrepository_deletion_window",
+      "target": "apps_collector_src_law_rag_collector_ports_py_date",
+      "edge_count": 5,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "apps/collector/src/law_rag_collector/ports.py"
+      ],
+      "source_locations": [
+        "L35"
+      ],
+      "contexts": [
+        "generic_arg",
+        "parameter_type"
+      ]
+    },
+    {
+      "source": "apps_collector_src_law_rag_collector_prepared_publisher_transaction_repository",
+      "target": "apps_collector_src_law_rag_collector_supabase_repository_supabasecurrentcorpusrepository",
+      "edge_count": 5,
+      "relations": [
+        "calls",
+        "references",
+        "uses"
+      ],
+      "source_files": [
+        "apps/collector/src/law_rag_collector/prepared_publisher.py"
+      ],
+      "source_locations": [
+        "L305",
+        "L306",
+        "L310"
+      ],
+      "contexts": [
+        "",
+        "call",
+        "parameter_type",
+        "return_type"
+      ]
+    }
+  ]
+}
