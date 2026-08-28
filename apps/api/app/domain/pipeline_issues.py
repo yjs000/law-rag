@@ -20,3 +20,4 @@ class PipelineIssue:
     def __post_init__(self) -> None:
         if not self.stage or not self.public_reason_code:
             raise ValueError("pipeline issues require a public stage and reason code")
+        object.__setattr__(self, "phase", ExecutionPhase(self.phase))

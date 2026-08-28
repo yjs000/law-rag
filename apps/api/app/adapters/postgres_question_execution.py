@@ -19,7 +19,7 @@ from app.domain.question_execution import (
     ExecutionStatus,
     transition_execution,
 )
-from app.ports.question_execution import ExecutionConflict, ExecutionNotFound
+from app.ports.question_execution import ExecutionConflict, ExecutionNotFound, PhaseClaim
 
 _RECORD_COLUMNS = """
 execution_id,owner_scope,prepare_idempotency_key,capability_hash,generation_id,status,version,
@@ -134,6 +134,49 @@ class PostgresQuestionExecutionRepository:
             if row is None:
                 raise ExecutionConflict("execution version is stale")
         return _record_from_row(row)
+
+    async def claim_phase(
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        expected_version: int,
+        target: ExecutionStatus,
+        capability_hash: str | None = None,
+    ) -> PhaseClaim:
+        async with self._engine.begin() as connection:
+            current = _require_owned(
+                await _select_owned_for_update(connection, execution_id, owner_scope),
+                capability_hash,
+            )
+            if current.status is target:
+                return PhaseClaim(execution=current, started=False)
+            if current.version != expected_version:
+                raise ExecutionConflict("execution version is stale")
+            updated = transition_execution(
+                ExecutionSnapshot(status=current.status, version=current.version), target
+            )
+            row = (
+                await connection.execute(
+                    text(
+                        f"""UPDATE question_executions SET
+                        status=:status,version=:version,updated_at=now()
+                        WHERE execution_id=:execution_id AND owner_scope=:owner_scope
+                          AND version=:expected_version
+                        RETURNING {_RECORD_COLUMNS}"""
+                    ),
+                    {
+                        "status": updated.status.value,
+                        "version": updated.version,
+                        "execution_id": execution_id,
+                        "owner_scope": owner_scope,
+                        "expected_version": expected_version,
+                    },
+                )
+            ).mappings().one_or_none()
+            if row is None:
+                raise ExecutionConflict("execution version is stale")
+        return PhaseClaim(execution=_record_from_row(row), started=True)
 
     async def append_event(
         self,
@@ -260,10 +303,13 @@ class PostgresQuestionExecutionRepository:
                 raise ExecutionConflict("execution version is stale")
         return _record_from_row(row)
 
-    async def cancel(self, execution_id: UUID, owner_scope: str) -> StoredQuestionExecution:
+    async def cancel(
+        self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
+    ) -> StoredQuestionExecution:
         async with self._engine.begin() as connection:
             current = _require_owned(
-                await _select_owned_for_update(connection, execution_id, owner_scope), None
+                await _select_owned_for_update(connection, execution_id, owner_scope),
+                capability_hash,
             )
             if current.status in TERMINAL_EXECUTION_STATUSES:
                 return current
@@ -294,9 +340,26 @@ class PostgresQuestionExecutionRepository:
                 await connection.execute(
                     text(
                         """UPDATE question_executions SET
-                        status='expired',version=version+1,updated_at=now()
-                        WHERE expires_at<=:now
-                          AND status NOT IN ('completed','failed','cancelled','expired')
+                        status=CASE
+                          WHEN status IN ('completed','failed','cancelled','expired') THEN status
+                          ELSE 'expired'
+                        END,
+                        version=CASE
+                          WHEN status IN ('completed','failed','cancelled','expired') THEN version
+                          ELSE version+1
+                        END,
+                        capability_hash=NULL,
+                        private_payload='{}'::jsonb,
+                        frozen_citations='[]'::jsonb,
+                        verified_response=NULL,
+                        updated_at=now()
+                        WHERE expires_at<=:now AND (
+                          status NOT IN ('completed','failed','cancelled','expired')
+                          OR capability_hash IS NOT NULL
+                          OR private_payload <> '{}'::jsonb
+                          OR frozen_citations <> '[]'::jsonb
+                          OR verified_response IS NOT NULL
+                        )
                         RETURNING execution_id"""
                     ),
                     {"now": now},

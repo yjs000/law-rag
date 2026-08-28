@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
@@ -37,6 +38,12 @@ class QuestionExecutionRecord(Protocol):
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class PhaseClaim:
+    execution: QuestionExecutionRecord
+    started: bool
+
+
 class QuestionExecutionRepository(Protocol):
     async def prepare_or_get(self, **kwargs) -> QuestionExecutionRecord: ...
 
@@ -47,6 +54,10 @@ class QuestionExecutionRepository(Protocol):
     async def transition_phase(
         self, execution_id: UUID, owner_scope: str, **kwargs
     ) -> QuestionExecutionRecord: ...
+
+    async def claim_phase(
+        self, execution_id: UUID, owner_scope: str, **kwargs
+    ) -> PhaseClaim: ...
 
     async def append_event(
         self, execution_id: UUID, owner_scope: str, event: AnswerEvent
@@ -60,6 +71,8 @@ class QuestionExecutionRepository(Protocol):
         self, execution_id: UUID, owner_scope: str, **kwargs
     ) -> QuestionExecutionRecord: ...
 
-    async def cancel(self, execution_id: UUID, owner_scope: str) -> QuestionExecutionRecord: ...
+    async def cancel(
+        self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
+    ) -> QuestionExecutionRecord: ...
 
     async def expire(self, now: datetime) -> tuple[UUID, ...]: ...

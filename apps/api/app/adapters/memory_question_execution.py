@@ -16,7 +16,7 @@ from app.domain.question_execution import (
     ExecutionStatus,
     transition_execution,
 )
-from app.ports.question_execution import ExecutionConflict, ExecutionNotFound
+from app.ports.question_execution import ExecutionConflict, ExecutionNotFound, PhaseClaim
 
 
 @dataclass(frozen=True)
@@ -108,6 +108,28 @@ class MemoryQuestionExecutionRepository:
             )
             return self._replace(current, status=updated.status, version=updated.version)
 
+    async def claim_phase(
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        expected_version: int,
+        target: ExecutionStatus,
+        capability_hash: str | None = None,
+    ) -> PhaseClaim:
+        async with self._lock:
+            current = self._get_owned(execution_id, owner_scope, capability_hash=capability_hash)
+            if current.status is target:
+                return PhaseClaim(execution=current, started=False)
+            self._require_expected_version(current, expected_version)
+            updated = transition_execution(
+                ExecutionSnapshot(status=current.status, version=current.version), target
+            )
+            return PhaseClaim(
+                execution=self._replace(current, status=updated.status, version=updated.version),
+                started=True,
+            )
+
     async def append_event(
         self,
         execution_id: UUID,
@@ -167,9 +189,11 @@ class MemoryQuestionExecutionRepository:
                 verified_response=dict(response),
             )
 
-    async def cancel(self, execution_id: UUID, owner_scope: str) -> StoredQuestionExecution:
+    async def cancel(
+        self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
+    ) -> StoredQuestionExecution:
         async with self._lock:
-            current = self._get_owned(execution_id, owner_scope)
+            current = self._get_owned(execution_id, owner_scope, capability_hash=capability_hash)
             if current.status in TERMINAL_EXECUTION_STATUSES:
                 return current
             updated = transition_execution(
@@ -182,14 +206,34 @@ class MemoryQuestionExecutionRepository:
         async with self._lock:
             expired: list[UUID] = []
             for record in tuple(self._records.values()):
-                if record.expires_at > now or record.status in TERMINAL_EXECUTION_STATUSES:
+                if record.expires_at > now:
                     continue
-                updated = transition_execution(
-                    ExecutionSnapshot(status=record.status, version=record.version),
-                    ExecutionStatus.EXPIRED,
-                )
-                self._replace(record, status=updated.status, version=updated.version)
-                expired.append(record.execution_id)
+                status = record.status
+                version = record.version
+                if status not in TERMINAL_EXECUTION_STATUSES:
+                    updated = transition_execution(
+                        ExecutionSnapshot(status=status, version=version),
+                        ExecutionStatus.EXPIRED,
+                    )
+                    status = updated.status
+                    version = updated.version
+                if (
+                    status != record.status
+                    or record.capability_hash is not None
+                    or record.private_payload
+                    or record.frozen_citations
+                    or record.verified_response is not None
+                ):
+                    self._replace(
+                        record,
+                        status=status,
+                        version=version,
+                        capability_hash=None,
+                        private_payload={},
+                        frozen_citations=(),
+                        verified_response=None,
+                    )
+                    expired.append(record.execution_id)
             return tuple(expired)
 
     def _get_owned(

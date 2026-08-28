@@ -68,7 +68,8 @@ def upgrade() -> None:
           phase text NOT NULL CHECK(phase IN ('core','finalize')),
           expires_at timestamptz NOT NULL,
           created_at timestamptz NOT NULL DEFAULT now(),
-          UNIQUE(provider,slot)
+          UNIQUE(provider,slot),
+          UNIQUE(execution_id,phase)
         )
         """,
         """

@@ -5,6 +5,7 @@ import pytest
 
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
+from app.domain.grounding import FrozenCitation
 from app.domain.question_execution import ExecutionStatus
 from app.ports.question_execution import ExecutionConflict, ExecutionNotFound
 
@@ -105,6 +106,34 @@ async def test_running_and_completed_phase_replays_return_the_authoritative_snap
     assert complete_replay == completed
 
 
+async def test_phase_claim_distinguishes_the_single_starter_from_a_replay(
+    repository: MemoryQuestionExecutionRepository,
+) -> None:
+    execution = await repository.prepare_or_get(
+        owner_scope="user:1",
+        prepare_idempotency_key="request-key",
+        generation_id=uuid4(),
+        expires_at=datetime(2026, 8, 28, tzinfo=UTC) + timedelta(minutes=5),
+    )
+
+    starter = await repository.claim_phase(
+        execution.execution_id,
+        "user:1",
+        expected_version=0,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+    replay = await repository.claim_phase(
+        execution.execution_id,
+        "user:1",
+        expected_version=0,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+
+    assert starter.started is True
+    assert replay.started is False
+    assert replay.execution == starter.execution
+
+
 async def test_stale_transition_cannot_overwrite_a_newer_snapshot(
     repository: MemoryQuestionExecutionRepository,
 ) -> None:
@@ -157,6 +186,70 @@ async def test_expiry_transitions_an_inflight_execution_and_keeps_its_idempotenc
 
     assert expired == (execution.execution_id,)
     assert replay.status is ExecutionStatus.EXPIRED
+    assert replay.private_payload == {}
+
+
+async def test_expiry_scrubs_private_payload_capability_and_terminal_response(
+    repository: MemoryQuestionExecutionRepository,
+) -> None:
+    expires_at = datetime(2026, 8, 28, tzinfo=UTC) + timedelta(seconds=1)
+    execution = await repository.prepare_or_get(
+        owner_scope="anonymous",
+        prepare_idempotency_key="request-key",
+        generation_id=uuid4(),
+        capability_hash="capability",
+        private_payload={"question": "비공개 질문"},
+        frozen_citations=(FrozenCitation(id="C1", quote="법령 원문"),),
+        expires_at=expires_at,
+    )
+    running = await repository.transition_phase(
+        execution.execution_id,
+        "anonymous",
+        expected_version=0,
+        target=ExecutionStatus.CORE_RUNNING,
+        capability_hash="capability",
+    )
+    answered = await repository.transition_phase(
+        execution.execution_id,
+        "anonymous",
+        expected_version=running.version,
+        target=ExecutionStatus.CORE_ANSWERED,
+        capability_hash="capability",
+    )
+    await repository.complete(
+        execution.execution_id,
+        "anonymous",
+        expected_version=answered.version,
+        response={"answer": "short-lived response"},
+        capability_hash="capability",
+    )
+
+    await repository.expire(expires_at)
+    scrubbed = await repository.get_owned(execution.execution_id, "anonymous")
+
+    assert scrubbed.status is ExecutionStatus.COMPLETED
+    assert scrubbed.capability_hash is None
+    assert scrubbed.private_payload == {}
+    assert scrubbed.frozen_citations == ()
+    assert scrubbed.verified_response is None
+
+
+async def test_anonymous_owner_can_cancel_with_its_execution_capability(
+    repository: MemoryQuestionExecutionRepository,
+) -> None:
+    execution = await repository.prepare_or_get(
+        owner_scope="anonymous",
+        prepare_idempotency_key="request-key",
+        generation_id=uuid4(),
+        capability_hash="capability",
+        expires_at=datetime(2026, 8, 28, tzinfo=UTC) + timedelta(minutes=5),
+    )
+
+    cancelled = await repository.cancel(
+        execution.execution_id, "anonymous", capability_hash="capability"
+    )
+
+    assert cancelled.status is ExecutionStatus.CANCELLED
 
 
 async def test_event_sequence_is_persisted_once_before_any_replay_is_visible(

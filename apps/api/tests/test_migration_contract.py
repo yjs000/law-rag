@@ -309,4 +309,5 @@ def test_v2_question_execution_migration_has_idempotency_events_and_capacity_lea
     assert "CREATE TABLE question_execution_issues" in sql
     assert "CREATE TABLE provider_capacity_leases" in sql
     assert "UNIQUE(provider,slot)" in sql
+    assert "UNIQUE(execution_id,phase)" in sql
     assert "question_text" not in sql

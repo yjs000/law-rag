@@ -1,6 +1,17 @@
 from app.application.final_answer import FinalAnswerCoordinator, VerifiedAnswer
 from app.domain.grounding import CitationRegistry, FrozenCitation, GroundedSentence
-from app.domain.pipeline_issues import PipelineIssue
+from app.domain.pipeline_issues import ExecutionPhase, PipelineIssue
+
+
+def test_pipeline_issue_normalizes_a_valid_phase_before_persistence() -> None:
+    issue = PipelineIssue(
+        phase="finalize",
+        stage="provider",
+        public_reason_code="provider_unavailable",
+        recoverable=True,
+    )
+
+    assert issue.phase is ExecutionPhase.FINALIZE
 
 
 def test_verified_core_survives_a_recoverable_finalize_failure() -> None:

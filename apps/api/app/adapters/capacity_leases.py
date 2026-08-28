@@ -57,6 +57,11 @@ class MemoryConcurrencyLimiter:
         async with self._lock:
             now = self._now()
             self._reclaim_expired(now)
+            if any(
+                lease.execution_id == execution_id and lease.phase is phase
+                for lease in self._leases.values()
+            ):
+                raise SystemBusy
             occupied = {lease.slot for lease in self._leases.values()}
             slot = next(
                 (candidate for candidate in range(self._slots) if candidate not in occupied),
@@ -156,6 +161,10 @@ class PostgresCapacityLeaseStore:
     ) -> Lease | None:
         async with self._engine.begin() as connection:
             await connection.execute(
+                text("SELECT pg_catalog.pg_advisory_xact_lock(hashtext(:provider))"),
+                {"provider": provider},
+            )
+            await connection.execute(
                 text("DELETE FROM provider_capacity_leases WHERE expires_at<=now()")
             )
             row = (
@@ -169,8 +178,9 @@ class PostgresCapacityLeaseStore:
                           SELECT 1 FROM provider_capacity_leases existing
                           WHERE existing.provider=:provider AND existing.slot=slot
                         )
+                          AND :expires_at > now()
                         ORDER BY slot LIMIT 1
-                        ON CONFLICT(provider,slot) DO NOTHING
+                        ON CONFLICT DO NOTHING
                         RETURNING lease_id,slot"""
                     ),
                     {
