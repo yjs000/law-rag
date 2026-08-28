@@ -4,6 +4,7 @@
 
 ## 2026 Q3
 
+- [0063: F-005 V2 LlamaIndex 가독성 중심 리팩터링](0063-f005-v2-readability-refactor.md)
 - [0059: 작업 관리 메타데이터와 얇은 로드맵](0059-task-management-metadata-and-roadmap.md)
 - [0016: 실험 A 일반 텍스트 조문 청킹](0016-experiment-a-plain-text-chunking.md)
 - [0017: 실험 B NVIDIA NIM 두 문장 임베딩과 유사도](0017-experiment-b-sentence-embeddings.md)

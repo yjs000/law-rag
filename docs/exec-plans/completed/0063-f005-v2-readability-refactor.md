@@ -44,13 +44,13 @@
 - Consumes: existing public imports `PostgresGenerationRepository`, `RetrievalGeneration`, `run_ingestion`, `ActiveGenerationIndexProvider`, `search`, `search_index`.
 - Produces: the same public imports as compatibility facades; internal services receive engines, stores, transforms and factories by constructor/call parameter rather than constructing them.
 
-- [ ] **Step 1: Capture focused behavior before moving code**
+- [x] **Step 1: Capture focused behavior before moving code**
 
 Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_generations.py tests/test_ingest.py tests/test_active_index.py tests/test_retriever.py -v`
 
 Expected: all selected tests pass before the file move.
 
-- [ ] **Step 2: Extract cohesive units without semantic edits**
+- [x] **Step 2: Extract cohesive units without semantic edits**
 
 Move catalog records and SQL mapping into `generation`, split ingestion into read/transform/write orchestration, and move active cache/query adapter into `query`. Keep old module names as re-export facades:
 
@@ -62,7 +62,7 @@ from law_rag_llamaindex.generation.repository import PostgresGenerationRepositor
 __all__ = ["PostgresGenerationRepository", "RetrievalGeneration"]
 ```
 
-- [ ] **Step 3: Make LlamaIndex control flow explicit**
+- [x] **Step 3: Make LlamaIndex control flow explicit**
 
 Use a small orchestration method whose body reads as the pipeline:
 
@@ -74,13 +74,13 @@ async def build_generation(self) -> RetrievalGeneration:
     return await self._publisher.publish_after_validation(generation)
 ```
 
-- [ ] **Step 4: Update only test import paths and run focused regression suite**
+- [x] **Step 4: Update only test import paths and run focused regression suite**
 
 Run: `uv run --directory apps/law-rag-llamaindex python -m pytest tests/test_generations.py tests/test_ingest.py tests/test_active_index.py tests/test_retriever.py -v`
 
 Expected: the same assertions pass after the extraction.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add apps/law-rag-llamaindex
@@ -99,13 +99,13 @@ git commit -m "refactor(llamaindex): expose ingestion and generation flow"
 - Consumes: `QuestionExecutionRepository`, `LegalRepository`, `QuestionPhaseCoordinator`, existing LlamaIndex repository adapter and existing answerer port.
 - Produces: `AppDependencies` and `V2QuestionExecutionService`, injected into v2 routes; existing v2 requests and SSE event payloads remain byte-for-byte equivalent where asserted.
 
-- [ ] **Step 1: Capture v2 contract behavior**
+- [x] **Step 1: Capture v2 contract behavior**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_v2_question_executions.py tests/test_v2_grounding_events.py tests/test_question_phase_coordinator.py -v`
 
 Expected: selected API tests pass before extraction.
 
-- [ ] **Step 2: Move resource creation into a dependency object**
+- [x] **Step 2: Move resource creation into a dependency object**
 
 Create an immutable dependency container and make `main.py` ask it for routers and lifespan cleanup:
 
@@ -119,7 +119,7 @@ class AppDependencies:
 
 `bootstrap.py` alone normalizes DB URLs, creates engines and LlamaIndex adapters, and owns cleanup callbacks.
 
-- [ ] **Step 3: Extract phase use cases behind one service**
+- [x] **Step 3: Extract phase use cases behind one service**
 
 Move frozen evidence, core and finalize helpers from `main.py` into a service with explicit public verbs:
 
@@ -130,17 +130,17 @@ class V2QuestionExecutionService:
     async def stream_finalize(self, execution_id: UUID, capability: str) -> AsyncIterator[AnswerEvent]: ...
 ```
 
-- [ ] **Step 4: Keep decisions flat**
+- [x] **Step 4: Keep decisions flat**
 
 Represent retry/replay/busy outcomes with existing phase coordinator result types. Use early returns for terminal states and isolated grounding predicates instead of nested request-handler conditionals.
 
-- [ ] **Step 5: Update test imports only where a moved helper is imported, then verify**
+- [x] **Step 5: Update test imports only where a moved helper is imported, then verify**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_v2_question_executions.py tests/test_v2_grounding_events.py tests/test_question_phase_coordinator.py -v`
 
 Expected: unchanged test assertions pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add apps/api/app apps/api/tests
@@ -160,13 +160,13 @@ git commit -m "refactor(api): isolate v2 execution application service"
 - Consumes: `AppDependencies`, v1 answer service and `V2QuestionExecutionService` from Task 2.
 - Produces: `create_app(dependencies: AppDependencies) -> FastAPI`; `main.py` exports the production `app` and backward-compatible test seams only.
 
-- [ ] **Step 1: Capture route registration and v1/v2 behavior**
+- [x] **Step 1: Capture route registration and v1/v2 behavior**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_api_route_registration.py tests/test_api.py tests/test_v2_search.py tests/test_v2_question_executions.py -v`
 
 Expected: the registered endpoints and their existing behaviors pass before router extraction.
 
-- [ ] **Step 2: Route by version and responsibility**
+- [x] **Step 2: Route by version and responsibility**
 
 Move only v1 routes to `api/v1` and only v2 routes to `api/v2`; compose them without behavior decisions in `main.py`:
 
@@ -178,23 +178,23 @@ def create_app(dependencies: AppDependencies) -> FastAPI:
     return app
 ```
 
-- [ ] **Step 3: Preserve transport rules in presenters**
+- [x] **Step 3: Preserve transport rules in presenters**
 
 Keep JSON, pre-stream HTTP errors, post-stream typed SSE errors and cancellation responses in `api/v2` presenter functions. Router methods delegate to application services and do not create SDK objects.
 
-- [ ] **Step 4: Enforce the file-size and dependency boundary**
+- [x] **Step 4: Enforce the file-size and dependency boundary**
 
 Run: `Get-ChildItem apps/api/app -Recurse -Filter *.py | ForEach-Object { if ((Get-Content $_.FullName).Count -gt 500) { $_.FullName } }`
 
 Expected: `main.py` and newly created/refactored F005 v2 modules are absent. Existing unrelated v1 infrastructure over 500 lines is recorded but not expanded.
 
-- [ ] **Step 5: Run focused route regressions**
+- [x] **Step 5: Run focused route regressions**
 
 Run: `uv run --directory apps/api python -m pytest tests/test_api_route_registration.py tests/test_api.py tests/test_v2_search.py tests/test_v2_question_executions.py -v`
 
 Expected: all existing assertions pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add apps/api/app apps/api/tests
@@ -205,7 +205,7 @@ git commit -m "refactor(api): separate v1 and v2 transport routers"
 
 **Files:**
 - Modify: `docs/design-docs/v2-llamaindex-framework-redesign.md`
-- Modify: `docs/exec-plans/active/0063-f005-v2-readability-refactor.md`
+- Modify: `docs/exec-plans/completed/0063-f005-v2-readability-refactor.md`
 
 **Interfaces:**
 - Consumes: Tasks 1–3 public compatibility facades and the unchanged tests.
@@ -229,7 +229,7 @@ Expected: every command exits 0; any existing environment-only failure is record
 
 Result (2026-08-28): all gates passed: LlamaIndex Ruff (`All checks passed!`) and pytest
 (`70 passed, 2 skipped, 1 existing NVIDIA model-validity warning`); API Ruff (`All checks passed!`)
-and pytest (`682 passed, 3 skipped, 1 Starlette/httpx deprecation warning`); web Vitest
+and pytest (`684 passed, 3 skipped, 1 Starlette/httpx deprecation warning`); web Vitest
 (`18 files, 95 tests passed`), ESLint and `tsc --noEmit`. The sandbox-only API test attempt
 ended in `PermissionError [WinError 5]` while pytest read its fresh base temp directory, and
 the sandbox-only web test attempt ended in Vitest fork-worker `spawn EPERM`; elevated reruns
