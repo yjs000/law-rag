@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from typing import Annotated, Any
 
 from fastapi import Header, HTTPException
@@ -12,13 +13,64 @@ from app.adapters.supabase_auth import SupabaseAuthError, SupabaseAuthUnavailabl
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse
 from app.observability import emit_question_outcome
 
+_request_app_dependencies: ContextVar[Any | None] = ContextVar(
+    "request_app_dependencies", default=None
+)
+_COMPOSITION_ATTRIBUTES = {
+    "collector_load_errors": "collector_load_errors",
+    "llamaindex_settings": "llamaindex_settings",
+    "postgres_identity": "postgres_identity",
+    "question_execution_repository": "question_executions",
+    "question_phase_limiter": "question_phase_limiter",
+    "repository": "repository",
+    "supabase_auth": "supabase_auth",
+    "v2_question_execution_service": "v2_service",
+}
+
+
+class _FactoryCompositionMain:
+    """Module-like request facade that binds routes to one app factory's adapters."""
+
+    def __init__(self, main: Any, app_dependencies: Any) -> None:
+        self._main = main
+        self._app_dependencies = app_dependencies
+
+    def __getattr__(self, name: str) -> Any:
+        dependency_name = _COMPOSITION_ATTRIBUTES.get(name)
+        if dependency_name is not None:
+            return getattr(self._app_dependencies, dependency_name)
+        if name == "_llamaindex_resources":
+            return self._llamaindex_resources
+        return getattr(self._main, name)
+
+    def _llamaindex_resources(self) -> tuple[object, object, object] | None:
+        try:
+            return self._app_dependencies.v2_resources.resolve()
+        except Exception:
+            return None
+
+
+def bind_app_dependencies(app_dependencies: Any) -> Token[Any | None]:
+    """Bind a non-production app factory's resources for one HTTP request."""
+
+    return _request_app_dependencies.set(app_dependencies)
+
+
+def reset_app_dependencies(token: Token[Any | None]) -> None:
+    """Restore the previous factory binding after a request completes."""
+
+    _request_app_dependencies.reset(token)
+
 
 def main_module() -> Any:
     """Resolve the composition entry lazily to retain monkeypatch compatibility."""
 
     import app.main as main
 
-    return main
+    app_dependencies = _request_app_dependencies.get()
+    if app_dependencies is None:
+        return main
+    return _FactoryCompositionMain(main, app_dependencies)
 
 
 def _require_mock_auth() -> None:

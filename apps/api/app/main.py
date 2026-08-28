@@ -6,7 +6,7 @@ from datetime import date
 from functools import lru_cache
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from law_rag_core.ports.repository import LegalRepository
 from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
@@ -22,6 +22,9 @@ from app.api.dependencies import (
     _authenticated_user,
     _optional_user,
     _save_if_authenticated,
+    bind_app_dependencies,
+    main_module,
+    reset_app_dependencies,
 )
 from app.api.v1 import build_router as build_v1_router
 from app.api.v1.questions import cancel_question, question
@@ -178,10 +181,11 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
 async def _v2_index_ready() -> bool:
     """Allow v2 only when the active pointer references an active generation."""
 
-    if not settings.database_url:
+    main = main_module()
+    if not main.settings.database_url:
         return False
     try:
-        async with repository.engine.connect() as connection:  # type: ignore[union-attr]
+        async with main.repository.engine.connect() as connection:  # type: ignore[union-attr]
             row = (
                 await connection.execute(
                     text(
@@ -252,14 +256,15 @@ def _embedder() -> NvidiaNimEmbedder:
 
 
 async def _check_quota(kind: str, *, user: MockUser | None = None) -> None:
-    if user is None or not postgres_identity or not settings.account_quota_enabled:
+    main = main_module()
+    if user is None or not main.postgres_identity or not main.settings.account_quota_enabled:
         return
     limit = (
-        settings.authenticated_ai_daily_limit
+        main.settings.authenticated_ai_daily_limit
         if kind == "ai"
-        else settings.authenticated_search_daily_limit
+        else main.settings.authenticated_search_daily_limit
     )
-    if not await postgres_identity.consume_quota(user.id, date.today(), kind, limit):
+    if not await main.postgres_identity.consume_quota(user.id, date.today(), kind, limit):
         raise HTTPException(status_code=429, detail="오늘의 계정 사용 한도를 초과했습니다.")
 
 
@@ -331,6 +336,16 @@ def create_app(app_dependencies: AppDependencies) -> FastAPI:
     )
     application.include_router(build_v1_router())
     application.include_router(build_v2_router())
+    if app_dependencies is not dependencies:
+
+        @application.middleware("http")
+        async def bind_factory_dependencies(request: Request, call_next):
+            token = bind_app_dependencies(app_dependencies)
+            try:
+                return await call_next(request)
+            finally:
+                reset_app_dependencies(token)
+
     return application
 
 

@@ -11,7 +11,6 @@ from law_rag_core.ports.repository import LegalRepository
 
 from app.api.dependencies import _optional_user, main_module
 from app.application.request_budget import RequestBudget
-from app.application.v1.answering import _answer_question
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
 from app.domain.schemas import QuestionRequest, QuestionResponse
 from app.observability import QuestionStageTimingOutcome, emit_question_stage_timing
@@ -43,7 +42,7 @@ async def _handle_question(
         try:
             await asyncio.sleep(0)
             async with asyncio.timeout(budget.remaining_seconds()):
-                response = await _answer_question(payload, request, user, budget, repository)
+                response = await main._answer_question(payload, request, user, budget, repository)
         except asyncio.CancelledError as exc:
             raise HTTPException(status_code=499, detail="질문 처리가 취소되었습니다.") from exc
         except TimeoutError as exc:

@@ -31,3 +31,12 @@
 ## Graphify
 
 - `graphify update .`를 실행했으나 기존 worktree의 권한 거부 test-cache directories를 스캔하지 못해 rebuild가 실패했다. 코드·테스트 검증에는 영향이 없었고 해당 cache directories를 변경하거나 삭제하지 않았다.
+
+## Fix round 1 (review 반영)
+
+- `create_app(app_dependencies)`가 `lifespan`만 사용하고 route handler는 전역 `app.main` resource를 읽던 결함을 수정했다. custom factory 요청은 `ContextVar` 기반 request facade를 통해 해당 factory의 repository, v2 service, phase limiter, auth/identity, LlamaIndex resources를 사용한다. production `app`은 전역 module lookup을 유지하므로 기존 `app.main` monkeypatch seam을 보존한다.
+- 새 request-level regression은 distinct factory repository가 `/v1/search` 응답을 만들고, distinct v2 resource 및 readiness repository가 `/v2/search`를 처리함을 확인한다.
+- v1 question transport가 로컬 import한 `_answer_question`을 직접 호출하던 결함을 수정하고 request-time `main._answer_question` lookup으로 복구했다. 이에 대한 monkeypatch regression을 추가했다.
+- route registration test는 v1/v2의 전체 public method/path set과 module owner를 검증하도록 확대했다.
+- RED: custom factory v1 search는 전역 빈 결과를 반환했고, v1 answer seam patch는 503을 반환했다. custom v2 search도 전역 readiness repository 때문에 503을 반환했다.
+- GREEN/verification: `uv run --directory apps/api ruff check app tests` → `All checks passed!`; focused route/API regressions → `107 passed` (기존 TestClient deprecation warning 1건).
