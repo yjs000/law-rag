@@ -4,5 +4,3 @@
 
 - [E-001 · Todo · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](0032-experiment-e-10-ai-answer-evaluation.md) — 다음 milestone: 재개 전 품질 원인 진단 범위를 선택
 - [F-001 · Todo · Feature — V3 LangGraph 에이전트 기본 골격](0055-v3-langgraph-agent-foundation.md) — 다음 milestone: v3 설계를 확인하고 미시작 태스크의 착수를 명시
-
-- [F-005 · Picked Up · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](0061-v2-llamaindex-framework-pipeline.md) — 다음 milestone: Task 1 generation/execution schema 착수
