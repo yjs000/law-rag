@@ -46,13 +46,19 @@ export async function runV2Execution(
   while (action !== "complete") {
     if (!KNOWN_ACTIONS.has(action)) throw new Error("알 수 없는 실행 다음 단계입니다.");
     const phase = action === "generate_core" ? "core" : "finalize";
-    const events = await stream(
-      deps.fetch(`${deps.apiUrl}/v2/question-executions/${encodeURIComponent(prepared.execution_id)}/${phase}`, {
-        method: "POST",
-        headers: deps.headers,
-        signal,
-      }),
-    );
+    const phaseUrl = `${deps.apiUrl}/v2/question-executions/${encodeURIComponent(prepared.execution_id)}/${phase}`;
+    const startPhase = () => stream(deps.fetch(phaseUrl, {
+      method: "POST",
+      headers: deps.headers,
+      signal,
+    }));
+    let events: SseEvent[];
+    try {
+      events = await startPhase();
+    } catch (error) {
+      if (signal?.aborted || error instanceof V2ExecutionHttpError) throw error;
+      events = await startPhase();
+    }
     for (const event of events) {
       if (event.event === "complete") return event.data.response as QuestionResponse;
       if (event.event === "error") throw new Error("답변 실행을 완료하지 못했습니다.");

@@ -32,4 +32,23 @@ describe("runV2Execution", () => {
       { fetch: fetch as typeof globalThis.fetch, apiUrl: "http://api", headers: {}, idempotencyKey: () => "key" },
     )).rejects.toThrow("알 수 없는");
   });
+
+  it("reconnects one interrupted phase without creating a second execution", async () => {
+    let coreAttempts = 0;
+    const fetch = async (url: string) => {
+      if (url.endsWith("/v2/question-executions")) return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      if (url.endsWith("/core")) {
+        coreAttempts += 1;
+        if (coreAttempts === 1) throw new TypeError("network interrupted");
+        return new Response(`event: complete\ndata: {"response":${JSON.stringify(response)}}\n\n`);
+      }
+      throw new Error("unexpected finalize");
+    };
+
+    await expect(runV2Execution(
+      { question: "질문", as_of_date: "2026-08-28", project_stage: "planning" },
+      { fetch: fetch as typeof globalThis.fetch, apiUrl: "http://api", headers: {}, idempotencyKey: () => "key" },
+    )).resolves.toEqual(response);
+    expect(coreAttempts).toBe(2);
+  });
 });
