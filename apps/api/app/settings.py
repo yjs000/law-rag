@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     question_embedding_timeout_seconds: float = Field(default=5, gt=0, le=30)
     retrieval_timeout_seconds: float = Field(default=8, gt=0, le=20)
     answer_timeout_seconds: float = Field(default=40, gt=0, le=52)
+    # v2 phase budget is separate from the preserved v1 52-second request budget.
+    v2_phase_timeout_seconds: float = Field(default=57, gt=2, le=59)
+    v2_provider_budget_seconds: float = Field(default=55, gt=0, le=57)
+    v2_provider_slots: int = Field(default=1, ge=1, le=100)
     # 배치/오프라인 스크립트가 32개 passage를 한 번에 임베딩할 때 쓰는 HTTP 타임아웃
     # (원래 값). 질문 하나를 라이브 요청 예산 안에서 임베딩할 때는
     # question_embedding_timeout_seconds(5초)를 대신 쓴다 - 두 용도가 다른 시간
@@ -91,6 +95,8 @@ class Settings(BaseSettings):
             self.question_request_timeout_seconds - self.response_reserve_seconds
         ):
             raise ValueError("answer timeout must fit before the response reserve")
+        if self.v2_provider_budget_seconds >= self.v2_phase_timeout_seconds:
+            raise ValueError("v2 provider budget must leave time to persist the phase result")
         if self.environment != "production":
             return self
         missing = [

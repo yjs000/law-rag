@@ -4,7 +4,6 @@ import type { AuthChangeEvent } from "@supabase/supabase-js";
 import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   askQuestion,
-  cancelQuestion,
   deleteAccount,
   deleteConversation,
   downloadPdf,
@@ -33,9 +32,9 @@ import {
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
 import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
-import { askQuestionWithRetry } from "../lib/generation-retry";
 import {
   appendPendingTurn,
+  applyLiveCoreSummary,
   completePendingTurn,
   conversationAnswerText,
   createChatSession,
@@ -75,6 +74,36 @@ const MODEL_LABELS: Record<AnswerPreference, string> = {
   terra: "AI답변",
   search_only: "기본검색",
 };
+
+function liveCoreResponse(
+  requestId: string,
+  summary: string,
+  citations: QuestionResponse["citations"],
+): QuestionResponse {
+  return {
+    request_id: requestId,
+    mode: "ai",
+    summary,
+    scope: "근거 검증을 마쳤습니다. 상세 설명을 생성 중입니다.",
+    sections: [],
+    checklist: [],
+    citations,
+    limitations: ["상세 답변은 같은 근거를 바탕으로 이어서 생성됩니다."],
+  };
+}
+
+function coreCitations(value: unknown): QuestionResponse["citations"] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((citation): citation is QuestionResponse["citations"][number] => (
+    typeof citation === "object" && citation !== null
+    && typeof (citation as { id?: unknown }).id === "string"
+    && typeof (citation as { document_title?: unknown }).document_title === "string"
+    && typeof (citation as { version_label?: unknown }).version_label === "string"
+    && typeof (citation as { path?: unknown }).path === "string"
+    && typeof (citation as { quote?: unknown }).quote === "string"
+    && typeof (citation as { source_url?: unknown }).source_url === "string"
+  ));
+}
 
 export function oauthRedirectMessage(search: string): string | null {
   const status = new URLSearchParams(search).get("auth");
@@ -330,7 +359,7 @@ export default function Home() {
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
   const authEpoch = useRef(0);
-  const activeRequest = useRef<{ id: string; controller: AbortController; attemptId?: string } | null>(null);
+  const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
 
@@ -550,7 +579,7 @@ export default function Home() {
     requestAnimationFrame(() => composer.current?.focus());
     const requestedAnswerMode = SEARCH_ONLY_ENABLED && terraUnavailable ? "search_only" : "terra";
     try {
-      const answer = await askQuestionWithRetry({
+      const answer = await askQuestion({
         client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
@@ -565,16 +594,13 @@ export default function Home() {
         ...(pending.rolledOver || !activeChat.confirmed
           ? {}
           : { conversation_id: activeChat.id }),
-      }, {
-        ask: askQuestion,
-        cancel: cancelQuestion,
-        nextClientRequestId: () => crypto.randomUUID(),
-        outerSignal: controller.signal,
-        onAttemptChange: (attemptId) => {
-          if (activeRequest.current?.id === requestId) {
-            activeRequest.current = { ...activeRequest.current, attemptId };
-          }
-        },
+      }, controller.signal, (event) => {
+        if (activeRequest.current?.id !== requestId || event.event !== "summary") return;
+        const summary = event.data.summary;
+        if (typeof summary !== "string" || !summary.trim()) return;
+        const core = liveCoreResponse(requestId, summary, coreCitations(event.data.citations));
+        setResult(core);
+        setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
       });
       if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer, SEARCH_ONLY_ENABLED);
@@ -621,7 +647,6 @@ export default function Home() {
   function stopGeneration() {
     const request = activeRequest.current;
     if (!request) return;
-    void cancelQuestion(request.attemptId ?? request.id).catch(() => undefined);
     request.controller.abort();
     setActiveChat((current) => stopPendingTurn(current, request.id));
     activeRequest.current = null;
@@ -806,7 +831,7 @@ export default function Home() {
                     {message.status === "pending" && <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div>}
                     {message.status === "stopped" && <p className="stopped-response">응답 대기를 중지했습니다.</p>}
                     {message.status === "error" && <p className="stopped-response">{message.error}</p>}
-                    {message.status === "complete" && message.response && previous?.role === "user" && <AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />}
+                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />}
                   </div></article>;
                 })}
                 {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}

@@ -13,6 +13,7 @@ from law_rag_core.domain.schemas import (
 )
 from law_rag_core.ports.repository import LegalRepository
 from law_rag_llamaindex.retriever import search as llamaindex_search
+from law_rag_llamaindex.retriever import search_index as llamaindex_search_index
 
 from app.domain.search_queries import SearchTrace
 
@@ -52,13 +53,19 @@ class LlamaIndexLegalRepository:
         생성해 검색 구현 경계를 유지한다.
         """
         started = perf_counter()
-        hits = await llamaindex_search(
-            self._vector_store,
-            self._embedder,
-            query,
-            as_of_date,
-            limit,
-        )
+        vector_store = self._vector_store
+        active = getattr(vector_store, "active", None)
+        if active is not None:
+            pinned = await active()
+            hits = await llamaindex_search_index(pinned.index, query, as_of_date, limit)
+        else:
+            hits = await llamaindex_search(
+                vector_store,
+                self._embedder,
+                query,
+                as_of_date,
+                limit,
+            )
         trace = SearchTrace(
             strategy="v2_llamaindex_dense",
             normalized_query=query,

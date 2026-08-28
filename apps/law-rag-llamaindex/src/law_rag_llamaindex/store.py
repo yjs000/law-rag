@@ -1,9 +1,11 @@
 """v2 LlamaIndex PostgreSQL vector store를 구성한다."""
 
 from llama_index.vector_stores.postgres import PGVectorStore
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from law_rag_llamaindex.config import Settings
+from law_rag_llamaindex.generations import RetrievalGeneration
 
 
 def build_vector_store(settings: Settings) -> PGVectorStore:
@@ -25,4 +27,29 @@ def build_vector_store(settings: Settings) -> PGVectorStore:
         hnsw_kwargs=settings.hnsw_kwargs,
         use_jsonb=True,
         perform_setup=True,
+    )
+
+
+def build_generation_vector_store(
+    settings: Settings,
+    generation: RetrievalGeneration,
+    *,
+    engine: Engine,
+    async_engine: AsyncEngine,
+    perform_setup: bool,
+) -> PGVectorStore:
+    """Open one server-derived generation table with caller-owned engines.
+
+    The caller is responsible for engine lifecycle. API reads pass
+    ``perform_setup=False`` so a request can never create a missing table.
+    """
+
+    return PGVectorStore(
+        table_name=generation.table_name,
+        embed_dim=settings.embed_dim,
+        hnsw_kwargs=settings.hnsw_kwargs,
+        use_jsonb=True,
+        perform_setup=perform_setup,
+        engine=engine,
+        async_engine=async_engine,
     )

@@ -40,24 +40,54 @@ async def search(
         )
     )
 
+    return _filter_hits(
+        zip(result.nodes or [], result.similarities or [], strict=True), as_of_date, limit
+    )
+
+
+async def search_index(index, query: str, as_of_date: date, limit: int) -> list[SearchHit]:
+    """Search a pinned ``VectorStoreIndex`` without a second API-owned embedding call."""
+
+    over_fetch = min(limit * 4, _OVER_FETCH_CAP)
+    filters = MetadataFilters(
+        filters=[
+            MetadataFilter(
+                key="effective_from",
+                value=as_of_date.isoformat(),
+                operator=FilterOperator.LTE,
+            )
+        ]
+    )
+    nodes = await index.as_retriever(
+        similarity_top_k=over_fetch, filters=filters
+    ).aretrieve(query)
+    return _filter_hits(((node.node, node.score) for node in nodes), as_of_date, limit)
+
+
+def _filter_hits(nodes, as_of_date: date, limit: int) -> list[SearchHit]:
+    """Map vector results and enforce temporal validity independent of store filters."""
+
     hits: list[SearchHit] = []
-    for node, similarity in zip(result.nodes or [], result.similarities or [], strict=True):
+    for node, similarity in nodes:
         metadata = node.metadata
-        hit = SearchHit(
-            provision_id=metadata["provision_id"],
-            document_id=metadata["document_id"],
-            document_title=metadata["document_title"],
-            source_kind=metadata["source_kind"],
-            version_label=metadata["version_label"],
-            effective_from=metadata["effective_from"],
-            effective_to=metadata["effective_to"],
-            path=metadata["path"],
-            heading=metadata["heading"],
-            content=metadata["content"],
-            source_url=metadata["source_url"],
-            score=similarity,
-            law_type_code=metadata["law_type_code"],
-        )
+        try:
+            hit = SearchHit(
+                provision_id=metadata["provision_id"],
+                document_id=metadata["document_id"],
+                document_title=metadata["document_title"],
+                source_kind=metadata["source_kind"],
+                version_label=metadata["version_label"],
+                effective_from=metadata["effective_from"],
+                effective_to=metadata["effective_to"],
+                path=metadata["path"],
+                heading=metadata["heading"],
+                content=metadata["content"],
+                source_url=metadata["source_url"],
+                score=similarity,
+                law_type_code=metadata["law_type_code"],
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
         if hit.effective_from is None or hit.effective_from > as_of_date:
             continue
         if hit.effective_to is not None and hit.effective_to <= as_of_date:

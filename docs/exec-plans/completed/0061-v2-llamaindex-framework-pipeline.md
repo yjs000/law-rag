@@ -1,5 +1,5 @@
 > 작업 ID: `F-005`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Feature`
 > 보조 라벨: `Data`, `Reliability`, `Security`, `Performance`
 > 선행 조건: 없음
@@ -166,9 +166,20 @@
 - Provider slots, lease TTL and pool size are intentionally measured configuration values—not assumed production constants.
 - Domain events/next actions originate in Task 4, persist in Task 5, coordinate in Task 6, stream in Task 7, and are consumed in Task 8.
 
-## Milestone review gates
+## 2026-08-28 milestone sequencing decision
 
-1. **Generation-based indexing and active pointer:** Tasks 1–3. Commit and review after an inactive generation can be verified and atomically published; no execution API change ships in this milestone.
-2. **question_execution persistence, transitions, and idempotency:** Tasks 4–5. Commit and review after owner isolation, phase replay, crash fail-closed behavior, and capacity leases have dedicated tests.
-3. **prepare/core/finalize API and grounded SSE:** Tasks 6–7. Freeze API contract tests before route replacement, then commit/review only when v1 regressions remain green.
-4. **Web state machine, load/reconnect, and operational verification:** Tasks 8–10. Commit/review web protocol and reliability contracts separately; record any unapproved hosted/DB checks as unverified rather than simulate success.
+사용자 지시에 따라 아래 순서가 이 계획의 Task 번호보다 우선한다.
+
+1. **Milestone 1 — generation 기반 색인·active pointer:** Task 2와 Task 3의 generation catalog, immutable index, active pointer/cache, pinned retrieval까지만 수행한다. `LegalRouterQueryEngine`의 execution별 context 연결은 phase API를 전제로 하므로 Milestone 3에서 수행한다. question_executions schema나 phase API는 포함하지 않는다.
+2. **Milestone 2 — question_execution 저장소·상태전이·멱등성:** 기존 Task 1의 execution 관련 migration과 Tasks 4–5를 수행한다. generation catalog migration은 Milestone 1의 publish 필요 최소 schema로 먼저 분리한다.
+3. **Milestone 3 — prepare/core/finalize API와 grounded SSE:** Tasks 6–7을 수행한다.
+4. **Milestone 4 — 웹 state machine, 부하·재연결·운영 검증:** Tasks 8–10을 수행한다.
+
+각 milestone은 focused tests, independent review, one-or-more scoped commits가 모두 끝난 뒤에만 다음 milestone으로 넘어간다.
+
+## 완료 기록 (2026-08-28)
+
+- Milestone 1~4를 구현하고 generation active pointer, execution 저장소·멱등성, prepare/core/finalize SSE, 웹 상태기계와 재연결·admission 계약을 완료했다.
+- 최종 보정은 generation 근거와 C번호의 동결, verified core 보존형 degraded 완료, 전송 단절/재연결의 authoritative task 소유권, lease 정리, 웹 즉시 인용 표시를 포함한다.
+- 검증: API `677 passed, 3 skipped`; LlamaIndex `69 passed, 2 skipped`; 웹 `95 passed`; 각 API·LlamaIndex Ruff, 웹 lint/typecheck 통과. hosted NVIDIA·운영 DB·실제 100 동시성은 승인된 환경이 없어 미검증으로 유지한다.
+- 독립 코드 리뷰에서 남은 Critical/High 없음 확인. 잔여 운영 검증은 배포 전 별도 Operations 범위에서 수행한다.

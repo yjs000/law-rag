@@ -71,6 +71,44 @@ def test_v2_search_returns_empty_list_when_ready(client: TestClient) -> None:
     assert response.json() == []
 
 
+def test_v2_search_resolves_the_active_generation_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    active_store = object()
+    active_index = object()
+    observed: dict[str, object] = {}
+
+    class ActiveProvider:
+        async def active(self):
+            return type("Pinned", (), {"store": active_store, "index": active_index})()
+
+    async def fake_ready() -> bool:
+        return True
+
+    async def fake_search(store, embedder, query, as_of_date, limit):
+        observed["store"] = store
+        return []
+
+    async def fake_index_search(index, query, as_of_date, limit):
+        observed["index"] = index
+        return []
+
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", ActiveProvider())
+    monkeypatch.setattr(main_module, "llamaindex_embedder", object())
+    monkeypatch.setattr(main_module, "_v2_index_ready", fake_ready)
+    monkeypatch.setattr(main_module, "llamaindex_search", fake_search)
+    monkeypatch.setattr(main_module, "llamaindex_search_index", fake_index_search)
+
+    response = TestClient(main_module.app).post(
+        "/v2/search", json={"query": "태양광", "as_of_date": "2026-01-01", "limit": 5}
+    )
+
+    assert response.status_code == 200
+    assert observed["index"] is active_index
+
+
 def test_v2_search_returns_503_with_stable_code_when_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -104,7 +142,7 @@ def test_v2_search_returns_503_when_resource_factory_fails(
     def fail_build(settings) -> object:
         raise RuntimeError("database credentials and DDL details must stay private")
 
-    monkeypatch.setattr(main_module, "build_llamaindex_vector_store", fail_build)
+    monkeypatch.setattr(main_module, "build_llamaindex_embedder", fail_build)
     main_module._build_llamaindex_resources.cache_clear()
     response = TestClient(main_module.app).post(
         "/v2/search", json={"query": "태양광", "as_of_date": "2026-01-01", "limit": 5}
@@ -118,9 +156,9 @@ def test_v2_search_returns_503_when_resource_factory_fails(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("latest_status", "expected_ready"),
-    [("completed", True), ("running", False), ("failed", False)],
+    [("active", True), ("building", False), ("failed", False)],
 )
-async def test_v2_readiness_depends_on_the_latest_ingestion_run(
+async def test_v2_readiness_depends_on_the_active_generation_pointer(
     monkeypatch: pytest.MonkeyPatch, latest_status: str, expected_ready: bool
 ) -> None:
     import app.main as main_module
@@ -132,8 +170,8 @@ async def test_v2_readiness_depends_on_the_latest_ingestion_run(
     class Connection:
         async def execute(self, statement):
             sql = str(statement)
-            assert "ORDER BY started_at DESC" in sql
-            assert "WHERE status='completed'" not in sql
+            assert "llamaindex_active_generation" in sql
+            assert "llamaindex_retrieval_generations" in sql
             return Result()
 
     class Engine:

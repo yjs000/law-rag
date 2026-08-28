@@ -6,15 +6,42 @@ from llama_index.core.schema import TextNode
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from law_rag_llamaindex.generations import (
+    GenerationCatalog,
+    GenerationSource,
+    provision_fingerprint,
+)
 from law_rag_llamaindex.ingest import (
     _async_database_url,
+    _sync_database_url,
     build_nodes,
     changed_provision_ids,
+    copy_generation_vectors,
     existing_hashes,
     main,
+    run_generation_ingestion,
+    run_generation_pipeline,
     run_ingestion,
+    verify_generation_vectors,
 )
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
+
+
+@pytest.fixture(autouse=True)
+def _replace_physical_generation_verifier(monkeypatch):
+    async def verifier(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr("law_rag_llamaindex.ingest.verify_generation_vectors", verifier)
+
+    def pipeline(provisions, embedder):
+        nodes = build_nodes(provisions)
+        embeddings = embedder.get_text_embedding_batch([node.text for node in nodes])
+        for node, embedding in zip(nodes, embeddings, strict=True):
+            node.embedding = embedding
+        return nodes
+
+    monkeypatch.setattr("law_rag_llamaindex.ingest.run_generation_pipeline", pipeline)
 
 
 def _record(provision_id: str, content: str) -> dict:
@@ -60,6 +87,29 @@ def test_build_nodes_sets_id_text_and_metadata():
     assert "source_text_sha256" in node.metadata
 
 
+def test_generation_pipeline_computes_embeddings_without_vector_or_docstore(monkeypatch):
+    observed: dict[str, object] = {}
+
+    class Pipeline:
+        def __init__(self, *, transformations):
+            observed["transformations"] = transformations
+
+        def run(self, *, nodes):
+            observed["nodes"] = nodes
+            for node in nodes:
+                node.embedding = [0.1, 0.2]
+            return nodes
+
+    embedder = object()
+    monkeypatch.setattr("law_rag_llamaindex.ingest.IngestionPipeline", Pipeline)
+
+    nodes = run_generation_pipeline([_record("a", "본문 A")], embedder)
+
+    assert observed["transformations"] == [embedder]
+    assert len(nodes) == 1
+    assert nodes[0].embedding == [0.1, 0.2]
+
+
 class _ConnectionContext:
     async def __aenter__(self):
         return self
@@ -94,6 +144,58 @@ class _Engine:
 
     def connect(self):
         return self._connection
+
+
+class _CopyResult:
+    rowcount = 2
+
+
+class _CopyConnection(_ConnectionContext):
+    def __init__(self) -> None:
+        self.statement = None
+        self.parameters = None
+
+    async def execute(self, statement, parameters):
+        self.statement = statement
+        self.parameters = parameters
+        return _CopyResult()
+
+
+class _CopyEngine:
+    def __init__(self, connection: _CopyConnection) -> None:
+        self.connection = connection
+
+    def begin(self):
+        return self.connection
+
+
+class _VerificationResult:
+    def __init__(self, row: dict[str, int]) -> None:
+        self.row = row
+
+    def mappings(self):
+        return self
+
+    def one(self):
+        return self.row
+
+
+class _VerificationConnection(_ConnectionContext):
+    def __init__(self, row: dict[str, int]) -> None:
+        self.row = row
+        self.statement = None
+
+    async def execute(self, statement):
+        self.statement = statement
+        return _VerificationResult(self.row)
+
+
+class _VerificationEngine:
+    def __init__(self, connection: _VerificationConnection) -> None:
+        self.connection = connection
+
+    def connect(self):
+        return self.connection
 
 
 class _LifecycleResult:
@@ -159,9 +261,235 @@ class _VectorStore:
             raise self.error
 
 
+class _GenerationRepository:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.catalog = GenerationCatalog()
+
+    async def start(self, source_fingerprint: str, transform_fingerprint: str):
+        self.events.append("generation-start")
+        return self.catalog.start(source_fingerprint, transform_fingerprint)
+
+    async def verify(self, generation_id, *, source_count: int, node_count: int) -> None:
+        self.events.append("generation-verify")
+        self.catalog.verify(generation_id, source_count=source_count, node_count=node_count)
+
+    async def record_sources(self, generation_id, sources) -> None:
+        self.events.append("generation-record-sources")
+        assert [source["provision_id"] for source in sources] == ["a"]
+
+    async def active(self):
+        return self.catalog.active()
+
+    async def sources(self, generation_id):
+        return []
+
+    async def publish(self, generation_id) -> None:
+        self.events.append("generation-publish")
+        self.catalog.publish(generation_id)
+
+    async def fail(self, generation_id, failure_code: str) -> None:
+        self.events.append(f"generation-fail:{failure_code}")
+        self.catalog.fail(generation_id, failure_code)
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_publishes_only_after_vector_write(monkeypatch):
+    events: list[str] = []
+    repository = _GenerationRepository(events)
+    vector_store = _VectorStore(events)
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: vector_store,
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.total_provisions == 1
+    assert result.embedded_count == 1
+    assert events.index("generation-start") < events.index("vector-write")
+    assert events.index("vector-write") < events.index("generation-verify")
+    assert events.index("vector-write") < events.index("generation-record-sources")
+    assert events.index("generation-record-sources") < events.index("generation-verify")
+    assert events.index("generation-verify") < events.index("generation-publish")
+    assert repository.catalog.active() is not None
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_marks_candidate_failed_without_active_pointer(monkeypatch):
+    events: list[str] = []
+    repository = _GenerationRepository(events)
+    vector_store = _VectorStore(events, error=RuntimeError("vector write failed"))
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+
+    with pytest.raises(RuntimeError, match="vector write failed"):
+        await run_generation_ingestion(
+            object(),
+            repository,
+            lambda _generation: vector_store,
+            _Embedder(),
+            transform_fingerprint="a" * 64,
+        )
+
+    assert "generation-publish" not in events
+    assert "generation-fail:vector_write_failed" in events
+    assert repository.catalog.active() is None
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_copies_unchanged_vectors_from_active_generation(
+    monkeypatch,
+):
+    events: list[str] = []
+
+    class RepositoryWithActiveSource(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "a" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+            self.active_generation = active
+            self.active_source = GenerationSource(
+                provision_id="a", source_fingerprint="", node_count=1
+            )
+
+        async def sources(self, generation_id):
+            return [
+                GenerationSource(
+                    provision_id="a",
+                    source_fingerprint=self.active_source.source_fingerprint,
+                    node_count=1,
+                )
+            ]
+
+    repository = RepositoryWithActiveSource(events)
+    provision = _record("a", "본문 A")
+    repository.active_source = GenerationSource(
+        provision_id="a",
+        source_fingerprint=provision_fingerprint(provision),
+        node_count=1,
+    )
+    copied: dict[str, object] = {}
+
+    async def copy_vectors(engine, source_table, target_table, node_ids):
+        copied.update(source_table=source_table, target_table=target_table, node_ids=node_ids)
+        return len(node_ids)
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions",
+        lambda _engine: _single_provision(events, provision),
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", copy_vectors)
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: _VectorStore(events),
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.embedded_count == 0
+    assert result.skipped_count == 1
+    assert copied["source_table"] == repository.active_generation.table_name
+    assert copied["node_ids"] == ["a"]
+    assert repository.catalog.active().node_count == 1
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_reembeds_when_transform_changes(monkeypatch):
+    events: list[str] = []
+
+    class RepositoryWithDifferentTransform(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "b" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+
+    repository = RepositoryWithDifferentTransform(events)
+
+    async def fail_copy(*args, **kwargs):
+        raise AssertionError("a transform change must force re-embedding")
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", fail_copy)
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: _VectorStore(events),
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.embedded_count == 1
+    assert result.skipped_count == 0
+    assert "vector-write" in events
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_rejects_partial_vector_copy(monkeypatch):
+    events: list[str] = []
+
+    class RepositoryWithActiveSource(_GenerationRepository):
+        def __init__(self, events: list[str]) -> None:
+            super().__init__(events)
+            active = self.catalog.start("old-source", "a" * 64)
+            self.catalog.verify(active.id, source_count=1, node_count=1)
+            self.catalog.publish(active.id)
+            self.active_generation = active
+
+        async def sources(self, generation_id):
+            return [
+                GenerationSource(
+                    provision_id="a",
+                    source_fingerprint=provision_fingerprint(provision),
+                    node_count=1,
+                )
+            ]
+
+    provision = _record("a", "본문 A")
+    repository = RepositoryWithActiveSource(events)
+
+    async def partial_copy(*args, **kwargs):
+        return 0
+
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions",
+        lambda _engine: _single_provision(events, provision),
+    )
+    monkeypatch.setattr("law_rag_llamaindex.ingest.copy_generation_vectors", partial_copy)
+
+    with pytest.raises(ValueError, match="copied vector count"):
+        await run_generation_ingestion(
+            object(),
+            repository,
+            lambda _generation: _VectorStore(events),
+            _Embedder(),
+            transform_fingerprint="a" * 64,
+        )
+
+    assert "generation-fail:vector_copy_failed" in events
+
+
 async def _provisions(events: list[str]) -> list[dict]:
     events.append("retrieve")
     return [_record("a", "본문 A")]
+
+
+async def _single_provision(events: list[str], provision: dict) -> list[dict]:
+    events.append("retrieve")
+    return [provision]
 
 
 @pytest.mark.asyncio
@@ -262,6 +590,56 @@ async def test_existing_hashes_distinguishes_missing_table_from_query_failure():
         await existing_hashes(failing_query_engine, "law_rag_llamaindex")
 
 
+@pytest.mark.asyncio
+async def test_copy_generation_vectors_uses_allowlisted_tables_and_bound_node_ids():
+    connection = _CopyConnection()
+    source = "law_rag_li_12345678123456781234567812345678"
+    target = "law_rag_li_87654321876543218765432187654321"
+
+    copied = await copy_generation_vectors(_CopyEngine(connection), source, target, ["a", "b"])
+
+    assert copied == 2
+    assert f'INSERT INTO "data_{target}"' in connection.statement.text
+    assert f'FROM "data_{source}"' in connection.statement.text
+    assert connection.parameters == {"node_ids": ["a", "b"]}
+    with pytest.raises(ValueError, match="allowlisted"):
+        await copy_generation_vectors(_CopyEngine(connection), "untrusted", target, ["a"])
+
+
+@pytest.mark.asyncio
+async def test_verify_generation_vectors_rejects_incomplete_physical_generation():
+    generation = GenerationCatalog().start("a" * 64, "b" * 64)
+    connection = _VerificationConnection(
+        {
+            "node_count": 1,
+            "distinct_node_count": 1,
+            "source_count": 1,
+            "invalid_metadata_count": 0,
+        }
+    )
+
+    await verify_generation_vectors(
+        _VerificationEngine(connection), generation, source_count=1, node_count=1
+    )
+    assert "count(DISTINCT node_id)" in connection.statement.text
+    with pytest.raises(ValueError, match="source coverage"):
+        await verify_generation_vectors(
+            _VerificationEngine(
+                _VerificationConnection(
+                    {
+                        "node_count": 1,
+                        "distinct_node_count": 1,
+                        "source_count": 0,
+                        "invalid_metadata_count": 0,
+                    }
+                )
+            ),
+            generation,
+            source_count=1,
+            node_count=1,
+        )
+
+
 pytestmark_db = pytest.mark.skipif(
     not os.environ.get("DATABASE_URL"), reason="requires a live Postgres DATABASE_URL"
 )
@@ -302,6 +680,17 @@ def test_async_database_url_adds_asyncpg_driver_to_plain_postgresql_url():
 def test_async_database_url_leaves_asyncpg_url_unchanged():
     url = "postgresql+asyncpg://user:pass@host:5432/db"
     assert _async_database_url(url) == url
+
+
+def test_sync_database_url_uses_psycopg_for_plain_or_asyncpg_urls():
+    assert (
+        _sync_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        _sync_database_url("postgresql+asyncpg://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
 
 
 @pytest.mark.asyncio

@@ -9,14 +9,10 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 없다. 다음 진입점은 [E-001 · 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)이며, 이후 우선순위는 [docs/ROADMAP.md](ROADMAP.md)에서 확인한다. 로드맵은 세션 시작용 얇은 색인이며 모든 실행계획을 읽으라는 뜻이 아니다.
+현재 `Picked Up` milestone은 없다. F-005 V2 LlamaIndex 프레임워크 파이프라인은 완료됐으며, 다음 진입점은 [E-001 · 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md)이다. 이후 우선순위는 [docs/ROADMAP.md](ROADMAP.md)에서 확인한다. 로드맵은 세션 시작용 얇은 색인이며 모든 실행계획을 읽으라는 뜻이 아니다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
-구현 전인 최신 승인 설계는
-[V2 LlamaIndex 프레임워크 파이프라인 개편](design-docs/v2-llamaindex-framework-redesign.md)이며,
-generation 색인·framework Router/QueryEngine/ResponseSynthesizer·서버 authoritative
-`question_execution` 기반 prepare/core/finalize 3단계 API·문장별 grounding SSE를 다음 구현 후보로
-기록한다. 현재 코드가 이미 이 구조로 동작한다는 뜻은 아니다.
+최근 완료된 구현은 [V2 LlamaIndex 프레임워크 파이프라인 개편](exec-plans/completed/0061-v2-llamaindex-framework-pipeline.md)이다. generation 색인·active pointer, 서버 authoritative `question_execution` 기반 prepare/core/finalize API·grounded SSE와 웹 phase 상태기계를 검증했다.
 
 ## 언제 더 읽어야 하는가
 

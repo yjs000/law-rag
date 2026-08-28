@@ -23,7 +23,7 @@ export type UserChatMessage = MessageBase & {
 export type AssistantChatMessage = MessageBase & {
   role: "assistant";
   requestId: string;
-  status: "pending" | "complete" | "stopped" | "error";
+  status: "pending" | "streaming" | "complete" | "stopped" | "error";
   response?: QuestionResponse;
   error?: string;
 };
@@ -230,15 +230,27 @@ export function completePendingTurn(
   requestId: string,
   response: QuestionResponse,
 ): ChatSession {
-  return updatePendingAssistant(session, requestId, (message) => ({
+  return updateActiveAssistant(session, requestId, (message) => ({
     ...message,
     status: "complete",
     response,
   }));
 }
 
+export function applyLiveCoreSummary(
+  session: ChatSession,
+  requestId: string,
+  response: QuestionResponse,
+): ChatSession {
+  return updateActiveAssistant(session, requestId, (message) => ({
+    ...message,
+    status: "streaming",
+    response,
+  }));
+}
+
 export function stopPendingTurn(session: ChatSession, requestId: string): ChatSession {
-  return updatePendingAssistant(session, requestId, (message) => ({
+  return updateActiveAssistant(session, requestId, (message) => ({
     ...message,
     status: "stopped",
   }));
@@ -249,14 +261,14 @@ export function failPendingTurn(
   requestId: string,
   error: string,
 ): ChatSession {
-  return updatePendingAssistant(session, requestId, (message) => ({
+  return updateActiveAssistant(session, requestId, (message) => ({
     ...message,
     status: "error",
     error,
   }));
 }
 
-function updatePendingAssistant(
+function updateActiveAssistant(
   session: ChatSession,
   requestId: string,
   update: (message: AssistantChatMessage) => AssistantChatMessage,
@@ -265,7 +277,7 @@ function updatePendingAssistant(
     (message) =>
       message.role === "assistant"
       && message.requestId === requestId
-      && message.status === "pending",
+      && (message.status === "pending" || message.status === "streaming"),
   );
   if (index < 0) return session;
   const messages = [...session.messages];

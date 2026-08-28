@@ -3,10 +3,6 @@
 공통 프로젝트의 현재 작업 진입점입니다. 상세 범위·결정·검증은 연결된 실행계획이 권위 문서이며,
 실행계획 작성 전인 승인 설계는 연결된 설계 문서를 따릅니다.
 
-## Picked Up
-
-- [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](exec-plans/active/0061-v2-llamaindex-framework-pipeline.md) — generation별 색인·authoritative execution·prepare/core/finalize API 구현을 시작
-
 ## Todo
 
 - [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 품질 원인 진단 범위를 선택
@@ -31,6 +27,7 @@
 
 ## Done
 
+- [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](exec-plans/completed/0061-v2-llamaindex-framework-pipeline.md) — generation별 색인·authoritative execution·prepare/core/finalize API와 웹 phase 상태기계를 완료
 - [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/completed/0059-task-management-metadata-and-roadmap.md) — 작업 관리 계약, 현재 계획 메타데이터, 상태 색인을 완료
 - [D-010 · Feature — 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) — 라우터와 실패 응답 계약을 완료
 - [0056: Python docstring과 Ruff D 규칙](exec-plans/completed/0056-python-docstrings-and-ruff-d.md) — 문서화 규칙을 정비
