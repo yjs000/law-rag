@@ -22,7 +22,8 @@ def upgrade() -> None:
           generation_id uuid NOT NULL
             REFERENCES llamaindex_retrieval_generations(generation_id),
           status text NOT NULL CHECK(status IN (
-            'prepared','core_running','finalize_running','completed','failed','cancelled','expired'
+            'prepared','core_running','core_answered','core_repair_required',
+            'finalize_running','phase_recovery_required','completed','failed','cancelled','expired'
           )),
           version integer NOT NULL DEFAULT 0 CHECK(version >= 0),
           private_payload jsonb NOT NULL DEFAULT '{}'::jsonb,

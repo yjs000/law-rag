@@ -300,6 +300,9 @@ def test_v2_question_execution_migration_has_idempotency_events_and_capacity_lea
     assert "CREATE TABLE question_executions" in sql
     assert "UNIQUE(owner_scope,prepare_idempotency_key)" in sql
     assert "generation_id uuid NOT NULL" in sql
+    assert "'core_answered'" in sql
+    assert "'core_repair_required'" in sql
+    assert "'phase_recovery_required'" in sql
     assert "version integer NOT NULL DEFAULT 0" in sql
     assert "CREATE TABLE question_execution_events" in sql
     assert "UNIQUE(execution_id,phase,sequence)" in sql
