@@ -5,6 +5,7 @@ import pytest
 from law_rag_llamaindex.generations import (
     GenerationCatalog,
     GenerationStateError,
+    PostgresGenerationRepository,
     generation_table_name,
     provision_fingerprint,
     source_fingerprint,
@@ -102,3 +103,54 @@ def test_transform_fingerprint_changes_for_embedding_or_chunker_contract() -> No
         embedding_model="other-model",
         embed_dim=2048,
     )
+
+
+class _Result:
+    def __init__(self, generation_id: UUID) -> None:
+        self._generation_id = generation_id
+
+    def scalar_one(self) -> UUID:
+        return self._generation_id
+
+
+class _Connection:
+    def __init__(self, generation_id: UUID) -> None:
+        self.generation_id = generation_id
+        self.statements: list[tuple[str, dict[str, object]]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        return None
+
+    async def execute(self, query, parameters):
+        self.statements.append((query.text, parameters))
+        return _Result(self.generation_id)
+
+
+class _Engine:
+    def __init__(self, connection: _Connection) -> None:
+        self.connection = connection
+
+    def begin(self) -> _Connection:
+        return self.connection
+
+
+@pytest.mark.asyncio
+async def test_postgres_catalog_publishes_verified_generation_and_pointer_atomically() -> None:
+    generation_id = UUID("12345678-1234-5678-1234-567812345678")
+    connection = _Connection(generation_id)
+    repository = PostgresGenerationRepository(_Engine(connection))
+
+    generation = await repository.start("a" * 64, "b" * 64, generation_id=generation_id)
+    await repository.verify(generation.id, source_count=2, node_count=3)
+    await repository.publish(generation.id)
+
+    sql = "\n".join(statement for statement, _ in connection.statements)
+    assert generation.table_name == "law_rag_li_12345678123456781234567812345678"
+    assert "INSERT INTO llamaindex_retrieval_generations" in sql
+    assert "WHERE generation_id = :generation_id AND status = 'building'" in sql
+    assert "WHERE generation_id = :generation_id AND status = 'verified'" in sql
+    assert "status = 'rollback'" in sql
+    assert "ON CONFLICT(singleton) DO UPDATE" in sql

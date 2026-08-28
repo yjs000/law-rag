@@ -12,6 +12,9 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 
 class GenerationStateError(ValueError):
     """Raised when a generation transition would violate the publish contract."""
@@ -183,3 +186,109 @@ class GenerationCatalog:
         """Return the active generation, if any has been published."""
 
         return self.get(self._active_id) if self._active_id is not None else None
+
+
+class PostgresGenerationRepository:
+    """Persist generation transitions using short, caller-owned transactions."""
+
+    def __init__(self, engine: AsyncEngine) -> None:
+        self._engine = engine
+
+    async def start(
+        self,
+        source_fingerprint: str,
+        transform_fingerprint: str,
+        *,
+        generation_id: UUID | None = None,
+    ) -> RetrievalGeneration:
+        """Create an unpublished generation catalog row."""
+
+        identifier = generation_id or uuid4()
+        generation = RetrievalGeneration(
+            id=identifier,
+            table_name=generation_table_name(identifier),
+            source_fingerprint=source_fingerprint,
+            transform_fingerprint=transform_fingerprint,
+            status="building",
+            source_count=None,
+            node_count=None,
+            failure_code=None,
+            created_at=datetime.now(UTC),
+            verified_at=None,
+            published_at=None,
+        )
+        query = text(
+            """
+            INSERT INTO llamaindex_retrieval_generations (
+              generation_id,physical_table_name,source_fingerprint,transform_fingerprint,status
+            ) VALUES (
+              :generation_id,:table_name,:source_fingerprint,:transform_fingerprint,'building'
+            )
+            """
+        )
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                query,
+                {
+                    "generation_id": generation.id,
+                    "table_name": generation.table_name,
+                    "source_fingerprint": source_fingerprint,
+                    "transform_fingerprint": transform_fingerprint,
+                },
+            )
+        return generation
+
+    async def verify(self, generation_id: UUID, *, source_count: int, node_count: int) -> None:
+        """Mark a fully validated candidate eligible for atomic publication."""
+
+        query = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'verified', source_count = :source_count, node_count = :node_count,
+                verified_at = now()
+            WHERE generation_id = :generation_id AND status = 'building'
+            RETURNING generation_id
+            """
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.execute(
+                query,
+                {
+                    "generation_id": generation_id,
+                    "source_count": source_count,
+                    "node_count": node_count,
+                },
+            )
+            result.scalar_one()
+
+    async def publish(self, generation_id: UUID) -> None:
+        """Switch active pointer only if the candidate has been verified."""
+
+        activate = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'active', published_at = now()
+            WHERE generation_id = :generation_id AND status = 'verified'
+            RETURNING generation_id
+            """
+        )
+        retire_previous = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'rollback'
+            WHERE status = 'active' AND generation_id <> :generation_id
+            """
+        )
+        pointer = text(
+            """
+            INSERT INTO llamaindex_active_generation (singleton,generation_id,updated_at)
+            VALUES (true,:generation_id,now())
+            ON CONFLICT(singleton) DO UPDATE
+            SET generation_id = excluded.generation_id, updated_at = excluded.updated_at
+            """
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.execute(activate, {"generation_id": generation_id})
+            result.scalar_one()
+            await connection.execute(retire_previous, {"generation_id": generation_id})
+            await connection.execute(pointer, {"generation_id": generation_id})
