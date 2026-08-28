@@ -170,7 +170,7 @@
 
 사용자 지시에 따라 아래 순서가 이 계획의 Task 번호보다 우선한다.
 
-1. **Milestone 1 — generation 기반 색인·active pointer:** Task 2와 Task 3만 수행한다. question_executions schema나 phase API는 포함하지 않는다.
+1. **Milestone 1 — generation 기반 색인·active pointer:** Task 2와 Task 3의 generation catalog, immutable index, active pointer/cache, pinned retrieval까지만 수행한다. `LegalRouterQueryEngine`의 execution별 context 연결은 phase API를 전제로 하므로 Milestone 3에서 수행한다. question_executions schema나 phase API는 포함하지 않는다.
 2. **Milestone 2 — question_execution 저장소·상태전이·멱등성:** 기존 Task 1의 execution 관련 migration과 Tasks 4–5를 수행한다. generation catalog migration은 Milestone 1의 publish 필요 최소 schema로 먼저 분리한다.
 3. **Milestone 3 — prepare/core/finalize API와 grounded SSE:** Tasks 6–7을 수행한다.
 4. **Milestone 4 — 웹 state machine, 부하·재연결·운영 검증:** Tasks 8–10을 수행한다.

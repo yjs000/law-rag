@@ -24,6 +24,7 @@ from law_rag_llamaindex.store import build_generation_vector_store
 from llama_index.core import VectorStoreIndex
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_repository import repository as memory_repository
@@ -117,8 +118,10 @@ def _build_llamaindex_resources(
         return None
 
     embedder = build_llamaindex_embedder(llamaindex_settings)
-    async_engine = create_async_engine(_llamaindex_async_database_url(database_url))
-    sync_engine = create_engine(_llamaindex_sync_database_url(database_url))
+    async_engine = create_async_engine(
+        _llamaindex_async_database_url(database_url), poolclass=NullPool
+    )
+    sync_engine = create_engine(_llamaindex_sync_database_url(database_url), poolclass=NullPool)
 
     async def close_engines() -> None:
         sync_engine.dispose()

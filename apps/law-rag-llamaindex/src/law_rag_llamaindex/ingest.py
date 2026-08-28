@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from llama_index.core.schema import TextNode
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from law_rag_llamaindex.generations import (
     generation_source_records,
@@ -369,8 +370,8 @@ async def main() -> None:
     if not settings.nvidia_api_key:
         raise SystemExit("NVIDIA_API_KEY is not configured")
 
-    engine = create_async_engine(_async_database_url(settings.database_url))
-    sync_engine = create_engine(_sync_database_url(settings.database_url))
+    engine = create_async_engine(_async_database_url(settings.database_url), poolclass=NullPool)
+    sync_engine = create_engine(_sync_database_url(settings.database_url), poolclass=NullPool)
     try:
         embedder = build_embedder(settings)
         result = await run_generation_ingestion(
