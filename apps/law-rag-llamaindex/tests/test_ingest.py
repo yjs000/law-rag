@@ -175,6 +175,10 @@ class _GenerationRepository:
         self.events.append("generation-verify")
         self.catalog.verify(generation_id, source_count=source_count, node_count=node_count)
 
+    async def record_sources(self, generation_id, sources) -> None:
+        self.events.append("generation-record-sources")
+        assert [source["provision_id"] for source in sources] == ["a"]
+
     async def publish(self, generation_id) -> None:
         self.events.append("generation-publish")
         self.catalog.publish(generation_id)
@@ -205,6 +209,8 @@ async def test_run_generation_ingestion_publishes_only_after_vector_write(monkey
     assert result.embedded_count == 1
     assert events.index("generation-start") < events.index("vector-write")
     assert events.index("vector-write") < events.index("generation-verify")
+    assert events.index("vector-write") < events.index("generation-record-sources")
+    assert events.index("generation-record-sources") < events.index("generation-verify")
     assert events.index("generation-verify") < events.index("generation-publish")
     assert repository.catalog.active() is not None
 

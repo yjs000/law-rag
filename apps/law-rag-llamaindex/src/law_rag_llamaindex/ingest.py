@@ -5,7 +5,7 @@ from llama_index.core.schema import TextNode
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from law_rag_llamaindex.generations import source_fingerprint
+from law_rag_llamaindex.generations import generation_source_records, source_fingerprint
 from law_rag_llamaindex.passage import (
     ProvisionRecord,
     build_node_metadata,
@@ -179,6 +179,11 @@ async def run_generation_ingestion(
             node.embedding = embedding
         stage = "vector_write"
         vector_store_for_generation(generation).add(nodes)
+        stage = "generation_source_lineage"
+        node_counts = {str(node.id_): 1 for node in nodes}
+        await generation_repository.record_sources(
+            generation.id, generation_source_records(provisions, node_counts=node_counts)
+        )
         stage = "generation_verify"
         await generation_repository.verify(
             generation.id, source_count=len(provisions), node_count=len(nodes)

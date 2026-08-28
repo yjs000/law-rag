@@ -81,6 +81,27 @@ def source_fingerprint(records: Iterable[Mapping[str, object]]) -> str:
     return _sha256_json(sorted(entries, key=lambda entry: entry["provision_id"]))
 
 
+def generation_source_records(
+    records: Iterable[Mapping[str, object]], *, node_counts: Mapping[str, int]
+) -> list[dict[str, object]]:
+    """Return one auditable source-lineage row for each provision in a generation."""
+
+    sources = []
+    for record in records:
+        provision_id = str(record["provision_id"])
+        node_count = node_counts.get(provision_id)
+        if node_count is None or node_count < 0:
+            raise ValueError("each generation source requires a non-negative node count")
+        sources.append(
+            {
+                "provision_id": provision_id,
+                "source_fingerprint": provision_fingerprint(record),
+                "node_count": node_count,
+            }
+        )
+    return sources
+
+
 def transform_fingerprint(
     *, chunker_version: str, embedding_provider: str, embedding_model: str, embed_dim: int
 ) -> str:
@@ -260,6 +281,33 @@ class PostgresGenerationRepository:
                 },
             )
             result.scalar_one()
+
+    async def record_sources(
+        self, generation_id: UUID, sources: Iterable[Mapping[str, object]]
+    ) -> None:
+        """Persist the source lineage that was written into a candidate generation."""
+
+        query = text(
+            """
+            INSERT INTO llamaindex_generation_sources (
+              generation_id,provision_id,source_fingerprint,node_count
+            ) VALUES (
+              :generation_id,:provision_id,:source_fingerprint,:node_count
+            )
+            ON CONFLICT(generation_id,provision_id) DO NOTHING
+            """
+        )
+        async with self._engine.begin() as connection:
+            for source in sources:
+                await connection.execute(
+                    query,
+                    {
+                        "generation_id": generation_id,
+                        "provision_id": source["provision_id"],
+                        "source_fingerprint": source["source_fingerprint"],
+                        "node_count": source["node_count"],
+                    },
+                )
 
     async def publish(self, generation_id: UUID) -> None:
         """Switch active pointer only if the candidate has been verified."""

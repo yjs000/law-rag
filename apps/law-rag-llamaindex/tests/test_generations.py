@@ -157,6 +157,32 @@ async def test_postgres_catalog_publishes_verified_generation_and_pointer_atomic
 
 
 @pytest.mark.asyncio
+async def test_postgres_catalog_records_each_generation_source_before_verification() -> None:
+    generation_id = UUID("12345678-1234-5678-1234-567812345678")
+    connection = _Connection(generation_id)
+    repository = PostgresGenerationRepository(_Engine(connection))
+
+    await repository.record_sources(
+        generation_id,
+        [
+            {"provision_id": "a", "source_fingerprint": "a" * 64, "node_count": 1},
+            {"provision_id": "b", "source_fingerprint": "b" * 64, "node_count": 2},
+        ],
+    )
+
+    assert len(connection.statements) == 2
+    sql, parameters = connection.statements[0]
+    assert "INSERT INTO llamaindex_generation_sources" in sql
+    assert "ON CONFLICT(generation_id,provision_id) DO NOTHING" in sql
+    assert parameters == {
+        "generation_id": generation_id,
+        "provision_id": "a",
+        "source_fingerprint": "a" * 64,
+        "node_count": 1,
+    }
+
+
+@pytest.mark.asyncio
 async def test_postgres_catalog_records_failure_without_touching_active_pointer() -> None:
     generation_id = UUID("12345678-1234-5678-1234-567812345678")
     connection = _Connection(generation_id)
