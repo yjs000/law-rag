@@ -76,3 +76,8 @@ class NvidiaNimQuestionRouter:
             reason=parsed.reason,
             missing_fields=tuple(parsed.missing_fields),
         )
+
+    async def aclose(self) -> None:
+        """Release the process-owned NVIDIA HTTP client."""
+
+        await self.client.close()

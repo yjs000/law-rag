@@ -815,3 +815,6 @@ v2는 다음 호환성 변경을 의도적으로 수용한다.
   `Idempotency-Key`로 같은 execution을 반환한다.
 - 2026-08-27: human-in-the-loop, realtime/attachment tool, agent workflow와 generation별 HNSW
   성능평가는 다음 목표로 분리한다.
+- 2026-08-28: v1/v2 transport 분리, composition root의 명시적 의존성 주입, LlamaIndex의
+  generation·ingestion·query stage package는 가독성을 위한 모듈 경계다. 기존 v1/v2 HTTP 계약과
+  파이프라인 동작을 바꾸지 않으며, v1은 계속 LlamaIndex와 generation table을 직접 사용하지 않는다.

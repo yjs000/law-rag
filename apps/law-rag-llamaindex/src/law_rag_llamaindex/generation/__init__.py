@@ -1,8 +1,4 @@
-"""Backward-compatible imports for the v2 generation catalog.
-
-New code should import from :mod:`law_rag_llamaindex.generation`.  This facade keeps the
-pre-refactor module path stable for the API and downstream scripts.
-"""
+"""Generation catalog models, persistence and publication policy."""
 
 from law_rag_llamaindex.generation.models import (
     GenerationSource,

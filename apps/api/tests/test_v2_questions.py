@@ -39,3 +39,15 @@ def test_v2_repository_does_not_request_legacy_query_embedding() -> None:
     assert main_module._requires_legacy_query_embedding(
         LlamaIndexLegalRepository(MagicMock(), object(), object())
     ) is False
+
+
+def test_v1_retrieval_uses_the_injected_query_embedding_capability() -> None:
+    """Prevent a v1 retrieval path from recognizing framework adapter classes."""
+
+    from app.application.v1.retrieval import requires_legacy_query_embedding
+
+    class ActiveIndexCapability:
+        def requires_application_query_embedding(self) -> bool:
+            return False
+
+    assert requires_legacy_query_embedding(ActiveIndexCapability()) is False

@@ -68,6 +68,11 @@ class NvidiaNimEmbedder:
             raise ValueError("NVIDIA NIM returned invalid embedding indexes")
         return [self._slice_and_normalize(item.embedding) for item in ordered]
 
+    async def aclose(self) -> None:
+        """Release the process-owned NVIDIA HTTP client."""
+
+        await self.client.close()
+
     def _slice_and_normalize(self, embedding: list[float]) -> list[float]:
         if len(embedding) != NATIVE_DIMENSIONS:
             raise ValueError("NVIDIA NIM returned an unexpected embedding dimension")

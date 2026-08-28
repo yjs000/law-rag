@@ -27,6 +27,7 @@
 
 ## Done
 
+- [F-005-R · Refactor — V2 LlamaIndex 가독성 중심 개편](exec-plans/completed/0063-f005-v2-readability-refactor.md) — LlamaIndex stage, composition root, v1/v2 transport 경계를 가독성 중심으로 분리
 - [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](exec-plans/completed/0061-v2-llamaindex-framework-pipeline.md) — generation별 색인·authoritative execution·prepare/core/finalize API와 웹 phase 상태기계를 완료
 - [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/completed/0059-task-management-metadata-and-roadmap.md) — 작업 관리 계약, 현재 계획 메타데이터, 상태 색인을 완료
 - [D-010 · Feature — 단일 단계 라우터와 라우터 불가 AI 응답](exec-plans/completed/0057-single-stage-router-and-failure-response.md) — 라우터와 실패 응답 계약을 완료

@@ -6,8 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.adapters.openai_answerer import CoreDraft, DraftAnswer
+from app.application.question_phase_coordinator import PhaseResult
+from app.domain.answer_events import AnswerEvent
 from app.domain.catalog import SourceKind
 from app.domain.grounding import FrozenCitation
+from app.domain.question_execution import ExecutionStatus
 from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit
 
 
@@ -270,6 +273,85 @@ def test_prepare_core_finalize_replays_authoritative_phase_events(
     assert core_replay.text == core.text
     assert "event: complete" in finalized.text
     assert finalize_replay.text == finalized.text
+
+
+def test_v2_phase_routes_invoke_main_compatibility_producers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTP phase routes keep the documented main-module monkeypatch seams."""
+
+    import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
+
+    async def fake_repository():
+        return object()
+
+    async def fake_retrieval(payload, active, repository):
+        return [], None
+
+    class Provider:
+        async def active(self):
+            return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
+
+    invoked: list[str] = []
+
+    async def fake_core(execution):
+        invoked.append("core")
+        return PhaseResult(
+            target=ExecutionStatus.CORE_ANSWERED,
+            events=(
+                AnswerEvent(event_type="summary", payload={"summary": "확인된 요약"}),
+                AnswerEvent(
+                    event_type="phase_complete",
+                    payload={
+                        "status": ExecutionStatus.CORE_ANSWERED.value,
+                        "next_action": "generate_detail",
+                    },
+                ),
+            ),
+        )
+
+    async def fake_finalize(execution, user):
+        invoked.append("finalize")
+        return PhaseResult(
+            target=ExecutionStatus.COMPLETED,
+            response={"request_id": "seam", "mode": "search_only"},
+            events=(
+                AnswerEvent.complete(
+                    {
+                        "response": {"request_id": "seam", "mode": "search_only"},
+                        "outcome": "normal",
+                    }
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+    )
+    monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
+    monkeypatch.setattr(main_module, "_retrieve_pinned_v2_evidence", fake_retrieval)
+    monkeypatch.setattr(
+        main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
+    )
+    monkeypatch.setattr(main_module, "_run_v2_core", fake_core)
+    monkeypatch.setattr(main_module, "_run_v2_finalize", fake_finalize)
+    client = TestClient(main_module.app)
+
+    prepared = client.post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "phase-seams"},
+        json={"question": "전기사업 허가가 필요한가요?", "answer_mode": "search_only"},
+    )
+    execution_id = prepared.json()["execution_id"]
+    headers = {"X-Execution-Capability": prepared.json()["execution_capability"]}
+
+    core = client.post(f"/v2/question-executions/{execution_id}/core", headers=headers)
+    finalized = client.post(f"/v2/question-executions/{execution_id}/finalize", headers=headers)
+
+    assert core.status_code == finalized.status_code == 200
+    assert invoked == ["core", "finalize"]
 
 
 def test_prepare_replay_does_not_retrieve_again_and_anonymous_phase_requires_capability(
