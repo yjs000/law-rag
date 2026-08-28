@@ -36,7 +36,7 @@
 | [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 | generation 색인, engine 주입, Router·QueryEngine·ResponseSynthesizer와 문장별 grounding SSE |
 | [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
-| [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 제안됨 | v1/v2 재사용 없이 라우팅·생성·검증을 LangGraph 노드로 재구축, Postgres 체크포인터 대화 영속화, 스레드/run API |
+| [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 승인 | LangGraph StateGraph·Postgres 체크포인터 대화 영속화·스레드/run API, F-005 호환 run/evidence/grounding 경계와 M1~M5 구현 순서 |
 
 ## 버전 표기
 

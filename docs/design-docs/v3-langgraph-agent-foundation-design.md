@@ -1,6 +1,6 @@
 # V3: LangGraph 에이전트 기본 골격 설계
 
-상태: 제안됨 (2026-08-19)
+상태: 승인됨 (2026-08-28)
 결정일: 2026-08-19
 
 > D-010(0057)이 v1의 현재 라우팅 계약을 단일 `QuestionRouter`와
@@ -206,3 +206,35 @@ GET /v3/threads/{thread_id}/state
   단계에서 세부 설계한다.
 - SSE 이벤트의 정확한 payload 필드(어디까지 노출할지, 예: 중간 검색 결과를 이벤트에
   포함할지)는 계획 단계에서 확정한다.
+
+## F-005 호환 재기준선 (2026-08-28)
+
+### 정본과 저장 경계
+
+- LangGraph Postgres 체크포인터가 V3 대화와 run State의 유일한 정본이다. `thread_id`는
+  대화를, `run_id`는 한 번의 실행을 식별한다.
+- 작은 `v3_agent_runs` 인덱스는 `(thread_id, idempotency_key_hash)`의 원자 claim과 run
+  lookup만 담당한다. 답변·검색 근거·node event는 저장하지 않으며 체크포인터 State에만 둔다.
+- V3는 F-005 `question_executions`, provider capacity lease, `prepare/core/finalize` API를
+  공유하지 않는다.
+
+### F-005 재사용 경계
+
+- API composition root가 F-005 active-generation provider를 소유하고 V3에는
+  `PinnedEvidenceRetriever` port만 주입한다. V3 API adapter가 `ChatNVIDIA`, vector store,
+  active index를 직접 조립하지 않는다.
+- run 시작 시 active generation을 한 번 선택해 `generation_id`·검색 hit를 State에 고정하고,
+  이후 생성·검증·재접속에서는 재검색하지 않는다.
+- 인프라 비의존 `FrozenCitation`, citation registry, grounding validation은
+  `packages/law-rag-core`로 추출해 V2와 V3가 함께 사용한다.
+- V3 router는 D-010의 단일 `QuestionRouter`와 `routing_unavailable` fail-closed 계약을
+  따른다.
+
+### Run·오류·SSE 계약
+
+- 모든 run 생성에는 `Idempotency-Key`가 필요하다. 동일 key와 동일 payload는 같은
+  `run_id`와 저장 결과/event를 반환하고, 다른 payload는 `409 idempotency_conflict`다.
+- 한 thread에는 active run 하나만 허용하며, 다른 key의 병렬 시작은
+  `409 thread_run_in_progress`다.
+- node 완료·typed 실패·final event는 State 기록 뒤에만 SSE로 보낸다. final payload는
+  `aget_state()`의 확정 State에서 만든다.
