@@ -36,6 +36,7 @@ class QuestionExecutionRecord(Protocol):
     frozen_citations: tuple[FrozenCitation, ...]
     verified_response: Mapping[str, object] | None
     expires_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,10 @@ class PhaseClaim:
 
 class QuestionExecutionRepository(Protocol):
     async def prepare_or_get(self, **kwargs) -> QuestionExecutionRecord: ...
+
+    async def find_by_prepare_key(
+        self, owner_scope: str, prepare_idempotency_key: str
+    ) -> QuestionExecutionRecord | None: ...
 
     async def get_owned(
         self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
@@ -63,8 +68,17 @@ class QuestionExecutionRepository(Protocol):
         self, execution_id: UUID, owner_scope: str, event: AnswerEvent
     ) -> AnswerEvent: ...
 
+    async def finish_phase(
+        self, execution_id: UUID, owner_scope: str, **kwargs
+    ) -> QuestionExecutionRecord: ...
+
     async def events_for(
-        self, execution_id: UUID, owner_scope: str, *, phase: str
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        phase: str,
+        capability_hash: str | None = None,
     ) -> tuple[AnswerEvent, ...]: ...
 
     async def append_issue(

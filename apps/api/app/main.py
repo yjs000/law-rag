@@ -2,10 +2,11 @@
 
 import asyncio
 import base64
+import hashlib
 import json
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Literal
 from uuid import UUID
@@ -26,6 +27,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.adapters.capacity_leases import (
+    MemoryConcurrencyLimiter,
+    PostgresCapacityLeaseStore,
+    PostgresConcurrencyLimiter,
+)
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.memory_repository import repository as memory_repository
@@ -54,6 +60,7 @@ from app.application.answering import (
     search_only_answer,
 )
 from app.application.checklist_exports import render_csv, render_markdown, render_pdf
+from app.application.question_phase_coordinator import PhaseResult, QuestionPhaseCoordinator
 from app.application.question_tasks import QuestionTaskRegistry
 from app.application.request_budget import RequestBudget, StageTimeoutError
 from app.domain.answer_actions import derive_answer_action
@@ -67,8 +74,10 @@ from app.domain.corpus_temporal_contract import (
 from app.domain.embedding_profiles import NVIDIA_NEMOTRON_512_PROFILE
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
+from app.domain.grounding import CitationRegistry, FrozenCitation, GroundedSentence
+from app.domain.pipeline_issues import ExecutionPhase
 from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
-from app.domain.question_execution import ExecutionStatus
+from app.domain.question_execution import ExecutionSnapshot, ExecutionStatus, next_action_for
 from app.domain.routing import RouteDecision, route_question
 from app.domain.schemas import (
     AiFallbackReason,
@@ -92,10 +101,12 @@ from app.domain.search_queries import SearchTrace
 from app.domain.source_urls import is_allowed_source_url
 from app.observability import (
     QuestionStageTimingOutcome,
+    emit_execution_phase,
     emit_question_outcome,
     emit_question_stage_timing,
     emit_route_outcome,
 )
+from app.ports.question_execution import ExecutionConflict, ExecutionNotFound, SystemBusy
 from app.settings import get_settings
 
 settings = get_settings()
@@ -109,6 +120,16 @@ question_execution_repository = (
     if isinstance(repository, PostgresLegalRepository)
     else MemoryQuestionExecutionRepository()
 )
+question_phase_limiter = (
+    PostgresConcurrencyLimiter(
+        provider="ultra",
+        slots=settings.v2_provider_slots,
+        lease_store=PostgresCapacityLeaseStore(repository.engine),
+    )
+    if isinstance(repository, PostgresLegalRepository)
+    else MemoryConcurrencyLimiter(provider="ultra", slots=settings.v2_provider_slots)
+)
+question_phase_tasks: dict[UUID, asyncio.Task[object]] = {}
 llamaindex_settings = get_llamaindex_settings()
 llamaindex_vector_store = None
 llamaindex_embedder = None
@@ -235,7 +256,14 @@ app.add_middleware(
     allow_origins=settings.web_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "X-Terms-Version", "X-Privacy-Version"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Execution-Capability",
+        "X-Terms-Version",
+        "X-Privacy-Version",
+    ],
 )
 
 
@@ -491,137 +519,223 @@ async def prepare_question_execution(
     request: Request,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
 ) -> dict[str, object]:
-    """Freeze one pinned v2 evidence response before any phase stream begins."""
+    """Freeze the active generation and evidence before any provider phase starts."""
     user = await _optional_user(request.headers.get("authorization"))
     owner_scope = _question_owner(request, user)
+    await question_execution_repository.expire(datetime.now(UTC))
+    existing = await question_execution_repository.find_by_prepare_key(owner_scope, idempotency_key)
+    if existing is not None:
+        return _prepared_execution_response(
+            existing,
+            execution_capability=(
+                _execution_capability(owner_scope, idempotency_key) if user is None else None
+            ),
+        )
     v2_repository = await _v2_repository()
+    await _check_quota("ai" if payload.answer_mode == "terra" else "search", user=user)
+    await _require_supported_as_of_date(payload.as_of_date, v2_repository)
+    route = "legal_search"
+    missing_fields: tuple[str, ...] = ()
+    if payload.answer_mode == "terra":
+        try:
+            decision = await route_question(payload.question, _question_router())
+            route = decision.route
+            missing_fields = decision.missing_fields
+        except Exception:
+            route = "routing_unavailable"
     resources = _llamaindex_resources()
     assert resources is not None
     active = await resources[0].active()
-    hits, _, corpus_as_of = await _retrieve_question_evidence(payload, None, v2_repository)
-    response = search_only_answer(payload, hits, corpus_as_of)
-    response.request_id = str(payload.client_request_id)
+    hits, corpus_as_of = (
+        await _retrieve_pinned_v2_evidence(payload, active, v2_repository)
+        if route == "legal_search"
+        else ([], None)
+    )
+    frozen_citations = tuple(
+        FrozenCitation(id=f"C{index}", quote=hit.content) for index, hit in enumerate(hits, 1)
+    )
+    execution_capability = (
+        _execution_capability(owner_scope, idempotency_key) if user is None else None
+    )
     execution = await question_execution_repository.prepare_or_get(
         owner_scope=owner_scope,
         prepare_idempotency_key=idempotency_key,
         generation_id=active.generation.id,
-        private_payload={"response": response.model_dump(mode="json")},
-        expires_at=datetime.now().astimezone() + timedelta(minutes=10),
+        capability_hash=_capability_hash(execution_capability),
+        private_payload={
+            "request": payload.model_dump(mode="json"),
+            "hits": [hit.model_dump(mode="json") for hit in hits],
+            "corpus_as_of": corpus_as_of.isoformat() if corpus_as_of is not None else None,
+            "route": route,
+            "missing_fields": list(missing_fields),
+        },
+        frozen_citations=frozen_citations,
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
     )
-    return {
+    emit_execution_phase(str(execution.execution_id), "prepare", "prepared")
+    return _prepared_execution_response(execution, execution_capability=execution_capability)
+
+
+def _prepared_execution_response(
+    execution, *, execution_capability: str | None = None
+) -> dict[str, object]:
+    next_action = next_action_for(
+        ExecutionSnapshot(status=execution.status, version=execution.version)
+    )
+    response: dict[str, object] = {
         "execution_id": str(execution.execution_id),
         "status": execution.status.value,
-        "next_action": (
-            "generate_core" if execution.status is ExecutionStatus.PREPARED else "complete"
-        ),
+        "next_action": next_action.value if next_action else "complete",
     }
+    if execution_capability is not None:
+        response["execution_capability"] = execution_capability
+    return response
 
 
-async def _stream_execution_phase(execution_id: UUID, request: Request, phase: str):
+def _capability_hash(value: str | None) -> str | None:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest() if value else None
+
+
+def _execution_capability(owner_scope: str, idempotency_key: str) -> str:
+    """Replay the same opaque anonymous capability without storing plaintext."""
+    material = f"{owner_scope}\x00{idempotency_key}".encode()
+    return hashlib.sha256(settings.rate_limit_secret.encode() + material).hexdigest()
+
+
+async def _retrieve_pinned_v2_evidence(
+    payload: QuestionRequest, active, v2_repository: LegalRepository
+):
+    """Search the same index whose generation ID is persisted on the execution."""
+    hits = await llamaindex_search_index(active.index, payload.question, payload.as_of_date, 10)
+    return hits, await v2_repository.last_sync()
+
+
+async def _stream_execution_phase(
+    execution_id: UUID,
+    request: Request,
+    phase: Literal["core", "finalize"],
+    execution_capability: str | None,
+):
     user = await _optional_user(request.headers.get("authorization"))
     owner_scope = _question_owner(request, user)
-    execution = await question_execution_repository.get_owned(execution_id, owner_scope)
+    capability_hash = _capability_hash(execution_capability) if user is None else None
+    await question_execution_repository.expire(datetime.now(UTC))
+    try:
+        execution = await question_execution_repository.get_owned(
+            execution_id, owner_scope, capability_hash=capability_hash
+        )
+    except ExecutionNotFound as exc:
+        raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
+    if execution.status is ExecutionStatus.EXPIRED:
+        raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.")
+    lease = await _admit_v2_provider_phase(execution, phase)
+
+    coordinator = QuestionPhaseCoordinator(
+        question_execution_repository,
+        core=lambda execution: _run_v2_core(execution),
+        finalize=lambda execution: _run_v2_finalize(execution, user),
+        phase_timeout=timedelta(seconds=settings.v2_phase_timeout_seconds),
+    )
 
     async def events():
-        current = execution
-        if current.status is ExecutionStatus.PREPARED and phase == "core":
-            claim = await question_execution_repository.claim_phase(
+        task = asyncio.create_task(
+            coordinator.run(
                 execution_id,
                 owner_scope,
-                expected_version=current.version,
-                target=ExecutionStatus.CORE_RUNNING,
+                phase=phase,
+                capability_hash=capability_hash,
             )
-            if claim.started:
-                response = claim.execution.private_payload["response"]
-                answered = await question_execution_repository.transition_phase(
-                    execution_id,
-                    owner_scope,
-                    expected_version=claim.execution.version,
-                    target=ExecutionStatus.CORE_ANSWERED,
-                )
-                await question_execution_repository.append_event(
-                    execution_id, owner_scope, phase="core", sequence=0,
-                    event=AnswerEvent(
-                        event_type="summary",
-                        payload={
-                            "summary": response["summary"],
-                            "citations": response["citations"],
-                        },
-                    ),
-                )
-                await question_execution_repository.append_event(
-                    execution_id,
-                    owner_scope,
-                    phase="core",
-                    sequence=1,
-                    event=AnswerEvent(
-                        event_type="phase_complete",
-                        payload={"status": answered.status.value, "next_action": "generate_detail"},
-                    ),
-                )
-                yield _sse(
-                    "summary",
-                    {"summary": response["summary"], "citations": response["citations"]},
-                )
-                yield _sse(
-                    "phase_complete",
-                    {"status": answered.status.value, "next_action": "generate_detail"},
-                )
-                return
-            current = await question_execution_repository.get_owned(execution_id, owner_scope)
-            if current.status is ExecutionStatus.CORE_RUNNING:
-                yield _sse("status", {"status": current.status.value, "next_action": None})
-                return
-        if current.status is ExecutionStatus.COMPLETED:
-            for event in await question_execution_repository.events_for(
-                execution_id, owner_scope, phase=phase
-            ):
+        )
+        question_phase_tasks[execution_id] = task
+        try:
+            persisted = await task
+        except asyncio.CancelledError:
+            persisted = (AnswerEvent.cancelled(),)
+        except (ExecutionConflict, ValueError):
+            persisted = (AnswerEvent.error("phase_not_ready"),)
+        except ExecutionNotFound:
+            persisted = (AnswerEvent.error("execution_not_found"),)
+        try:
+            for event in persisted:
                 yield _sse(event.event_type, dict(event.payload))
-            return
-        if current.status is ExecutionStatus.CORE_ANSWERED and phase == "core":
-            for event in await question_execution_repository.events_for(
-                execution_id, owner_scope, phase="core"
-            ):
-                yield _sse(event.event_type, dict(event.payload))
-            return
-        if current.status is ExecutionStatus.CORE_ANSWERED and phase == "finalize":
-            claim = await question_execution_repository.claim_phase(
-                execution_id,
-                owner_scope,
-                expected_version=current.version,
-                target=ExecutionStatus.FINALIZE_RUNNING,
-            )
-            if claim.started:
-                response = claim.execution.private_payload["response"]
-                completed = await question_execution_repository.complete(
-                    execution_id,
-                    owner_scope,
-                    expected_version=claim.execution.version,
-                    response=response,
-                )
-                complete_payload = {"response": completed.verified_response, "outcome": "normal"}
-                await question_execution_repository.append_event(
-                    execution_id,
-                    owner_scope,
-                    phase="finalize",
-                    sequence=0,
-                    event=AnswerEvent.complete(complete_payload),
-                )
-                yield _sse("complete", complete_payload)
-                return
-        yield _sse("error", {"reason_code": "phase_not_ready"})
+        finally:
+            if question_phase_tasks.get(execution_id) is task:
+                del question_phase_tasks[execution_id]
+            if lease is not None:
+                await lease.release()
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
 
+async def _admit_v2_provider_phase(execution, phase: Literal["core", "finalize"]):
+    """Reject provider work before SSE starts; deterministic search-only phases need no slot."""
+    request_data = execution.private_payload.get("request")
+    if not isinstance(request_data, dict):
+        return None
+    request_payload = QuestionRequest.model_validate(request_data)
+    will_start = (
+        (phase == "core" and execution.status is ExecutionStatus.PREPARED)
+        or (
+            phase == "finalize"
+            and execution.status
+            in {ExecutionStatus.CORE_ANSWERED, ExecutionStatus.CORE_REPAIR_REQUIRED}
+        )
+    )
+    if not will_start or request_payload.answer_mode != "terra":
+        return None
+    if phase == "finalize" and isinstance(
+        execution.private_payload.get("verified_core_response"), dict
+    ):
+        return None
+    if execution.private_payload.get("route", "legal_search") != "legal_search":
+        return None
+    try:
+        return await question_phase_limiter.acquire(
+            execution.execution_id,
+            ExecutionPhase.CORE if phase == "core" else ExecutionPhase.FINALIZE,
+            datetime.now(UTC) + timedelta(seconds=settings.v2_provider_budget_seconds),
+        )
+    except SystemBusy as exc:
+        emit_execution_phase(str(execution.execution_id), phase, "busy")
+        raise HTTPException(status_code=503, detail="system_busy") from exc
+
+
 @app.post("/v2/question-executions/{execution_id}/core")
-async def core_question_execution(execution_id: UUID, request: Request) -> StreamingResponse:
-    return await _stream_execution_phase(execution_id, request, "core")
+async def core_question_execution(
+    execution_id: UUID,
+    request: Request,
+    execution_capability: Annotated[str | None, Header(alias="X-Execution-Capability")] = None,
+) -> StreamingResponse:
+    return await _stream_execution_phase(execution_id, request, "core", execution_capability)
 
 
 @app.post("/v2/question-executions/{execution_id}/finalize")
-async def finalize_question_execution(execution_id: UUID, request: Request) -> StreamingResponse:
-    return await _stream_execution_phase(execution_id, request, "finalize")
+async def finalize_question_execution(
+    execution_id: UUID,
+    request: Request,
+    execution_capability: Annotated[str | None, Header(alias="X-Execution-Capability")] = None,
+) -> StreamingResponse:
+    return await _stream_execution_phase(execution_id, request, "finalize", execution_capability)
+
+
+@app.delete("/v2/question-executions/{execution_id}", status_code=202)
+async def cancel_question_execution(
+    execution_id: UUID,
+    request: Request,
+    execution_capability: Annotated[str | None, Header(alias="X-Execution-Capability")] = None,
+) -> dict[str, bool]:
+    user = await _optional_user(request.headers.get("authorization"))
+    try:
+        await question_execution_repository.cancel(
+            execution_id,
+            _question_owner(request, user),
+            capability_hash=_capability_hash(execution_capability) if user is None else None,
+        )
+    except ExecutionNotFound as exc:
+        raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
+    if task := question_phase_tasks.get(execution_id):
+        task.cancel()
+    return {"cancelled": True}
 
 
 @app.post("/v1/questions/{client_request_id}/cancel", status_code=202)
@@ -631,6 +745,163 @@ async def cancel_question(client_request_id: UUID, request: Request) -> dict[str
     if not await question_tasks.cancel(_question_owner(request, user), client_request_id):
         raise HTTPException(status_code=404, detail="처리 중인 질문을 찾을 수 없습니다.")
     return {"cancelled": True}
+
+
+def _execution_request_and_hits(
+    execution,
+) -> tuple[QuestionRequest, list[SearchHit], datetime | None]:
+    payload = execution.private_payload
+    request_data = payload.get("request")
+    hit_data = payload.get("hits")
+    if not isinstance(request_data, dict) or not isinstance(hit_data, list):
+        raise ValueError("execution payload is incomplete")
+    corpus_as_of = payload.get("corpus_as_of")
+    return (
+        QuestionRequest.model_validate(request_data),
+        [SearchHit.model_validate(item) for item in hit_data if isinstance(item, dict)],
+        datetime.fromisoformat(corpus_as_of) if isinstance(corpus_as_of, str) else None,
+    )
+
+
+async def _v2_response_from_frozen_evidence(execution) -> QuestionResponse:
+    """Generate only from the execution's persisted evidence; never re-retrieve."""
+    payload, hits, corpus_as_of = _execution_request_and_hits(execution)
+    fallback = search_only_answer(payload, hits, corpus_as_of)
+    fallback.request_id = str(payload.client_request_id)
+    route = execution.private_payload.get("route", "legal_search")
+    if route != "legal_search":
+        missing_fields = execution.private_payload.get("missing_fields", [])
+        return route_guidance_fallback(
+            payload,
+            str(route),
+            missing_fields=tuple(item for item in missing_fields if isinstance(item, str))
+            if isinstance(missing_fields, list)
+            else (),
+        )
+    if payload.answer_mode != "terra" or not _ai_available():
+        return fallback
+    generation_hits = select_generation_hits(hits, settings.answer_evidence_max_characters)
+    draft = await _answerer().answer(payload, generation_hits)
+    if not validate_draft(draft, generation_hits):
+        raise ValueError("generated answer did not satisfy the citation contract")
+    citations = [
+        Citation(
+            id=f"C{index}",
+            provision_id=hit.provision_id,
+            document_title=hit.document_title,
+            version_label=hit.version_label,
+            path=hit.path,
+            quote=hit.content,
+            source_url=hit.source_url,
+            source_kind=hit.source_kind,
+            law_type_code=hit.law_type_code,
+        )
+        for index, hit in enumerate(generation_hits, 1)
+    ]
+    return QuestionResponse(
+        request_id=str(payload.client_request_id),
+        mode="ai",
+        summary=draft.summary,
+        scope=draft.scope,
+        sections=draft.sections,
+        checklist=draft.checklist,
+        citations=citations,
+        limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
+        corpus_as_of=corpus_as_of,
+        requested_answer_mode=payload.answer_mode,
+        action=draft.action,
+        route="legal_search",
+    )
+
+
+async def _run_v2_core(execution) -> PhaseResult:
+    response = await _v2_response_from_frozen_evidence(execution)
+    if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
+        return PhaseResult(
+            target=ExecutionStatus.CORE_REPAIR_REQUIRED,
+            events=(
+                AnswerEvent(
+                    event_type="phase_complete",
+                    payload={
+                        "status": ExecutionStatus.CORE_REPAIR_REQUIRED.value,
+                        "next_action": "repair_core",
+                    },
+                ),
+            ),
+        )
+    response_data = response.model_dump(mode="json")
+    return PhaseResult(
+        target=ExecutionStatus.CORE_ANSWERED,
+        events=(
+            AnswerEvent(
+                event_type="summary",
+                payload={"summary": response.summary, "citations": response_data["citations"]},
+            ),
+            AnswerEvent(
+                event_type="phase_complete",
+                payload={
+                    "status": ExecutionStatus.CORE_ANSWERED.value,
+                    "next_action": "generate_detail",
+                },
+            ),
+        ),
+        private_payload={"verified_core_response": response_data},
+    )
+
+
+async def _run_v2_finalize(execution, user: MockUser | None) -> PhaseResult:
+    payload, _hits, _corpus_as_of = _execution_request_and_hits(execution)
+    stored_core = execution.private_payload.get("verified_core_response")
+    if isinstance(stored_core, dict):
+        response = QuestionResponse.model_validate(stored_core)
+    else:
+        response = await _v2_response_from_frozen_evidence(execution)
+        if not _v2_response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
+            response = _v2_grounding_fallback(payload)
+    response = await _save_if_authenticated(user, payload, response)
+    response_data = response.model_dump(mode="json")
+    outcome = "degraded" if execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED else "normal"
+    return PhaseResult(
+        target=ExecutionStatus.COMPLETED,
+        response=response_data,
+        events=(AnswerEvent.complete({"response": response_data, "outcome": outcome}),),
+    )
+
+
+def _v2_response_is_grounded(response: QuestionResponse, registry: CitationRegistry) -> bool:
+    if not response.citations:
+        return not response.sections and not response.checklist
+    all_citations = tuple(citation.id for citation in response.citations)
+    if not registry.verify(GroundedSentence(response.summary, all_citations)):
+        return False
+    for section in response.sections:
+        citation_ids = tuple(section.citation_ids)
+        if not registry.verify(GroundedSentence(section.claim, citation_ids)):
+            return False
+        if not registry.verify(GroundedSentence(section.explanation, citation_ids)):
+            return False
+    return all(
+        registry.verify(GroundedSentence(item.label, tuple(item.citation_ids)))
+        for item in response.checklist
+    )
+
+
+def _v2_grounding_fallback(payload: QuestionRequest) -> QuestionResponse:
+    """A legal-claim-free terminal response used only after failed repair."""
+    return QuestionResponse(
+        request_id=str(payload.client_request_id),
+        mode="ai",
+        summary="검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요.",
+        scope="근거 검증 실패",
+        sections=[],
+        checklist=[],
+        citations=[],
+        limitations=["이 서비스는 법률 자문을 대체하지 않습니다."],
+        result_status="no_results",
+        requested_answer_mode=payload.answer_mode,
+        action="unanswerable",
+        route="legal_search",
+    )
 
 
 async def _retrieve_question_evidence(

@@ -281,6 +281,44 @@ async def test_event_sequence_is_persisted_once_before_any_replay_is_visible(
         )
 
 
+async def test_finish_phase_makes_status_and_replayable_events_visible_together(
+    repository: MemoryQuestionExecutionRepository,
+) -> None:
+    execution = await repository.prepare_or_get(
+        owner_scope="user:1",
+        prepare_idempotency_key="atomic-phase",
+        generation_id=uuid4(),
+        expires_at=datetime(2026, 8, 28, tzinfo=UTC) + timedelta(minutes=5),
+    )
+    running = await repository.claim_phase(
+        execution.execution_id,
+        "user:1",
+        expected_version=execution.version,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+    from app.domain.answer_events import AnswerEvent
+
+    answered = await repository.finish_phase(
+        execution.execution_id,
+        "user:1",
+        expected_version=running.execution.version,
+        target=ExecutionStatus.CORE_ANSWERED,
+        phase="core",
+        events=(
+            AnswerEvent(event_type="summary", payload={"summary": "검증됨"}),
+            AnswerEvent(
+                event_type="phase_complete",
+                payload={"status": "core_answered", "next_action": "generate_detail"},
+            ),
+        ),
+    )
+
+    assert answered.status is ExecutionStatus.CORE_ANSWERED
+    assert [event.event_type for event in await repository.events_for(
+        execution.execution_id, "user:1", phase="core"
+    )] == ["summary", "phase_complete"]
+
+
 async def test_postgres_transition_uses_owner_and_optimistic_version_conditions() -> None:
     execution_id = uuid4()
     generation_id = uuid4()

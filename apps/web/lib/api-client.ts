@@ -130,12 +130,6 @@ export async function askQuestion(
   }
 }
 
-export function cancelQuestion(clientRequestId: string): Promise<{ cancelled: boolean }> {
-  return request(`/v1/questions/${encodeURIComponent(clientRequestId)}/cancel`, {
-    method: "POST",
-  });
-}
-
 export function listConversations(cursor?: string | null, limit = 20): Promise<ConversationPage> {
   const query = new URLSearchParams({ limit: String(limit) });
   if (cursor) query.set("cursor", cursor);

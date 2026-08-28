@@ -83,6 +83,13 @@ class MemoryQuestionExecutionRepository:
             self._by_prepare_key[key] = record.execution_id
             return record
 
+    async def find_by_prepare_key(
+        self, owner_scope: str, prepare_idempotency_key: str
+    ) -> StoredQuestionExecution | None:
+        async with self._lock:
+            execution_id = self._by_prepare_key.get((owner_scope, prepare_idempotency_key))
+            return self._records.get(execution_id) if execution_id is not None else None
+
     async def get_owned(
         self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
     ) -> StoredQuestionExecution:
@@ -151,11 +158,63 @@ class MemoryQuestionExecutionRepository:
             self._events[key] = event
             return event
 
+    async def finish_phase(
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        expected_version: int,
+        target: ExecutionStatus,
+        phase: str,
+        events: tuple[AnswerEvent, ...],
+        response: Mapping[str, object] | None = None,
+        private_payload: Mapping[str, object] | None = None,
+        capability_hash: str | None = None,
+    ) -> StoredQuestionExecution:
+        """Persist a phase result and every public event under one lock.
+
+        A provider call is intentionally outside the lock.  Once it returns, an
+        interrupted write must not leave a status that claims completion without
+        the replayable events clients need to observe it.
+        """
+        async with self._lock:
+            current = self._get_owned(execution_id, owner_scope, capability_hash=capability_hash)
+            if current.status is target:
+                return current
+            self._require_expected_version(current, expected_version)
+            updated = transition_execution(
+                ExecutionSnapshot(status=current.status, version=current.version), target
+            )
+            for sequence, event in enumerate(events):
+                key = (execution_id, phase, sequence)
+                existing = self._events.get(key)
+                if existing is not None and existing != event:
+                    raise ExecutionConflict("event sequence is already occupied")
+                self._events[key] = event
+            return self._replace(
+                current,
+                status=updated.status,
+                version=updated.version,
+                verified_response=(
+                    dict(response) if response is not None else current.verified_response
+                ),
+                private_payload=(
+                    {**current.private_payload, **private_payload}
+                    if private_payload is not None
+                    else current.private_payload
+                ),
+            )
+
     async def events_for(
-        self, execution_id: UUID, owner_scope: str, *, phase: str
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        phase: str,
+        capability_hash: str | None = None,
     ) -> tuple[AnswerEvent, ...]:
         async with self._lock:
-            self._get_owned(execution_id, owner_scope)
+            self._get_owned(execution_id, owner_scope, capability_hash=capability_hash)
             return tuple(
                 event
                 for (event_execution_id, event_phase, _sequence), event in sorted(

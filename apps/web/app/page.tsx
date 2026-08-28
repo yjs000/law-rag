@@ -4,7 +4,6 @@ import type { AuthChangeEvent } from "@supabase/supabase-js";
 import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   askQuestion,
-  cancelQuestion,
   deleteAccount,
   deleteConversation,
   downloadPdf,
@@ -33,7 +32,6 @@ import {
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
 import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
-import { askQuestionWithRetry } from "../lib/generation-retry";
 import {
   appendPendingTurn,
   completePendingTurn,
@@ -330,7 +328,7 @@ export default function Home() {
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
   const authEpoch = useRef(0);
-  const activeRequest = useRef<{ id: string; controller: AbortController; attemptId?: string } | null>(null);
+  const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
 
@@ -550,7 +548,7 @@ export default function Home() {
     requestAnimationFrame(() => composer.current?.focus());
     const requestedAnswerMode = SEARCH_ONLY_ENABLED && terraUnavailable ? "search_only" : "terra";
     try {
-      const answer = await askQuestionWithRetry({
+      const answer = await askQuestion({
         client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
@@ -565,17 +563,7 @@ export default function Home() {
         ...(pending.rolledOver || !activeChat.confirmed
           ? {}
           : { conversation_id: activeChat.id }),
-      }, {
-        ask: askQuestion,
-        cancel: cancelQuestion,
-        nextClientRequestId: () => crypto.randomUUID(),
-        outerSignal: controller.signal,
-        onAttemptChange: (attemptId) => {
-          if (activeRequest.current?.id === requestId) {
-            activeRequest.current = { ...activeRequest.current, attemptId };
-          }
-        },
-      });
+      }, controller.signal);
       if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer, SEARCH_ONLY_ENABLED);
       setModeNotice(resolution.notice ?? "");
@@ -621,7 +609,6 @@ export default function Home() {
   function stopGeneration() {
     const request = activeRequest.current;
     if (!request) return;
-    void cancelQuestion(request.attemptId ?? request.id).catch(() => undefined);
     request.controller.abort();
     setActiveChat((current) => stopPendingTurn(current, request.id));
     activeRequest.current = null;

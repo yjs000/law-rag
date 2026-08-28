@@ -1,6 +1,7 @@
 import json
 import logging
 from collections import Counter
+from hashlib import sha256
 from threading import Lock
 from typing import Literal
 
@@ -12,6 +13,7 @@ from app.domain.schemas import AiFallbackReason, AnswerMode
 logger = logging.getLogger("law_rag.question_outcome")
 route_logger = logging.getLogger("law_rag.route_outcome")
 stage_timing_logger = logging.getLogger("law_rag.question_stage_timing")
+execution_logger = logging.getLogger("law_rag.execution_phase")
 
 QuestionStageTimingStage = Literal[
     "routing",
@@ -149,3 +151,26 @@ def emit_question_stage_timing(
         remaining_ms=remaining_ms,
     )
     stage_timing_logger.info(json.dumps(event.model_dump(mode="json"), ensure_ascii=True))
+
+
+class ExecutionPhaseEvent(BaseModel):
+    """Privacy-safe v2 lifecycle event: no question, evidence, token, or owner data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    execution_correlation: str
+    phase: Literal["prepare", "core", "finalize"]
+    outcome: Literal["prepared", "started", "replayed", "completed", "busy", "recovery_required"]
+
+
+def emit_execution_phase(
+    execution_id: str, phase: Literal["prepare", "core", "finalize"],
+    outcome: Literal["prepared", "started", "replayed", "completed", "busy", "recovery_required"],
+) -> None:
+    """Emit an opaque correlation hash only, never an execution ID or private payload."""
+    event = ExecutionPhaseEvent(
+        execution_correlation=sha256(execution_id.encode("utf-8")).hexdigest()[:16],
+        phase=phase,
+        outcome=outcome,
+    )
+    execution_logger.info(json.dumps(event.model_dump(mode="json"), ensure_ascii=True))

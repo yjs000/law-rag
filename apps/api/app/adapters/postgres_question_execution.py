@@ -77,6 +77,21 @@ class PostgresQuestionExecutionRepository:
             ).mappings().one()
         return _record_from_row(row)
 
+    async def find_by_prepare_key(
+        self, owner_scope: str, prepare_idempotency_key: str
+    ) -> StoredQuestionExecution | None:
+        async with self._engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        f"""SELECT {_RECORD_COLUMNS} FROM question_executions
+                        WHERE owner_scope=:owner_scope AND prepare_idempotency_key=:prepare_key"""
+                    ),
+                    {"owner_scope": owner_scope, "prepare_key": prepare_idempotency_key},
+                )
+            ).mappings().one_or_none()
+        return _record_from_row(row) if row is not None else None
+
     async def get_owned(
         self, execution_id: UUID, owner_scope: str, *, capability_hash: str | None = None
     ) -> StoredQuestionExecution:
@@ -229,12 +244,111 @@ class PostgresQuestionExecutionRepository:
                 raise ExecutionConflict("event sequence is already occupied")
             return event
 
+    async def finish_phase(
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        expected_version: int,
+        target: ExecutionStatus,
+        phase: str,
+        events: tuple[AnswerEvent, ...],
+        response: Mapping[str, object] | None = None,
+        private_payload: Mapping[str, object] | None = None,
+        capability_hash: str | None = None,
+    ) -> StoredQuestionExecution:
+        """Atomically commit a completed phase and its replayable event log."""
+        async with self._engine.begin() as connection:
+            current = _require_owned(
+                await _select_owned_for_update(connection, execution_id, owner_scope),
+                capability_hash,
+            )
+            if current.status is target:
+                return current
+            if current.version != expected_version:
+                raise ExecutionConflict("execution version is stale")
+            updated = transition_execution(
+                ExecutionSnapshot(status=current.status, version=current.version), target
+            )
+            row = (
+                await connection.execute(
+                    text(
+                        f"""UPDATE question_executions SET status=:status,version=:version,
+                        verified_response=COALESCE(CAST(:response AS jsonb), verified_response),
+                        private_payload=CASE WHEN :private_payload IS NULL THEN private_payload
+                          ELSE private_payload || CAST(:private_payload AS jsonb) END,
+                        updated_at=now()
+                        WHERE execution_id=:execution_id AND owner_scope=:owner_scope
+                          AND version=:expected_version
+                        RETURNING {_RECORD_COLUMNS}"""
+                    ),
+                    {
+                        "status": updated.status.value,
+                        "version": updated.version,
+                        "response": json.dumps(dict(response)) if response is not None else None,
+                        "private_payload": (
+                            json.dumps(dict(private_payload))
+                            if private_payload is not None
+                            else None
+                        ),
+                        "execution_id": execution_id,
+                        "owner_scope": owner_scope,
+                        "expected_version": expected_version,
+                    },
+                )
+            ).mappings().one_or_none()
+            if row is None:
+                raise ExecutionConflict("execution version is stale")
+            for sequence, event in enumerate(events):
+                inserted = (
+                    await connection.execute(
+                        text(
+                            """INSERT INTO question_execution_events(
+                            execution_id,phase,sequence,event_type,public_payload)
+                        VALUES(
+                          :execution_id,:phase,:sequence,:event_type,CAST(:payload AS jsonb)
+                        )
+                            ON CONFLICT(execution_id,phase,sequence) DO NOTHING
+                            RETURNING event_type,public_payload"""
+                        ),
+                        {
+                            "execution_id": execution_id,
+                            "phase": phase,
+                            "sequence": sequence,
+                            "event_type": event.event_type,
+                            "payload": json.dumps(dict(event.payload)),
+                        },
+                    )
+                ).mappings().one_or_none()
+                if inserted is None:
+                    existing = (
+                        await connection.execute(
+                            text(
+                                """SELECT event_type,public_payload FROM question_execution_events
+                                WHERE execution_id=:execution_id AND phase=:phase
+                                  AND sequence=:sequence"""
+                            ),
+                            {"execution_id": execution_id, "phase": phase, "sequence": sequence},
+                        )
+                    ).mappings().one()
+                    if existing["event_type"] != event.event_type or _json_mapping(
+                        existing["public_payload"]
+                    ) != event.payload:
+                        raise ExecutionConflict("event sequence is already occupied")
+        return _record_from_row(row)
+
     async def events_for(
-        self, execution_id: UUID, owner_scope: str, *, phase: str
+        self,
+        execution_id: UUID,
+        owner_scope: str,
+        *,
+        phase: str,
+        capability_hash: str | None = None,
     ) -> tuple[AnswerEvent, ...]:
-        async with self._engine.connect() as connection:
+        async with self._engine.begin() as connection:
             _require_owned(
-                await _select_owned_for_update(connection, execution_id, owner_scope), None
+                await _select_owned_for_update(connection, execution_id, owner_scope),
+                capability_hash,
             )
             rows = (
                 await connection.execute(
