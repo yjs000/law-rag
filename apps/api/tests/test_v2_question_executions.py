@@ -27,7 +27,7 @@ def test_obsolete_v2_single_question_route_is_removed() -> None:
     assert response.status_code == 404
 
 
-def test_prepare_then_core_replays_the_same_authoritative_complete(
+def test_prepare_core_finalize_replays_authoritative_phase_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.main as main_module
@@ -63,8 +63,13 @@ def test_prepare_then_core_replays_the_same_authoritative_complete(
 
     execution_id = prepared.json()["execution_id"]
     core = client.post(f"/v2/question-executions/{execution_id}/core")
-    replay = client.post(f"/v2/question-executions/{execution_id}/core")
+    core_replay = client.post(f"/v2/question-executions/{execution_id}/core")
+    finalized = client.post(f"/v2/question-executions/{execution_id}/finalize")
+    finalize_replay = client.post(f"/v2/question-executions/{execution_id}/finalize")
 
     assert core.headers["content-type"].startswith("text/event-stream")
-    assert "event: complete" in core.text
-    assert replay.text == core.text
+    assert "event: summary" in core.text
+    assert '"next_action": "generate_detail"' in core.text
+    assert core_replay.text == core.text
+    assert "event: complete" in finalized.text
+    assert finalize_replay.text == finalized.text

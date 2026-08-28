@@ -539,26 +539,34 @@ async def _stream_execution_phase(execution_id: UUID, request: Request, phase: s
                     expected_version=claim.execution.version,
                     target=ExecutionStatus.CORE_ANSWERED,
                 )
-                completed = await question_execution_repository.complete(
-                    execution_id,
-                    owner_scope,
-                    expected_version=answered.version,
-                    response=response,
-                )
                 await question_execution_repository.append_event(
                     execution_id, owner_scope, phase="core", sequence=0,
-                    event=AnswerEvent(event_type="summary", payload={"response": response}),
+                    event=AnswerEvent(
+                        event_type="summary",
+                        payload={
+                            "summary": response["summary"],
+                            "citations": response["citations"],
+                        },
+                    ),
                 )
-                complete_payload = {"response": completed.verified_response, "outcome": "normal"}
                 await question_execution_repository.append_event(
                     execution_id,
                     owner_scope,
                     phase="core",
                     sequence=1,
-                    event=AnswerEvent.complete(complete_payload),
+                    event=AnswerEvent(
+                        event_type="phase_complete",
+                        payload={"status": answered.status.value, "next_action": "generate_detail"},
+                    ),
                 )
-                yield _sse("summary", {"response": response})
-                yield _sse("complete", complete_payload)
+                yield _sse(
+                    "summary",
+                    {"summary": response["summary"], "citations": response["citations"]},
+                )
+                yield _sse(
+                    "phase_complete",
+                    {"status": answered.status.value, "next_action": "generate_detail"},
+                )
                 return
             current = await question_execution_repository.get_owned(execution_id, owner_scope)
             if current.status is ExecutionStatus.CORE_RUNNING:
@@ -566,10 +574,41 @@ async def _stream_execution_phase(execution_id: UUID, request: Request, phase: s
                 return
         if current.status is ExecutionStatus.COMPLETED:
             for event in await question_execution_repository.events_for(
+                execution_id, owner_scope, phase=phase
+            ):
+                yield _sse(event.event_type, dict(event.payload))
+            return
+        if current.status is ExecutionStatus.CORE_ANSWERED and phase == "core":
+            for event in await question_execution_repository.events_for(
                 execution_id, owner_scope, phase="core"
             ):
                 yield _sse(event.event_type, dict(event.payload))
             return
+        if current.status is ExecutionStatus.CORE_ANSWERED and phase == "finalize":
+            claim = await question_execution_repository.claim_phase(
+                execution_id,
+                owner_scope,
+                expected_version=current.version,
+                target=ExecutionStatus.FINALIZE_RUNNING,
+            )
+            if claim.started:
+                response = claim.execution.private_payload["response"]
+                completed = await question_execution_repository.complete(
+                    execution_id,
+                    owner_scope,
+                    expected_version=claim.execution.version,
+                    response=response,
+                )
+                complete_payload = {"response": completed.verified_response, "outcome": "normal"}
+                await question_execution_repository.append_event(
+                    execution_id,
+                    owner_scope,
+                    phase="finalize",
+                    sequence=0,
+                    event=AnswerEvent.complete(complete_payload),
+                )
+                yield _sse("complete", complete_payload)
+                return
         yield _sse("error", {"reason_code": "phase_not_ready"})
 
     return StreamingResponse(events(), media_type="text/event-stream")
