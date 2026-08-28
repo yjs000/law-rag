@@ -292,3 +292,20 @@ class PostgresGenerationRepository:
             result.scalar_one()
             await connection.execute(retire_previous, {"generation_id": generation_id})
             await connection.execute(pointer, {"generation_id": generation_id})
+
+    async def fail(self, generation_id: UUID, failure_code: str) -> None:
+        """Record a failed candidate while retaining the current active pointer."""
+
+        query = text(
+            """
+            UPDATE llamaindex_retrieval_generations
+            SET status = 'failed', failure_code = :failure_code
+            WHERE generation_id = :generation_id AND status IN ('building','verified')
+            RETURNING generation_id
+            """
+        )
+        async with self._engine.begin() as connection:
+            result = await connection.execute(
+                query, {"generation_id": generation_id, "failure_code": failure_code}
+            )
+            result.scalar_one()

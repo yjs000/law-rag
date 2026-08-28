@@ -5,6 +5,7 @@ from llama_index.core.schema import TextNode
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from law_rag_llamaindex.generations import source_fingerprint
 from law_rag_llamaindex.passage import (
     ProvisionRecord,
     build_node_metadata,
@@ -147,6 +148,52 @@ async def run_ingestion(engine, vector_store, embedder, table_name: str) -> Inge
         except Exception:
             pass
         raise
+
+
+async def run_generation_ingestion(
+    engine,
+    generation_repository,
+    vector_store_for_generation,
+    embedder,
+    *,
+    transform_fingerprint: str,
+) -> IngestionResult:
+    """Build a new immutable generation and publish only after all writes verify.
+
+    The repository owns the atomic active-pointer transition; this orchestration
+    never mutates an active vector table in place.
+    """
+
+    from law_rag_llamaindex.source import fetch_provisions
+
+    provisions = await fetch_provisions(engine)
+    generation = await generation_repository.start(
+        source_fingerprint(provisions), transform_fingerprint
+    )
+    stage = "node_build"
+    try:
+        nodes = build_nodes(provisions)
+        stage = "embedding"
+        embeddings = embedder.get_text_embedding_batch([node.text for node in nodes])
+        for node, embedding in zip(nodes, embeddings, strict=True):
+            node.embedding = embedding
+        stage = "vector_write"
+        vector_store_for_generation(generation).add(nodes)
+        stage = "generation_verify"
+        await generation_repository.verify(
+            generation.id, source_count=len(provisions), node_count=len(nodes)
+        )
+        stage = "generation_publish"
+        await generation_repository.publish(generation.id)
+    except Exception:
+        try:
+            await generation_repository.fail(generation.id, f"{stage}_failed")
+        except Exception:
+            pass
+        raise
+    return IngestionResult(
+        total_provisions=len(provisions), embedded_count=len(provisions), skipped_count=0
+    )
 
 
 def _async_database_url(database_url: str) -> str:

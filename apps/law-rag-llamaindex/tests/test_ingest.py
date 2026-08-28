@@ -6,12 +6,14 @@ from llama_index.core.schema import TextNode
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from law_rag_llamaindex.generations import GenerationCatalog
 from law_rag_llamaindex.ingest import (
     _async_database_url,
     build_nodes,
     changed_provision_ids,
     existing_hashes,
     main,
+    run_generation_ingestion,
     run_ingestion,
 )
 from law_rag_llamaindex.passage import build_passage_text, compute_source_text_sha256
@@ -157,6 +159,76 @@ class _VectorStore:
         self.events.append("vector-write")
         if self.error is not None:
             raise self.error
+
+
+class _GenerationRepository:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.catalog = GenerationCatalog()
+
+    async def start(self, source_fingerprint: str, transform_fingerprint: str):
+        self.events.append("generation-start")
+        return self.catalog.start(source_fingerprint, transform_fingerprint)
+
+    async def verify(self, generation_id, *, source_count: int, node_count: int) -> None:
+        self.events.append("generation-verify")
+        self.catalog.verify(generation_id, source_count=source_count, node_count=node_count)
+
+    async def publish(self, generation_id) -> None:
+        self.events.append("generation-publish")
+        self.catalog.publish(generation_id)
+
+    async def fail(self, generation_id, failure_code: str) -> None:
+        self.events.append(f"generation-fail:{failure_code}")
+        self.catalog.fail(generation_id, failure_code)
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_publishes_only_after_vector_write(monkeypatch):
+    events: list[str] = []
+    repository = _GenerationRepository(events)
+    vector_store = _VectorStore(events)
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+
+    result = await run_generation_ingestion(
+        object(),
+        repository,
+        lambda _generation: vector_store,
+        _Embedder(),
+        transform_fingerprint="a" * 64,
+    )
+
+    assert result.total_provisions == 1
+    assert result.embedded_count == 1
+    assert events.index("generation-start") < events.index("vector-write")
+    assert events.index("vector-write") < events.index("generation-verify")
+    assert events.index("generation-verify") < events.index("generation-publish")
+    assert repository.catalog.active() is not None
+
+
+@pytest.mark.asyncio
+async def test_run_generation_ingestion_marks_candidate_failed_without_active_pointer(monkeypatch):
+    events: list[str] = []
+    repository = _GenerationRepository(events)
+    vector_store = _VectorStore(events, error=RuntimeError("vector write failed"))
+    monkeypatch.setattr(
+        "law_rag_llamaindex.source.fetch_provisions", lambda _engine: _provisions(events)
+    )
+
+    with pytest.raises(RuntimeError, match="vector write failed"):
+        await run_generation_ingestion(
+            object(),
+            repository,
+            lambda _generation: vector_store,
+            _Embedder(),
+            transform_fingerprint="a" * 64,
+        )
+
+    assert "generation-publish" not in events
+    assert "generation-fail:vector_write_failed" in events
+    assert repository.catalog.active() is None
 
 
 async def _provisions(events: list[str]) -> list[dict]:

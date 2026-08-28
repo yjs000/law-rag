@@ -154,3 +154,17 @@ async def test_postgres_catalog_publishes_verified_generation_and_pointer_atomic
     assert "WHERE generation_id = :generation_id AND status = 'verified'" in sql
     assert "status = 'rollback'" in sql
     assert "ON CONFLICT(singleton) DO UPDATE" in sql
+
+
+@pytest.mark.asyncio
+async def test_postgres_catalog_records_failure_without_touching_active_pointer() -> None:
+    generation_id = UUID("12345678-1234-5678-1234-567812345678")
+    connection = _Connection(generation_id)
+    repository = PostgresGenerationRepository(_Engine(connection))
+
+    await repository.fail(generation_id, "embedding_failed")
+
+    sql = "\n".join(statement for statement, _ in connection.statements)
+    assert "SET status = 'failed', failure_code = :failure_code" in sql
+    assert "WHERE generation_id = :generation_id AND status IN ('building','verified')" in sql
+    assert "llamaindex_active_generation" not in sql
