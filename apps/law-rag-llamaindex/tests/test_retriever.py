@@ -8,7 +8,7 @@ from llama_index.core.vector_stores.types import (
     VectorStoreQueryResult,
 )
 
-from law_rag_llamaindex.retriever import search
+from law_rag_llamaindex.retriever import search, search_index
 
 
 class _FakeEmbedder:
@@ -167,3 +167,32 @@ async def test_search_applies_limit_after_temporal_post_filtering() -> None:
         "10000000-0000-0000-0000-000000000006",
     ]
     assert vector_store.queries[0].similarity_top_k == 8
+
+
+@pytest.mark.asyncio
+async def test_search_index_uses_llamaindex_retriever_with_one_date_filter() -> None:
+    current = _node(provision_id="10000000-0000-0000-0000-000000000007")
+
+    class Retriever:
+        async def aretrieve(self, query):
+            assert query == "전기사업"
+            return [type("NodeWithScore", (), {"node": current, "score": 0.87})()]
+
+    class Index:
+        def __init__(self) -> None:
+            self.kwargs = None
+
+        def as_retriever(self, **kwargs):
+            self.kwargs = kwargs
+            return Retriever()
+
+    index = Index()
+    hits = await search_index(index, "전기사업", date(2026, 2, 1), 5)
+
+    assert [str(hit.provision_id) for hit in hits] == [
+        "10000000-0000-0000-0000-000000000007"
+    ]
+    assert index.kwargs["similarity_top_k"] == 20
+    filter_ = index.kwargs["filters"].filters[0]
+    assert filter_.key == "effective_from"
+    assert filter_.operator is FilterOperator.LTE

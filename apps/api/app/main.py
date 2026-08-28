@@ -19,6 +19,7 @@ from law_rag_llamaindex.config import get_settings as get_llamaindex_settings
 from law_rag_llamaindex.embedding import build_embedder as build_llamaindex_embedder
 from law_rag_llamaindex.generations import PostgresGenerationRepository
 from law_rag_llamaindex.retriever import search as llamaindex_search
+from law_rag_llamaindex.retriever import search_index as llamaindex_search_index
 from law_rag_llamaindex.store import build_generation_vector_store
 from llama_index.core import VectorStoreIndex
 from sqlalchemy import create_engine, text
@@ -377,16 +378,20 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
     active = getattr(vector_store, "active", None)
     if active is not None:
         try:
-            vector_store = (await active()).store
+            pinned = await active()
         except Exception:
             raise _v2_not_ready_http_error() from None
-    hits = await llamaindex_search(
-        vector_store,
-        embedder,
-        payload.query,
-        payload.as_of_date,
-        payload.limit,
-    )
+        hits = await llamaindex_search_index(
+            pinned.index, payload.query, payload.as_of_date, payload.limit
+        )
+    else:
+        hits = await llamaindex_search(
+            vector_store,
+            embedder,
+            payload.query,
+            payload.as_of_date,
+            payload.limit,
+        )
     if payload.source_kinds:
         hits = [hit for hit in hits if hit.source_kind in payload.source_kinds]
     return [hit for hit in hits if is_allowed_source_url(hit.source_url)]

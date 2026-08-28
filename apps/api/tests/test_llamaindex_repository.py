@@ -103,21 +103,22 @@ async def test_search_with_trace_pins_the_active_generation_store_for_one_reques
     delegate = MagicMock()
     active_store = object()
     observed: dict[str, object] = {}
+    active_index = object()
 
     class ActiveProvider:
         async def active(self):
-            return type("Pinned", (), {"store": active_store})()
+            return type("Pinned", (), {"store": active_store, "index": active_index})()
 
-    async def fake_search(store, emb, query, as_of_date, limit):
-        observed["store"] = store
+    async def fake_search(index, query, as_of_date, limit):
+        observed["index"] = index
         return []
 
-    monkeypatch.setattr("app.adapters.llamaindex_repository.llamaindex_search", fake_search)
+    monkeypatch.setattr("app.adapters.llamaindex_repository.llamaindex_search_index", fake_search)
 
     repository = LlamaIndexLegalRepository(delegate, ActiveProvider(), object())
     await repository.search_with_trace("질문", date(2026, 1, 1), 5)
 
-    assert observed["store"] is active_store
+    assert observed["index"] is active_index
 
 
 @pytest.mark.asyncio
