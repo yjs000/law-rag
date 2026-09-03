@@ -33,6 +33,7 @@ import {
   appendPendingTurn,
   applyLiveCoreSummary,
   completePendingTurn,
+  reconcileClarification,
   conversationAnswerText,
   createChatSession,
   failPendingTurn,
@@ -584,6 +585,8 @@ export default function Home() {
     setQuestion(nextDraft);
     requestAnimationFrame(() => composer.current?.focus());
     const requestedAnswerMode = SEARCH_ONLY_ENABLED && terraUnavailable ? "search_only" : "terra";
+    const clarification = activeChat.clarification;
+    const clarificationCapability = clarification?.capability ?? crypto.randomUUID();
     try {
       const answer = await askQuestion({
         client_request_id: requestId,
@@ -600,6 +603,9 @@ export default function Home() {
         ...(pending.rolledOver || !activeChat.confirmed
           ? {}
           : { conversation_id: activeChat.id }),
+        ...(clarification
+          ? { clarification_case_id: clarification.caseId, clarification_capability: clarificationCapability }
+          : { clarification_capability: clarificationCapability }),
       }, controller.signal, (event) => {
         if (activeRequest.current?.id !== requestId || event.event !== "summary") return;
         const summary = event.data.summary;
@@ -617,7 +623,7 @@ export default function Home() {
       }
       setResult(answer);
       setActiveChat((current) => ({
-        ...completePendingTurn(current, requestId, answer),
+        ...reconcileClarification(completePendingTurn(current, requestId, answer), answer, clarificationCapability),
         id: answer.conversation_id ?? current.id,
         confirmed: answer.conversation_id != null || current.confirmed,
       }));
@@ -832,7 +838,7 @@ export default function Home() {
                     {message.status === "pending" && <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div>}
                     {message.status === "stopped" && <p className="stopped-response">응답 대기를 중지했습니다.</p>}
                     {message.status === "error" && <p className="stopped-response">{message.error}</p>}
-                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />}
+                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <><AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />{message.response.clarification && <aside aria-label="추가 정보 질문" className="clarification-prompts"><p>정확한 안내를 위해 다음 정보를 알려주세요.</p>{message.response.clarification.question_format.map((fact) => <p key={fact.id}><strong>{fact.label}</strong> — {fact.why_needed}</p>)}<button onClick={() => setQuestion("현재 정보로 답변해 주세요.")} type="button">현재 정보로 답변 요청</button></aside>}</>}
                   </div></article>;
                 })}
                 {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}

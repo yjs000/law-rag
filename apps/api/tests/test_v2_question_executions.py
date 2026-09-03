@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -89,6 +89,89 @@ def test_obsolete_v2_single_question_route_is_removed() -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_v2_prepare_passes_anonymous_case_capability_only_to_clarification_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A case capability authorizes the workflow but never reaches a public payload."""
+
+    import app.main as main_module
+
+    case_id = uuid4()
+    captured: dict[str, object] = {}
+
+    class Workflow:
+        async def run_turn(self, request, owner):
+            captured["request"] = request
+            captured["owner"] = owner
+            return SimpleNamespace(case=None, next_status=None)
+
+    class Service:
+        async def prepare(self, request):
+            captured["prepare"] = request
+            return SimpleNamespace(execution=SimpleNamespace(execution_id=uuid4()))
+
+        def prepared_response(self, _prepared):
+            return {
+                "execution_id": "execution-1",
+                "status": "prepared",
+                "next_action": "generate_core",
+            }
+
+    monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+    monkeypatch.setattr(main_module, "v2_question_execution_service", Service())
+
+    response = TestClient(main_module.app).post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "clarification-key"},
+        json={
+            "question": "발전 설비는 100kW입니다.",
+            "clarification_case_id": str(case_id),
+            "clarification_capability": "private-case-capability",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "execution_id": "execution-1",
+        "status": "prepared",
+        "next_action": "generate_core",
+    }
+    assert captured["request"].case_id == case_id
+    assert captured["owner"].capability_hash == main_module._capability_hash(
+        "private-case-capability"
+    )
+    assert captured["prepare"].payload.clarification_capability == "private-case-capability"
+    assert "private-case-capability" not in response.text
+
+
+def test_v2_prepare_hides_foreign_clarification_cases_as_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Foreign, expired, and invalid case ids share one non-enumerable response."""
+
+    import app.main as main_module
+    from app.ports.clarification_case import ClarificationCaseNotFound
+
+    class Workflow:
+        async def run_turn(self, _request, _owner):
+            raise ClarificationCaseNotFound()
+
+    monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+
+    response = TestClient(main_module.app).post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "foreign-case"},
+        json={
+            "question": "이어서 답변해 주세요.",
+            "clarification_case_id": str(UUID("00000000-0000-0000-0000-000000000001")),
+            "clarification_capability": "foreign-capability",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "보완 질문을 찾을 수 없습니다."}
 
 
 @pytest.mark.asyncio

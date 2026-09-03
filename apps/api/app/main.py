@@ -116,6 +116,7 @@ llamaindex_vector_store = None
 llamaindex_embedder = None
 llamaindex_repository = None
 v2_question_execution_service = dependencies.v2_service
+clarification_workflow = dependencies.clarification_workflow
 supabase_auth = dependencies.supabase_auth
 postgres_identity = dependencies.postgres_identity
 collector_load_errors = dependencies.collector_load_errors
