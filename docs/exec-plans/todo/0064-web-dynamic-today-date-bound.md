@@ -76,13 +76,12 @@
 | AI 근거 답변·스트리밍·중지 | POST /v2/question-executions → core/finalize SSE → DELETE execution | request body·phase·취소 회귀 테스트 |
 | 로그인 사용자 대화 이력 | GET /v1/conversations, GET/DELETE /v1/conversations/{id}/turns | cursor·상세 지연 로딩 회귀 테스트 |
 | Google 인증·계정 삭제 | Supabase OAuth, GET /v1/auth/me, DELETE /v1/account | 인증 헤더·개인정보 초기화 회귀 테스트 |
-| Markdown/CSV/PDF 체크리스트 | 클라이언트 생성, GET /v1/questions/history/{id}/checklist?format=pdf | PDF 인증 요청 회귀 테스트 |
 | 인용 원문 | V2 QuestionResponse.citations | 별도 /v1/provisions 호출을 추가하지 않음 |
 | 기준일 선택 | UI date input + QuestionInput.as_of_date | 한국 오늘 max 갱신과 요청 body 회귀 테스트 |
 | 코퍼스 준비·지원 범위 | 서버 측 판정 | UI 범위에서 제외; 상태 API 선제 차단·재조회 미구현 |
 
 ### Task 0: 요구사항별 API 계약 회귀 검증
 
-- [ ] V2 prepare/core/finalize/cancel, 대화 목록·상세·삭제, PDF 인증 요청을 요구사항 매핑으로 회귀 검증한다.
+- [ ] V2 prepare/core/finalize/cancel과 대화 목록·상세·삭제를 요구사항 매핑으로 회귀 검증한다.
 - [ ] 인용 표시에 별도 search/provision 호출을 추가하지 않는 경계를 확인한다.
 - [ ] focused 테스트를 통과시키고 이 작업만 검토해 로컬 커밋한다.
