@@ -2946,9 +2946,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/adapters/postgres_question_execution.py": {
-    "mtime": 1788421496.8952804,
-    "seen": 1788426830.240479,
-    "ast_hash": "b752bef0c9b8779a0a01b55fa0669674",
+    "mtime": 1788432784.3476384,
+    "seen": 1788432897.5140896,
+    "ast_hash": "30e17d9d7093de6d71b6d2bbf1f98633",
     "semantic_hash": ""
   },
   "apps/api/app/application/final_answer.py": {
@@ -3030,9 +3030,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_question_execution_repository.py": {
-    "mtime": 1788421496.9832802,
-    "seen": 1788426830.2406797,
-    "ast_hash": "b22be3d60bcdddc0c7df001a46866470",
+    "mtime": 1788432798.7587833,
+    "seen": 1788432897.5446663,
+    "ast_hash": "35d15e8b56c280d554c7722dbfdbe160",
     "semantic_hash": ""
   },
   "apps/api/tests/test_question_phase_coordinator.py": {

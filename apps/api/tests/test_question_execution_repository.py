@@ -392,3 +392,96 @@ async def test_postgres_transition_uses_owner_and_optimistic_version_conditions(
     assert "owner_scope=:owner_scope" in update_sql
     assert "version=:expected_version" in update_sql
     assert parameters["expected_version"] == 0
+
+
+@pytest.mark.asyncio
+async def test_postgres_finish_phase_casts_nullable_private_payload_before_null_check() -> None:
+    from app.domain.answer_events import AnswerEvent
+
+    execution_id = uuid4()
+    generation_id = uuid4()
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+
+    def row(status: str, version: int):
+        return {
+            "execution_id": execution_id,
+            "owner_scope": "user:1",
+            "prepare_idempotency_key": "request-key",
+            "capability_hash": None,
+            "generation_id": generation_id,
+            "status": status,
+            "version": version,
+            "private_payload": {},
+            "frozen_citations": [],
+            "verified_response": None,
+            "expires_at": now + timedelta(minutes=5),
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+
+        def mappings(self):
+            return self
+
+        def one(self):
+            return self.value
+
+        def one_or_none(self):
+            return self.value
+
+    class Connection:
+        def __init__(self):
+            self.calls = []
+            self.rows = iter(
+                (
+                    row("core_running", 1),
+                    row("core_answered", 2),
+                    {
+                        "event_type": "phase_complete",
+                        "public_payload": {"next_action": "generate_detail"},
+                    },
+                )
+            )
+
+        async def execute(self, statement, parameters):
+            self.calls.append((str(statement), parameters))
+            return Result(next(self.rows))
+
+    class Begin:
+        def __init__(self, connection):
+            self.connection = connection
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, *args):
+            return False
+
+    class Engine:
+        def __init__(self):
+            self.connection = Connection()
+
+        def begin(self):
+            return Begin(self.connection)
+
+    engine = Engine()
+    repository = PostgresQuestionExecutionRepository(engine)  # type: ignore[arg-type]
+    await repository.finish_phase(
+        execution_id,
+        "user:1",
+        expected_version=1,
+        target=ExecutionStatus.CORE_ANSWERED,
+        phase="core",
+        events=(
+            AnswerEvent(
+                event_type="phase_complete", payload={"next_action": "generate_detail"}
+            ),
+        ),
+        private_payload={"verified_core": {"summary": "검증됨"}},
+    )
+
+    update_sql, _parameters = engine.connection.calls[1]
+    assert "CASE WHEN CAST(:private_payload AS jsonb) IS NULL" in " ".join(update_sql.split())

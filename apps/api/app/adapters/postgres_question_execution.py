@@ -275,7 +275,8 @@ class PostgresQuestionExecutionRepository:
                     text(
                         f"""UPDATE question_executions SET status=:status,version=:version,
                         verified_response=COALESCE(CAST(:response AS jsonb), verified_response),
-                        private_payload=CASE WHEN :private_payload IS NULL THEN private_payload
+                        private_payload=CASE
+                          WHEN CAST(:private_payload AS jsonb) IS NULL THEN private_payload
                           ELSE private_payload || CAST(:private_payload AS jsonb) END,
                         updated_at=now()
                         WHERE execution_id=:execution_id AND owner_scope=:owner_scope
