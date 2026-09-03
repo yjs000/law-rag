@@ -3,22 +3,8 @@
 from __future__ import annotations
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict
 
-from app.application.clarification_workflow import (
-    ClarificationIntent,
-    ClarificationTurnJudgment,
-    FactSubmission,
-)
-
-
-class _ContinuationJudgmentSchema(BaseModel):
-    """Continuation extraction must not propose new required facts."""
-
-    model_config = ConfigDict(frozen=True)
-
-    intent: ClarificationIntent
-    submitted_facts: tuple[FactSubmission, ...] = ()
+from app.application.clarification_workflow import ClarificationTurnJudgment
 
 
 class NvidiaNimClarificationInterpreter:
@@ -59,53 +45,6 @@ class NvidiaNimClarificationInterpreter:
             },
         )
         return ClarificationTurnJudgment.model_validate_json(_content(response))
-
-    async def extract_continuation(
-        self,
-        *,
-        original_question: str,
-        unresolved_facts: tuple[object, ...],
-        user_text: str,
-    ) -> ClarificationTurnJudgment:
-        unresolved = [
-            {"fact_id": str(fact.id), "label": str(fact.label)} for fact in unresolved_facts
-        ]
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "법률 clarification 후속 추출기다. 답변을 생성하거나 "
-                        "새 질문 사실을 만들지 말고, 현재 사용자 메시지에서 의도와 "
-                        "이미 부여된 fact_id의 값 또는 거절만 JSON으로 추출한다."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": "\n".join(
-                        (
-                            f"원 질문: {original_question}",
-                            f"미해결 사실: {unresolved}",
-                            f"사용자 메시지: {user_text}",
-                        )
-                    ),
-                },
-            ],
-            max_tokens=500,
-            temperature=0.0,
-            stream=False,
-            extra_body={
-                "guided_json": _ContinuationJudgmentSchema.model_json_schema(),
-                "chat_template_kwargs": {"enable_thinking": False},
-            },
-        )
-        parsed = _ContinuationJudgmentSchema.model_validate_json(_content(response))
-        return ClarificationTurnJudgment(
-            intent=parsed.intent,
-            submitted_facts=parsed.submitted_facts,
-            required_facts=(),
-        )
 
     async def aclose(self) -> None:
         await self.client.close()

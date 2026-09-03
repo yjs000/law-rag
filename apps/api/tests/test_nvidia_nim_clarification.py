@@ -5,7 +5,13 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.nvidia_nim_clarification import NvidiaNimClarificationInterpreter
-from app.bootstrap import build_nvidia_clarification_interpreter
+from app.adapters.structured_clarification_continuation import (
+    StructuredClarificationContinuationExtractor,
+)
+from app.bootstrap import (
+    build_nvidia_clarification_interpreter,
+    build_structured_clarification_continuation_extractor,
+)
 from app.settings import Settings
 
 
@@ -27,6 +33,13 @@ def test_composition_factory_uses_the_configured_ultra_router_model() -> None:
     )
 
     assert interpreter.model == "nvidia/test-ultra-router"
+
+
+def test_composition_factory_uses_non_nvidia_continuation_extractor() -> None:
+    assert isinstance(
+        build_structured_clarification_continuation_extractor(),
+        StructuredClarificationContinuationExtractor,
+    )
 
 
 @pytest.mark.asyncio
@@ -103,38 +116,19 @@ async def test_nvidia_clarification_propagates_provider_failure_to_safe_workflow
 
 @pytest.mark.asyncio
 async def test_continuation_uses_structured_intent_and_fact_extraction_only() -> None:
-    interpreter = _interpreter()
-    captured: dict[str, object] = {}
-
-    async def create(**kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=json.dumps(
-                            {
-                                "intent": "request_answer_now",
-                                "submitted_facts": [
-                                    {"fact_id": "fact-1", "status": "answered", "value": "100kW"}
-                                ],
-                                "required_facts": [],
-                            }
-                        )
-                    )
-                )
-            ]
-        )
-
-    interpreter.client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
-    judgment = await interpreter.extract_continuation(
+    extractor = StructuredClarificationContinuationExtractor()
+    judgment = await extractor.extract_continuation(
         original_question="태양광 발전 사업의 허가 요건은 무엇인가요?",
         unresolved_facts=(SimpleNamespace(id="fact-1", label="설비 용량"),),
-        user_text="100kW입니다. 지금 답변해 주세요.",
+        user_text=json.dumps(
+            {
+                "intent": "request_answer_now",
+                "submitted_facts": [{"fact_id": "fact-1", "status": "answered", "value": "100kW"}],
+            }
+        ),
     )
 
     assert judgment.intent == "request_answer_now"
     assert judgment.submitted_facts[0].value == "100kW"
-    assert "required_facts" not in captured["extra_body"]["guided_json"]["properties"]
+    assert judgment.required_facts == ()
+    assert not hasattr(_interpreter(), "extract_continuation")

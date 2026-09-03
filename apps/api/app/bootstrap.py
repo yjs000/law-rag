@@ -24,6 +24,7 @@ from app.adapters.capacity_leases import (
     PostgresCapacityLeaseStore,
     PostgresConcurrencyLimiter,
 )
+from app.adapters.llamaindex_clarification_workflow import LlamaIndexClarificationWorkflow
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
@@ -43,8 +44,11 @@ from app.adapters.postgres_clarification_case import PostgresClarificationCaseRe
 from app.adapters.postgres_identity import PostgresIdentityRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
+from app.adapters.structured_clarification_continuation import (
+    StructuredClarificationContinuationExtractor,
+)
 from app.adapters.supabase_auth import SupabaseAuth
-from app.application.clarification_workflow import ClarificationWorkflow
+from app.application.clarification_workflow import ClarificationTurnOrchestrator
 from app.application.v1.dependencies import QueryEmbeddingCapability, V1AnswerDependencies
 from app.application.v2.dependencies import (
     ClarificationWorkflowDependencies,
@@ -110,7 +114,7 @@ class AppDependencies:
     nvidia_answerer: NvidiaNimAnswerer | None
     clarification_cases: Any
     nvidia_clarification_interpreter: NvidiaNimClarificationInterpreter | None
-    clarification_workflow: ClarificationWorkflow | None
+    clarification_workflow: ClarificationTurnOrchestrator | None
     nvidia_question_router: NvidiaNimQuestionRouter | None
     supabase_auth: SupabaseAuth | None
     postgres_identity: PostgresIdentityRepository | None
@@ -317,10 +321,11 @@ def build_app_dependencies(
     )
     nvidia_question_router = build_nvidia_question_router(settings) if settings.ai_enabled else None
     clarification_workflow = (
-        ClarificationWorkflow(
+        LlamaIndexClarificationWorkflow(
             ClarificationWorkflowDependencies(
                 repository=clarification_cases,
-                interpreter=nvidia_clarification_interpreter,
+                initial_judge=nvidia_clarification_interpreter,
+                continuation_extractor=build_structured_clarification_continuation_extractor(),
                 now=lambda: datetime.now(UTC),
                 case_ttl=timedelta(days=1),
             )
@@ -401,6 +406,14 @@ def build_nvidia_clarification_interpreter(settings: Settings) -> NvidiaNimClari
         model=settings.nvidia_route_classifier_model,
         timeout_seconds=settings.route_classifier_timeout_seconds,
     )
+
+
+def build_structured_clarification_continuation_extractor() -> (
+    StructuredClarificationContinuationExtractor
+):
+    """Create the non-NVIDIA structured extractor used after the initial turn."""
+
+    return StructuredClarificationContinuationExtractor()
 
 
 def build_nvidia_question_router(settings: Settings) -> NvidiaNimQuestionRouter:

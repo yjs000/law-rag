@@ -1,22 +1,29 @@
+import ast
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
-from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
-from app.application.clarification_workflow import (
+import app.application.clarification_workflow as clarification_application
+from app.adapters.llamaindex_clarification_workflow import (
     CaseLoaded,
     CaseMerged,
-    ClarificationOwner,
-    ClarificationTurnJudgment,
-    ClarificationTurnRequest,
-    ClarificationWorkflow,
-    FactSubmission,
     InterpreterFailed,
+    LlamaIndexClarificationWorkflow,
     PolicySelected,
-    RequiredFactCandidate,
     TurnInterpreted,
     TurnStarted,
 )
+from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
+from app.application.clarification_workflow import (
+    ClarificationOwner,
+    ClarificationTurnJudgment,
+    ClarificationTurnOrchestrator,
+    ClarificationTurnRequest,
+    FactSubmission,
+    RequiredFactCandidate,
+)
+from app.application.v2.dependencies import ClarificationWorkflowDependencies
 from app.ports.clarification_case import ClarificationCaseStatus
 
 
@@ -65,13 +72,16 @@ def _initial(*candidates: RequiredFactCandidate) -> ClarificationTurnJudgment:
     )
 
 
-def _workflow(interpreter: _FakeInterpreter) -> ClarificationWorkflow:
+def _workflow(interpreter: _FakeInterpreter) -> LlamaIndexClarificationWorkflow:
     now = datetime(2026, 9, 3, tzinfo=UTC)
-    return ClarificationWorkflow(
-        repository=MemoryClarificationCaseRepository(now=lambda: now),
-        interpreter=interpreter,
-        now=lambda: now,
-        case_ttl=timedelta(days=1),
+    return LlamaIndexClarificationWorkflow(
+        ClarificationWorkflowDependencies(
+            repository=MemoryClarificationCaseRepository(now=lambda: now),
+            initial_judge=interpreter,
+            continuation_extractor=interpreter,
+            now=lambda: now,
+            case_ttl=timedelta(days=1),
+        )
     )
 
 
@@ -87,6 +97,25 @@ def _request(*, case_id=None, user_text: str | None = None) -> ClarificationTurn
 
 def _owner() -> ClarificationOwner:
     return ClarificationOwner(owner_scope="user:owner", capability_hash=None)
+
+
+def test_application_layer_does_not_import_llamaindex_workflow_sdk() -> None:
+    application_dir = Path(clarification_application.__file__).parent
+    imports: list[str] = []
+    for source_file in application_dir.rglob("*.py"):
+        for node in ast.walk(ast.parse(source_file.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom):
+                imports.append(node.module or "")
+            elif isinstance(node, ast.Import):
+                imports.extend(alias.name for alias in node.names)
+
+    assert all(not module.startswith("llama_index") for module in imports)
+
+
+def test_llamaindex_adapter_implements_application_orchestrator_protocol() -> None:
+    workflow = _workflow(_FakeInterpreter(initial=_initial(_candidate(1))))
+
+    assert isinstance(workflow, ClarificationTurnOrchestrator)
 
 
 def test_workflow_events_do_not_carry_private_case_or_fact_payloads() -> None:
@@ -132,6 +161,27 @@ async def test_initial_turn_formats_every_blocking_fact() -> None:
 
 
 @pytest.mark.asyncio
+async def test_candidate_persistence_rejects_blank_reason_and_normalizes_blank_group() -> None:
+    interpreter = _FakeInterpreter(
+        initial=_initial(
+            RequiredFactCandidate(
+                label="무효 후보", why_needed=" \t", blocking=True, group="사업 정보"
+            ),
+            RequiredFactCandidate(
+                label="유효 후보", why_needed="적용 요건을 가릅니다.", blocking=True, group=" \n"
+            ),
+        )
+    )
+
+    outcome = await _workflow(interpreter).run_turn(_request(), _owner())
+
+    assert outcome.case is not None
+    assert tuple(fact.id for fact in outcome.case.case.required_facts) == ("fact-1",)
+    assert outcome.case.case.required_facts[0].label == "유효 후보"
+    assert outcome.case.case.required_facts[0].group == "기본 정보"
+
+
+@pytest.mark.asyncio
 async def test_continuation_removes_answered_and_declined_facts_from_question_format() -> None:
     interpreter = _FakeInterpreter(
         initial=_initial(*(_candidate(index) for index in range(1, 4))),
@@ -160,6 +210,8 @@ async def test_continuation_removes_answered_and_declined_facts_from_question_fo
     assert outcome.case.status is ClarificationCaseStatus.WAITING_FOR_USER
     assert tuple(fact.id for fact in outcome.question_format.facts) == ("fact-3",)
     assert outcome.policy == "interim"
+    assert interpreter.initial_calls == 1
+    assert interpreter.continuation_calls == 1
 
 
 @pytest.mark.asyncio

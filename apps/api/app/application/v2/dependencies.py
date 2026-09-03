@@ -10,6 +10,10 @@ from uuid import UUID
 
 from law_rag_core.ports.repository import LegalRepository
 
+from app.application.clarification_workflow import (
+    ContinuationFactIntentExtractor,
+    InitialClarificationJudge,
+)
 from app.application.question_phase_coordinator import PhaseResult
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.clarification_case import ClarificationCaseRepository
@@ -79,7 +83,8 @@ class ClarificationWorkflowDependencies:
     """SDK-free collaborators for one clarification workflow instance."""
 
     repository: ClarificationCaseRepository
-    interpreter: Any
+    initial_judge: InitialClarificationJudge
+    continuation_extractor: ContinuationFactIntentExtractor
     now: Callable[[], datetime]
     case_ttl: timedelta
 
