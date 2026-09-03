@@ -15,6 +15,7 @@ from app.application.clarification_workflow import (
     InitialClarificationJudge,
 )
 from app.application.question_phase_coordinator import PhaseResult
+from app.application.v2.grounding import ClarificationGrounding
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.clarification_case import ClarificationCaseRepository
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
@@ -97,6 +98,7 @@ class PrepareQuestion:
     owner_scope: str
     idempotency_key: str
     user: MockUser | None
+    clarification: ClarificationGrounding | None = None
 
 
 @dataclass(frozen=True)

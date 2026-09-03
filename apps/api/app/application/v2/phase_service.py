@@ -23,6 +23,9 @@ from app.application.v2.evidence import (
     freeze_citations,
 )
 from app.application.v2.grounding import (
+    ClarificationGrounding,
+    claims_are_grounded,
+    clarification_grounding_from_payload,
     core_degraded_response,
     core_is_grounded,
     grounding_fallback,
@@ -85,19 +88,26 @@ class V2QuestionExecutionService:
             dependencies, request.payload.answer_mode, route, hits
         )
         execution_capability = self._anonymous_capability(request, dependencies)
+        private_payload = {
+            # The case capability authorizes transport access only; preserving it
+            # with the long-lived execution snapshot would create a second secret store.
+            "request": request.payload.model_dump(
+                mode="json", exclude={"clarification_capability"}
+            ),
+            "hits": [hit.model_dump(mode="json") for hit in hits],
+            "generation_hits": [hit.model_dump(mode="json") for hit in generation_hits],
+            "corpus_as_of": corpus_as_of.isoformat() if corpus_as_of is not None else None,
+            "route": route,
+            "missing_fields": list(missing_fields),
+        }
+        if request.clarification is not None:
+            private_payload["clarification_grounding"] = request.clarification.to_payload()
         execution = await dependencies.executions.prepare_or_get(
             owner_scope=request.owner_scope,
             prepare_idempotency_key=request.idempotency_key,
             generation_id=active.generation.id,
             capability_hash=dependencies.capability_hash(execution_capability),
-            private_payload={
-                "request": request.payload.model_dump(mode="json"),
-                "hits": [hit.model_dump(mode="json") for hit in hits],
-                "generation_hits": [hit.model_dump(mode="json") for hit in generation_hits],
-                "corpus_as_of": corpus_as_of.isoformat() if corpus_as_of is not None else None,
-                "route": route,
-                "missing_fields": list(missing_fields),
-            },
+            private_payload=private_payload,
             frozen_citations=freeze_citations(generation_hits),
             expires_at=dependencies.now() + timedelta(minutes=10),
         )
@@ -171,9 +181,21 @@ class V2QuestionExecutionService:
             return fallback
 
         generation_hits = self._stored_or_selected_generation_hits(dependencies, execution, hits)
-        draft = await dependencies.answerer().answer(payload, generation_hits)
+        clarification = self._clarification_grounding(execution)
+        if clarification is None:
+            draft = await dependencies.answerer().answer(payload, generation_hits)
+        else:
+            draft = await dependencies.answerer().answer(
+                payload, generation_hits, clarification=clarification
+            )
         if not dependencies.validate_response(draft, generation_hits):
             raise ValueError("generated answer did not satisfy the citation contract")
+        if clarification is not None and not claims_are_grounded(
+            draft.grounded_claims, clarification, CitationRegistry(execution.frozen_citations)
+        ):
+            raise ValueError(
+                "generated clarification claims did not satisfy the grounding contract"
+            )
         return QuestionResponse(
             request_id=str(payload.client_request_id),
             mode="ai",
@@ -213,7 +235,13 @@ class V2QuestionExecutionService:
             )
 
         generation_hits = self._stored_or_selected_generation_hits(dependencies, execution, hits)
-        draft = await dependencies.answerer().answer_core(payload, generation_hits)
+        clarification = self._clarification_grounding(execution)
+        if clarification is None:
+            draft = await dependencies.answerer().answer_core(payload, generation_hits)
+        else:
+            draft = await dependencies.answerer().answer_core(
+                payload, generation_hits, clarification=clarification
+            )
         if not dependencies.validate_core(draft, generation_hits):
             raise ValueError("generated core did not satisfy the citation contract")
         return draft, citations_for_hits(generation_hits)
@@ -222,7 +250,17 @@ class V2QuestionExecutionService:
         """Validate a core draft before persisting the only publishable core event."""
 
         core, citations = await self.core_from_frozen_evidence(execution)
-        if not core_is_grounded(core, CitationRegistry(execution.frozen_citations)):
+        clarification = self._clarification_grounding(execution)
+        core_is_valid = (
+            claims_are_grounded(
+                core.grounded_claims,
+                clarification,
+                CitationRegistry(execution.frozen_citations),
+            )
+            if clarification is not None
+            else core_is_grounded(core, CitationRegistry(execution.frozen_citations))
+        )
+        if not core_is_valid:
             return PhaseResult(
                 target=ExecutionStatus.CORE_REPAIR_REQUIRED,
                 events=(
@@ -235,7 +273,9 @@ class V2QuestionExecutionService:
                     ),
                 ),
             )
-        core_data = core.model_dump(mode="json")
+        # Claims are validated before this point and must not alter the legacy
+        # persisted-core contract or become a second public response surface.
+        core_data = core.model_dump(mode="json", exclude={"grounded_claims"})
         return PhaseResult(
             target=ExecutionStatus.CORE_ANSWERED,
             events=(
@@ -282,7 +322,10 @@ class V2QuestionExecutionService:
         except Exception:
             response = core_degraded_response(payload, core, execution.private_payload)
             degraded = True
-        if not response_is_grounded(response, CitationRegistry(execution.frozen_citations)):
+        clarification = self._clarification_grounding(execution)
+        if clarification is None and not response_is_grounded(
+            response, CitationRegistry(execution.frozen_citations)
+        ):
             response = core_degraded_response(payload, core, execution.private_payload)
             degraded = True
         elif core is not None:
@@ -444,6 +487,11 @@ class V2QuestionExecutionService:
             [value for value in raw_core.get("citation_ids", []) if isinstance(value, str)],
             str(raw_core.get("action", "unanswerable")),
         )
+
+    def _clarification_grounding(
+        self, execution: QuestionExecutionRecord
+    ) -> ClarificationGrounding | None:
+        return clarification_grounding_from_payload(execution.private_payload)
 
 
 __all__ = ["V2QuestionExecutionService", "grounding_fallback"]

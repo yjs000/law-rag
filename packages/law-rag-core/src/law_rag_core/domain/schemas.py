@@ -93,6 +93,24 @@ class ConversationTurnContext(BaseModel):
     answer: Annotated[str, Field(min_length=1, max_length=12000)]
 
 
+class ClarificationFactPrompt(BaseModel):
+    """A safe-to-display pending fact prompt; values never leave the case store."""
+
+    id: Annotated[str, Field(min_length=1, max_length=80)]
+    label: Annotated[str, Field(min_length=1, max_length=120)]
+    why_needed: Annotated[str, Field(min_length=1, max_length=300)]
+    group: Annotated[str, Field(min_length=1, max_length=80)]
+    priority: int = Field(ge=0)
+
+
+class ClarificationContinuation(BaseModel):
+    """Optional continuation metadata for a waiting clarification response."""
+
+    case_id: UUID
+    policy: Literal["interim", "full", "conditional"]
+    facts: list[ClarificationFactPrompt] = Field(default_factory=list)
+
+
 class QuestionRequest(BaseModel):
     # 클라이언트가 중복 요청을 구분하기 위해 부여한 ID.
     client_request_id: UUID = Field(default_factory=uuid4)
@@ -114,6 +132,9 @@ class QuestionRequest(BaseModel):
     conversation_context: Annotated[list[ConversationTurnContext], Field(max_length=20)] = Field(
         default_factory=list
     )
+    # A continuation reference is optional so established v1/v2 callers keep their wire contract.
+    clarification_case_id: UUID | None = None
+    clarification_capability: Annotated[str | None, Field(max_length=512)] = None
 
     @model_validator(mode="after")
     def validate_context_size(self) -> Self:
@@ -285,6 +306,8 @@ class QuestionResponse(BaseModel):
         ]
         | None
     ) = None
+    # Optional so existing response consumers can ignore clarification support until they opt in.
+    clarification: ClarificationContinuation | None = None
 
 
 class MockUser(BaseModel):
