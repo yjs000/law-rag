@@ -113,8 +113,12 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 - UI 원칙: `docs/DESIGN.md`, `docs/FRONTEND.md`
 - 보안과 개인정보: `docs/SECURITY.md`
 - 신뢰성 목표: `docs/RELIABILITY.md`
+- 코퍼스 수집·임베딩·migration·V2 generation 운영 명령: `docs/references/operations-runbook.md`
 - 품질 현황: `docs/QUALITY_SCORE.md`
 - 알려진 부채: `docs/exec-plans/tech-debt-tracker.md`
+
+법률 수집, 임베딩, migration, `corpus_unready`, `v2_search_not_ready` 또는 active generation 작업은
+소스 검색 전에 위 운영 런북의 `에이전트 빠른 명령 색인`을 먼저 확인한다.
 
 ## 변경 불변조건
 

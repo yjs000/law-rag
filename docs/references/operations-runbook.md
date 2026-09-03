@@ -1,6 +1,46 @@
 # 코퍼스 운영·롤백 런북
 
-최종 갱신: 2026-08-04
+최종 갱신: 2026-09-03
+
+## 에이전트 빠른 명령 색인
+
+법률 수집, 임베딩, migration, `corpus_unready`, `v2_search_not_ready` 또는 active generation을 다루는
+에이전트는 소스 코드를 다시 검색하기 전에 이 절을 먼저 사용한다. 모든 명령은 **저장소 루트**에서
+실행한다.
+
+아래에서 `DB write` 또는 `외부 호출`로 표시한 명령은 운영 데이터와 외부 API 비용에 영향을 줄 수
+있으므로 사용자 승인을 받은 뒤 실행한다. 비밀값은 `.env.local` 또는 프로세스 환경에서 읽고 명령줄,
+로그와 문서에 출력하지 않는다.
+
+| 목적 | 명령 | 영향 |
+|---|---|---|
+| 전체 로컬 검증 | `pnpm.cmd verify` | 로컬 읽기·테스트 산출물 |
+| DB migration 상태 확인 | `uv run --directory apps/api alembic current` | DB read |
+| 누락 migration 적용 | `uv run --directory apps/api alembic upgrade head` | DB write |
+| 법률 수집과 기존 corpus 임베딩 갱신 | `powershell -ExecutionPolicy Bypass -File apps/collector/ops/Sync-Corpus.ps1` | 외부 법령 API·NVIDIA 호출, DB·Storage write |
+| V2 LlamaIndex generation 생성·검증·활성화 | `uv run --directory apps/law-rag-llamaindex python -m law_rag_llamaindex.ingest` | NVIDIA 호출, DB write |
+| 공개 corpus 상태 확인 | `Invoke-RestMethod https://law-rag-api-opal.vercel.app/v1/corpus/status` | 운영 API read |
+
+### 전체 법령·검색 갱신 순서
+
+최신 법률 원문부터 V2 검색 활성화까지 갱신할 때는 다음 두 명령을 순서대로 실행한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File apps/collector/ops/Sync-Corpus.ps1
+uv run --directory apps/law-rag-llamaindex python -m law_rag_llamaindex.ingest
+```
+
+첫 번째 명령은 `prepare-current → generate-cache --bundle → apply-prepared`를 묶어 공식 원문과 기존
+corpus 임베딩을 갱신한다. 두 번째 명령은 그 결과로 새 V2 immutable generation을 만들고 전체 검증을
+통과한 뒤 active pointer를 전환한다. `Sync-Corpus.ps1`만 실행하면 V2 active generation은 생성되지
+않는다.
+
+필수 설정은 다음과 같다. 값 자체는 이 문서에 기록하지 않는다.
+
+- corpus 갱신: `LAW_OPEN_API_OC`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
+  `NVIDIA_API_KEY`
+- V2 generation: `DATABASE_URL`, `NVIDIA_API_KEY`와 해당 embedding 설정
+- 국가법령정보 호출: 등록된 고정 공인 출구 IP 머신에서 실행
 
 ## 정상 실행
 
@@ -12,9 +52,8 @@
    반영은 등록된 고정 공인 출구 IP 머신에서 사람 또는 에이전트가 아래 순서를 그 자리에서 수동 실행해
    왔다.
 4. `/v1/corpus/status`에서 9개 대상, 현재 snapshot, 지원 날짜와 `corpus_search_ready`를 확인한다.
-5. NVIDIA 임베딩 검색을 배포할 때는 API 코드보다 먼저 migration `0007`을 적용하고, Preview와
-   Production에 `NVIDIA_API_KEY`, `NVIDIA_EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`,
-   `EMBEDDING_TIMEOUT_SECONDS`를 환경별로 등록한다.
+5. DB schema가 저장소 head인지 확인하고 누락 migration이 있으면 API 코드보다 먼저 적용한다. Preview와
+   Production에는 `NVIDIA_API_KEY`와 현재 embedding 설정을 환경별로 등록한다.
 
 ## 수동 준비와 점검 반영
 
@@ -34,7 +73,7 @@
 | 401/403 또는 사용자 검증 실패 | 등록된 고정 공인 출구 IP와 OC | 재시도 반복 금지, 등록 정보 수정 후 한 문서 smoke |
 | 429/5xx/timeout | 준비 단계의 실행 상태와 재시도 소진 | gate가 열려 있으면 기존 코퍼스 유지, 다음 예약 또는 수동 재실행 |
 | 정규화 실패 | 포맷·폴백 사유·대상 MST | HTML로 우회하지 않고 fixture와 파서를 먼저 갱신 |
-| AI quota/모델 오류 | 응답 mode와 관측 이벤트 | 다른 모델로 전환하지 않고 검색 전용 유지 |
+| AI quota/모델 오류 | execution issue와 단계별 reason code | 다른 모델이나 검색 경로로 임의 전환하지 않고 현재 fail-closed 계약 유지 |
 | NVIDIA 임베딩 오류 | bundle 상태와 profile·key·quota | gate를 닫기 전 실패하므로 기존 검색 유지, 원인 수정 후 재준비 |
 | `corpus_unready` + `corpus_publish` | update ID와 workflow 실패 단계 | 원인 수정 후 bundle을 다시 준비·반영; gate 수동 활성화 금지 |
 | 기준 snapshot 불일치·writer lock 충돌 | prepare/apply 실행 ID | gate를 닫지 않고 종료되므로 충돌 writer 종료 뒤 새 bundle 준비 |
@@ -45,8 +84,10 @@
 - 코드: 직전 검증 커밋으로 새 배포를 만들며 원격 DB 파괴 명령은 실행하지 않는다.
 - 코퍼스: 준비 실패는 DB를 바꾸지 않는다. 반영 실패는 transaction B 전체를 rollback하고 gate=false를
   유지한다. 자동 rollback이나 구세대 전환 대신 원인을 수정한 새 bundle을 다시 적용한다.
-- AI: `AI_MODE=off`로 검색 전용 모드로 전환한다.
-- 인증: 목업 인증은 production 환경에서 404이며 실제 OAuth 연결 전 공개 로그인 기능을 열지 않는다.
+- AI: 다른 provider로 임의 전환하지 않는다. 검증 전 생성 내용은 공개하지 않고 단계별 실패 원인을
+  확인한 뒤 같은 계약으로 복구한다.
+- 인증: Production은 Supabase Google OAuth를 사용한다. 장애 시 mock 인증을 Production에 활성화하지
+  않고 OAuth 설정과 callback allowlist를 복구한다.
 
 ## 비밀과 로그
 
