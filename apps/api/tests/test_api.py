@@ -17,6 +17,12 @@ def test_health_exposes_no_secrets() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_main_exports_composition_owned_ai_adapters() -> None:
+    assert main_module.nvidia_embedder is main_module.dependencies.nvidia_embedder
+    assert main_module.nvidia_answerer is main_module.dependencies.nvidia_answerer
+    assert main_module.nvidia_question_router is main_module.dependencies.nvidia_question_router
+
+
 def test_corpus_status_exposes_search_readiness() -> None:
     response = TestClient(app).get("/v1/corpus/status")
 
