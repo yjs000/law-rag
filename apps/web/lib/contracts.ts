@@ -32,19 +32,6 @@ export type QuestionResponse = {
   conversation_id?: string | null;
 };
 
-export type CorpusStatus = {
-  last_successful_sync: string | null;
-  ai_available: boolean;
-  ai_unavailable_reason?: "ai_disabled" | "quota_exhausted" | null;
-  warnings: string[];
-  items?: {
-    title: string;
-    source_kind: string;
-    state: "ready" | "missing" | "failed";
-    latest_effective_date?: string | null;
-  }[];
-};
-
 export type MockUser = {
   id: string;
   email: string;

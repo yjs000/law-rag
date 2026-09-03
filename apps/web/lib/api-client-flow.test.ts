@@ -4,7 +4,6 @@ import {
   deleteConversation,
   deleteQuestionHistory,
   downloadPdf,
-  getCorpusStatus,
   getStoredUser,
   listConversations,
   listConversationTurns,
@@ -120,7 +119,7 @@ describe("structured API error details (0039)", () => {
       },
     }, { status: 503 })));
 
-    await expect(getCorpusStatus()).rejects.toThrow(
+    await expect(listQuestionHistory()).rejects.toThrow(
       "법령 corpus를 갱신하는 동안 검색이 일시 중지됩니다.",
     );
   });
@@ -131,7 +130,7 @@ describe("structured API error details (0039)", () => {
       detail: "유효하지 않은 인증 세션입니다.",
     }, { status: 401 })));
 
-    await expect(getCorpusStatus()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
+    await expect(listQuestionHistory()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
   });
 });
 

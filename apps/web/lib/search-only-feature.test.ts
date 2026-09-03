@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCorpusAnswerMode, resolveResponseAnswerMode } from "./answer-mode";
+import { resolveResponseAnswerMode } from "./answer-mode";
 
 describe("search-only feature flag", () => {
   it("keeps Terra selected instead of falling back when search-only is disabled", () => {
@@ -7,7 +7,6 @@ describe("search-only feature flag", () => {
       preference: "terra",
       notice: "AI 생성 한도 또는 연결 문제로 답변을 생성할 수 없습니다.",
     };
-    expect(resolveCorpusAnswerMode({ ai_available: false }, false)).toEqual(expected);
     expect(resolveResponseAnswerMode("terra", {
       mode: "search_only",
       requested_answer_mode: "terra",

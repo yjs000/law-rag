@@ -83,12 +83,18 @@
 ### Task 0: 요구사항별 API 계약 회귀 검증
 
 - [x] V2 prepare/core/finalize/cancel과 대화 목록·상세·삭제를 요구사항 매핑으로 회귀 검증했다.
+- [x] `/v1/corpus/status` 선제 조회 및 그 결과를 UI에 표시·선택하는 경로를 제거하고, 서버 응답 fallback만 사용함을 검증했다.
 - [x] 인용 표시에 별도 search/provision 호출을 추가하지 않는 경계를 확인했다.
 - [x] focused 테스트를 통과시키고 이 작업만 검토해 로컬 커밋했다.
+
+## 재개 기록 (2026-09-03)
+
+- 완료 전 경계 검토에서 `/v1/corpus/status`를 `page.tsx`가 선제 조회하고 계정 UI/모델 선택에 쓰는 기존 경로를 확인했다. 이는 코퍼스 준비·최신성을 서버가 사용자에게 보이지 않게 처리한다는 확정 범위와 충돌하므로, 이 경로를 제거한 뒤 다시 완료 처리한다.
 
 ## 완료 결과 (2026-09-03)
 
 - `page.tsx`는 한국 자정까지의 지연을 계산해 date input의 `max`를 다음 KST today()로 갱신한다. 사용자가 이미 선택한 날짜는 변경하지 않는다.
 - `as_of_date`가 V2 prepare 요청 JSON 본문에 유지됨을 검증했다. V2 클라이언트 테스트는 prepare → core/finalize SSE, 재연결, 취소 DELETE까지 다룬다.
-- 검증 성공: `pnpm lint:web`, `pnpm typecheck`, `pnpm test:web` (18 files, 97 tests), `pnpm build:web`.
-- 비범위: 코퍼스 준비/최신성 UI 및 체크리스트 내보내기 제거. 후자는 F-007에서 다룬다.
+- 프런트는 `/v1/corpus/status`를 호출·해석·표시하지 않는다. 서버가 실제 질문 응답으로 반환하는 fallback만 처리한다.
+- 검증 성공: `pnpm lint:web`, `pnpm typecheck`, `pnpm test:web` (19 files, 94 tests), `pnpm build:web`.
+- 비범위: 체크리스트 내보내기 제거. 후속 F-007에서 처리한다.

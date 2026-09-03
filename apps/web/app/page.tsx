@@ -7,7 +7,6 @@ import {
   deleteAccount,
   deleteConversation,
   downloadPdf,
-  getCorpusStatus,
   getStoredUser,
   listConversations,
   listConversationTurns,
@@ -26,8 +25,6 @@ import { consumeQuestionDraft } from "../lib/composer-state";
 import {
   type AnswerPreference,
   isTerraAvailabilityFailure,
-  isTerraUnavailable,
-  resolveCorpusAnswerMode,
   resolveResponseAnswerMode,
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
@@ -50,14 +47,12 @@ import {
   type DocumentKind,
 } from "../lib/source-filter";
 import type {
-  CorpusStatus,
   ConversationSummary,
   MockUser,
   QuestionResponse,
 } from "../lib/contracts";
 import {
   ACCOUNT_SETTINGS_TITLE,
-  accountDialogCopy,
   answerModeBadgeLabel,
 } from "../lib/provider-neutral-copy";
 import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
@@ -269,18 +264,16 @@ function AuthDialog({ notice, onClose, onGoogleContinue, onSwitch, view }: {
   );
 }
 
-function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
-  corpus: CorpusStatus | null;
+function AccountDialog({ onClose, onDelete, onLogout, user }: {
   onClose: () => void;
   onDelete: () => Promise<void>;
   onLogout: () => Promise<void>;
   user: MockUser;
 }) {
-  const copy = accountDialogCopy(corpus?.ai_available === true);
   return (
     <Dialog onClose={onClose} titleId="account-title">
       <p className="eyebrow">Account dashboard</p>
-      <h2 id="account-title">{copy.title}</h2>
+      <h2 id="account-title">{ACCOUNT_SETTINGS_TITLE}</h2>
       <div className="account-profile">
         <div className="avatar">{user.display_name.slice(0, 1)}</div>
         <div><strong>{user.display_name}</strong><span>{user.email}</span></div>
@@ -288,7 +281,6 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
       <dl className="policy-grid">
         <div><dt>로그인</dt><dd>Google</dd></div>
         <div><dt>질문 보존</dt><dd>생성일로부터 1년</dd></div>
-        <div><dt>AI 모드</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{copy.status}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
         <div><dt>계정 사용 한도</dt><dd>제한 없음</dd></div>
       </dl>
@@ -346,7 +338,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [modeNotice, setModeNotice] = useState("");
-  const [corpus, setCorpus] = useState<CorpusStatus | null>(null);
   const [terraUnavailableFromResponse, setTerraUnavailableFromResponse] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
@@ -460,14 +451,6 @@ export default function Home() {
         void Promise.resolve().then(() => hydrateUser());
       }
     });
-    getCorpusStatus().then((status) => {
-      setCorpus(status);
-      const resolution = resolveCorpusAnswerMode(status, SEARCH_ONLY_ENABLED);
-      if (!status.ai_available) {
-        setModeNotice(resolution.notice ?? "");
-        setAnswerPreference(resolution.preference);
-      }
-    }).catch(() => setCorpus(null));
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -631,11 +614,6 @@ export default function Home() {
       setAnswerPreference(resolution.preference);
       if (isTerraAvailabilityFailure(answer.fallback_reason)) {
         setTerraUnavailableFromResponse(true);
-        setCorpus((current) => current ? {
-          ...current,
-          ai_available: false,
-          ai_unavailable_reason: answer.fallback_reason === "ai_disabled" ? "ai_disabled" : "quota_exhausted",
-        } : current);
       }
       setResult(answer);
       setActiveChat((current) => ({
@@ -782,7 +760,7 @@ export default function Home() {
     }
   }
 
-  const terraUnavailable = terraUnavailableFromResponse || isTerraUnavailable(corpus);
+  const terraUnavailable = terraUnavailableFromResponse;
 
   function refineQuestion() {
     setShowAnonymousNudge(false);
@@ -877,7 +855,7 @@ export default function Home() {
       </section>
 
       {showAuth && <AuthDialog notice={authNotice} onClose={closeAuth} onGoogleContinue={handleGoogleAuth} onSwitch={switchAuthView} view={authView} />}
-      {showAccount && user && <AccountDialog corpus={corpus} onClose={closeAccount} onDelete={handleDeleteAccount} onLogout={handleLogout} user={user} />}
+      {showAccount && user && <AccountDialog onClose={closeAccount} onDelete={handleDeleteAccount} onLogout={handleLogout} user={user} />}
     </main>
   );
 }
