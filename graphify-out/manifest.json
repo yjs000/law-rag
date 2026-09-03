@@ -2035,8 +2035,8 @@
   },
   "pyproject.toml": {
     "mtime": 1787114286.1499307,
-    "seen": 1788438370.7791882,
-    "ast_hash": "",
+    "seen": 1788439406.8167076,
+    "ast_hash": "7a827cab5367324f28278777ccefcff2",
     "semantic_hash": ""
   },
   "scripts/check_docs.py": {
