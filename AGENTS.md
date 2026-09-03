@@ -166,6 +166,12 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 - 인용 검증을 우회해 답변 품질을 높이는 것처럼 보이게 하는 변경
 - 근거 없는 기술·법률 요구사항을 임의로 확정
 
+## Graphify 산출물 커밋 정책
+
+- 코드 변경이 있는 기능·버그·리팩터링 커밋은 `graphify update .`를 실행한 뒤, 변경된 `graphify-out/` 산출물을 해당 기능 커밋에 함께 포함한다. 그래프 산출물만 따로 커밋하지 않는다.
+- 갱신이 실패하면 원인을 해결하거나, 해결이 현재 범위를 벗어나면 실패 원인과 잔여 산출물을 실행 계획에 기록한다. 이전 작업이나 사용자가 이미 만든 `graphify-out/` 변경은 현재 기능 커밋에 섞지 않는다.
+- 로컬 질의 상태·AST 캐시 등 `.gitignore`에 명시된 graphify 임시 파일은 계속 커밋하지 않는다.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
