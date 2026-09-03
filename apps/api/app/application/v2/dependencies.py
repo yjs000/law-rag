@@ -12,6 +12,7 @@ from law_rag_core.ports.repository import LegalRepository
 
 from app.application.question_phase_coordinator import PhaseResult
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
+from app.ports.clarification_case import ClarificationCaseRepository
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
 
 
@@ -71,6 +72,16 @@ class V2ExecutionDependencies:
     ]
     run_core: Callable[[QuestionExecutionRecord], Awaitable[PhaseResult]]
     run_finalize: Callable[[QuestionExecutionRecord, MockUser | None], Awaitable[PhaseResult]]
+
+
+@dataclass(frozen=True)
+class ClarificationWorkflowDependencies:
+    """SDK-free collaborators for one clarification workflow instance."""
+
+    repository: ClarificationCaseRepository
+    interpreter: Any
+    now: Callable[[], datetime]
+    case_ttl: timedelta
 
 
 @dataclass(frozen=True)

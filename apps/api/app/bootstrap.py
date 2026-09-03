@@ -25,9 +25,11 @@ from app.adapters.capacity_leases import (
     PostgresConcurrencyLimiter,
 )
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
+from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.memory_repository import repository as memory_repository
 from app.adapters.nvidia_nim_answerer import NvidiaNimAnswerer
+from app.adapters.nvidia_nim_clarification import NvidiaNimClarificationInterpreter
 from app.adapters.nvidia_nim_embedder import NvidiaNimEmbedder
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import (
@@ -37,12 +39,17 @@ from app.adapters.openai_answerer import (
     validate_core_draft,
     validate_draft,
 )
+from app.adapters.postgres_clarification_case import PostgresClarificationCaseRepository
 from app.adapters.postgres_identity import PostgresIdentityRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
 from app.adapters.supabase_auth import SupabaseAuth
+from app.application.clarification_workflow import ClarificationWorkflow
 from app.application.v1.dependencies import QueryEmbeddingCapability, V1AnswerDependencies
-from app.application.v2.dependencies import V2ExecutionDependencies
+from app.application.v2.dependencies import (
+    ClarificationWorkflowDependencies,
+    V2ExecutionDependencies,
+)
 from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.question_execution import QuestionExecutionRecord
@@ -101,6 +108,9 @@ class AppDependencies:
     v1_query_embedding_capability: QueryEmbeddingCapability
     nvidia_embedder: NvidiaNimEmbedder | None
     nvidia_answerer: NvidiaNimAnswerer | None
+    clarification_cases: Any
+    nvidia_clarification_interpreter: NvidiaNimClarificationInterpreter | None
+    clarification_workflow: ClarificationWorkflow | None
     nvidia_question_router: NvidiaNimQuestionRouter | None
     supabase_auth: SupabaseAuth | None
     postgres_identity: PostgresIdentityRepository | None
@@ -116,6 +126,7 @@ class AppDependencies:
         for adapter in (
             self.nvidia_embedder,
             self.nvidia_answerer,
+            self.nvidia_clarification_interpreter,
             self.nvidia_question_router,
         ):
             if adapter:
@@ -264,6 +275,11 @@ def build_app_dependencies(
         if isinstance(repository, PostgresLegalRepository)
         else MemoryQuestionExecutionRepository()
     )
+    clarification_cases = (
+        PostgresClarificationCaseRepository(repository.engine)
+        if isinstance(repository, PostgresLegalRepository)
+        else MemoryClarificationCaseRepository()
+    )
     question_phase_limiter = (
         PostgresConcurrencyLimiter(
             provider="ultra",
@@ -296,7 +312,22 @@ def build_app_dependencies(
     llamaindex_settings = get_llamaindex_settings()
     nvidia_embedder = build_nvidia_embedder(settings) if settings.ai_enabled else None
     nvidia_answerer = build_nvidia_answerer(settings) if settings.ai_enabled else None
+    nvidia_clarification_interpreter = (
+        build_nvidia_clarification_interpreter(settings) if settings.ai_enabled else None
+    )
     nvidia_question_router = build_nvidia_question_router(settings) if settings.ai_enabled else None
+    clarification_workflow = (
+        ClarificationWorkflow(
+            ClarificationWorkflowDependencies(
+                repository=clarification_cases,
+                interpreter=nvidia_clarification_interpreter,
+                now=lambda: datetime.now(UTC),
+                case_ttl=timedelta(days=1),
+            )
+        )
+        if nvidia_clarification_interpreter is not None
+        else None
+    )
     v2_resources = V2LlamaIndexResources(
         lambda: build_llamaindex_resources(
             settings.database_url,
@@ -315,6 +346,9 @@ def build_app_dependencies(
         v1_query_embedding_capability=build_v1_query_embedding_capability(repository),
         nvidia_embedder=nvidia_embedder,
         nvidia_answerer=nvidia_answerer,
+        clarification_cases=clarification_cases,
+        nvidia_clarification_interpreter=nvidia_clarification_interpreter,
+        clarification_workflow=clarification_workflow,
         nvidia_question_router=nvidia_question_router,
         supabase_auth=supabase_auth,
         postgres_identity=postgres_identity,
@@ -355,6 +389,17 @@ def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
         max_output_tokens=settings.answer_max_output_tokens,
         max_attempts=settings.answer_generation_max_attempts,
         message_builder=build_messages_v2,
+    )
+
+
+def build_nvidia_clarification_interpreter(settings: Settings) -> NvidiaNimClarificationInterpreter:
+    """Create the single configured Ultra interpreter for clarification turns."""
+
+    return NvidiaNimClarificationInterpreter(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_route_classifier_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
     )
 
 
