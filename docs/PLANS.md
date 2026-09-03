@@ -3,6 +3,19 @@
 실행 계획 생성 여부, 작성 절차 및 implementation workflow는 설치된 Superpowers의 현재 planning 관련
 skill을 따른다. 이 문서는 plan이 필요한지 다시 판단하지 않는다.
 
+## 로드맵 정본과 최소 읽기
+
+실행계획 파일의 상단 메타데이터가 상태·유형·제목·다음 행동·참고 범위의 유일한 정본이다. `docs/ROADMAP.md`는
+그 헤더에서 생성되는 색인이므로 직접 편집하지 않고, 헤더를 바꾼 뒤 `python scripts/render_roadmap.py`로
+재생성한다. `docs/exec-plans/{todo,active,completed}/README.md`는 artifact 위치를 안내하는 lifecycle README
+navigation일 뿐 상태 정본이 아니다.
+
+시작·재개·상태 전이 시 project-scoped [`roadmap-operator`](../.codex/skills/roadmap-operator/SKILL.md)의 네 가지
+순서를 따른다: `docs/CURRENT_STATE.md` L1-L28과 생성된 roadmap의 마지막 비완료 행, 선택한 계획의 상단
+메타데이터, 그 헤더의 명시된 참고 범위. 다른 계획 본문·완료 계획·전체 아키텍처는 기본적으로 읽지 않는다.
+범위 밖 문맥이 반드시 필요하면 읽기 전에 경로, 시작줄, 끝줄, 이유를 선언하고 사용자에게 알리거나 작업 기록에
+남긴다. 상태 전이 전후에는 읽은 범위를 같은 형식으로 간결하게 보고한다.
+
 이 문서의 역할은 law-rag repository 안에서 실행 계획의 저장 위치, 상태 lifecycle,
 repository-specific metadata를 정의하는 것이다.
 
@@ -15,7 +28,7 @@ repository-specific metadata를 정의하는 것이다.
 
 ## 작업 관리 메타데이터
 
-새 실행계획과 상태가 전이되는 실행계획의 상단에는 다음 여섯 필드를 둔다.
+새 실행계획과 상태가 전이되는 실행계획의 상단에는 다음 색인 필드를 둔다.
 
 ```md
 > 작업 ID: `F-001`
@@ -23,6 +36,7 @@ repository-specific metadata를 정의하는 것이다.
 > 유형: `Feature`
 > 보조 라벨: `Data`, `Evaluation`
 > 선행 조건: 없음
+> 다음 행동: 요구사항별 회귀 테스트부터 시작
 > 참고 범위:
 > - `apps/api/app/history.py` L42-L118 — 현재 이력 경계
 > - `docs/product-specs/history.md` L15-L38 — 사용자 요구

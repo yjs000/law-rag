@@ -891,6 +891,65 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             self.assertGreater(roadmap_index, docs_index)
             self.assertLess(roadmap_index - docs_index, 200)
 
+    def test_operator_skill_declares_four_ordered_read_scopes_and_expansion_rule(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        skill_path = repository_root / ".codex" / "skills" / "roadmap-operator" / "SKILL.md"
+
+        self.assertTrue(skill_path.is_file(), skill_path)
+        skill_text = skill_path.read_text(encoding="utf-8")
+
+        scope_markers = [
+            "docs/CURRENT_STATE.md L1-L28",
+            "docs/ROADMAP.md",
+            "선택한 실행계획 파일의 시작부터 첫 `##`",
+            "`참고 범위`에 적힌 각 파일의 명시된 `L시작-L끝`",
+        ]
+        scope_positions = [skill_text.index(marker) for marker in scope_markers]
+        self.assertEqual(scope_positions, sorted(scope_positions))
+
+        self.assertIn("마지막 비완료 행", skill_text)
+        self.assertIn("다른 실행계획의 본문", skill_text)
+        self.assertIn("완료 계획", skill_text)
+        self.assertIn("ARCHITECTURE.md", skill_text)
+        self.assertIn("기본적으로 읽지 않는다", skill_text)
+
+        for marker in ("경로", "시작줄", "끝줄", "이유"):
+            self.assertIn(marker, skill_text)
+        self.assertIn("범위 밖", skill_text)
+        self.assertIn("상태 전이 전후", skill_text)
+        self.assertIn("읽은 범위", skill_text)
+        self.assertIn("python scripts/render_roadmap.py", skill_text)
+        self.assertIn("python scripts/check_roadmap.py", skill_text)
+
+    def test_project_documents_make_header_and_generated_roadmap_authoritative(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        agents_text = (repository_root / "AGENTS.md").read_text(encoding="utf-8")
+        current_state_text = (repository_root / "docs" / "CURRENT_STATE.md").read_text(
+            encoding="utf-8"
+        )
+        plans_text = (repository_root / "docs" / "PLANS.md").read_text(encoding="utf-8")
+
+        self.assertIn(".codex/skills/roadmap-operator/SKILL.md", agents_text)
+        self.assertIn("실행계획 파일의 상단 메타데이터", agents_text)
+        self.assertIn("docs/ROADMAP.md", agents_text)
+        self.assertIn("python scripts/render_roadmap.py", agents_text)
+        self.assertIn("직접 편집하지", agents_text)
+        self.assertIn("범위 밖", agents_text)
+        self.assertIn("상태 전이 전후", agents_text)
+
+        for document in (current_state_text, plans_text):
+            self.assertIn("실행계획 파일의 상단 메타데이터", document)
+            self.assertIn("docs/ROADMAP.md", document)
+            self.assertIn("생성", document)
+            self.assertIn("범위 밖", document)
+            self.assertIn("경로", document)
+            self.assertIn("시작줄", document)
+            self.assertIn("끝줄", document)
+            self.assertIn("이유", document)
+
+        self.assertIn("lifecycle README", plans_text)
+        self.assertIn("navigation", plans_text)
+
 
 if __name__ == "__main__":
     unittest.main()

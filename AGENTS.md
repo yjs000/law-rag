@@ -20,11 +20,25 @@
    세션 전체를 미리 읽지 않는다.
 4. brainstorming·설계 승인·planning 필요 여부와 절차는 설치된 Superpowers skill의 trigger 조건을
    따른다. 이 저장소는 작업 규모로 그 여부를 다시 판단하지 않는다.
-5. `docs/ROADMAP.md`의 `Picked Up` 항목을 먼저 읽고, 해당 작업을 재개할 때만 연결된 실행계획을
-   확인한다. `Picked Up`이 없으면 `Todo`의 첫 항목을 사용한다. 사용자가 이전에 다음 작업으로 등록한
-   항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다. Superpowers `writing-plans`로 실행
-   계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
+5. `.codex/skills/roadmap-operator/SKILL.md`의 네 가지 읽기 범위 순서를 따라 생성된
+   `docs/ROADMAP.md`의 `Picked Up` 항목을 먼저 읽는다. 해당 작업을 재개할 때만 연결된 실행계획
+   헤더와 선언된 참고 범위를 확인한다. `Picked Up`이 없으면 `Todo`의 첫 항목을 사용한다. 사용자가
+   이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다.
+   Superpowers `writing-plans`로 실행계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
 6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
+
+## 로드맵 정본·최소 읽기 운영
+
+- 실행계획 파일의 상단 메타데이터가 상태·유형·제목·다음 행동·참고 범위의 유일한 정본이다.
+  `docs/ROADMAP.md`는 이 헤더에서 생성되는 산출물이며, 상태·제목·다음 행동을 직접 편집하지 않는다.
+  헤더를 바꾼 뒤 `python scripts/render_roadmap.py`를 실행한다.
+- `docs/exec-plans/{todo,active,completed}/README.md`는 lifecycle navigation only이며 상태의 정본이
+  아니다. 실제 상태와 우선순위는 생성된 `docs/ROADMAP.md`와 선택한 계획 헤더에서 확인한다.
+- 시작·재개·상태 전이 시 `roadmap-operator`의 네 범위(현재 상태 L1-L28와 마지막 비완료 roadmap 행,
+  선택한 계획 헤더, 헤더의 선언 범위)를 순서대로 읽는다. 다른 계획 본문·완료 계획·전체 아키텍처는
+  기본적으로 읽지 않는다.
+- 범위 밖 문맥이 필요하면 읽기 전에 `경로`, `시작줄`, `끝줄`, `이유`를 명시하고 사용자에게 알리거나
+  작업 기록에 남긴다. 상태 전이 전후에는 읽은 범위와 각 이유를 간결하게 보고한다.
 
 ## Docker·로컬 DB 정책
 
