@@ -4,9 +4,12 @@ import subprocess
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts import check_roadmap, render_roadmap
 from scripts.roadmap_registry import (
     PlanRecord,
     load_registry,
@@ -461,6 +464,174 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         records = load_registry(self.root, staged=True)
 
         self.assertEqual(records[0].title, "색인 버전")
+
+    def test_rendering_valid_records_is_deterministic_and_has_only_index_fields(self) -> None:
+        self._write_plan(
+            number="0001",
+            task_id="F-001",
+            status="Todo",
+            title="첫 번째 계획",
+            filename="0001-first-plan.md",
+        )
+        self._write_plan(
+            number="0002",
+            directory="active",
+            task_id="F-002",
+            status="Picked Up",
+            title="진행 중인 계획",
+            filename="0002-picked-up.md",
+        )
+        self._write_plan(
+            number="0003",
+            directory="active",
+            task_id="B-003",
+            status="Blocked",
+            plan_type="Bug",
+            title="막힌 계획",
+            filename="0003-blocked-plan.md",
+        )
+        self._write_plan(
+            number="0004",
+            directory="completed",
+            task_id="D-004",
+            status="Done",
+            plan_type="Documentation",
+            title="완료 계획",
+            filename="0004-done-plan.md",
+        )
+
+        records = load_registry(self.root)
+        rendered = render_roadmap.render_roadmap(records)
+
+        self.assertEqual(rendered, render_roadmap.render_roadmap(list(reversed(records))))
+        self.assertIn("python scripts/render_roadmap.py", rendered)
+        self.assertIn(roadmap_digest(records), rendered)
+        self.assertLess(rendered.index("## Todo"), rendered.index("## Blocked"))
+        self.assertLess(rendered.index("## Blocked"), rendered.index("## Done"))
+        self.assertIn(
+            "[F-002 · Feature — 진행 중인 계획](exec-plans/active/0002-picked-up.md) — "
+            "다음 행동: 요구사항별 회귀 테스트부터 시작",
+            rendered,
+        )
+        self.assertNotIn("## Picked Up", rendered)
+
+        task_rows = [
+            line
+            for line in rendered.splitlines()
+            if line.startswith("- [") and " · " in line
+        ]
+        self.assertEqual(len(task_rows), 4)
+        for row in task_rows:
+            self.assertIn(" · ", row)
+            self.assertIn("](", row)
+            self.assertNotIn("보조 라벨", row)
+            self.assertNotIn("선행 조건", row)
+            self.assertTrue("다음 행동:" in row or "재개 조건:" in row)
+
+    def test_done_section_keeps_only_newest_twelve_records_and_completed_index(self) -> None:
+        self._clear_plans()
+        for index in range(1, 14):
+            self._write_plan(
+                number=f"{index:04d}",
+                directory="completed",
+                task_id=f"D-{index:03d}",
+                status="Done",
+                plan_type="Documentation",
+                title=f"완료 계획 {index:02d}",
+                filename=f"{index:04d}-done-{index:02d}.md",
+            )
+
+        rendered = render_roadmap.render_roadmap(load_registry(self.root))
+
+        self.assertNotIn("D-001 · Documentation", rendered)
+        for index in range(2, 14):
+            self.assertIn(f"D-{index:03d} · Documentation", rendered)
+        self.assertEqual(rendered.count("exec-plans/completed/README.md"), 1)
+        done_body = rendered.split("## Done", 1)[1]
+        self.assertEqual(sum(line.startswith("- [D-") for line in done_body.splitlines()), 12)
+
+    def test_renderer_validates_before_replacing_roadmap(self) -> None:
+        roadmap_path = self.root / "docs" / "ROADMAP.md"
+        roadmap_path.write_bytes(b"existing roadmap\n")
+        self._write_plan(status="Invalid")
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = render_roadmap.main(["--repo-root", str(self.root)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(roadmap_path.read_bytes(), b"existing roadmap\n")
+        self.assertIn("상태", stderr.getvalue())
+
+    def test_renderer_cli_writes_the_rendered_utf8_bytes_without_newline_translation(self) -> None:
+        self._write_plan()
+        roadmap_path = self.root / "docs" / "ROADMAP.md"
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            exit_code = render_roadmap.main(["--repo-root", str(self.root)])
+
+        self.assertEqual(exit_code, 0)
+        expected = render_roadmap.render_roadmap(load_registry(self.root)).encode("utf-8")
+        self.assertEqual(roadmap_path.read_bytes(), expected)
+
+    def test_checker_reports_first_manual_difference_without_writing(self) -> None:
+        self._write_plan()
+        roadmap_path = self.root / "docs" / "ROADMAP.md"
+        roadmap_path.write_text(
+            render_roadmap.render_roadmap(load_registry(self.root)), encoding="utf-8"
+        )
+        original = roadmap_path.read_bytes()
+        roadmap_path.write_bytes(original.replace("Todo".encode(), "T0do".encode(), 1))
+        edited = roadmap_path.read_bytes()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = check_roadmap.main(["--repo-root", str(self.root)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(roadmap_path.read_bytes(), edited)
+        self.assertIn("첫 번째 차이", stderr.getvalue())
+        self.assertIn("python scripts/render_roadmap.py", stderr.getvalue())
+
+    def test_checker_staged_mode_uses_index_plan_and_roadmap_bytes(self) -> None:
+        plan_path = self._write_plan(title="초기 버전")
+        roadmap_path = self.root / "docs" / "ROADMAP.md"
+        roadmap_path.write_text(
+            render_roadmap.render_roadmap(load_registry(self.root)), encoding="utf-8"
+        )
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", "."], cwd=self.root, check=True)
+
+        plan_path.write_text(self._header(title="색인 버전"), encoding="utf-8")
+        subprocess.run(["git", "add", str(plan_path.relative_to(self.root))], cwd=self.root, check=True)
+        index_records = load_registry(self.root, staged=True)
+        roadmap_path.write_text(
+            render_roadmap.render_roadmap(index_records), encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "add", str(roadmap_path.relative_to(self.root))],
+            cwd=self.root,
+            check=True,
+        )
+
+        plan_path.write_text(self._header(title="작업 트리 버전"), encoding="utf-8")
+        roadmap_path.write_text("worktree-only roadmap\n", encoding="utf-8")
+        worktree_plan = plan_path.read_bytes()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = check_roadmap.main(
+                ["--staged", "--repo-root", str(self.root)]
+            )
+
+        self.assertEqual(exit_code, 0, stderr.getvalue())
+        self.assertIn("parsed plans: 1", stdout.getvalue())
+        self.assertIn(roadmap_digest(index_records), stdout.getvalue())
+        self.assertEqual(plan_path.read_bytes(), worktree_plan)
+        self.assertEqual(roadmap_path.read_text(encoding="utf-8"), "worktree-only roadmap\n")
 
 
 if __name__ == "__main__":
