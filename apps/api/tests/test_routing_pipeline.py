@@ -29,6 +29,44 @@ def test_production_adapter_implements_single_question_router() -> None:
     assert issubclass(NvidiaNimQuestionRouter, QuestionRouter)
 
 
+def test_nvidia_router_uses_a_fresh_client_in_each_event_loop() -> None:
+    payload = json.dumps(
+        {
+            "route": "legal_search",
+            "confidence": 0.95,
+            "reason": "법령으로 설명할 수 있습니다.",
+            "missing_fields": [],
+        }
+    )
+
+    class LoopBoundClient:
+        def __init__(self) -> None:
+            self.loop = asyncio.get_running_loop()
+            self.chat = SimpleNamespace(completions=self)
+
+        async def create(self, **kwargs):
+            assert asyncio.get_running_loop() is self.loop
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]
+            )
+
+        async def close(self) -> None:
+            return None
+
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+        client_factory=LoopBoundClient,
+    )
+
+    first = asyncio.run(router.route("허가 절차를 알려주세요."))
+    second = asyncio.run(router.route("허가 절차를 알려주세요."))
+
+    assert first.route == second.route == "legal_search"
+
+
 @pytest.mark.asyncio
 async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -> None:
     router = NvidiaNimQuestionRouter(
