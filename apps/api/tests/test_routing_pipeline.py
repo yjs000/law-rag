@@ -67,6 +67,52 @@ def test_nvidia_router_uses_a_fresh_client_in_each_event_loop() -> None:
     assert first.route == second.route == "legal_search"
 
 
+def test_nvidia_router_retries_transient_failure_with_a_fresh_client() -> None:
+    payload = json.dumps(
+        {
+            "route": "legal_search",
+            "confidence": 0.95,
+            "reason": "법령으로 설명할 수 있습니다.",
+            "missing_fields": [],
+        }
+    )
+    clients_created = 0
+
+    class Client:
+        def __init__(self, fail: bool) -> None:
+            self.fail = fail
+            self.chat = SimpleNamespace(completions=self)
+
+        async def create(self, **kwargs):
+            if self.fail:
+                raise RuntimeError("transient provider failure")
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]
+            )
+
+        async def close(self) -> None:
+            return None
+
+    def client_factory() -> Client:
+        nonlocal clients_created
+        clients_created += 1
+        return Client(fail=clients_created == 1)
+
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+        max_attempts=2,
+        client_factory=client_factory,
+    )
+
+    decision = asyncio.run(router.route("허가 절차를 알려주세요."))
+
+    assert decision.route == "legal_search"
+    assert clients_created == 2
+
+
 @pytest.mark.asyncio
 async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -> None:
     router = NvidiaNimQuestionRouter(

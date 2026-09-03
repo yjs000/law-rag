@@ -13,6 +13,8 @@ from app.domain.routing import (
     RouteJudgment,
 )
 
+_NON_RETRYABLE_STATUS_CODES = {402, 429}
+
 
 class _RouteJudgmentSchema(BaseModel):
     route: ProviderQuestionRoute
@@ -31,12 +33,15 @@ class NvidiaNimQuestionRouter:
         base_url: str,
         model: str,
         timeout_seconds: float,
+        max_attempts: int = 2,
         client_factory: Callable[[], Any] | None = None,
     ) -> None:
         if not api_key:
             raise ValueError("NVIDIA API key is required")
         if base_url != "https://integrate.api.nvidia.com/v1":
             raise ValueError("unsupported NVIDIA hosted NIM base URL")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
         self.client: Any | None = None
         self._client_factory = client_factory or (
             lambda: AsyncOpenAI(
@@ -47,8 +52,23 @@ class NvidiaNimQuestionRouter:
             )
         )
         self.model = model
+        self.max_attempts = max_attempts
 
     async def route(self, question: str) -> RouteJudgment:
+        last_error: Exception
+        for attempt in range(self.max_attempts):
+            try:
+                return await self._route_once(question)
+            except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
+                last_error = exc
+                if (
+                    getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES
+                    or attempt + 1 >= self.max_attempts
+                ):
+                    raise
+        raise last_error
+
+    async def _route_once(self, question: str) -> RouteJudgment:
         async with self._client_scope() as client:
             response = await client.chat.completions.create(
                 model=self.model,
