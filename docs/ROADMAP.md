@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 1b0c0498e40f5f23ce3de99da6ab42fc2e5807a232b3abb6ca0b24121baab622 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: e61d48bd47a9726cb101890f492ce32e5bbc5c09ab3fd33947132f3d3592109a -->
 
 # 프로젝트 로드맵
 
@@ -20,6 +20,7 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: F-005 실행계획에서 temporal contract task 편입 여부를 결정
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작
+- [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/active/0067-production-web-e2e-completion-loop.md) — 다음 행동: P0 첫 진입부터 AI 질문·근거 원문 정상 흐름을 배포 환경에서 검증
 
 ## Blocked
 

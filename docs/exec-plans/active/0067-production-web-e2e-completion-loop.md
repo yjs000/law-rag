@@ -1,0 +1,134 @@
+> 작업 ID: `B-004`
+> 상태: `Picked Up`
+> 유형: `Bug`
+> 보조 라벨: `Reliability`, `UX`, `Evaluation`
+> 선행 조건: 없음
+> 다음 행동: P0 첫 진입부터 AI 질문·근거 원문 정상 흐름을 배포 환경에서 검증
+> 참고 범위:
+> - `docs/product-specs/web-e2e-validation.md` L1-L120 — 승인된 전체 E2E 체크리스트와 우선순위
+> - `apps/web/app/page.tsx` L332-L856 — 웹 사용자 흐름과 화면 상태
+> - `apps/web/lib/v2-execution.ts` L1-L241 — 질문 실행 단계와 재연결·취소 계약
+
+# Production Web E2E Completion Loop Implementation Plan
+
+## 계획 본문
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 배포 웹의 정상 흐름을 먼저 보장하고 저장된 E2E 명세의 모든 기본·경계 흐름을 증거와 함께 완료한다.
+
+**Architecture:** 실제 배포 환경의 정상 흐름은 브라우저로 검증하고, 장애 주입이 필요한 경계 흐름은 기존 Vitest 계약 테스트와 최소한의 결정적 브라우저 재현을 함께 사용한다. 발견된 결함은 실패 테스트를 먼저 추가한 뒤 최소 수정하고, 각 작업이 끝날 때 전체 완료 체크를 다시 실행한다.
+
+**Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Supabase Auth, FastAPI V2 execution API, Codex Browser
+
+**Spec:** `docs/product-specs/web-e2e-validation.md`
+
+## Global Constraints
+
+- P0 정상 흐름이 전부 통과하기 전에는 P1 개선을 우선하지 않는다.
+- 법률 답변의 실질적 주장은 검색된 근거와 인용 위치를 가져야 한다.
+- 개인정보, 인증정보, 법률 원문 전문을 테스트 증거나 로그에 남기지 않는다.
+- 결함 수정은 재현 테스트의 RED를 확인한 뒤 최소 구현으로 GREEN을 만든다.
+- 각 작업 후 `uv run --project apps/api python scripts/check_roadmap.py`로 전체 계획 완료 여부를 다시 확인한다.
+
+---
+
+### Task 1: 검증 명세·기준선 고정
+
+**Files:**
+- Create: `docs/product-specs/web-e2e-validation.md`
+- Create: `docs/exec-plans/active/0067-production-web-e2e-completion-loop.md`
+- Modify: `docs/product-specs/index.md`
+- Generated: `docs/ROADMAP.md`
+
+**Interfaces:**
+- Consumes: 사용자가 승인한 기본 흐름·경계 흐름 목록
+- Produces: `B-004`의 단일 authoritative 체크리스트와 Picked Up 실행계획
+
+- [x] **Step 1: 제품 명세 색인에 E2E 검증 명세를 연결한다.**
+- [x] **Step 2: roadmap renderer를 실행하고 B-004가 유일한 Picked Up인지 확인한다.**
+- [x] **Step 3: 웹 unit test, lint, typecheck, build 기준선을 실행한다.**
+- [x] **Step 4: 문서와 생성 로드맵을 기능 단위로 커밋한다.**
+
+### Task 2: P0 익명 정상 질문·근거 흐름
+
+**Files:**
+- Modify if a defect is reproduced: `apps/web/app/page.tsx`, `apps/web/lib/*.ts`
+- Test if a defect is reproduced: `apps/web/**/*.test.ts`, `apps/web/**/*.test.tsx`
+- Evidence: repository-approved E2E evidence path selected during execution
+
+**Interfaces:**
+- Consumes: 배포 URL과 P0 첫 진입부터 익명 저장 경계까지의 체크 항목
+- Produces: 정상 질문, V2 실행, 인용, 필터, 기준일, Markdown/CSV, 익명 안내의 브라우저 증거
+
+- [ ] **Step 1: 1280px에서 첫 진입과 세 추천 질문을 실행해 Network·Console·화면 결과를 기록한다.**
+- [ ] **Step 2: 직접 입력, Enter/Shift+Enter, 근거 이동, 문서 필터, 오늘·과거 기준일을 검증한다.**
+- [ ] **Step 3: Markdown/CSV 내보내기와 익명 로그인 안내·비소급 저장 계약을 검증한다.**
+- [ ] **Step 4: 실패가 있으면 재현 테스트 RED → 최소 수정 → focused GREEN → 배포 재검증을 반복한다.**
+- [ ] **Step 5: P0 익명 항목을 증거와 함께 갱신하고 전체 완료 체크를 실행한다.**
+
+### Task 3: P0 인증·대화·이력 정상 흐름
+
+**Files:**
+- Modify if a defect is reproduced: `apps/web/app/page.tsx`, `apps/web/lib/api-client.ts`, `apps/web/lib/chat-state.ts`
+- Test if a defect is reproduced: `apps/web/lib/api-client-flow.test.ts`, `apps/web/lib/auth-page-state.test.ts`, `apps/web/lib/chat-state.test.ts`
+- Evidence: same evidence path as Task 2
+
+**Interfaces:**
+- Consumes: 사용 가능한 안전한 Google 테스트 세션
+- Produces: 로그인, 연속 질문, 기록 복원·페이지네이션·삭제, PDF, 로그아웃의 브라우저 증거
+
+- [ ] **Step 1: 로그인·가입 모달과 Google 인증 완료를 검증한다.**
+- [ ] **Step 2: 연속 질문, 새 질문, 새로고침 복원, 기록 열기와 페이지네이션을 검증한다.**
+- [ ] **Step 3: 기록 삭제 취소·확인, PDF 내보내기, 로그아웃을 검증한다.**
+- [ ] **Step 4: 실패가 있으면 TDD 수정 루프를 돌리고 인증 P0 전체를 다시 실행한다.**
+- [ ] **Step 5: P0 전체 완료 체크를 실행하고 P0가 모두 통과한 경우에만 Task 4로 이동한다.**
+
+### Task 4: P1 입력·검색·네트워크·인증 경계
+
+**Files:**
+- Modify if a defect is reproduced: affected `apps/web/app/` or `apps/web/lib/` source
+- Test: affected focused Vitest file plus browser scenario
+- Evidence: same evidence path as Task 2
+
+**Interfaces:**
+- Consumes: P1 입력·날짜·검색·네트워크·상태·인증·내보내기 체크 항목
+- Produces: 각 오류의 사용자 복구 가능성, 재시도 상한, 중복 실행 방지 증거
+
+- [ ] **Step 1: 입력, IME, 길이, XSS, 날짜와 필터 경계를 검증한다.**
+- [ ] **Step 2: 빈 결과, 불완전 조문, 범위 밖 질문, 인용 무결성, AI 폴백을 검증한다.**
+- [ ] **Step 3: 재시도 가능·불가능 HTTP 상태, 스트림 재연결, 중지, 화면 전환 경쟁 상태를 검증한다.**
+- [ ] **Step 4: 인증 취소·세션 만료·다른 탭 로그아웃·이력 및 내보내기 실패를 검증한다.**
+- [ ] **Step 5: 각 실패마다 TDD 수정 후 P1 관련 묶음과 P0 정상 흐름을 함께 재실행한다.**
+
+### Task 5: 반응형·접근성·전체 회귀 및 완료
+
+**Files:**
+- Modify if a defect is reproduced: affected web source and focused tests
+- Modify: `docs/product-specs/web-e2e-validation.md`
+- Modify then move: `docs/exec-plans/active/0067-production-web-e2e-completion-loop.md`
+- Generated: `docs/ROADMAP.md`, `graphify-out/`
+
+**Interfaces:**
+- Consumes: Task 1–4의 최신 통과 증거와 남은 체크 항목
+- Produces: 375px, 430px, 1280px 시각 증거, 전체 회귀 결과, Done 실행계획
+
+- [ ] **Step 1: 375px, 430px, 1280px에서 동일 핵심 시나리오를 캡처하고 overflow·가림을 확인한다.**
+- [ ] **Step 2: 모달 포커스 순환, Escape 복귀, 키보드 조작, live region을 검증한다.**
+- [ ] **Step 3: `pnpm test:web`, `pnpm lint:web`, `pnpm typecheck`, `pnpm build:web` 및 관련 API 회귀를 실행한다.**
+- [ ] **Step 4: 코드 변경이 있으면 `graphify update .`를 실행하고 변경 산출물을 함께 검증한다.**
+- [ ] **Step 5: 독립 리뷰를 반영하고 모든 명세 체크박스가 증거와 함께 완료됐는지 확인한다.**
+- [ ] **Step 6: 계획을 Done으로 옮기고 roadmap renderer/checker를 실행한 뒤 기능 단위로 커밋한다.**
+
+## 완료 체크 명령
+
+```powershell
+uv run --project apps/api python scripts/check_roadmap.py
+pnpm test:web
+pnpm lint:web
+pnpm typecheck
+pnpm build:web
+```
+
+완료 조건은 위 명령 성공만이 아니라 `docs/product-specs/web-e2e-validation.md`의 모든 체크박스에 최신
+실행 증거가 연결되어 있는 것이다.
