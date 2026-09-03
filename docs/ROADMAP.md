@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7e5e2d0a6d431310cc11202cb13a6fe0da84010ff87570ab16a16c184a5c50d4 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 146abf5943bc308eda13a9c0f811837154cea5efa487275371f2a4cf8bc94cbe -->
 
 # 프로젝트 로드맵
 
@@ -21,11 +21,11 @@
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: F-005 실행계획에서 temporal contract task 편입 여부를 결정
 - [F-006 · Feature — Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan](exec-plans/active/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작
-- [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/todo/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 실행계획 헤더 파서와 결정적 renderer의 실패 테스트부터 작성
 
 ## Blocked
 
 
 ## Done
 
+- [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 - [완료 계획 색인](exec-plans/completed/README.md)

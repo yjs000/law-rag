@@ -1,9 +1,9 @@
 > 작업 ID: `DOC-002`
-> 상태: `Todo`
+> 상태: `Done`
 > 유형: `Documentation`
 > 보조 라벨: `Reliability`
 > 선행 조건: 로드맵 정본·컨텍스트 절약 설계가 승인되어야 한다.
-> 다음 행동: 실행계획 헤더 파서와 결정적 renderer의 실패 테스트부터 작성
+> 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 > 참고 범위:
 > - `docs/superpowers/specs/2026-09-03-roadmap-registry-and-context-diet-design.md` L1-L104 — 정본·생성·검사·최소 읽기 요구사항
 > - `docs/PLANS.md` L16-L68 — 계획 위치와 상태 lifecycle의 기존 계약
@@ -62,27 +62,27 @@
 - Consumes: a repository root and Markdown plan paths under `docs/exec-plans/todo`, `active`, and `completed`.
 - Produces: `PlanRecord`, `ReferenceRange`, `RegistryError`, `load_registry(root, staged=False) -> list[PlanRecord]`, `validate_registry(records, root) -> list[RegistryError]`, `roadmap_digest(records) -> str`, and `roadmap_sections(records) -> dict[str, list[PlanRecord]]`.
 
-- [ ] **Step 1: Write failing parser and validation tests**
+- [x] **Step 1: Write failing parser and validation tests**
 
   Add fixtures that express a valid header, every missing required field, an over-120-character `다음 행동`, four reference ranges, a non-relative/missing path, `L0`, an inverted range, an unknown label/type/status, duplicate IDs, two `Picked Up` records, and each forbidden directory/state pair. Assert errors include the record ID, repository-relative file, field name, and a concrete corrective command such as `python scripts/render_roadmap.py` for generated-roadmap drift.
 
-- [ ] **Step 2: Run the focused tests and confirm the missing module failure**
+- [x] **Step 2: Run the focused tests and confirm the missing module failure**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: FAIL because `scripts.roadmap_registry` does not exist.
 
-- [ ] **Step 3: Implement only the shared model, parser, and validators**
+- [x] **Step 3: Implement only the shared model, parser, and validators**
 
   Implement immutable `dataclass` records and a parser that reads only file start through the first `##` heading, requires a single H1 after the blockquote header, derives the numeric plan ID from the filename, and reads file content from either disk or the staged index. Validate path/state lifecycle according to `docs/PLANS.md`, header field grammar, reference path existence and inclusive line bounds, unique task IDs, and 0–1 `Picked Up`. Hash a canonical, sorted serialization of every input header so ordering and wall-clock time cannot affect the digest.
 
-- [ ] **Step 4: Run parser and validation tests**
+- [x] **Step 4: Run parser and validation tests**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: PASS for valid, boundary, and invalid-header fixtures.
 
-- [ ] **Step 5: Commit the isolated registry foundation**
+- [x] **Step 5: Commit the isolated registry foundation**
 
   Run:
 
@@ -103,21 +103,21 @@
 - Consumes: `load_registry`, `validate_registry`, `roadmap_digest`, and `roadmap_sections` from `scripts.roadmap_registry`.
 - Produces: `render_roadmap(records) -> str`, CLI `python scripts/render_roadmap.py`, and CLI `python scripts/check_roadmap.py [--staged]` with exit status 0/1.
 
-- [ ] **Step 1: Add failing renderer/checker tests**
+- [x] **Step 1: Add failing renderer/checker tests**
 
   Test that rendering the same valid records twice produces byte-identical output; that it writes a header comment containing the exact render command and stable digest; that rows contain only task ID, type, plan-title link, and `다음 행동`/`재개 조건`; that `Done` has at most twelve newest records plus the completed index link; and that checker detects a one-character manual roadmap edit without modifying it. Add a staged fixture where the index has changed plan/roadmap bytes and `--staged` must validate those index bytes rather than the working tree.
 
-- [ ] **Step 2: Run the focused renderer/checker tests and confirm failure**
+- [x] **Step 2: Run the focused renderer/checker tests and confirm failure**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: FAIL because the renderer and checker entry points are absent.
 
-- [ ] **Step 3: Implement deterministic rendering and read-only comparison**
+- [x] **Step 3: Implement deterministic rendering and read-only comparison**
 
   Render `Todo`, `Blocked`, and `Done` in the exact order supplied by the registry’s deterministic sort; place the sole `Picked Up` record in the `Todo` section so an in-progress milestone remains discoverable without adding a fourth section. Prefix the file with a non-time-based generated comment. Make `render_roadmap.py` validate first and atomically replace only `docs/ROADMAP.md`. Make `check_roadmap.py` never call write APIs, report the first differing line and the render command on mismatch, and in `--staged` mode obtain plan and roadmap content via `git show :<path>` while still checking tracked file locations.
 
-- [ ] **Step 4: Regenerate the repository roadmap, then run the focused suite**
+- [x] **Step 4: Regenerate the repository roadmap, then run the focused suite**
 
   Run:
 
@@ -129,7 +129,7 @@
 
   Expected: renderer reports a stable digest; all tests pass; checker reports only parsed-plan count, `Picked Up` count, and the same digest.
 
-- [ ] **Step 5: Commit the generated-roadmap contract**
+- [x] **Step 5: Commit the generated-roadmap contract**
 
   Run:
 
@@ -153,21 +153,21 @@
 - Consumes: current non-completed plan headers and `python scripts/render_roadmap.py`.
 - Produces: a fully parseable non-completed plan registry, one generated roadmap, and lifecycle README files that do not claim independent status authority.
 
-- [ ] **Step 1: Add an end-to-end fixture for the repository migration boundary**
+- [x] **Step 1: Add an end-to-end fixture for the repository migration boundary**
 
   Add assertions that all `todo` and `active` Markdown plans have `다음 행동`, at most three reference entries with `Lstart-Lend` and reasons, and accepted IDs/types/labels. Add a fixture proving completed plans without a new header are excluded from mandatory bulk migration but that any completed plan which does contain the new header is still parseable.
 
-- [ ] **Step 2: Run the migration-boundary test and confirm failure**
+- [x] **Step 2: Run the migration-boundary test and confirm failure**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: FAIL listing current plan files that lack a required new-header field or normalized reference range.
 
-- [ ] **Step 3: Migrate only active and todo artifacts, then simplify indexes**
+- [x] **Step 3: Migrate only active and todo artifacts, then simplify indexes**
 
   Add one concise `다음 행동` to every plan in `todo/` and `active/`; split or narrow each reference list to a maximum of three entries with exact line bounds and reasons. Preserve plan body history, IDs, filenames, and lifecycle directories. Rewrite lifecycle README files to describe their storage role and link to the generated roadmap instead of repeating Todo/active/Done status rows. Do not mass-edit completed plan headers.
 
-- [ ] **Step 4: Regenerate and verify the migrated document set**
+- [x] **Step 4: Regenerate and verify the migrated document set**
 
   Run:
 
@@ -179,7 +179,7 @@
 
   Expected: registry and link checks pass; `git diff` shows `ROADMAP.md` only as renderer output and no completed-plan bulk rewrite.
 
-- [ ] **Step 5: Commit the metadata migration separately**
+- [x] **Step 5: Commit the metadata migration separately**
 
   Run:
 
@@ -200,21 +200,21 @@
 - Consumes: `python scripts/check_roadmap.py --staged` and the current repository `.git/hooks` directory.
 - Produces: an idempotent pre-commit hook dispatcher that exits 0 without invoking Python unless staged paths include `docs/exec-plans/` or `docs/ROADMAP.md`; CI/local verification commands that always run the non-staged checker.
 
-- [ ] **Step 1: Write failing hook and CI command tests**
+- [x] **Step 1: Write failing hook and CI command tests**
 
   Use a temporary Git repository fixture with an existing executable `post-commit` and, separately, an existing user-owned `pre-commit`. Verify installation preserves `post-commit`, does not alter `core.hooksPath`, preserves a user pre-commit by refusing with a clear manual-install message rather than overwriting it, and produces a dispatcher that invokes the staged checker only for the two allowed path classes. Assert CI and `verify.ps1` include the non-staged checker immediately after the existing docs check.
 
-- [ ] **Step 2: Run the hook-focused tests and confirm failure**
+- [x] **Step 2: Run the hook-focused tests and confirm failure**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: FAIL because `scripts/install_git_hooks.py` does not exist and CI/local commands do not yet invoke the checker.
 
-- [ ] **Step 3: Implement the conservative installer and wire checks**
+- [x] **Step 3: Implement the conservative installer and wire checks**
 
   Implement an explicit `--repo-root` option plus default repository discovery. Install a generated pre-commit only when no pre-commit exists; encode the staged-path filter with `git diff --cached --name-only --diff-filter=ACMR`, then call `python scripts/check_roadmap.py --staged`. Never set Git configuration. Add `uv run --project apps/api python scripts/check_roadmap.py` after `check_docs.py` in CI and `verify.ps1`.
 
-- [ ] **Step 4: Run hook, staged, CI-command, and full documentation verification**
+- [x] **Step 4: Run hook, staged, CI-command, and full documentation verification**
 
   Run:
 
@@ -226,7 +226,7 @@
 
   Expected: all fixtures pass; `--staged` either reports the staged registry digest or a precise discrepancy without editing files; documentation checks pass.
 
-- [ ] **Step 5: Commit enforcement separately**
+- [x] **Step 5: Commit enforcement separately**
 
   Run:
 
@@ -248,21 +248,21 @@
 - Consumes: generated `docs/ROADMAP.md`, selected plan index header, and its declared reference ranges.
 - Produces: an operator procedure that first reads `docs/CURRENT_STATE.md` L1-L28 and the generated roadmap through the final non-completed row, then only the selected plan header and its declared ranges; any additional read must record path, bounds, and reason before use.
 
-- [ ] **Step 1: Write failing text-contract tests**
+- [x] **Step 1: Write failing text-contract tests**
 
   Add assertions that the operator instructions name the four ordered read scopes, prohibit reading other plan bodies/completed plans/full architecture documents by default, require a concise pre/post status-transition range report, and require declaring an out-of-range read’s path, start line, end line, and reason. Add assertions that `AGENTS.md` directs roadmap regeneration rather than direct editing.
 
-- [ ] **Step 2: Run the text-contract test and confirm failure**
+- [x] **Step 2: Run the text-contract test and confirm failure**
 
   Run: `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v`
 
   Expected: FAIL because the operator skill and synchronized project instructions are absent.
 
-- [ ] **Step 3: Document and install the minimal-reading workflow**
+- [x] **Step 3: Document and install the minimal-reading workflow**
 
   Determine the repository’s approved scope for a reusable Codex skill before writing it; use that scope rather than silently creating an inaccessible user-home artifact. Write `roadmap-operator` with the four-step read order, lifecycle transition procedure, renderer/checker commands, and concise read-range report. Update project documents so they identify header metadata as authoritative, `ROADMAP.md` as generated, lifecycle READMEs as navigation only, and the explicit expansion rule for out-of-range context.
 
-- [ ] **Step 4: Run the operator/document contract checks and the complete repository verification**
+- [x] **Step 4: Run the operator/document contract checks and the complete repository verification**
 
   Run:
 
@@ -275,7 +275,7 @@
 
   Expected: all roadmap fixtures, generated-roadmap validation, document links, lint, types, tests, and web checks pass.
 
-- [ ] **Step 5: Review, update graph, and commit the final workflow**
+- [x] **Step 5: Review, update graph, and commit the final workflow**
 
   Run:
 
@@ -303,3 +303,13 @@
 - Placeholder scan: no `TBD`, `TODO`, deferred implementation, or unspecified error-handling instructions remain.
 - Type/interface consistency: every renderer/checker/hook task consumes the registry functions introduced in Task 1; the staged reader and record model remain the sole data boundary.
 - Scope check: this is one integrated documentation-governance subsystem; splitting parser/renderer/hook/operator into separate plans would leave no independently usable workflow.
+
+## 완료 결과 (2026-09-03)
+
+- Task 1~5의 registry, renderer/checker, metadata migration, scoped hook/CI enforcement, minimal-reading operator workflow을 구현하고 독립 re-review를 마쳤다.
+- final-review의 completion gates를 해소했다: collector import 경로, API의 `psycopg` runtime dependency, maintenance `scripts` package import, QUALITY_SCORE freshness를 실제 검증 증거에 맞춰 정정했다.
+- 최신 전체 검증은 core 26건, API 687 passed/3 skipped, collector 97 passed/5 skipped, docs/roadmap checks, web lint/typecheck/95 tests/build를 통과했다.
+
+## 잔여 작업
+
+- 없음. graphify 생성물의 기존 dirty 상태는 이 계획의 변경·검증 범위에 포함하지 않았다.
