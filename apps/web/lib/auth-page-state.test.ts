@@ -4,6 +4,7 @@ import {
   clampAsOfDate,
   HYDRATE_THROTTLE_MS,
   koreaTodayIsoDate,
+  millisecondsUntilNextKoreaMidnight,
   nextAuthUser,
   oauthRedirectMessage,
   shouldHydrateNow,
@@ -90,6 +91,18 @@ describe("koreaTodayIsoDate (0035)", () => {
     // 2026-08-08 10:00 UTC = 2026-08-08 19:00 KST
     const utcMorning = new Date("2026-08-08T10:00:00Z");
     expect(koreaTodayIsoDate(utcMorning)).toBe("2026-08-08");
+  });
+});
+
+describe("millisecondsUntilNextKoreaMidnight (F-006)", () => {
+  it("waits only until the next KST midnight", () => {
+    // 2026-08-08 14:59:59 UTC = 2026-08-08 23:59:59 KST
+    expect(millisecondsUntilNextKoreaMidnight(new Date("2026-08-08T14:59:59Z"))).toBe(1_000);
+  });
+
+  it("schedules a full Korean day just after KST midnight", () => {
+    // 2026-08-08 15:00:00 UTC = 2026-08-09 00:00:00 KST
+    expect(millisecondsUntilNextKoreaMidnight(new Date("2026-08-08T15:00:00Z"))).toBe(86_400_000);
   });
 });
 

@@ -133,6 +133,18 @@ export function koreaTodayIsoDate(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
 }
 
+/** Delay until the next KST calendar day, so date input bounds update without a page refresh. */
+export function millisecondsUntilNextKoreaMidnight(now: Date = new Date()): number {
+  const koreaOffsetMs = 9 * 60 * 60 * 1_000;
+  const koreaClock = new Date(now.getTime() + koreaOffsetMs);
+  const nextKoreaMidnight = Date.UTC(
+    koreaClock.getUTCFullYear(),
+    koreaClock.getUTCMonth(),
+    koreaClock.getUTCDate() + 1,
+  ) - koreaOffsetMs;
+  return nextKoreaMidnight - now.getTime();
+}
+
 /** Prevents picking an as-of date after the KST "today" the server accepts, including direct keyboard entry. */
 export function clampAsOfDate(value: string, todayIso: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && value > todayIso ? todayIso : value;
@@ -327,7 +339,8 @@ function AnswerView({
 
 export default function Home() {
   const [question, setQuestion] = useState("");
-  const [asOf, setAsOf] = useState(koreaTodayIsoDate());
+  const [today, setToday] = useState(koreaTodayIsoDate);
+  const [asOf, setAsOf] = useState(today);
   const [answerPreference, setAnswerPreference] = useState<AnswerPreference>("terra");
   const [result, setResult] = useState<QuestionResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -362,6 +375,16 @@ export default function Home() {
   const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshTodayAtKoreaMidnight = () => {
+      setToday(koreaTodayIsoDate());
+      timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
+    };
+    timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
+    return () => clearTimeout(timer);
+  }, []);
 
   const clearAuthenticatedWorkspace = useCallback(() => {
     authEpoch.current += 1;
@@ -846,7 +869,7 @@ export default function Home() {
             <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
             <div className="composer-footer">
               <fieldset className="document-filters"><legend className="sr-only">원문 문서 종류</legend>{Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => { const kind = value as DocumentKind; return <label key={kind}><input checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} type="checkbox" />{label}</label>; })}</fieldset>
-              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={koreaTodayIsoDate()} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, koreaTodayIsoDate()))} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
+              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={today} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, today))} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
             </div>
           </form>
           <p className="composer-disclaimer">법률 자문을 대체하지 않습니다. 중요한 결정은 원문과 전문가 검토를 함께 확인하세요.</p>

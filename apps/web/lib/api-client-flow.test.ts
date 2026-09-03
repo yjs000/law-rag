@@ -91,6 +91,10 @@ describe("Supabase authenticated question workflow", () => {
     expect((await askQuestion(history.request, controller.signal)).request_id).toBe("history-1");
     const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/question-executions"));
     expect(questionCall?.[1]?.signal).toBe(controller.signal);
+    expect(JSON.parse(String(questionCall?.[1]?.body))).toMatchObject({
+      as_of_date: "2026-07-14",
+      question: "허가를 확인해줘",
+    });
     expect(await listQuestionHistory()).toEqual([history]);
     expect((await listConversations()).items[0].title).toBe("허가를 확인해줘");
     expect((await listConversationTurns("chat-1")).items).toEqual([history]);
