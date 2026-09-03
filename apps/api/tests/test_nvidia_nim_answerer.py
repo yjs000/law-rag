@@ -46,6 +46,46 @@ def _hit() -> SearchHit:
     )
 
 
+def test_nvidia_answerer_uses_a_fresh_client_in_each_event_loop() -> None:
+    payload = json.dumps(
+        {
+            "summary": "전기사업에 관한 근거입니다.",
+            "citation_ids": ["C1"],
+            "action": "fully_answerable",
+        }
+    )
+
+    class LoopBoundClient:
+        def __init__(self) -> None:
+            self.loop = asyncio.get_running_loop()
+            self.chat = SimpleNamespace(completions=self)
+
+        async def create(self, **kwargs):
+            assert asyncio.get_running_loop() is self.loop
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]
+            )
+
+        async def close(self) -> None:
+            return None
+
+    answerer = NvidiaNimAnswerer(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3-ultra-550b-a55b",
+        timeout_seconds=30,
+        max_output_tokens=4096,
+        client_factory=LoopBoundClient,
+    )
+    request = QuestionRequest(question="전기사업 근거")
+    hits = [_hit()]
+
+    first = asyncio.run(answerer.answer_core(request, hits))
+    second = asyncio.run(answerer.answer_core(request, hits))
+
+    assert first.summary == second.summary == "전기사업에 관한 근거입니다."
+
+
 @pytest.mark.asyncio
 async def test_nvidia_nim_uses_guided_schema_and_validates_answer() -> None:
     answerer = _answerer()
