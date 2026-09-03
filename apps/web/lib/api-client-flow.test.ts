@@ -48,6 +48,27 @@ afterEach(() => {
 });
 
 describe("Supabase authenticated question workflow", () => {
+  it("keeps browser fetch bound to Window during v2 execution", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    const fetchMock = vi.fn(async function (
+      this: unknown,
+      input: string | URL | Request,
+    ) {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      const url = String(input);
+      if (url.endsWith("/v2/question-executions")) {
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      if (url.endsWith("/core")) {
+        return new Response('event: phase_complete\ndata: {"next_action":"generate_detail"}\n\n');
+      }
+      return new Response(`event: complete\ndata: {"response":${JSON.stringify(answer)}}\n\n`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askQuestion(history.request)).resolves.toEqual(answer);
+  });
+
   it("starts PKCE login and sends the Supabase bearer token to API calls", async () => {
     const values = new Map<string, string>();
     vi.stubGlobal("window", {

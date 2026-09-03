@@ -111,7 +111,7 @@ export async function askQuestion(
 ): Promise<QuestionResponse> {
   try {
     return await runV2Execution(input, {
-      fetch,
+      fetch: (request, init) => fetch(request, init),
       apiUrl: API,
       headers: await authHeaders(),
       idempotencyKey: () => crypto.randomUUID(),
