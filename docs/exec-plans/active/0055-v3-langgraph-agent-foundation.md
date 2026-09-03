@@ -3,14 +3,12 @@
 > 유형: `Feature`
 > 보조 라벨: `Data`, `Reliability`
 > 선행 조건: v3 설계의 StateGraph·검색 재사용·Postgres 체크포인터 계약을 확인하고 다음 미시작 태스크 착수를 명시해야 한다.
-> 다음 행동: 미시작 Task 12~16의 착수 범위를 명시
+> 다음 행동: 다음 미시작 태스크의 착수 범위를 명시한다.
 > 참고 범위:
 > - `docs/design-docs/v3-langgraph-agent-foundation-design.md` L41-L49 — 그래프·영속화·검색 재사용·API 계약
 > - `docs/design-docs/v3-langgraph-agent-foundation-design.md` L80-L83 — workspace와 의존성 경계
 
 # V3 LangGraph 에이전트 기본 골격 구현 계획
-
-## 계획 본문
 
 > **에이전트 작업자를 위한 안내:** 필수 서브스킬: 이 계획을 태스크 단위로 구현하려면 superpowers:subagent-driven-development(권장) 또는 superpowers:executing-plans를 사용하세요. 각 단계는 체크박스(`- [ ]`) 문법으로 진행 상황을 추적합니다.
 

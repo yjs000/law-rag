@@ -3,14 +3,12 @@
 > 유형: `Feature`
 > 보조 라벨: `Reliability`
 > 선행 조건: 설계 문서와 provider-side 취소 가정을 NVIDIA hosted NIM 기준으로 현행화하고 explicit cancel ID 제공 여부를 재확인해야 한다.
-> 다음 행동: NVIDIA hosted NIM 기준으로 취소 설계를 현행화
+> 다음 행동: NVIDIA hosted NIM의 explicit cancel ID 제공 여부를 확인하고 설계 가정을 현행화한다.
 > 참고 범위:
 > - `docs/design-docs/distributed-question-cancellation.md` L19-L30 — 영속 취소 상태와 종결 상태 전이 계약
 > - `docs/design-docs/distributed-question-cancellation.md` L65-L70 — provider 취소 한계와 관측 조건
 
 # 분산 질문 취소 실행 계획
-
-## 계획 본문
 
 상태: `todo로 환원 (2026-08-18)` — active에서 구현 대부분(coordinator 포트·memory adapter·
 polling watcher 목업 테스트)까지 진행했으나, [설계 문서](../../design-docs/distributed-question-cancellation.md)와

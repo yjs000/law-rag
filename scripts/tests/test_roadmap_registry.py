@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
@@ -10,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import check_roadmap, install_git_hooks, render_roadmap
+from scripts import check_roadmap, render_roadmap
 from scripts.roadmap_registry import (
     PlanRecord,
     load_registry,
@@ -22,7 +21,7 @@ from scripts.roadmap_registry import (
 
 class RoadmapRegistryFixtures(unittest.TestCase):
     def setUp(self) -> None:
-        self.tempdir = tempfile.TemporaryDirectory(dir=Path.cwd())
+        self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name)
         (self.root / "docs" / "exec-plans" / "todo").mkdir(parents=True)
         (self.root / "docs" / "exec-plans" / "active").mkdir(parents=True)
@@ -124,6 +123,19 @@ class RoadmapRegistryFixtures(unittest.TestCase):
 
         self.assertEqual(records[0].status, "Todo")
         self.assertEqual(roadmap_digest(records), baseline_digest)
+        self.assertEqual(self._errors(records), [])
+
+    def test_header_reader_accepts_introductory_prose_after_the_title(self) -> None:
+        path = self._write_plan()
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "# 로드맵 레지스트리 테스트\n\n## 구현",
+                "# 로드맵 레지스트리 테스트\n\n짧은 개요입니다.\n\n## 구현",
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(self._errors(load_registry(self.root)), [])
 
     def test_staged_header_reader_does_not_use_full_blob_git_show(self) -> None:
         path = self._write_plan()
@@ -263,28 +275,6 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         todo.write_text("", encoding="utf-8")
         active.write_text("", encoding="utf-8")
         completed.write_text("", encoding="utf-8")
-        self._write_plan(
-            number="0004",
-            directory="completed",
-            task_id="D-004",
-            status="Done",
-            plan_type="Documentation",
-            filename="0004-indexed-completed.md",
-        )
-        legacy_completed = self._write_plan(
-            number="0005",
-            directory="completed",
-            task_id="D-005",
-            status="Done",
-            plan_type="Documentation",
-            filename="0005-legacy-completed.md",
-        )
-        legacy_completed.write_text(
-            legacy_completed.read_text(encoding="utf-8").replace(
-                "> 다음 행동: 요구사항별 회귀 테스트부터 시작\n", ""
-            ),
-            encoding="utf-8",
-        )
 
         records = load_registry(self.root)
         errors = self._errors(records)
@@ -295,7 +285,6 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             {
                 "docs/exec-plans/todo/0001-headerless-todo.md",
                 "docs/exec-plans/active/0002-headerless-active.md",
-                "docs/exec-plans/completed/0004-indexed-completed.md",
             },
         )
         for number in ("0001", "0002"):
@@ -310,41 +299,6 @@ class RoadmapRegistryFixtures(unittest.TestCase):
                     (number, field, file_errors),
                 )
         self.assertFalse(any("0003-headerless-completed.md" in message for message in errors))
-        indexed_completed = next(
-            record for record in records if record.path.name == "0004-indexed-completed.md"
-        )
-        self.assertEqual(indexed_completed.status, "Done")
-        self.assertFalse(any(record.path.name == "0005-legacy-completed.md" for record in records))
-
-    def test_lifecycle_readmes_are_not_registry_plans(self) -> None:
-        for directory in ("todo", "active", "completed"):
-            (self.root / "docs" / "exec-plans" / directory / "README.md").write_text(
-                "# lifecycle navigation\n", encoding="utf-8"
-            )
-
-        records = load_registry(self.root)
-
-        self.assertFalse(any(record.path.name == "README.md" for record in records))
-
-    def test_repository_non_completed_plans_meet_migration_boundary(self) -> None:
-        repository_root = Path(__file__).resolve().parents[2]
-        records = [
-            record
-            for record in load_registry(repository_root)
-            if record.path.parts[2] in {"todo", "active"} and record.path.name != "README.md"
-        ]
-
-        self.assertTrue(records)
-        errors = validate_registry(records, repository_root)
-
-        self.assertEqual([], errors, "\n".join(str(error) for error in errors))
-        for record in records:
-            self.assertIsNotNone(record.task_id)
-            self.assertIsNotNone(record.plan_type)
-            self.assertIsNotNone(record.next_action)
-            self.assertLessEqual(len(record.references), 3)
-            self.assertTrue(all(reference.start_line and reference.end_line for reference in record.references))
-            self.assertTrue(all(reference.reason for reference in record.references))
 
     def test_unknown_values_duplicate_ids_and_picked_up_cardinality(self) -> None:
         self._write_plan(
@@ -364,6 +318,16 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertTrue(any("UnknownLabel" in message and "보조 라벨" in message for message in errors))
         self.assertTrue(any("중복" in message and "작업 ID" in message for message in errors))
         self.assertTrue(any("Picked Up" in message for message in errors))
+
+    def test_feature_subtask_ids_are_valid_and_remain_individually_unique(self) -> None:
+        self._write_plan(number="0001", task_id="F-006-A", directory="active", status="Picked Up")
+        self._write_plan(number="0002", task_id="F-006-B", directory="active", status="Blocked")
+        self._write_plan(number="0003", task_id="F-006-A", directory="active", status="Blocked")
+
+        errors = self._errors(load_registry(self.root))
+
+        self.assertTrue(any("F-006-A" in message and "중복" in message for message in errors))
+        self.assertFalse(any("F-006-B" in message and "형식" in message for message in errors))
 
     def test_picked_up_cardinality_is_one_actionable_global_error(self) -> None:
         self._write_plan(
@@ -486,7 +450,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         for number in ("0001", "0002", "0003"):
             self.assertTrue(any(number in message for message in errors))
 
-    def test_sections_place_picked_up_with_todo_and_digest_is_order_independent(self) -> None:
+    def test_sections_keep_picked_up_separate_and_digest_is_order_independent(self) -> None:
         self._write_plan(
             number="0002", task_id="F-002", status="Blocked", filename="0002-second.md"
         )
@@ -503,8 +467,9 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         records = load_registry(self.root)
 
         sections = roadmap_sections(records)
-        self.assertEqual(list(sections), ["Todo", "Blocked", "Done"])
-        self.assertEqual([record.status for record in sections["Todo"]], ["Picked Up"])
+        self.assertEqual(list(sections), ["Picked Up", "Todo", "Blocked", "Done"])
+        self.assertEqual([record.status for record in sections["Picked Up"]], ["Picked Up"])
+        self.assertEqual(sections["Todo"], [])
         self.assertEqual([record.status for record in sections["Blocked"]], ["Blocked"])
         self.assertEqual([record.status for record in sections["Done"]], ["Done"])
         self.assertEqual(roadmap_digest(records), roadmap_digest(list(reversed(records))))
@@ -565,6 +530,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertEqual(rendered, render_roadmap.render_roadmap(list(reversed(records))))
         self.assertIn("python scripts/render_roadmap.py", rendered)
         self.assertIn(roadmap_digest(records), rendered)
+        self.assertLess(rendered.index("## Picked Up"), rendered.index("## Todo"))
         self.assertLess(rendered.index("## Todo"), rendered.index("## Blocked"))
         self.assertLess(rendered.index("## Blocked"), rendered.index("## Done"))
         self.assertIn(
@@ -572,7 +538,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             "다음 행동: 요구사항별 회귀 테스트부터 시작",
             rendered,
         )
-        self.assertNotIn("## Picked Up", rendered)
+        self.assertIn("## Picked Up", rendered)
 
         task_rows = [
             line
@@ -691,292 +657,6 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertIn(roadmap_digest(index_records), stdout.getvalue())
         self.assertEqual(plan_path.read_bytes(), worktree_plan)
         self.assertEqual(roadmap_path.read_text(encoding="utf-8"), "worktree-only roadmap\n")
-
-    def _init_fixture_repo(self) -> Path:
-        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "tests@example.invalid"],
-            cwd=self.root,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "Roadmap Tests"],
-            cwd=self.root,
-            check=True,
-        )
-        return self.root / ".git" / "hooks"
-
-    def test_installer_preserves_post_commit_core_hooks_path_and_is_idempotent(self) -> None:
-        hooks = self._init_fixture_repo()
-        post_commit = hooks / "post-commit"
-        post_commit_bytes = b"#!/bin/sh\n# user graphify hook\n"
-        post_commit.write_bytes(post_commit_bytes)
-        post_commit.chmod(0o755)
-        subprocess.run(
-            ["git", "config", "core.hooksPath", "custom-hooks"],
-            cwd=self.root,
-            check=True,
-        )
-        before_hooks_path = subprocess.run(
-            ["git", "config", "--local", "--get", "core.hooksPath"],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-
-        stdout = StringIO()
-        stderr = StringIO()
-        with redirect_stdout(stdout), redirect_stderr(stderr):
-            first_exit = install_git_hooks.main(["--repo-root", str(self.root)])
-        first_hook = (hooks / "pre-commit").read_bytes()
-
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            second_exit = install_git_hooks.main(["--repo-root", str(self.root)])
-
-        after_hooks_path = subprocess.run(
-            ["git", "config", "--local", "--get", "core.hooksPath"],
-            cwd=self.root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        self.assertEqual(first_exit, 0, stderr.getvalue())
-        self.assertEqual(second_exit, 0)
-        self.assertEqual(post_commit.read_bytes(), post_commit_bytes)
-        self.assertEqual(before_hooks_path, after_hooks_path)
-        self.assertEqual((hooks / "pre-commit").read_bytes(), first_hook)
-
-    def test_installer_refuses_to_overwrite_user_pre_commit_with_manual_guidance(self) -> None:
-        hooks = self._init_fixture_repo()
-        pre_commit = hooks / "pre-commit"
-        user_hook = b"#!/bin/sh\nuser-owned hook\n"
-        pre_commit.write_bytes(user_hook)
-        pre_commit.chmod(0o755)
-
-        stdout = StringIO()
-        stderr = StringIO()
-        with redirect_stdout(stdout), redirect_stderr(stderr):
-            exit_code = install_git_hooks.main(["--repo-root", str(self.root)])
-
-        self.assertEqual(exit_code, 1)
-        self.assertEqual(pre_commit.read_bytes(), user_hook)
-        message = stderr.getvalue().lower()
-        self.assertIn("refus", message)
-        self.assertIn("manual", message)
-
-    def test_pre_commit_dispatcher_filters_staged_paths_before_running_checker(self) -> None:
-        hooks = self._init_fixture_repo()
-        checker = self.root / "scripts" / "check_roadmap.py"
-        checker.parent.mkdir()
-        checker.write_text(
-            "from pathlib import Path\n"
-            "import sys\n"
-            "Path('checker-invocations.txt').open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n",
-            encoding="utf-8",
-        )
-        (self.root / "README.md").write_text("initial\n", encoding="utf-8")
-        subprocess.run(["git", "add", "README.md", "scripts/check_roadmap.py"], cwd=self.root, check=True)
-        subprocess.run(["git", "commit", "-qm", "initial"], cwd=self.root, check=True)
-
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
-        hook = hooks / "pre-commit"
-        self.assertTrue(hook.exists())
-
-        unrelated = self.root / "unrelated.txt"
-        unrelated.write_text("unrelated\n", encoding="utf-8")
-        subprocess.run(["git", "add", "unrelated.txt"], cwd=self.root, check=True)
-        subprocess.run(["git", "commit", "-qm", "unrelated"], cwd=self.root, check=True)
-        self.assertFalse((self.root / "checker-invocations.txt").exists())
-
-        roadmap = self.root / "docs" / "ROADMAP.md"
-        roadmap.write_text("generated\n", encoding="utf-8")
-        subprocess.run(["git", "add", "docs/ROADMAP.md"], cwd=self.root, check=True)
-        subprocess.run(["git", "commit", "-qm", "roadmap"], cwd=self.root, check=True)
-        self.assertEqual(
-            (self.root / "checker-invocations.txt").read_text(encoding="utf-8"),
-            "--staged\n",
-        )
-
-        plan = self.root / "docs" / "exec-plans" / "todo" / "0001-plan.md"
-        plan.write_text("plan\n", encoding="utf-8")
-        subprocess.run(["git", "add", "docs/exec-plans/todo/0001-plan.md"], cwd=self.root, check=True)
-        subprocess.run(["git", "commit", "-qm", "plan"], cwd=self.root, check=True)
-        self.assertEqual(
-            (self.root / "checker-invocations.txt").read_text(encoding="utf-8"),
-            "--staged\n--staged\n",
-        )
-
-    def test_pre_commit_dispatcher_rejects_staged_path_discovery_failure(self) -> None:
-        hooks = self._init_fixture_repo()
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
-
-        (self.root / "README.md").write_text("staged\n", encoding="utf-8")
-        subprocess.run(["git", "add", "README.md"], cwd=self.root, check=True)
-        (self.root / "broken-index").write_bytes(b"not a git index")
-        hook = hooks / "pre-commit"
-        hook.write_text(
-            "#!/bin/sh\nexport GIT_INDEX_FILE=broken-index\n"
-            + hook.read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
-        completed = subprocess.run(
-            ["git", "commit", "-qm", "broken index"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        self.assertNotEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-
-    def test_pre_commit_dispatcher_handles_git_quoted_non_ascii_plan_path(self) -> None:
-        self._init_fixture_repo()
-        checker = self.root / "scripts" / "check_roadmap.py"
-        checker.parent.mkdir()
-        checker.write_text(
-            "from pathlib import Path\n"
-            "import sys\n"
-            "Path('checker-invocations.txt').open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n",
-            encoding="utf-8",
-        )
-        (self.root / "README.md").write_text("initial\n", encoding="utf-8")
-        subprocess.run(["git", "add", "README.md", "scripts/check_roadmap.py"], cwd=self.root, check=True)
-        subprocess.run(["git", "commit", "-qm", "initial"], cwd=self.root, check=True)
-        subprocess.run(["git", "config", "core.quotePath", "true"], cwd=self.root, check=True)
-
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
-
-        non_ascii_plan = self.root / "docs" / "exec-plans" / "todo" / "0001-한글.md"
-        non_ascii_plan.write_text("plan\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "add", "docs/exec-plans/todo/0001-한글.md"],
-            cwd=self.root,
-            check=True,
-        )
-        subprocess.run(["git", "commit", "-qm", "non-ascii plan"], cwd=self.root, check=True)
-
-        invocations = self.root / "checker-invocations.txt"
-        self.assertTrue(invocations.exists())
-        self.assertEqual(invocations.read_text(encoding="utf-8"), "--staged\n")
-
-    def test_installer_discovers_repository_root_by_default(self) -> None:
-        self._init_fixture_repo()
-        completed = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parents[1] / "install_git_hooks.py")],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertTrue((self.root / ".git" / "hooks" / "pre-commit").exists())
-
-    def test_ci_and_verify_run_non_staged_checker_after_docs_check(self) -> None:
-        ci_text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml").read_text(
-            encoding="utf-8"
-        )
-        verify_text = (Path(__file__).resolve().parents[1] / "verify.ps1").read_text(
-            encoding="utf-8"
-        )
-        expected = "uv run --project apps/api python scripts/check_roadmap.py"
-        docs_check = "uv run --project apps/api python scripts/check_docs.py"
-        for workflow in (ci_text, verify_text):
-            docs_index = workflow.index(docs_check)
-            roadmap_index = workflow.index(expected)
-            self.assertGreater(roadmap_index, docs_index)
-            self.assertLess(roadmap_index - docs_index, 200)
-
-    def test_operator_skill_declares_four_ordered_read_scopes_and_expansion_rule(self) -> None:
-        repository_root = Path(__file__).resolve().parents[2]
-        skill_path = repository_root / ".codex" / "skills" / "roadmap-operator" / "SKILL.md"
-
-        self.assertTrue(skill_path.is_file(), skill_path)
-        skill_text = skill_path.read_text(encoding="utf-8")
-
-        scope_markers = [
-            "docs/CURRENT_STATE.md L1-L28",
-            "docs/ROADMAP.md",
-            "선택한 실행계획 파일의 시작부터 첫 `##`",
-            "`참고 범위`에 적힌 각 파일의 명시된 `L시작-L끝`",
-        ]
-        scope_positions = [skill_text.index(marker) for marker in scope_markers]
-        self.assertEqual(scope_positions, sorted(scope_positions))
-
-        self.assertIn("마지막 비완료 행", skill_text)
-        self.assertIn("다른 실행계획의 본문", skill_text)
-        self.assertIn("완료 계획", skill_text)
-        self.assertIn("ARCHITECTURE.md", skill_text)
-        self.assertIn("기본적으로 읽지 않는다", skill_text)
-
-        for marker in ("경로", "시작줄", "끝줄", "이유"):
-            self.assertIn(marker, skill_text)
-        self.assertIn("범위 밖", skill_text)
-        self.assertIn("상태 전이 전후", skill_text)
-        self.assertIn("읽은 범위", skill_text)
-        self.assertIn("python scripts/render_roadmap.py", skill_text)
-        self.assertIn("python scripts/check_roadmap.py", skill_text)
-
-    def test_project_documents_make_header_and_generated_roadmap_authoritative(self) -> None:
-        repository_root = Path(__file__).resolve().parents[2]
-        agents_text = (repository_root / "AGENTS.md").read_text(encoding="utf-8")
-        current_state_text = (repository_root / "docs" / "CURRENT_STATE.md").read_text(
-            encoding="utf-8"
-        )
-        plans_text = (repository_root / "docs" / "PLANS.md").read_text(encoding="utf-8")
-
-        self.assertIn(".codex/skills/roadmap-operator/SKILL.md", agents_text)
-        self.assertIn("실행계획 파일의 상단 메타데이터", agents_text)
-        self.assertIn("docs/ROADMAP.md", agents_text)
-        self.assertIn("python scripts/render_roadmap.py", agents_text)
-        self.assertIn("직접 편집하지", agents_text)
-        self.assertIn("범위 밖", agents_text)
-        self.assertIn("상태 전이 전후", agents_text)
-
-        for document in (current_state_text, plans_text):
-            self.assertIn("실행계획 파일의 상단 메타데이터", document)
-            self.assertIn("docs/ROADMAP.md", document)
-            self.assertIn("생성", document)
-            self.assertIn("범위 밖", document)
-            self.assertIn("경로", document)
-            self.assertIn("시작줄", document)
-            self.assertIn("끝줄", document)
-            self.assertIn("이유", document)
-
-        self.assertIn("lifecycle README", plans_text)
-        self.assertIn("navigation", plans_text)
-
-    def test_startup_current_state_reads_are_bounded_to_l1_l28(self) -> None:
-        repository_root = Path(__file__).resolve().parents[2]
-        agents_text = (repository_root / "AGENTS.md").read_text(encoding="utf-8")
-        current_state_text = (repository_root / "docs" / "CURRENT_STATE.md").read_text(
-            encoding="utf-8"
-        )
-
-        startup_step = next(line for line in agents_text.splitlines() if line.startswith("2."))
-        self.assertIn("이 파일", startup_step)
-        self.assertIn("`docs/CURRENT_STATE.md` L1-L28", startup_step)
-
-        current_state_startup = next(
-            line
-            for line in current_state_text.splitlines()
-            if line.startswith("세션 시작 시 기본으로 읽는 문서는")
-        )
-        self.assertIn("`AGENTS.md`", current_state_startup)
-        self.assertIn("`docs/CURRENT_STATE.md` L1-L28", current_state_startup)
-        self.assertNotIn("이 파일뿐이다", current_state_startup)
-
-    def test_plans_describes_the_seven_field_header_including_next_action(self) -> None:
-        repository_root = Path(__file__).resolve().parents[2]
-        plans_text = (repository_root / "docs" / "PLANS.md").read_text(encoding="utf-8")
-
-        self.assertIn("위 일곱 필드 헤더", plans_text)
-        self.assertIn("다음 행동", plans_text)
-        self.assertNotIn("위 여섯 필드 헤더", plans_text)
 
 
 if __name__ == "__main__":

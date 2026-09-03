@@ -11,10 +11,13 @@ from law_rag_core.ports.repository import LegalRepository
 
 from app.adapters.openai_answerer import CoreDraft
 from app.api.dependencies import _optional_user, main_module
+from app.application.clarification_workflow import ClarificationOwner, ClarificationTurnRequest
 from app.application.question_phase_coordinator import PhaseResult
 from app.application.v2.dependencies import PhaseRequest, PreparedExecution, PrepareQuestion
+from app.application.v2.grounding import ClarificationGrounding
 from app.domain.schemas import Citation, MockUser, QuestionRequest, QuestionResponse
 from app.observability import emit_execution_phase
+from app.ports.clarification_case import ClarificationCaseNotFound
 from app.ports.question_execution import ExecutionNotFound
 
 router = APIRouter()
@@ -82,16 +85,65 @@ async def prepare_question_execution(
 
     main = main_module()
     user = await _optional_user(request.headers.get("authorization"))
+    owner_scope = main._question_owner(request, user)
+    clarification, clarification_outcome = await _prepare_clarification_turn(
+        main, payload, owner_scope, user
+    )
     prepared = await main.v2_question_execution_service.prepare(
         PrepareQuestion(
             payload=payload,
-            owner_scope=main._question_owner(request, user),
+            owner_scope=owner_scope,
             idempotency_key=idempotency_key,
             user=user,
+            clarification=clarification,
+            clarification_outcome=clarification_outcome,
         )
     )
     emit_execution_phase(str(prepared.execution.execution_id), "prepare", "prepared")
     return main.v2_question_execution_service.prepared_response(prepared)
+
+
+async def _prepare_clarification_turn(
+    main: Any,
+    payload: QuestionRequest,
+    owner_scope: str,
+    user: MockUser | None,
+) -> tuple[ClarificationGrounding | None, Any | None]:
+    """Resolve one optional clarification turn without persisting its capability."""
+
+    workflow = getattr(main, "clarification_workflow", None)
+    if workflow is None:
+        return None, None
+
+    is_continuation = payload.clarification_case_id is not None
+    if not is_continuation:
+        route = await main.route_question(payload.question, main._question_router())
+        if getattr(route, "route", None) != "clarification_required":
+            return None, None
+
+    try:
+        outcome = await workflow.run_turn(
+            ClarificationTurnRequest(
+                question=payload.question,
+                as_of_date=payload.as_of_date,
+                project_stage=payload.project_stage,
+                case_id=payload.clarification_case_id,
+                user_text=payload.question if is_continuation else None,
+                conversation_id=payload.conversation_id,
+            ),
+            ClarificationOwner(
+                owner_scope=owner_scope,
+                capability_hash=_capability_hash(payload.clarification_capability)
+                if user is None
+                else None,
+            ),
+        )
+    except ClarificationCaseNotFound as exc:
+        raise HTTPException(status_code=404, detail="보완 질문을 찾을 수 없습니다.") from exc
+
+    if outcome.case is None or outcome.next_status is None:
+        return None, None
+    return ClarificationGrounding(policy=outcome.policy, case=outcome.case.case), outcome
 
 
 @router.delete("/v2/question-executions/{execution_id}", status_code=202)

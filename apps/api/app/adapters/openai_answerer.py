@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.application.v2.grounding import ClarificationGrounding
+from app.domain.clarification import GroundedClaim
 from app.domain.routing import QuestionRoute
 from app.domain.schemas import AnswerSection, ChecklistItem, QuestionRequest, SearchHit
 
@@ -27,6 +29,12 @@ class DraftAnswer(BaseModel):
     missing_information: list[str] = Field(default_factory=list)
 
 
+class ClarificationDraftAnswer(DraftAnswer):
+    """The clarification-only detail schema carrying structural legal claims."""
+
+    grounded_claims: list[GroundedClaim] = Field(default_factory=list)
+
+
 class CoreDraft(BaseModel):
     """The deliberately small, publishable result of the v2 core phase."""
 
@@ -35,6 +43,12 @@ class CoreDraft(BaseModel):
     action: Literal[
         "fully_answerable", "partially_answerable", "clarification_required", "unanswerable"
     ]
+
+
+class ClarificationCoreDraft(CoreDraft):
+    """The clarification-only core schema carrying structural legal claims."""
+
+    grounded_claims: list[GroundedClaim] = Field(default_factory=list)
 
 
 MAX_GENERATION_ARTICLES = 5
@@ -145,7 +159,12 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
     return messages
 
 
-def build_messages_v2(request: QuestionRequest, hits: list[SearchHit]) -> list[dict[str, str]]:
+def build_messages_v2(
+    request: QuestionRequest,
+    hits: list[SearchHit],
+    *,
+    clarification: ClarificationGrounding | None = None,
+) -> list[dict[str, str]]:
     """0043: 법률을 처음 접하는 사용자를 위한 문체 규칙을 추가한 v2 프롬프트.
 
     인용·근거·action 안전 규칙은 build_messages()와 동일하게 유지하고, summary
@@ -205,6 +224,28 @@ def build_messages_v2(request: QuestionRequest, hits: list[SearchHit]) -> list[d
             ),
         },
     ]
+    if clarification is not None:
+        answered = [
+            fact.id for fact in clarification.case.required_facts if fact.status.value == "answered"
+        ]
+        unresolved = [
+            fact.id for fact in clarification.case.remaining_facts()
+        ]
+        messages[0]["content"] += (
+            " 이번 답변은 clarification 정책 '"
+            + clarification.policy
+            + "'를 따른다. 구조화된 grounded_claims에는 summary·section·checklist의 모든 법률 "
+            "주장을 claim_kind, citation_ids, required_fact_ids, surface, "
+            "surface_index와 함께 넣는다. "
+            "surface는 summary, section_claim, section_explanation, checklist_label 중 하나이고 "
+            "summary의 surface_index는 null, 나머지는 해당 배열 index다. 일반 규칙은 "
+            "required_fact_ids를 비우고, 개별 적용은 answered 사실만, 남은 사실에 따른 설명은 "
+            "conditional claim으로 쓴다. confirmed_fact_ids="
+            + json.dumps(answered, ensure_ascii=False)
+            + "; unresolved_fact_ids="
+            + json.dumps(unresolved, ensure_ascii=False)
+            + ". 사실 값은 출력하거나 추측하지 않는다."
+        )
     for turn in request.conversation_context:
         messages.append(
             {
@@ -227,17 +268,23 @@ def build_messages_v2(request: QuestionRequest, hits: list[SearchHit]) -> list[d
     return messages
 
 
-def build_core_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict[str, str]]:
+def build_core_messages(
+    request: QuestionRequest,
+    hits: list[SearchHit],
+    *,
+    clarification: ClarificationGrounding | None = None,
+) -> list[dict[str, str]]:
     """Build the first v2 generation prompt without requesting unpublished detail."""
-    messages = build_messages_v2(request, hits)
+    messages = build_messages_v2(request, hits, clarification=clarification)
     system = messages[0]["content"]
     messages[0] = {
         "role": "system",
         "content": (
             system
-            + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action만 "
-            "출력한다. sections, checklist, scope, limitations은 생성하거나 암시하지 않는다. "
-            "citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 C번호만 넣는다."
+            + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action"
+            "과 grounded_claims만 출력한다. sections, checklist, scope, limitations은 생성하거나 "
+            "암시하지 않는다. citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 "
+            "C번호만 넣는다."
         ),
     }
     return messages

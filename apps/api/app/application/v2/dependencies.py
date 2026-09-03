@@ -10,8 +10,15 @@ from uuid import UUID
 
 from law_rag_core.ports.repository import LegalRepository
 
+from app.application.clarification_workflow import (
+    ClarificationOutcome,
+    ContinuationFactIntentExtractor,
+    InitialClarificationJudge,
+)
 from app.application.question_phase_coordinator import PhaseResult
+from app.application.v2.grounding import ClarificationGrounding
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
+from app.ports.clarification_case import ClarificationCaseRepository
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
 
 
@@ -43,6 +50,7 @@ class V2ExecutionDependencies:
     """
 
     executions: QuestionExecutionRepository
+    clarification_cases: ClarificationCaseRepository | None
     resolve_repository: Callable[[], Awaitable[LegalRepository]]
     active_provider: Callable[[], ActiveGenerationProvider]
     retrieve_evidence: Callable[
@@ -74,6 +82,17 @@ class V2ExecutionDependencies:
 
 
 @dataclass(frozen=True)
+class ClarificationWorkflowDependencies:
+    """SDK-free collaborators for one clarification workflow instance."""
+
+    repository: ClarificationCaseRepository
+    initial_judge: InitialClarificationJudge
+    continuation_extractor: ContinuationFactIntentExtractor
+    now: Callable[[], datetime]
+    case_ttl: timedelta
+
+
+@dataclass(frozen=True)
 class PrepareQuestion:
     """Validated transport input needed to create or replay an execution."""
 
@@ -81,6 +100,8 @@ class PrepareQuestion:
     owner_scope: str
     idempotency_key: str
     user: MockUser | None
+    clarification: ClarificationGrounding | None = None
+    clarification_outcome: ClarificationOutcome | None = None
 
 
 @dataclass(frozen=True)

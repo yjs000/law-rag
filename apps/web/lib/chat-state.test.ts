@@ -7,6 +7,7 @@ import {
   applyLiveCoreSummary,
   appendPendingTurn,
   completePendingTurn,
+  reconcileClarification,
   createChatSession,
   ellipsizeChatTitle,
   estimateTextTokens,
@@ -208,5 +209,25 @@ describe("pending assistant transitions", () => {
     expect(failed.messages[1]).toMatchObject({ status: "error", error: "연결 오류" });
     expect(failPendingTurn(stopped, "request-1", "늦은 오류")).toBe(stopped);
     expect(stopPendingTurn(pending, "stale-request")).toBe(pending);
+  });
+});
+
+describe("clarification continuation", () => {
+  it("retains an opaque capability for the next free-chat submission and clears it on completion", () => {
+    const waiting: QuestionResponse = {
+      ...response,
+      clarification: {
+        case_id: "case-1",
+        status: "waiting_for_user",
+        question_format: [{ id: "site", label: "설치 위치", why_needed: "관할을 판단합니다.", group: "사업 정보", priority: 1 }],
+        remaining_count: 1,
+      },
+    };
+
+    const pending = reconcileClarification(createChatSession("chat-1"), waiting, "opaque-capability");
+    expect(pending.clarification).toEqual({ caseId: "case-1", capability: "opaque-capability", remainingCount: 1, questionFormat: waiting.clarification?.question_format });
+    expect(JSON.stringify(pending.messages)).not.toContain("opaque-capability");
+
+    expect(reconcileClarification(pending, response, "new-capability").clarification).toBeUndefined();
   });
 });

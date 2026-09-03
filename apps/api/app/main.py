@@ -96,6 +96,7 @@ def _v2_service_dependencies():
             check_quota=_check_v2_quota,
             require_supported_date=_require_supported_as_of_date,
             save_authenticated=_save_if_authenticated,
+            clarification_cases=dependencies.clarification_cases,
             execution_capability=_execution_capability,
             capability_hash=_capability_hash,
             admit_phase=_admit_v2_provider_phase,
@@ -118,6 +119,7 @@ nvidia_embedder = dependencies.nvidia_embedder
 nvidia_answerer = dependencies.nvidia_answerer
 nvidia_question_router = dependencies.nvidia_question_router
 v2_question_execution_service = dependencies.v2_service
+clarification_workflow = dependencies.clarification_workflow
 supabase_auth = dependencies.supabase_auth
 postgres_identity = dependencies.postgres_identity
 collector_load_errors = dependencies.collector_load_errors

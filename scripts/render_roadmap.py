@@ -63,7 +63,7 @@ def render_roadmap(records: Iterable[PlanRecord]) -> str:
         "",
     ]
 
-    for section_name in ("Todo", "Blocked", "Done"):
+    for section_name in ("Picked Up", "Todo", "Blocked", "Done"):
         lines.extend((f"## {section_name}", ""))
         section_records: Sequence[PlanRecord] = sections[section_name]
         if section_name == "Done":

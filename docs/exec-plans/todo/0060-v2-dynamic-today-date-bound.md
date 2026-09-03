@@ -3,15 +3,13 @@
 > 유형: `Bug`
 > 보조 라벨: `Data`, `UX`
 > 선행 조건: [F-005 V2 LlamaIndex 프레임워크 파이프라인 개편](../../design-docs/v2-llamaindex-framework-redesign.md)의 실행계획에서 v2 temporal adapter 경계를 확정해야 한다.
-> 다음 행동: F-005 실행계획에서 temporal contract task 편입 여부를 결정
+> 다음 행동: v2 temporal adapter 경계를 확정한다.
 > 참고 범위:
 > - `apps/api/app/domain/corpus_temporal_contract.py` L23-L59 — KST today와 지원 범위 검사 계약
-> - `apps/api/app/main.py` L216-L246 — 요청 시점의 한국 날짜를 temporal state에 전달하는 현재 API 경계
-> - `apps/api/app/adapters/postgres_repository.py` L564-L579 — 지원 상한을 주입받는 repository port 구현
+> - `apps/api/app/adapters/postgres_repository.py` L577-L579 — 지원 상한을 주입받는 repository port 구현
+> - `apps/web/app/page.tsx` L850-L856 — date input의 현재 KST today 상한
 
 # 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산
-
-## 계획 본문
 
 상태: `확정됨, 미착수 (2026-08-27)`
 

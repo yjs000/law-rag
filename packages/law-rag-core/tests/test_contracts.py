@@ -12,6 +12,8 @@ from law_rag_core.domain.schemas import (
     ChecklistDocument,
     ChecklistExportFormat,
     ChecklistItem,
+    ClarificationContinuation,
+    ClarificationFactPrompt,
     MockUser,
     ProjectStage,
     QuestionHistoryEntry,
@@ -49,6 +51,46 @@ def test_question_response_exposes_requested_mode_and_safe_fallback_reason() -> 
 
     assert response.requested_answer_mode == "terra"
     assert response.fallback_reason == "billing_or_quota_error"
+
+
+def test_clarification_continuation_uses_the_waiting_transport_contract() -> None:
+    case_id = uuid4()
+    continuation = ClarificationContinuation(
+        case_id=case_id,
+        status="waiting_for_user",
+        question_format=[
+            ClarificationFactPrompt(
+                id="site",
+                label="설치 위치",
+                why_needed="관할을 판단합니다.",
+                group="사업 정보",
+                priority=1,
+            )
+        ],
+        remaining_count=1,
+    )
+
+    assert continuation.model_dump(mode="json") == {
+        "case_id": str(case_id),
+        "status": "waiting_for_user",
+        "question_format": [
+            {
+                "id": "site",
+                "label": "설치 위치",
+                "why_needed": "관할을 판단합니다.",
+                "group": "사업 정보",
+                "priority": 1,
+            }
+        ],
+        "remaining_count": 1,
+    }
+    with pytest.raises(ValidationError):
+        ClarificationContinuation(
+            case_id=case_id,
+            status="completed",
+            question_format=[],
+            remaining_count=0,
+        )
 
 
 def test_question_context_rejects_aggregate_input_over_safe_budget() -> None:

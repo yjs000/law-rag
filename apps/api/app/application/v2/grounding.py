@@ -3,10 +3,150 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any, Literal
 
+from app.domain.clarification import (
+    ClarificationCase,
+    FactStatus,
+    GroundedClaim,
+    RequiredFact,
+    validate_claim,
+)
 from app.domain.grounding import CitationRegistry, GroundedSentence
 from app.domain.schemas import Citation, QuestionRequest, QuestionResponse
+
+ClaimTarget = tuple[str, int | None]
+
+
+@dataclass(frozen=True)
+class ClarificationGrounding:
+    """The policy and private case state frozen with one v2 execution.
+
+    Only identifiers, blocking flags, and statuses are serialized into the
+    execution.  Fact values remain owned by ``clarification_cases`` and are
+    never copied into an SSE payload or execution record.
+    """
+
+    policy: Literal["interim", "full", "conditional"]
+    case: ClarificationCase
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "policy": self.policy,
+            "facts": [
+                {"id": fact.id, "blocking": fact.blocking, "status": fact.status.value}
+                for fact in self.case.required_facts
+            ],
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> ClarificationGrounding:
+        if not isinstance(payload, dict):
+            raise ValueError("clarification grounding payload is invalid")
+        policy = payload.get("policy")
+        raw_facts = payload.get("facts")
+        if policy not in {"interim", "full", "conditional"} or not isinstance(raw_facts, list):
+            raise ValueError("clarification grounding payload is incomplete")
+        facts: list[RequiredFact] = []
+        for priority, raw_fact in enumerate(raw_facts):
+            if not isinstance(raw_fact, dict):
+                raise ValueError("clarification grounding fact is invalid")
+            identifier = raw_fact.get("id")
+            status = raw_fact.get("status")
+            blocking = raw_fact.get("blocking")
+            if (
+                not isinstance(identifier, str)
+                or not identifier
+                or not isinstance(status, str)
+                or not isinstance(blocking, bool)
+            ):
+                raise ValueError("clarification grounding fact is incomplete")
+            try:
+                fact_status = FactStatus(status)
+            except ValueError as exc:
+                raise ValueError("clarification grounding fact has an unknown status") from exc
+            facts.append(
+                RequiredFact(
+                    id=identifier,
+                    label=identifier,
+                    why_needed="frozen clarification fact",
+                    blocking=blocking,
+                    group="frozen",
+                    priority=priority,
+                    status=fact_status,
+                )
+            )
+        return cls(policy=policy, case=ClarificationCase(tuple(facts)))
+
+
+def claims_are_grounded(
+    claims: Iterable[GroundedClaim],
+    grounding: ClarificationGrounding,
+    registry: CitationRegistry,
+    *,
+    required_targets: Iterable[ClaimTarget] | None = None,
+) -> bool:
+    """Validate F-006 claims by structure, frozen IDs, and fact state only.
+
+    Deliberately do not inspect generated wording or match phrases against the
+    citation quote.  ``validate_claim`` is the single claim-kind rule and the
+    policy check only determines whether a declared full answer is possible.
+    """
+
+    if grounding.policy == "full" and not grounding.case.all_blocking_facts_answered():
+        return False
+    frozen_claims = tuple(claims)
+    if not frozen_claims or not all(
+        validate_claim(claim, grounding.case, registry) for claim in frozen_claims
+    ):
+        return False
+    if required_targets is None:
+        return True
+
+    targets = tuple(required_targets)
+    claim_targets = tuple(_claim_target(claim) for claim in frozen_claims)
+    return (
+        bool(targets)
+        and all(target is not None for target in claim_targets)
+        and len(claim_targets) == len(set(claim_targets))
+        and set(claim_targets) == set(targets)
+    )
+
+
+def _claim_target(claim: GroundedClaim) -> ClaimTarget | None:
+    if claim.surface == "summary":
+        return (claim.surface, None) if claim.surface_index is None else None
+    if claim.surface not in {"section_claim", "section_explanation", "checklist_label"}:
+        return None
+    if isinstance(claim.surface_index, int) and not isinstance(claim.surface_index, bool):
+        return (claim.surface, claim.surface_index) if claim.surface_index >= 0 else None
+    return None
+
+
+def detail_claim_targets(draft: Any) -> tuple[ClaimTarget, ...]:
+    """Return every legal-bearing detail field without inspecting its wording."""
+
+    targets: list[ClaimTarget] = [("summary", None)]
+    targets.extend(("section_claim", index) for index, _section in enumerate(draft.sections))
+    targets.extend(
+        ("section_explanation", index) for index, _section in enumerate(draft.sections)
+    )
+    targets.extend(("checklist_label", index) for index, _item in enumerate(draft.checklist))
+    return tuple(targets)
+
+
+def core_claim_targets(_core: Any) -> tuple[ClaimTarget, ...]:
+    """The core phase publishes only its summary as a legal-bearing field."""
+
+    return (("summary", None),)
+
+
+def clarification_grounding_from_payload(payload: object) -> ClarificationGrounding | None:
+    if not isinstance(payload, dict) or "clarification_grounding" not in payload:
+        return None
+    return ClarificationGrounding.from_payload(payload["clarification_grounding"])
 
 
 def response_is_grounded(response: QuestionResponse, registry: CitationRegistry) -> bool:

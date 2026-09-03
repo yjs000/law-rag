@@ -1,4 +1,4 @@
-import type { QuestionResponse } from "./contracts";
+import type { ClarificationFactPrompt, QuestionResponse } from "./contracts";
 
 /** Input budget only. The generation adapter must reserve output tokens separately. */
 export const DEFAULT_INPUT_CONTEXT_TOKENS = 24_576;
@@ -39,6 +39,15 @@ export type ChatSession = {
   rolloverNotice?: string;
   /** True once the backend has actually created a conversation row for `id`. */
   confirmed: boolean;
+  /** Opaque browser-only authorization for the next clarification submission. */
+  clarification?: PendingClarification;
+};
+
+export type PendingClarification = {
+  caseId: string;
+  capability: string;
+  questionFormat: ClarificationFactPrompt[];
+  remainingCount: number;
 };
 
 export type PendingTurnInput = {
@@ -235,6 +244,29 @@ export function completePendingTurn(
     status: "complete",
     response,
   }));
+}
+
+/** Keep continuation authorization out of rendered messages and conversation context. */
+export function reconcileClarification(
+  session: ChatSession,
+  response: QuestionResponse,
+  capability: string,
+): ChatSession {
+  const continuation = response.clarification;
+  if (continuation?.status !== "waiting_for_user") {
+    const withoutClarification = { ...session };
+    delete withoutClarification.clarification;
+    return withoutClarification;
+  }
+  return {
+    ...session,
+    clarification: {
+      caseId: continuation.case_id,
+      capability,
+      questionFormat: continuation.question_format,
+      remainingCount: continuation.remaining_count,
+    },
+  };
 }
 
 export function applyLiveCoreSummary(

@@ -30,6 +30,22 @@ export type QuestionResponse = {
   limitations: string[];
   corpus_as_of?: string | null;
   conversation_id?: string | null;
+  clarification?: ClarificationContinuation | null;
+};
+
+export type ClarificationFactPrompt = {
+  id: string;
+  label: string;
+  why_needed: string;
+  group: string;
+  priority: number;
+};
+
+export type ClarificationContinuation = {
+  case_id: string;
+  status: "waiting_for_user";
+  question_format: ClarificationFactPrompt[];
+  remaining_count: number;
 };
 
 export type MockUser = {
@@ -80,4 +96,6 @@ export type QuestionInput = {
   answer_mode?: "terra" | "search_only";
   conversation_id?: string;
   conversation_context?: Array<{ question: string; answer: string }>;
+  clarification_case_id?: string;
+  clarification_capability?: string;
 };

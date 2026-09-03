@@ -10,12 +10,16 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from app.adapters.openai_answerer import (
+    ClarificationCoreDraft,
+    ClarificationDraftAnswer,
     CoreDraft,
     DraftAnswer,
     build_blocked_route_messages,
     build_core_messages,
     build_messages,
+    build_messages_v2,
 )
+from app.application.v2.grounding import ClarificationGrounding
 from app.domain.routing import QuestionRoute
 from app.domain.schemas import QuestionRequest, SearchHit
 
@@ -63,11 +67,31 @@ class NvidiaNimAnswerer:
         self.max_attempts = max_attempts
         self.message_builder = message_builder
 
-    async def answer(self, request: QuestionRequest, hits: list[SearchHit]) -> DraftAnswer:
-        return await self._generate(self.message_builder(request, hits), DraftAnswer)
+    async def answer(
+        self,
+        request: QuestionRequest,
+        hits: list[SearchHit],
+        *,
+        clarification: ClarificationGrounding | None = None,
+    ) -> DraftAnswer:
+        messages = (
+            build_messages_v2(request, hits, clarification=clarification)
+            if clarification is not None
+            else self.message_builder(request, hits)
+        )
+        schema = ClarificationDraftAnswer if clarification is not None else DraftAnswer
+        return await self._generate(messages, schema)
 
-    async def answer_core(self, request: QuestionRequest, hits: list[SearchHit]) -> CoreDraft:
-        return await self._generate(build_core_messages(request, hits), CoreDraft)
+    async def answer_core(
+        self,
+        request: QuestionRequest,
+        hits: list[SearchHit],
+        *,
+        clarification: ClarificationGrounding | None = None,
+    ) -> CoreDraft:
+        schema = ClarificationCoreDraft if clarification is not None else CoreDraft
+        messages = build_core_messages(request, hits, clarification=clarification)
+        return await self._generate(messages, schema)
 
     async def answer_blocked_route(
         self, request: QuestionRequest, route: QuestionRoute, reason: str | None
