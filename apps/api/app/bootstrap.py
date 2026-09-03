@@ -386,7 +386,9 @@ def build_llamaindex_resources(
         return None
     embedder = embedder_factory(llamaindex_settings)
     async_engine = create_async_engine(
-        normalize_async_database_url(database_url), poolclass=NullPool
+        normalize_async_database_url(database_url),
+        poolclass=NullPool,
+        connect_args={"statement_cache_size": 0},
     )
     sync_engine = create_engine(normalize_sync_database_url(database_url), poolclass=NullPool)
 
