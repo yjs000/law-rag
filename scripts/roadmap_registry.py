@@ -172,7 +172,11 @@ def _plan_paths(root: Path, staged: bool) -> list[Path]:
         paths = [
             path
             for path in paths
-            if path.suffix.lower() == ".md" and _is_plan_relative_path(path)
+            if (
+                path.suffix.lower() == ".md"
+                and path.name.lower() != "readme.md"
+                and _is_plan_relative_path(path)
+            )
         ]
         return sorted(paths, key=lambda path: path.as_posix())
 
@@ -184,7 +188,7 @@ def _plan_paths(root: Path, staged: bool) -> list[Path]:
         paths.extend(
             path.relative_to(root)
             for path in base.rglob("*.md")
-            if path.is_file()
+            if path.is_file() and path.name.lower() != "readme.md"
         )
     return sorted(paths, key=lambda path: path.as_posix())
 
@@ -277,12 +281,13 @@ def _read_plan(
 
 
 def _has_index_header(lines: Sequence[str]) -> bool:
-    """Return whether the preamble has at least one known metadata field."""
+    """Return whether the preamble contains the current metadata header marker."""
 
     for line in lines:
         if _H2_RE.match(line):
             break
-        if _FIELD_RE.match(line):
+        match = _FIELD_RE.match(line)
+        if match is not None and match.group("field") == "다음 행동":
             return True
     return False
 
@@ -428,9 +433,10 @@ def _parse_labels(value: str) -> tuple[str, ...]:
 def load_registry(root: str | Path, staged: bool = False) -> list[PlanRecord]:
     """Load parseable plan index headers from the repository.
 
-    Legacy completed plans that do not contain any index field are intentionally
-    skipped.  This keeps the registry compatible with the staged migration
-    boundary; a completed plan is still parsed as soon as it gains the header.
+    Legacy completed plans that do not contain the current ``다음 행동`` marker
+    are intentionally skipped.  This keeps the registry compatible with the
+    staged migration boundary; a completed plan is parsed once it gains the
+    current header.
     """
 
     root_path = Path(root).resolve()

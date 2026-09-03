@@ -3,11 +3,14 @@
 > 유형: `Experiment`
 > 보조 라벨: `Data`, `Evaluation`
 > 선행 조건: parser·chunk_size·overlap·호출 비용 상한·실험 DB 권한을 확정하고 입력 artifact와 운영 색인 격리 경로를 검증해야 한다.
+> 다음 행동: 동일 v2 snapshot에서 청킹별 top-k Recall을 비교
 > 참고 범위:
 > - `docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md` L105-L118 — v2 ingestion 입력과 원본 metadata 보존 계약
 > - `docs/design-docs/experiment-d-10-gold-adjudication.md` L9-L14 — D-10 calibration Gold의 10문항 범위와 D-full 분리
 
 # 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹
+
+## 계획 본문
 
 상태: `제안됨 (2026-08-25)`
 

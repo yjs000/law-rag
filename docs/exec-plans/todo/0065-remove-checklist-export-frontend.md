@@ -3,11 +3,15 @@
 > 유형: Feature
 > 보조 라벨: UX
 > 선행 조건: 없음
+> 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작
 > 참고 범위:
-> - docs/product-specs/grounded-legal-qa.md — 제거 전 여정 7번
-> - apps/web/app/page.tsx, apps/web/lib/checklist-export.ts, apps/web/lib/api-client.ts — 내보내기 UI와 클라이언트
+> - `docs/product-specs/grounded-legal-qa.md` L7-L13 — 제거 전 핵심 여정과 체크리스트 범위
+> - `apps/web/app/page.tsx` L318-L323 — 체크리스트 UI와 내보내기 제어
+> - `apps/web/lib/checklist-export.ts` L3-L25 — 프런트 내보내기 렌더링 함수
 
 # 체크리스트 내보내기 프런트 제거 Implementation Plan
+
+## 계획 본문
 
 > For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (- [ ]) syntax for tracking.
 

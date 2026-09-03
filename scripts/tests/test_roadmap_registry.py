@@ -262,6 +262,28 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         todo.write_text("", encoding="utf-8")
         active.write_text("", encoding="utf-8")
         completed.write_text("", encoding="utf-8")
+        self._write_plan(
+            number="0004",
+            directory="completed",
+            task_id="D-004",
+            status="Done",
+            plan_type="Documentation",
+            filename="0004-indexed-completed.md",
+        )
+        legacy_completed = self._write_plan(
+            number="0005",
+            directory="completed",
+            task_id="D-005",
+            status="Done",
+            plan_type="Documentation",
+            filename="0005-legacy-completed.md",
+        )
+        legacy_completed.write_text(
+            legacy_completed.read_text(encoding="utf-8").replace(
+                "> 다음 행동: 요구사항별 회귀 테스트부터 시작\n", ""
+            ),
+            encoding="utf-8",
+        )
 
         records = load_registry(self.root)
         errors = self._errors(records)
@@ -272,6 +294,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             {
                 "docs/exec-plans/todo/0001-headerless-todo.md",
                 "docs/exec-plans/active/0002-headerless-active.md",
+                "docs/exec-plans/completed/0004-indexed-completed.md",
             },
         )
         for number in ("0001", "0002"):
@@ -286,6 +309,41 @@ class RoadmapRegistryFixtures(unittest.TestCase):
                     (number, field, file_errors),
                 )
         self.assertFalse(any("0003-headerless-completed.md" in message for message in errors))
+        indexed_completed = next(
+            record for record in records if record.path.name == "0004-indexed-completed.md"
+        )
+        self.assertEqual(indexed_completed.status, "Done")
+        self.assertFalse(any(record.path.name == "0005-legacy-completed.md" for record in records))
+
+    def test_lifecycle_readmes_are_not_registry_plans(self) -> None:
+        for directory in ("todo", "active", "completed"):
+            (self.root / "docs" / "exec-plans" / directory / "README.md").write_text(
+                "# lifecycle navigation\n", encoding="utf-8"
+            )
+
+        records = load_registry(self.root)
+
+        self.assertFalse(any(record.path.name == "README.md" for record in records))
+
+    def test_repository_non_completed_plans_meet_migration_boundary(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        records = [
+            record
+            for record in load_registry(repository_root)
+            if record.path.parts[2] in {"todo", "active"} and record.path.name != "README.md"
+        ]
+
+        self.assertTrue(records)
+        errors = validate_registry(records, repository_root)
+
+        self.assertEqual([], errors, "\n".join(str(error) for error in errors))
+        for record in records:
+            self.assertIsNotNone(record.task_id)
+            self.assertIsNotNone(record.plan_type)
+            self.assertIsNotNone(record.next_action)
+            self.assertLessEqual(len(record.references), 3)
+            self.assertTrue(all(reference.start_line and reference.end_line for reference in record.references))
+            self.assertTrue(all(reference.reason for reference in record.references))
 
     def test_unknown_values_duplicate_ids_and_picked_up_cardinality(self) -> None:
         self._write_plan(

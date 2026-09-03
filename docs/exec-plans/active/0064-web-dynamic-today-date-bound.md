@@ -3,13 +3,15 @@
 > 유형: Feature
 > 보조 라벨: UX, Reliability
 > 선행 조건: 없음
+> 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 > 참고 범위:
-> - apps/web/app/page.tsx L132-L140, L328-L347, L556-L633, L840-L850 — 날짜 UI·제출 흐름
-> - apps/web/lib/api-client.ts L108-L136 — V2 질문 실행 API 경계
-> - apps/web/lib/v2-execution.ts L32-L127 — prepare/core/finalize SSE 계약
-> - docs/product-specs/grounded-legal-qa.md, docs/FRONTEND.md — 제품·UI 요구
+> - `apps/web/app/page.tsx` L132-L140 — 기준일 입력과 동적 상한 계산
+> - `apps/web/app/page.tsx` L556-L633 — 질문 제출 흐름에 기준일 전달
+> - `apps/web/lib/v2-execution.ts` L32-L127 — prepare/core/finalize SSE 실행 계약
 
 # Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan
+
+## 계획 본문
 
 > For agentic workers: REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 

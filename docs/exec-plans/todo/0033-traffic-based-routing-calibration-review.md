@@ -3,11 +3,14 @@
 > 유형: `Experiment`
 > 보조 라벨: `Performance`, `Evaluation`
 > 선행 조건: 단일 QuestionRouter 오분류 또는 D-10 수준 인증 표본이 실제로 누적되거나 사용자가 재검토를 요청해야 한다.
+> 다음 행동: 실 트래픽 축적 후 단일 QuestionRouter 정책을 재검토
 > 참고 범위:
 > - `docs/exec-plans/completed/0028-pre-retrieval-question-routing.md` L3-L7 — 기존 오분류와 0033 후속 재검토 연결
 > - `docs/exec-plans/completed/0028-pre-retrieval-question-routing.md` L40-L48 — route·reason code·검색 실행 관측 계약
 
 # 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음
+
+## 계획 본문
 
 상태: `역사적·superseded — D-010(0057) 단일 QuestionRouter로 대체됨; 실 트래픽/tracking 데이터 축적 후 정책 calibration만 재검토`
 
