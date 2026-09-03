@@ -1,5 +1,5 @@
 > 작업 ID: F-006
-> 상태: Todo
+> 상태: Picked Up
 > 유형: Feature
 > 보조 라벨: UX, Reliability
 > 선행 조건: 없음

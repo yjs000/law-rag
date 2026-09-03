@@ -5,7 +5,7 @@
 
 ## Todo
 
-- [F-006 · Feature — 0064: Web grounded QA 프런트 API 정합성](exec-plans/todo/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
+- [F-006 · Feature — 0064: Web grounded QA 프런트 API 정합성](exec-plans/active/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-007 · Feature — 0065: 체크리스트 내보내기 프런트 제거](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작
 - [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 품질 원인 진단 범위를 선택
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격](exec-plans/active/0055-v3-langgraph-agent-foundation.md) — 다음 행동: 미시작 Task 12~16의 착수 범위를 명시
