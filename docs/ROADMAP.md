@@ -5,7 +5,6 @@
 
 ## Todo
 
-- [F-006 · Feature — 0064: Web grounded QA 프런트 API 정합성](exec-plans/active/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-007 · Feature — 0065: 체크리스트 내보내기 프런트 제거](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작
 - [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 품질 원인 진단 범위를 선택
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격](exec-plans/active/0055-v3-langgraph-agent-foundation.md) — 다음 행동: 미시작 Task 12~16의 착수 범위를 명시
@@ -29,6 +28,7 @@
 
 ## Done
 
+- [F-006 · Feature — 0064: Web grounded QA 프런트 API 정합성](exec-plans/completed/0064-web-dynamic-today-date-bound.md) — KST today() 기준일 갱신과 V2 실행·대화 API 계약 회귀 검증을 완료
 - [F-005-R · Refactor — V2 LlamaIndex 가독성 중심 개편](exec-plans/completed/0063-f005-v2-readability-refactor.md) — LlamaIndex stage, composition root, v1/v2 transport 경계를 가독성 중심으로 분리
 - [F-005 · Feature — V2 LlamaIndex 프레임워크 파이프라인 개편](exec-plans/completed/0061-v2-llamaindex-framework-pipeline.md) — generation별 색인·authoritative execution·prepare/core/finalize API와 웹 phase 상태기계를 완료
 - [DOC-001 · Documentation — 작업 관리 메타데이터와 얇은 로드맵](exec-plans/completed/0059-task-management-metadata-and-roadmap.md) — 작업 관리 계약, 현재 계획 메타데이터, 상태 색인을 완료

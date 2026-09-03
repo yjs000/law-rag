@@ -1,5 +1,5 @@
 > 작업 ID: F-006
-> 상태: Picked Up
+> 상태: Done
 > 유형: Feature
 > 보조 라벨: UX, Reliability
 > 선행 조건: 없음
@@ -41,9 +41,9 @@
 - Consumes: koreaTodayIsoDate(now?: Date): string
 - Produces: 한국 오늘을 max로 사용하고 한국 자정 뒤 새 상한을 반영하는 date input
 
-- [ ] 실패하는 자정 경계 테스트를 작성하고 focused test가 기대대로 실패함을 확인한다.
-- [ ] date input의 max와 자정 갱신/정리 상태를 최소 구현한다.
-- [ ] focused test를 통과시키고 이 작업만 검토해 로컬 커밋한다.
+- [x] 실패하는 자정 경계 테스트를 작성하고 focused test가 기대대로 실패함을 확인한다.
+- [x] date input의 max와 자정 갱신/정리 상태를 최소 구현한다.
+- [x] focused test를 통과시키고 이 작업만 검토해 로컬 커밋한다.
 
 ### Task 2: V2 기준일 전달 회귀 테스트
 
@@ -55,9 +55,9 @@
 - Consumes: QuestionInput.as_of_date
 - Produces: POST /v2/question-executions body가 선택 날짜를 보존함을 검증하는 테스트
 
-- [ ] V2 prepare 요청 body의 as_of_date 단언을 작성하고, 누락된 단언이 실패함을 확인한다.
-- [ ] 프로덕션 변경이 필요할 때만 최소 수정하고 prepare/core/finalize 흐름을 회귀 검증한다.
-- [ ] focused test를 통과시키고 이 작업만 검토해 로컬 커밋한다.
+- [x] V2 prepare 요청 body의 as_of_date 단언을 작성했다. 기존 전달 구현을 특성화하는 회귀 테스트이므로 즉시 통과했다.
+- [x] 프로덕션 변경 없이 prepare/core/finalize 흐름을 회귀 검증했다.
+- [x] focused test를 통과시키고 이 작업만 검토해 로컬 커밋했다.
 
 ### Task 3: 전체 검증과 완료 기록
 
@@ -65,9 +65,9 @@
 - Modify: 이 계획과 docs/ROADMAP.md
 - Verify: 프런트 lint, typecheck, test, build
 
-- [ ] pnpm lint:web, pnpm typecheck, pnpm test:web, pnpm build:web를 실행한다.
-- [ ] diff에서 코퍼스 상태 선제 처리와 V1 질문 호출이 추가되지 않았음을 확인한다.
-- [ ] 검증 결과를 기록하고 계획을 completed/로 이동, 로드맵을 Done으로 갱신한 뒤 별도 로컬 커밋한다.
+- [x] pnpm lint:web, pnpm typecheck, pnpm test:web, pnpm build:web를 실행했다.
+- [x] diff에서 코퍼스 상태 선제 처리와 V1 질문 호출이 추가되지 않았음을 확인했다.
+- [x] 검증 결과를 기록하고 계획을 completed/로 이동, 로드맵을 Done으로 갱신한 뒤 별도 로컬 커밋한다.
 
 ## API Alignment Amendment
 
@@ -82,6 +82,13 @@
 
 ### Task 0: 요구사항별 API 계약 회귀 검증
 
-- [ ] V2 prepare/core/finalize/cancel과 대화 목록·상세·삭제를 요구사항 매핑으로 회귀 검증한다.
-- [ ] 인용 표시에 별도 search/provision 호출을 추가하지 않는 경계를 확인한다.
-- [ ] focused 테스트를 통과시키고 이 작업만 검토해 로컬 커밋한다.
+- [x] V2 prepare/core/finalize/cancel과 대화 목록·상세·삭제를 요구사항 매핑으로 회귀 검증했다.
+- [x] 인용 표시에 별도 search/provision 호출을 추가하지 않는 경계를 확인했다.
+- [x] focused 테스트를 통과시키고 이 작업만 검토해 로컬 커밋했다.
+
+## 완료 결과 (2026-09-03)
+
+- `page.tsx`는 한국 자정까지의 지연을 계산해 date input의 `max`를 다음 KST today()로 갱신한다. 사용자가 이미 선택한 날짜는 변경하지 않는다.
+- `as_of_date`가 V2 prepare 요청 JSON 본문에 유지됨을 검증했다. V2 클라이언트 테스트는 prepare → core/finalize SSE, 재연결, 취소 DELETE까지 다룬다.
+- 검증 성공: `pnpm lint:web`, `pnpm typecheck`, `pnpm test:web` (18 files, 97 tests), `pnpm build:web`.
+- 비범위: 코퍼스 준비/최신성 UI 및 체크리스트 내보내기 제거. 후자는 F-007에서 다룬다.
