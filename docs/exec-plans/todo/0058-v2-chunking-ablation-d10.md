@@ -3,6 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Data`, `Evaluation`
 > 선행 조건: parser·chunk_size·overlap·호출 비용 상한·실험 DB 권한을 확정하고 입력 artifact와 운영 색인 격리 경로를 검증해야 한다.
+> 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 > 참고 범위:
 > - `docs/design-docs/v2-llamaindex-retrieval-pipeline-design.md` L105-L118 — v2 ingestion 입력과 원본 metadata 보존 계약
 > - `docs/design-docs/experiment-d-10-gold-adjudication.md` L9-L14 — D-10 calibration Gold의 10문항 범위와 D-full 분리

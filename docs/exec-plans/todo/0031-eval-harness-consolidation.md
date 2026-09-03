@@ -3,6 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
 > 선행 조건: 사용자가 착수를 명시하고 대량 판정·정정 반복이 다시 문제라는 근거를 확인해야 한다.
+> 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
 > 참고 범위:
 > - `docs/exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md` L600-L604 — D-10/E-10 gate와 일반화·release 판단 경계
 

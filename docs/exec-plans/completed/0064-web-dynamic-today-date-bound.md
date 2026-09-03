@@ -1,4 +1,4 @@
-> 작업 ID: F-006
+> 작업 ID: F-006-A
 > 상태: Done
 > 유형: Feature
 > 보조 라벨: UX, Reliability

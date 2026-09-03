@@ -21,7 +21,7 @@ from scripts.roadmap_registry import (
 
 class RoadmapRegistryFixtures(unittest.TestCase):
     def setUp(self) -> None:
-        self.tempdir = tempfile.TemporaryDirectory(dir=Path.cwd())
+        self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name)
         (self.root / "docs" / "exec-plans" / "todo").mkdir(parents=True)
         (self.root / "docs" / "exec-plans" / "active").mkdir(parents=True)
@@ -123,6 +123,19 @@ class RoadmapRegistryFixtures(unittest.TestCase):
 
         self.assertEqual(records[0].status, "Todo")
         self.assertEqual(roadmap_digest(records), baseline_digest)
+        self.assertEqual(self._errors(records), [])
+
+    def test_header_reader_accepts_introductory_prose_after_the_title(self) -> None:
+        path = self._write_plan()
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "# 로드맵 레지스트리 테스트\n\n## 구현",
+                "# 로드맵 레지스트리 테스트\n\n짧은 개요입니다.\n\n## 구현",
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(self._errors(load_registry(self.root)), [])
 
     def test_staged_header_reader_does_not_use_full_blob_git_show(self) -> None:
         path = self._write_plan()
@@ -306,6 +319,16 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertTrue(any("중복" in message and "작업 ID" in message for message in errors))
         self.assertTrue(any("Picked Up" in message for message in errors))
 
+    def test_feature_subtask_ids_are_valid_and_remain_individually_unique(self) -> None:
+        self._write_plan(number="0001", task_id="F-006-A", directory="active", status="Picked Up")
+        self._write_plan(number="0002", task_id="F-006-B", directory="active", status="Blocked")
+        self._write_plan(number="0003", task_id="F-006-A", directory="active", status="Blocked")
+
+        errors = self._errors(load_registry(self.root))
+
+        self.assertTrue(any("F-006-A" in message and "중복" in message for message in errors))
+        self.assertFalse(any("F-006-B" in message and "형식" in message for message in errors))
+
     def test_picked_up_cardinality_is_one_actionable_global_error(self) -> None:
         self._write_plan(
             number="0001",
@@ -427,7 +450,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         for number in ("0001", "0002", "0003"):
             self.assertTrue(any(number in message for message in errors))
 
-    def test_sections_place_picked_up_with_todo_and_digest_is_order_independent(self) -> None:
+    def test_sections_keep_picked_up_separate_and_digest_is_order_independent(self) -> None:
         self._write_plan(
             number="0002", task_id="F-002", status="Blocked", filename="0002-second.md"
         )
@@ -444,8 +467,9 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         records = load_registry(self.root)
 
         sections = roadmap_sections(records)
-        self.assertEqual(list(sections), ["Todo", "Blocked", "Done"])
-        self.assertEqual([record.status for record in sections["Todo"]], ["Picked Up"])
+        self.assertEqual(list(sections), ["Picked Up", "Todo", "Blocked", "Done"])
+        self.assertEqual([record.status for record in sections["Picked Up"]], ["Picked Up"])
+        self.assertEqual(sections["Todo"], [])
         self.assertEqual([record.status for record in sections["Blocked"]], ["Blocked"])
         self.assertEqual([record.status for record in sections["Done"]], ["Done"])
         self.assertEqual(roadmap_digest(records), roadmap_digest(list(reversed(records))))
@@ -506,6 +530,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertEqual(rendered, render_roadmap.render_roadmap(list(reversed(records))))
         self.assertIn("python scripts/render_roadmap.py", rendered)
         self.assertIn(roadmap_digest(records), rendered)
+        self.assertLess(rendered.index("## Picked Up"), rendered.index("## Todo"))
         self.assertLess(rendered.index("## Todo"), rendered.index("## Blocked"))
         self.assertLess(rendered.index("## Blocked"), rendered.index("## Done"))
         self.assertIn(
@@ -513,7 +538,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             "다음 행동: 요구사항별 회귀 테스트부터 시작",
             rendered,
         )
-        self.assertNotIn("## Picked Up", rendered)
+        self.assertIn("## Picked Up", rendered)
 
         task_rows = [
             line

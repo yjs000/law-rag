@@ -3,6 +3,7 @@
 > 유형: `Bug`
 > 보조 라벨: `Evaluation`
 > 선행 조건: 사용자가 우선 조사할 엣지케이스 범위를 확정해야 한다.
+> 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
 > 참고 범위:
 > - `docs/exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md` L17-L26 — 실제 재질문 중복·누적 재현과 채워진 항목을 다시 묻지 않는 목표
 

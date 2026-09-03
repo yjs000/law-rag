@@ -3,6 +3,7 @@
 > 유형: `Feature`
 > 보조 라벨: `Data`, `Reliability`
 > 선행 조건: v3 설계의 StateGraph·검색 재사용·Postgres 체크포인터 계약을 확인하고 다음 미시작 태스크 착수를 명시해야 한다.
+> 다음 행동: 다음 미시작 태스크의 착수 범위를 명시한다.
 > 참고 범위:
 > - `docs/design-docs/v3-langgraph-agent-foundation-design.md` L41-L49 — 그래프·영속화·검색 재사용·API 계약
 > - `docs/design-docs/v3-langgraph-agent-foundation-design.md` L80-L83 — workspace와 의존성 경계

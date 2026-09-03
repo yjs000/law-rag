@@ -1,16 +1,17 @@
-# F-006 대화형 clarification workflow Implementation Plan
-
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-> 작업 ID: `F-006`
+> 작업 ID: `F-006-B`
 > 상태: `Picked Up`
 > 유형: `Feature`
 > 보조 라벨: `Reliability`, `Security`, `UX`
 > 선행 조건: [승인된 설계](../../superpowers/specs/2026-09-03-conversational-clarification-workflow-design.md)
+> 다음 행동: V2 transport·웹 continuation UX·완료 문서를 검증하고 별도 커밋으로 정리한다.
 > 참고 범위:
-> - `apps/api/app/application/v2/phase_service.py` — v2 prepare/core/finalize 정본 흐름
-> - `apps/api/app/domain/grounding.py` — frozen citation 검증 경계
-> - `packages/law-rag-core/src/law_rag_core/domain/schemas.py` — API 계약 정본
+> - `apps/api/app/application/v2/phase_service.py` L46-L104 — v2 prepare/core/finalize 정본 흐름
+> - `apps/api/app/domain/grounding.py` L26-L64 — frozen citation 검증 경계
+> - `packages/law-rag-core/src/law_rag_core/domain/schemas.py` L106-L140 — API 계약 정본
+
+# F-006-B 대화형 clarification workflow Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 사용자 사실 부족 질문을 grounded interim 답변과 재개 가능한 clarification case 대화로 처리한다.
 

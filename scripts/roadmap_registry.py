@@ -43,7 +43,9 @@ _TYPE_PREFIXES = {
     "Operations": "O",
     "Documentation": "DOC",
 }
-_TASK_ID_RE = re.compile(r"^(?P<prefix>F|B|TD|E|O|DOC|D)-(?P<number>\d{3,})$")
+_TASK_ID_RE = re.compile(
+    r"^(?P<prefix>F|B|TD|E|O|DOC|D)-(?P<number>\d{3,})(?:-[A-Z])?$"
+)
 _PLAN_FILENAME_RE = re.compile(r"^(?P<number>\d+)-[^/\\]+\.md$")
 _H2_RE = re.compile(r"^\s*##(?!#)(?:\s|$)")
 _H1_RE = re.compile(r"^\s*#(?!#)\s+(.+?)\s*$")
@@ -333,8 +335,8 @@ def _parse_plan(
     field_positions: dict[str, int] = {}
     in_reference_section = False
     h1_positions: list[tuple[int, str]] = []
-    seen_h1 = False
 
+    title_found = False
     for index, line in enumerate(lines):
         if not line.strip():
             continue
@@ -342,11 +344,10 @@ def _parse_plan(
         title_match = _H1_RE.match(line)
         if title_match is not None:
             h1_positions.append((index, title_match.group(1).strip()))
-            seen_h1 = True
+            title_found = True
             continue
 
-        if seen_h1:
-            issues.append(_ParseIssue("색인 헤더", "H1 뒤에는 빈 줄만 허용됩니다"))
+        if title_found:
             continue
 
         match = _FIELD_RE.match(line)
@@ -877,16 +878,17 @@ def roadmap_digest(records: Iterable[PlanRecord]) -> str:
 
 
 def roadmap_sections(records: Iterable[PlanRecord]) -> dict[str, list[PlanRecord]]:
-    """Group records for rendering, with Picked Up discoverable under Todo."""
+    """Group records for rendering without hiding the active picked-up plan."""
 
     sections: dict[str, list[PlanRecord]] = {
+        "Picked Up": [],
         "Todo": [],
         "Blocked": [],
         "Done": [],
     }
     for record in sorted(records, key=_record_sort_key):
-        if record.status in {"Todo", "Picked Up"}:
-            sections["Todo"].append(record)
+        if record.status in {"Picked Up", "Todo"}:
+            sections[record.status].append(record)
         elif record.status in {"Blocked", "Done"}:
             sections[record.status].append(record)
     return sections
