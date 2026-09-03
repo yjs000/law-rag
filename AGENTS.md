@@ -14,7 +14,7 @@
 ## 작업 시작 순서
 
 1. `git status --short --branch`로 현재 변경과 브랜치를 확인한다.
-2. 이 파일과 `docs/CURRENT_STATE.md`를 읽는다.
+2. 이 파일과 `docs/CURRENT_STATE.md` L1-L28만 읽는다.
 3. 작업이 아키텍처·모듈 경계·배포를 건드리면 그때 `ARCHITECTURE.md`를 읽고, 특정 기능의 설계·제품
    요구사항이 필요하면 그때 관련 `docs/design-docs/` 및 `docs/product-specs/` 문서를 읽는다 — 매
    세션 전체를 미리 읽지 않는다.

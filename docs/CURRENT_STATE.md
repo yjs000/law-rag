@@ -1,6 +1,6 @@
 # 현재 상태 (세션 시작 포인터)
 
-세션 시작 시 기본으로 읽는 문서는 `AGENTS.md`와 이 파일뿐이다. `ARCHITECTURE.md`, `docs/design-docs/`,
+세션 시작 시 기본으로 읽는 문서는 `AGENTS.md`와 `docs/CURRENT_STATE.md` L1-L28뿐이다. `ARCHITECTURE.md`, `docs/design-docs/`,
 과거 exec-plan, `docs/learning/`은 작업이 실제로 그 영역을 건드릴 때만 읽는다 — 매 세션 전체를 미리
 읽지 않는다([0031](exec-plans/todo/0031-eval-harness-consolidation.md) item 5, 2026-08-08).
 

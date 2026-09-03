@@ -950,6 +950,34 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertIn("lifecycle README", plans_text)
         self.assertIn("navigation", plans_text)
 
+    def test_startup_current_state_reads_are_bounded_to_l1_l28(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        agents_text = (repository_root / "AGENTS.md").read_text(encoding="utf-8")
+        current_state_text = (repository_root / "docs" / "CURRENT_STATE.md").read_text(
+            encoding="utf-8"
+        )
+
+        startup_step = next(line for line in agents_text.splitlines() if line.startswith("2."))
+        self.assertIn("이 파일", startup_step)
+        self.assertIn("`docs/CURRENT_STATE.md` L1-L28", startup_step)
+
+        current_state_startup = next(
+            line
+            for line in current_state_text.splitlines()
+            if line.startswith("세션 시작 시 기본으로 읽는 문서는")
+        )
+        self.assertIn("`AGENTS.md`", current_state_startup)
+        self.assertIn("`docs/CURRENT_STATE.md` L1-L28", current_state_startup)
+        self.assertNotIn("이 파일뿐이다", current_state_startup)
+
+    def test_plans_describes_the_seven_field_header_including_next_action(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        plans_text = (repository_root / "docs" / "PLANS.md").read_text(encoding="utf-8")
+
+        self.assertIn("위 일곱 필드 헤더", plans_text)
+        self.assertIn("다음 행동", plans_text)
+        self.assertNotIn("위 여섯 필드 헤더", plans_text)
+
 
 if __name__ == "__main__":
     unittest.main()
