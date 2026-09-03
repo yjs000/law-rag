@@ -56,3 +56,22 @@ API full suite reached 642 passed and core suite reached 21 passed before their 
 ## Graphify note
 
 `graphify update .` was attempted again after the review correction. Its rebuild remains blocked by `[WinError 5] Access denied` for managed pytest cache directories (for example, `packages/law-rag-core/pytest-cache-files-5iycrah5`); its partial `graphify-out/cache/stat-index.json` change is intentionally not staged.
+
+## Review correction round 2
+
+### RED
+
+- Added direct core/finalize regressions for an `answer_mode="search_only"` clarification and for a `terra` clarification while AI is unavailable.
+- Command: `uv run --directory apps/api python -m pytest tests/test_clarification_answering.py -k safe_fallback -v`
+- Result: 2 failed. Both raised `AttributeError: 'CoreDraft' object has no attribute 'grounded_claims'` in `run_core`, proving that the deterministic fallback incorrectly entered the structured LLM-claim gate.
+
+### GREEN
+
+- Core generation now returns private phase metadata identifying the deterministic non-AI fallback. `run_core` accepts that fallback directly for a clarification, without reading `CoreDraft.grounded_claims` or using phrase/text matching; AI-generated clarification cores still require the existing complete structural `GroundedClaim` gate.
+- The regression verifies both core and finalize paths: no structured core/detail answerer calls, search-only response mode, and exactly one deferred case transition. It covers waiting continuation for `search_only` and completion for unavailable AI.
+- Focused command: `uv run --directory apps/api python -m pytest tests/test_clarification_answering.py -k safe_fallback -v`
+  - Result: 2 passed.
+- Compatibility command: `uv run --directory apps/api python -m pytest tests/test_clarification_answering.py tests/test_clarification_domain.py tests/test_clarification_workflow.py tests/test_v2_question_executions.py tests/test_grounding_gate.py tests/test_nvidia_nim_answerer.py tests/test_layperson_prompt_v2.py -v`
+  - Result: 90 passed.
+- Static checks: `uv run --directory apps/api ruff check app tests` and `git diff --check` passed.
+- `graphify update .` was attempted after this correction; it could not rebuild because existing managed `packages/law-rag-core/pytest-cache-files-*` directories return `[WinError 5] Access denied`. Its unrelated partial graph cache change remains unstaged.

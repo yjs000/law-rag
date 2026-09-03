@@ -233,6 +233,16 @@ class V2QuestionExecutionService:
     ) -> tuple[Any, list[Any]]:
         """Generate the compact core result from the exact evidence frozen at prepare."""
 
+        core, citations, _used_safe_fallback = await self._core_result_from_frozen_evidence(
+            execution
+        )
+        return core, citations
+
+    async def _core_result_from_frozen_evidence(
+        self, execution: QuestionExecutionRecord
+    ) -> tuple[Any, list[Any], bool]:
+        """Return the core and whether it is the deterministic non-AI fallback."""
+
         dependencies = self._dependencies()
         payload, hits, corpus_as_of = execution_request_and_hits(execution)
         fallback = search_only_answer(payload, hits, corpus_as_of)
@@ -249,6 +259,7 @@ class V2QuestionExecutionService:
                     fallback.action or "unanswerable",
                 ),
                 fallback.citations,
+                True,
             )
 
         generation_hits = self._stored_or_selected_generation_hits(dependencies, execution, hits)
@@ -261,23 +272,28 @@ class V2QuestionExecutionService:
             )
         if not dependencies.validate_core(draft, generation_hits):
             raise ValueError("generated core did not satisfy the citation contract")
-        return draft, citations_for_hits(generation_hits)
+        return draft, citations_for_hits(generation_hits), False
 
     async def run_core(self, execution: QuestionExecutionRecord) -> PhaseResult:
         """Validate a core draft before persisting the only publishable core event."""
 
-        core, citations = await self.core_from_frozen_evidence(execution)
+        core, citations, used_safe_fallback = await self._core_result_from_frozen_evidence(
+            execution
+        )
         clarification = self._clarification_grounding(execution)
-        core_is_valid = (
-            claims_are_grounded(
+        if clarification is None:
+            core_is_valid = core_is_grounded(core, CitationRegistry(execution.frozen_citations))
+        elif used_safe_fallback:
+            # This deterministic search-only output is not an LLM claim surface.
+            # In particular, the legacy CoreDraft has no structured claims to read.
+            core_is_valid = True
+        else:
+            core_is_valid = claims_are_grounded(
                 core.grounded_claims,
                 clarification,
                 CitationRegistry(execution.frozen_citations),
                 required_targets=core_claim_targets(core),
             )
-            if clarification is not None
-            else core_is_grounded(core, CitationRegistry(execution.frozen_citations))
-        )
         if not core_is_valid:
             return PhaseResult(
                 target=ExecutionStatus.CORE_REPAIR_REQUIRED,

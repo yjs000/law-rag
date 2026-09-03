@@ -126,6 +126,8 @@ class _CapturingAnswerer:
         self.claims = claims
         self.core_context: ClarificationGrounding | None = None
         self.detail_context: ClarificationGrounding | None = None
+        self.core_calls = 0
+        self.detail_calls = 0
 
     async def answer_core(
         self,
@@ -134,6 +136,7 @@ class _CapturingAnswerer:
         *,
         clarification: ClarificationGrounding,
     ) -> CoreDraft:
+        self.core_calls += 1
         self.core_context = clarification
         return ClarificationCoreDraft(
             summary="전혀 다른 표현의 일반 규칙입니다.",
@@ -149,6 +152,7 @@ class _CapturingAnswerer:
         *,
         clarification: ClarificationGrounding,
     ) -> ClarificationDraftAnswer:
+        self.detail_calls += 1
         self.detail_context = clarification
         return _draft(claims=self.claims)
 
@@ -157,6 +161,7 @@ def _service(
     answerer: _CapturingAnswerer,
     *,
     clarification_cases: MemoryClarificationCaseRepository | None = None,
+    ai_available: bool = True,
 ) -> tuple[V2QuestionExecutionService, MemoryQuestionExecutionRepository]:
     executions = MemoryQuestionExecutionRepository()
     now = datetime(2026, 9, 3, tzinfo=UTC)
@@ -186,7 +191,7 @@ def _service(
         retrieve_evidence=_retrieve,
         route=_route,
         answerer=lambda: answerer,
-        ai_available=lambda: True,
+        ai_available=lambda: ai_available,
         check_quota=_allow,
         require_supported_date=_allow,
         save_authenticated=_save,
@@ -325,6 +330,80 @@ async def test_grounded_finalize_persists_the_pending_case_transition(
             ],
             "remaining_count": 1,
         }
+    else:
+        assert published["clarification"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("answer_mode", "ai_available", "policy", "site_status", "next_status"),
+    [
+        (
+            "search_only",
+            True,
+            "interim",
+            FactStatus.UNANSWERED,
+            ClarificationCaseStatus.WAITING_FOR_USER,
+        ),
+        (
+            "terra",
+            False,
+            "full",
+            FactStatus.ANSWERED,
+            ClarificationCaseStatus.COMPLETED,
+        ),
+    ],
+)
+async def test_clarification_safe_fallback_skips_structured_core_and_preserves_transition(
+    answer_mode: str,
+    ai_available: bool,
+    policy: str,
+    site_status: FactStatus,
+    next_status: ClarificationCaseStatus,
+) -> None:
+    """A non-AI clarification still completes its phase and deferred case transition."""
+
+    context = _context(policy, site_status=site_status)
+    cases = MemoryClarificationCaseRepository()
+    record = await _case_record(cases, context)
+    outcome = ClarificationOutcome(
+        case=record,
+        policy=policy,
+        question_format=ClarificationQuestionFormat(record.case.remaining_facts()),
+        next_status=next_status,
+    )
+    answerer = _CapturingAnswerer(claims=_detail_claims())
+    service, _executions = _service(
+        answerer,
+        clarification_cases=cases,
+        ai_available=ai_available,
+    )
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(
+                question="전기사업 허가가 필요한가요?", answer_mode=answer_mode
+            ),
+            owner_scope="anonymous:test",
+            idempotency_key=f"safe-fallback-{answer_mode}-{policy}",
+            user=None,
+            clarification=context,
+            clarification_outcome=outcome,
+        )
+    )
+
+    core = await service.run_core(prepared.execution)
+    finalized = await service.run_finalize(prepared.execution, None)
+
+    persisted = await cases.get_owned(record.case_id, "anonymous:test")
+    published = finalized.events[0].payload["response"]
+    assert core.target.value == "core_answered"
+    assert answerer.core_calls == 0
+    assert answerer.detail_calls == 0
+    assert published["mode"] == "search_only"
+    assert persisted.status is next_status
+    assert persisted.version == 1
+    if next_status is ClarificationCaseStatus.WAITING_FOR_USER:
+        assert published["clarification"]["status"] == "waiting_for_user"
     else:
         assert published["clarification"] is None
 
