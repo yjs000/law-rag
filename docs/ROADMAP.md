@@ -5,6 +5,7 @@
 
 ## Todo
 
+- [F-006 · Feature — 0064: Web 기준일 선택 상한을 한국 오늘으로 동적 유지](exec-plans/todo/0064-web-dynamic-today-date-bound.md) — 다음 행동: 승인된 실행계획의 테스트 우선 구현을 시작
 - [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 품질 원인 진단 범위를 선택
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격](exec-plans/active/0055-v3-langgraph-agent-foundation.md) — 다음 행동: 미시작 Task 12~16의 착수 범위를 명시
 - [F-002 · Feature — 0012: 분산 질문 취소](exec-plans/todo/0012-distributed-question-cancellation.md) — 다음 행동: NVIDIA hosted NIM 기준으로 취소 설계를 현행화
