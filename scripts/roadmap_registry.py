@@ -14,7 +14,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 PLAN_DIRECTORIES = ("todo", "active", "completed")
@@ -54,6 +54,11 @@ _REFERENCE_RE = re.compile(
     r"^\s*(?P<path>`[^`]*`|[^\s]+)\s+L(?P<start>\d+)-L(?P<end>\d+)\s*$"
 )
 _REFERENCE_LINE_RE = re.compile(r"^\s*>\s*-\s*(?P<body>.*?)\s*$")
+# Sentence rule for ``다음 행동``: terminal punctuation is one or more of
+# ``. ! ? 。 ！ ？`` followed by whitespace or the end of the value.  A value
+# without terminal punctuation is allowed as one unpunctuated action; more
+# than one punctuation run means that the value contains multiple sentences.
+_SENTENCE_TERMINATOR_RE = re.compile(r"[.!?。！？]+(?=\s|$)")
 _DEFAULT_CORRECTION = (
     "헤더를 수정한 뒤 python scripts/render_roadmap.py 를 실행하세요"
 )
@@ -67,29 +72,10 @@ class ReferenceRange:
     start_line: int | None
     end_line: int | None
     reason: str
-    raw: str = field(default="", compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", _strip_code(str(self.path).strip()))
         object.__setattr__(self, "reason", str(self.reason).strip())
-
-    @property
-    def relative_path(self) -> str:
-        """Return the normalized repository-relative path spelling."""
-
-        return self.path
-
-    @property
-    def start(self) -> int | None:
-        """Alias for the inclusive starting line."""
-
-        return self.start_line
-
-    @property
-    def end(self) -> int | None:
-        """Alias for the inclusive ending line."""
-
-        return self.end_line
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,30 +87,6 @@ class RegistryError:
     field: str
     message: str
     correction: str = _DEFAULT_CORRECTION
-
-    @property
-    def task_id(self) -> str:
-        """Alias retained for callers that call the record identifier a task ID."""
-
-        return self.record_id
-
-    @property
-    def path(self) -> str:
-        """Alias for the repository-relative file shown in the error."""
-
-        return self.file
-
-    @property
-    def command(self) -> str:
-        """Return the concrete corrective command associated with this error."""
-
-        return self.correction
-
-    @property
-    def fix(self) -> str:
-        """Alias for :attr:`correction`."""
-
-        return self.correction
 
     def __str__(self) -> str:
         return (
@@ -157,62 +119,6 @@ class PlanRecord:
         object.__setattr__(self, "labels", tuple(str(label).strip() for label in self.labels))
         object.__setattr__(self, "references", tuple(self.references))
         object.__setattr__(self, "parse_errors", tuple(self.parse_errors))
-
-    @property
-    def plan_id(self) -> int | None:
-        """Alias for the numeric execution-plan ID derived from the filename."""
-
-        return self.plan_number
-
-    @property
-    def numeric_id(self) -> int | None:
-        """Alias for :attr:`plan_number`."""
-
-        return self.plan_number
-
-    @property
-    def filename_id(self) -> int | None:
-        """Alias for :attr:`plan_number`."""
-
-        return self.plan_number
-
-    @property
-    def work_id(self) -> str | None:
-        """Return the user-facing task ID from the metadata header."""
-
-        return self.task_id
-
-    @property
-    def type(self) -> str | None:  # noqa: A003 - mirrors the Markdown field name
-        """Alias for the plan's metadata type."""
-
-        return self.plan_type
-
-    @property
-    def task_type(self) -> str | None:
-        """Alias for :attr:`plan_type`."""
-
-        return self.plan_type
-
-    @property
-    def file(self) -> Path:
-        """Alias for the plan path relative to the repository root."""
-
-        return self.path
-
-    @property
-    def lifecycle(self) -> str | None:
-        """Return ``todo``, ``active``, or ``completed`` when present in path."""
-
-        parts = self.path.as_posix().split("/")
-        try:
-            index = parts.index("exec-plans")
-        except ValueError:
-            return None
-        if index + 1 >= len(parts) or parts[index - 1 : index] != ["docs"]:
-            return None
-        directory = parts[index + 1]
-        return directory if directory in PLAN_DIRECTORIES else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,14 +166,15 @@ def _plan_paths(root: Path, staged: bool) -> list[Path]:
             "--",
             *(f"docs/exec-plans/{directory}" for directory in PLAN_DIRECTORIES),
         )
-        if output is not None:
-            paths = [Path(raw) for raw in output.split("\0") if raw]
-            paths = [
-                path
-                for path in paths
-                if path.suffix.lower() == ".md" and _is_plan_relative_path(path)
-            ]
-            return sorted(paths, key=lambda path: path.as_posix())
+        if output is None:
+            return []
+        paths = [Path(raw) for raw in output.split("\0") if raw]
+        paths = [
+            path
+            for path in paths
+            if path.suffix.lower() == ".md" and _is_plan_relative_path(path)
+        ]
+        return sorted(paths, key=lambda path: path.as_posix())
 
     paths: list[Path] = []
     for directory in PLAN_DIRECTORIES:
@@ -292,22 +199,87 @@ def _is_plan_relative_path(path: Path) -> bool:
     )
 
 
-def _read_plan(root: Path, relative_path: Path, staged: bool) -> str | None:
+def _header_lines(lines: Iterable[str]) -> tuple[str, ...]:
+    """Read lines through the first exact H2, excluding that heading and body."""
+
+    header: list[str] = []
+    for line in lines:
+        normalized = line.rstrip("\r\n")
+        if _H2_RE.match(normalized):
+            break
+        header.append(normalized)
+    return tuple(header)
+
+
+def _read_staged_header(root: Path, relative_path: Path) -> tuple[str, ...] | None:
+    """Stream one indexed plan header and stop as soon as its first H2 appears."""
+
+    try:
+        process = subprocess.Popen(
+            ["git", "show", f":{relative_path.as_posix()}"],
+            cwd=root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        )
+    except (OSError, UnicodeError):
+        return None
+
+    lines: list[str] = []
+    stopped_at_h2 = False
+    read_failed = False
+    stdout = process.stdout
+    if stdout is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
+        return None
+    try:
+        for line in stdout:
+            normalized = line.rstrip("\r\n")
+            if _H2_RE.match(normalized):
+                stopped_at_h2 = True
+                break
+            lines.append(normalized)
+    except (OSError, UnicodeError):
+        read_failed = True
+    finally:
+        stdout.close()
+
+    if (stopped_at_h2 or read_failed) and process.poll() is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        returncode = process.wait()
+    except OSError:
+        return None
+    if read_failed or (returncode != 0 and not stopped_at_h2):
+        return None
+    return tuple(lines)
+
+
+def _read_plan(
+    root: Path, relative_path: Path, staged: bool
+) -> tuple[str, ...] | None:
     if staged:
-        output = _git_output(root, "show", f":{relative_path.as_posix()}")
-        if output is not None:
-            return output
+        return _read_staged_header(root, relative_path)
     path = root / relative_path
     try:
-        return path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8") as stream:
+            return _header_lines(stream)
     except (OSError, UnicodeError):
         return None
 
 
-def _has_index_header(text: str) -> bool:
+def _has_index_header(lines: Sequence[str]) -> bool:
     """Return whether the preamble has at least one known metadata field."""
 
-    for line in text.splitlines():
+    for line in lines:
         if _H2_RE.match(line):
             break
         if _FIELD_RE.match(line):
@@ -331,14 +303,13 @@ def _parse_reference(body: str) -> tuple[ReferenceRange, _ParseIssue | None]:
             "참고 범위",
             f"'{raw}' 형식이 올바르지 않습니다. 경로, L시작-L끝, 이유가 필요합니다",
         )
-        return ReferenceRange(path, None, None, reason, raw=raw), issue
+        return ReferenceRange(path, None, None, reason), issue
 
     reference = ReferenceRange(
         _strip_code(match.group("path")),
         int(match.group("start")),
         int(match.group("end")),
         reason,
-        raw=raw,
     )
     issue = None
     if not reason:
@@ -346,19 +317,33 @@ def _parse_reference(body: str) -> tuple[ReferenceRange, _ParseIssue | None]:
     return reference, issue
 
 
-def _parse_plan(relative_path: Path, text: str, staged: bool) -> PlanRecord:
+def _parse_plan(
+    relative_path: Path, lines: Sequence[str], staged: bool
+) -> PlanRecord:
     """Parse a single plan's index header and retain issues for validation."""
 
-    lines = text.splitlines()
-    end = next((index for index, line in enumerate(lines) if _H2_RE.match(line)), len(lines))
-    preamble = lines[:end]
     values: dict[str, str] = {}
     references: list[ReferenceRange] = []
     issues: list[_ParseIssue] = []
     field_positions: dict[str, int] = {}
     in_reference_section = False
+    h1_positions: list[tuple[int, str]] = []
+    seen_h1 = False
 
-    for index, line in enumerate(preamble):
+    for index, line in enumerate(lines):
+        if not line.strip():
+            continue
+
+        title_match = _H1_RE.match(line)
+        if title_match is not None:
+            h1_positions.append((index, title_match.group(1).strip()))
+            seen_h1 = True
+            continue
+
+        if seen_h1:
+            issues.append(_ParseIssue("색인 헤더", "H1 뒤에는 빈 줄만 허용됩니다"))
+            continue
+
         match = _FIELD_RE.match(line)
         if match is not None:
             field = match.group("field")
@@ -371,11 +356,17 @@ def _parse_plan(relative_path: Path, text: str, staged: bool) -> PlanRecord:
             continue
 
         reference_match = _REFERENCE_LINE_RE.match(line)
-        if reference_match is not None and in_reference_section:
-            reference, issue = _parse_reference(reference_match.group("body"))
-            references.append(reference)
-            if issue is not None:
-                issues.append(issue)
+        if reference_match is not None:
+            if not in_reference_section:
+                issues.append(_ParseIssue("참고 범위", "참고 범위 필드 아래에 있어야 합니다"))
+            else:
+                reference, issue = _parse_reference(reference_match.group("body"))
+                references.append(reference)
+                if issue is not None:
+                    issues.append(issue)
+            continue
+
+        issues.append(_ParseIssue("색인 헤더", "허용되지 않은 색인 헤더 입력입니다"))
 
     plan_match = _PLAN_FILENAME_RE.match(relative_path.name)
     plan_number = int(plan_match.group("number")) if plan_match else None
@@ -386,12 +377,9 @@ def _parse_plan(relative_path: Path, text: str, staged: bool) -> PlanRecord:
     labels = _parse_labels(labels_value)
     prerequisites = values.get("선행 조건", "").strip() or None
     next_action = values.get("다음 행동", "").strip() or None
-    h1_positions = [
-        (index, match.group(1).strip())
-        for index, line in enumerate(preamble)
-        if (match := _H1_RE.match(line)) is not None
-    ]
     title = h1_positions[0][1] if h1_positions else None
+    if not field_positions:
+        issues.append(_ParseIssue("색인 헤더", "필수 색인 헤더가 없습니다"))
     if not h1_positions:
         issues.append(_ParseIssue("제목", "색인 헤더 뒤에 정확히 하나의 H1 제목이 필요합니다"))
     elif len(h1_positions) != 1:
@@ -401,10 +389,8 @@ def _parse_plan(relative_path: Path, text: str, staged: bool) -> PlanRecord:
                 f"색인 헤더 뒤의 H1 제목은 하나여야 합니다(현재 {len(h1_positions)}개)",
             )
         )
-    if h1_positions and field_positions:
-        last_field = max(field_positions.values())
-        if h1_positions[0][0] <= last_field:
-            issues.append(_ParseIssue("제목", "H1 제목은 blockquote 색인 헤더 뒤에 와야 합니다"))
+    if h1_positions and (not field_positions or h1_positions[0][0] <= max(field_positions.values())):
+        issues.append(_ParseIssue("제목", "H1 제목은 blockquote 색인 헤더 뒤에 와야 합니다"))
 
     file_display = relative_path.as_posix()
     record_display_id = task_id or (str(plan_number) if plan_number is not None else "<unknown>")
@@ -450,10 +436,15 @@ def load_registry(root: str | Path, staged: bool = False) -> list[PlanRecord]:
     root_path = Path(root).resolve()
     records: list[PlanRecord] = []
     for relative_path in _plan_paths(root_path, staged):
-        text = _read_plan(root_path, relative_path, staged)
-        if text is None or not _has_index_header(text):
+        header_lines = _read_plan(root_path, relative_path, staged)
+        directory = relative_path.as_posix().split("/")[2]
+        if header_lines is None:
+            if directory == "completed":
+                continue
+            header_lines = ()
+        if directory == "completed" and not _has_index_header(header_lines):
             continue
-        records.append(_parse_plan(relative_path, text, staged))
+        records.append(_parse_plan(relative_path, header_lines, staged))
     return sorted(records, key=_record_sort_key)
 
 
@@ -506,15 +497,79 @@ def _normal_relative_path(raw_path: str) -> Path | None:
     return path
 
 
-def _source_text_for_reference(root: Path, reference_path: Path, staged: bool) -> str | None:
-    if staged:
-        output = _git_output(root, "show", f":{reference_path.as_posix()}")
-        if output is not None:
-            return output
+def _staged_line_count(
+    root: Path, reference_path: Path, end_line: int
+) -> int | None:
+    """Count only as many indexed source lines as the requested range needs."""
+
     try:
-        return (root / reference_path).read_text(encoding="utf-8")
+        process = subprocess.Popen(
+            ["git", "show", f":{reference_path.as_posix()}"],
+            cwd=root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+        )
     except (OSError, UnicodeError):
         return None
+
+    stdout = process.stdout
+    if stdout is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
+        return None
+
+    line_count = 0
+    reached_end = False
+    read_failed = False
+    try:
+        for _line in stdout:
+            line_count += 1
+            if line_count >= end_line:
+                reached_end = True
+                break
+    except (OSError, UnicodeError):
+        read_failed = True
+    finally:
+        stdout.close()
+
+    if reached_end and process.poll() is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    elif read_failed and process.poll() is None:
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        returncode = process.wait()
+    except OSError:
+        return None
+    if read_failed or (returncode != 0 and not reached_end):
+        return None
+    return line_count
+
+
+def _line_count(root: Path, reference_path: Path, staged: bool, end_line: int) -> int | None:
+    if staged:
+        return _staged_line_count(root, reference_path, end_line)
+
+    line_count = 0
+    try:
+        with (root / reference_path).open("r", encoding="utf-8") as source:
+            for _line in source:
+                line_count += 1
+                if line_count >= end_line:
+                    break
+    except (OSError, UnicodeError):
+        return None
+    return line_count
 
 
 def _validate_reference(
@@ -537,18 +592,6 @@ def _validate_reference(
         )
         return errors
 
-    source = _source_text_for_reference(root, relative_path, record.staged)
-    if source is None:
-        errors.append(
-            _error(
-                record,
-                root,
-                field_name,
-                f"참조 파일 '{relative_path.as_posix()}'이 존재하지 않습니다",
-            )
-        )
-        return errors
-
     if reference.start_line is None or reference.end_line is None:
         errors.append(
             _error(record, root, field_name, "참조 범위는 L시작-L끝 형식이어야 합니다")
@@ -567,7 +610,17 @@ def _validate_reference(
                 f"끝 줄 L{reference.end_line}은 시작 줄 L{reference.start_line} 이상이어야 합니다",
             )
         )
-    line_count = len(source.splitlines())
+    line_count = _line_count(root, relative_path, record.staged, reference.end_line)
+    if line_count is None:
+        errors.append(
+            _error(
+                record,
+                root,
+                field_name,
+                f"참조 파일 '{relative_path.as_posix()}'이 존재하지 않습니다",
+            )
+        )
+        return errors
     if reference.end_line > line_count:
         errors.append(
             _error(
@@ -725,6 +778,15 @@ def validate_registry(
                     f"다음 행동은 120자 이하여야 합니다(현재 {len(record.next_action)}자)",
                 )
             )
+        elif len(_SENTENCE_TERMINATOR_RE.findall(record.next_action)) > 1:
+            errors.append(
+                _error(
+                    record,
+                    root_path,
+                    "다음 행동",
+                    "다음 행동은 한 문장이어야 합니다(종결 부호 . ! ? 。 ！ ？ 뒤의 공백 또는 끝을 기준으로 한 문장만 허용하며, 부호 없는 단일 행동은 허용됩니다)",
+                )
+            )
 
         if not record.references:
             errors.append(_error(record, root_path, "참고 범위", "최소 하나의 참고 범위가 필요합니다"))
@@ -742,16 +804,15 @@ def validate_registry(
 
     picked_up = [record for record in records_list if record.status == "Picked Up"]
     if len(picked_up) > 1:
-        for record in picked_up:
-            errors.append(
-                _error(
-                    record,
-                    root_path,
-                    "상태",
-                    f"저장소 전체의 Picked Up은 0개 또는 1개여야 합니다(현재 {len(picked_up)}개)",
-                    "한 계획만 Picked Up으로 두고 나머지는 Todo 또는 Blocked로 바꾸세요",
-                )
+        errors.append(
+            _error(
+                picked_up[0],
+                root_path,
+                "상태",
+                f"저장소 전체의 Picked Up은 0개 또는 1개여야 합니다(현재 {len(picked_up)}개)",
+                "한 계획만 Picked Up으로 두고 나머지는 Todo 또는 Blocked로 바꾸세요",
             )
+        )
 
     return errors
 
