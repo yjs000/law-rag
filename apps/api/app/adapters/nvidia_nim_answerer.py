@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Callable
 from typing import TypeVar
@@ -89,7 +90,8 @@ class NvidiaNimAnswerer:
                 break
             try:
                 attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
-                return await self._attempt(messages, schema, attempt_timeout=attempt_timeout)
+                async with asyncio.timeout(max(remaining, 0)):
+                    return await self._attempt(messages, schema, attempt_timeout=attempt_timeout)
             except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
                 last_error = exc
                 if getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES:

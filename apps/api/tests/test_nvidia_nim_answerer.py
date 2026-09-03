@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date
 from types import SimpleNamespace
@@ -247,6 +248,29 @@ async def test_nvidia_nim_stops_retrying_once_the_overall_deadline_is_gone(
     # Budget is 10s and each attempt burns 9s, so a second attempt (18s) would
     # blow past the deadline - only one attempt should have been made.
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_enforces_overall_deadline_when_provider_ignores_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answerer = NvidiaNimAnswerer(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3-ultra-550b-a55b",
+        timeout_seconds=0.01,
+        max_output_tokens=4096,
+        max_attempts=1,
+    )
+
+    async def stuck_attempt(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        return CoreDraft(summary="too late", citation_ids=[], action="unanswerable")
+
+    monkeypatch.setattr(answerer, "_attempt", stuck_attempt)
+
+    with pytest.raises(TimeoutError):
+        await answerer.answer_core(QuestionRequest(question="전기사업 근거"), [_hit()])
 
 
 def test_nvidia_nim_rejects_unapproved_base_url() -> None:
