@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
@@ -9,7 +10,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts import check_roadmap, render_roadmap
+from scripts import check_roadmap, install_git_hooks, render_roadmap
 from scripts.roadmap_registry import (
     PlanRecord,
     load_registry,
@@ -690,6 +691,150 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertIn(roadmap_digest(index_records), stdout.getvalue())
         self.assertEqual(plan_path.read_bytes(), worktree_plan)
         self.assertEqual(roadmap_path.read_text(encoding="utf-8"), "worktree-only roadmap\n")
+
+    def _init_fixture_repo(self) -> Path:
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "tests@example.invalid"],
+            cwd=self.root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Roadmap Tests"],
+            cwd=self.root,
+            check=True,
+        )
+        return self.root / ".git" / "hooks"
+
+    def test_installer_preserves_post_commit_core_hooks_path_and_is_idempotent(self) -> None:
+        hooks = self._init_fixture_repo()
+        post_commit = hooks / "post-commit"
+        post_commit_bytes = b"#!/bin/sh\n# user graphify hook\n"
+        post_commit.write_bytes(post_commit_bytes)
+        post_commit.chmod(0o755)
+        subprocess.run(
+            ["git", "config", "core.hooksPath", "custom-hooks"],
+            cwd=self.root,
+            check=True,
+        )
+        before_hooks_path = subprocess.run(
+            ["git", "config", "--local", "--get", "core.hooksPath"],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            first_exit = install_git_hooks.main(["--repo-root", str(self.root)])
+        first_hook = (hooks / "pre-commit").read_bytes()
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            second_exit = install_git_hooks.main(["--repo-root", str(self.root)])
+
+        after_hooks_path = subprocess.run(
+            ["git", "config", "--local", "--get", "core.hooksPath"],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(first_exit, 0, stderr.getvalue())
+        self.assertEqual(second_exit, 0)
+        self.assertEqual(post_commit.read_bytes(), post_commit_bytes)
+        self.assertEqual(before_hooks_path, after_hooks_path)
+        self.assertEqual((hooks / "pre-commit").read_bytes(), first_hook)
+
+    def test_installer_refuses_to_overwrite_user_pre_commit_with_manual_guidance(self) -> None:
+        hooks = self._init_fixture_repo()
+        pre_commit = hooks / "pre-commit"
+        user_hook = b"#!/bin/sh\nuser-owned hook\n"
+        pre_commit.write_bytes(user_hook)
+        pre_commit.chmod(0o755)
+
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = install_git_hooks.main(["--repo-root", str(self.root)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(pre_commit.read_bytes(), user_hook)
+        message = stderr.getvalue().lower()
+        self.assertIn("refus", message)
+        self.assertIn("manual", message)
+
+    def test_pre_commit_dispatcher_filters_staged_paths_before_running_checker(self) -> None:
+        hooks = self._init_fixture_repo()
+        checker = self.root / "scripts" / "check_roadmap.py"
+        checker.parent.mkdir()
+        checker.write_text(
+            "from pathlib import Path\n"
+            "import sys\n"
+            "Path('checker-invocations.txt').open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n",
+            encoding="utf-8",
+        )
+        (self.root / "README.md").write_text("initial\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md", "scripts/check_roadmap.py"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-qm", "initial"], cwd=self.root, check=True)
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
+        hook = hooks / "pre-commit"
+        self.assertTrue(hook.exists())
+
+        unrelated = self.root / "unrelated.txt"
+        unrelated.write_text("unrelated\n", encoding="utf-8")
+        subprocess.run(["git", "add", "unrelated.txt"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-qm", "unrelated"], cwd=self.root, check=True)
+        self.assertFalse((self.root / "checker-invocations.txt").exists())
+
+        roadmap = self.root / "docs" / "ROADMAP.md"
+        roadmap.write_text("generated\n", encoding="utf-8")
+        subprocess.run(["git", "add", "docs/ROADMAP.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-qm", "roadmap"], cwd=self.root, check=True)
+        self.assertEqual(
+            (self.root / "checker-invocations.txt").read_text(encoding="utf-8"),
+            "--staged\n",
+        )
+
+        plan = self.root / "docs" / "exec-plans" / "todo" / "0001-plan.md"
+        plan.write_text("plan\n", encoding="utf-8")
+        subprocess.run(["git", "add", "docs/exec-plans/todo/0001-plan.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-qm", "plan"], cwd=self.root, check=True)
+        self.assertEqual(
+            (self.root / "checker-invocations.txt").read_text(encoding="utf-8"),
+            "--staged\n--staged\n",
+        )
+
+    def test_installer_discovers_repository_root_by_default(self) -> None:
+        self._init_fixture_repo()
+        completed = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve().parents[1] / "install_git_hooks.py")],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertTrue((self.root / ".git" / "hooks" / "pre-commit").exists())
+
+    def test_ci_and_verify_run_non_staged_checker_after_docs_check(self) -> None:
+        ci_text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+        verify_text = (Path(__file__).resolve().parents[1] / "verify.ps1").read_text(
+            encoding="utf-8"
+        )
+        expected = "uv run --project apps/api python scripts/check_roadmap.py"
+        docs_check = "uv run --project apps/api python scripts/check_docs.py"
+        for workflow in (ci_text, verify_text):
+            docs_index = workflow.index(docs_check)
+            roadmap_index = workflow.index(expected)
+            self.assertGreater(roadmap_index, docs_index)
+            self.assertLess(roadmap_index - docs_index, 200)
 
 
 if __name__ == "__main__":

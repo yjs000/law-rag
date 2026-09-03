@@ -55,6 +55,8 @@ uv run --project apps/collector ruff check apps/collector/src apps/collector/tes
 Assert-LastExitCode
 uv run --project apps/api python scripts/check_docs.py
 Assert-LastExitCode
+uv run --project apps/api python scripts/check_roadmap.py
+Assert-LastExitCode
 pnpm.cmd lint:web
 Assert-LastExitCode
 pnpm.cmd typecheck
