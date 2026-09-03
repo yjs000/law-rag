@@ -113,6 +113,40 @@ def test_nvidia_router_retries_transient_failure_with_a_fresh_client() -> None:
     assert clients_created == 2
 
 
+def test_nvidia_router_logs_only_safe_failure_category(caplog: pytest.LogCaptureFixture) -> None:
+    class ProviderFailure(RuntimeError):
+        status_code = 503
+
+    class Client:
+        def __init__(self) -> None:
+            self.chat = SimpleNamespace(completions=self)
+
+        async def create(self, **kwargs):
+            raise ProviderFailure("secret provider response")
+
+        async def close(self) -> None:
+            return None
+
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+        max_attempts=1,
+        client_factory=Client,
+    )
+
+    with caplog.at_level(logging.INFO, logger="law_rag.route_provider"):
+        with pytest.raises(ProviderFailure):
+            asyncio.run(router.route("민감한 질문 원문"))
+
+    assert len(caplog.records) == 1
+    assert '"failure_kind": "http_5xx"' in caplog.records[0].message
+    assert '"attempt": 1' in caplog.records[0].message
+    assert "secret provider response" not in caplog.records[0].message
+    assert "민감한 질문 원문" not in caplog.records[0].message
+
+
 @pytest.mark.asyncio
 async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -> None:
     router = NvidiaNimQuestionRouter(

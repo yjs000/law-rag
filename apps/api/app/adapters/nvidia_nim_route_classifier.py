@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -14,6 +16,7 @@ from app.domain.routing import (
 )
 
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
+_ROUTER_LOGGER = logging.getLogger("law_rag.route_provider")
 
 
 class _RouteJudgmentSchema(BaseModel):
@@ -61,6 +64,12 @@ class NvidiaNimQuestionRouter:
                 return await self._route_once(question)
             except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
                 last_error = exc
+                _ROUTER_LOGGER.info(
+                    json.dumps(
+                        {"attempt": attempt + 1, "failure_kind": _failure_kind(exc)},
+                        sort_keys=True,
+                    )
+                )
                 if (
                     getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES
                     or attempt + 1 >= self.max_attempts
@@ -123,3 +132,21 @@ class NvidiaNimQuestionRouter:
             yield client
         finally:
             await client.close()
+
+
+def _failure_kind(error: Exception) -> str:
+    if isinstance(error, TimeoutError) or type(error).__name__ == "APITimeoutError":
+        return "timeout"
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        if status_code in _NON_RETRYABLE_STATUS_CODES:
+            return f"http_{status_code}"
+        if 400 <= status_code < 500:
+            return "http_4xx"
+        if 500 <= status_code < 600:
+            return "http_5xx"
+    if type(error).__name__ == "APIConnectionError":
+        return "connection_error"
+    if isinstance(error, ValueError):
+        return "invalid_response"
+    return "provider_error"
