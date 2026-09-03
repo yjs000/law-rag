@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1788439902.6603825,
-    "seen": 1788440483.9020977,
-    "ast_hash": "01382426fbe2d85762b54c6b930f854b",
+    "mtime": 1788442395.111369,
+    "seen": 1788443542.1621494,
+    "ast_hash": "28807c9c544b6c7e3139b3bcde38e3f9",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -2802,9 +2802,9 @@
     "semantic_hash": ""
   },
   "docs/product-specs/index.md": {
-    "mtime": 1788421497.1392806,
-    "seen": 1788440483.9022367,
-    "ast_hash": "7fabb2157edf03efb9b773a69ee0be9c",
+    "mtime": 1788442347.5223303,
+    "seen": 1788443542.1833577,
+    "ast_hash": "ea9a77c18b9e444d82e9e5ee058a4ed3",
     "semantic_hash": ""
   },
   "docs/product-specs/new-user-onboarding.md": {
@@ -2946,9 +2946,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/adapters/postgres_question_execution.py": {
-    "mtime": 1788432784.3476384,
-    "seen": 1788440483.9016256,
-    "ast_hash": "30e17d9d7093de6d71b6d2bbf1f98633",
+    "mtime": 1788443460.6811507,
+    "seen": 1788443542.0900102,
+    "ast_hash": "74e3276d0cc373f308d08fff0b80e654",
     "semantic_hash": ""
   },
   "apps/api/app/application/final_answer.py": {
@@ -2976,9 +2976,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/domain/grounding.py": {
-    "mtime": 1788421496.9152794,
-    "seen": 1788440483.9016788,
-    "ast_hash": "b1c65d11674aaa15eacd863380b5267d",
+    "mtime": 1788443458.0396018,
+    "seen": 1788443542.0970345,
+    "ast_hash": "83822267ae27bf43cb98439c1673099e",
     "semantic_hash": ""
   },
   "apps/api/app/domain/pipeline_issues.py": {
@@ -3030,9 +3030,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_question_execution_repository.py": {
-    "mtime": 1788432798.7587833,
-    "seen": 1788440483.901824,
-    "ast_hash": "35d15e8b56c280d554c7722dbfdbe160",
+    "mtime": 1788443410.8731105,
+    "seen": 1788443542.11894,
+    "ast_hash": "91d820acf10af89a26f8e7f09c560de4",
     "semantic_hash": ""
   },
   "apps/api/tests/test_question_phase_coordinator.py": {
@@ -3048,9 +3048,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_v2_grounding_events.py": {
-    "mtime": 1788421496.9912796,
-    "seen": 1788440483.901842,
-    "ast_hash": "ba336161584ac0029ce5bb2b0d9b95e3",
+    "mtime": 1788443410.4005067,
+    "seen": 1788443542.1227834,
+    "ast_hash": "ca18ba9e1e98ec5f95528a40252c4a4c",
     "semantic_hash": ""
   },
   "apps/api/tests/test_v2_phase_deadline.py": {
@@ -3342,9 +3342,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/application/v2/evidence.py": {
-    "mtime": 1788421496.909302,
-    "seen": 1788440483.9016638,
-    "ast_hash": "dfe5ba720530fc6d9f49a0ad61ca56f8",
+    "mtime": 1788443459.329127,
+    "seen": 1788443542.0949402,
+    "ast_hash": "b8aea00ebf57d87c1d8cb4cc7a870de0",
     "semantic_hash": ""
   },
   "apps/api/app/application/v2/grounding.py": {
@@ -3663,6 +3663,18 @@
     "mtime": 1788439902.6643808,
     "seen": 1788440483.9021888,
     "ast_hash": "58b8ff31c89f6aa5571299992a25902d",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/active/0067-production-web-e2e-completion-loop.md": {
+    "mtime": 1788442453.051814,
+    "seen": 1788443542.1679187,
+    "ast_hash": "c5e63f4b4b80af9b3555874b54235eee",
+    "semantic_hash": ""
+  },
+  "docs/product-specs/web-e2e-validation.md": {
+    "mtime": 1788442346.5760436,
+    "seen": 1788443542.183517,
+    "ast_hash": "503f4de0ef531160f7999a2848125b25",
     "semantic_hash": ""
   }
 }

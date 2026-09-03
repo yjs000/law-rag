@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -13,6 +14,93 @@ from app.ports.question_execution import ExecutionConflict, ExecutionNotFound
 @pytest.fixture
 def repository() -> MemoryQuestionExecutionRepository:
     return MemoryQuestionExecutionRepository(now=lambda: datetime(2026, 8, 28, tzinfo=UTC))
+
+
+async def test_postgres_prepare_preserves_frozen_source_metadata() -> None:
+    execution_id = uuid4()
+    generation_id = uuid4()
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+    citation = FrozenCitation(
+        id="C1",
+        quote="① 전기사업을 하려는 자는 허가를 받아야 한다.",
+        document_title="전기사업법",
+        path="제7조",
+    )
+    row = {
+        "execution_id": execution_id,
+        "owner_scope": "anonymous:test",
+        "prepare_idempotency_key": "metadata-key",
+        "capability_hash": None,
+        "generation_id": generation_id,
+        "status": "prepared",
+        "version": 0,
+        "private_payload": {},
+        "frozen_citations": [
+            {
+                "id": citation.id,
+                "quote": citation.quote,
+                "document_title": citation.document_title,
+                "path": citation.path,
+            }
+        ],
+        "verified_response": None,
+        "expires_at": now + timedelta(minutes=5),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def one(self):
+            return row
+
+    class Connection:
+        parameters = None
+
+        async def execute(self, _statement, parameters):
+            self.parameters = parameters
+            return Result()
+
+    class Begin:
+        def __init__(self, connection):
+            self.connection = connection
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class Engine:
+        def __init__(self):
+            self.connection = Connection()
+
+        def begin(self):
+            return Begin(self.connection)
+
+    engine = Engine()
+    repository = PostgresQuestionExecutionRepository(engine)  # type: ignore[arg-type]
+
+    stored = await repository.prepare_or_get(
+        owner_scope="anonymous:test",
+        prepare_idempotency_key="metadata-key",
+        generation_id=generation_id,
+        frozen_citations=(citation,),
+        expires_at=now + timedelta(minutes=5),
+    )
+
+    encoded = json.loads(engine.connection.parameters["frozen_citations"])
+    assert encoded == [
+        {
+            "id": "C1",
+            "quote": "① 전기사업을 하려는 자는 허가를 받아야 한다.",
+            "document_title": "전기사업법",
+            "path": "제7조",
+        }
+    ]
+    assert stored.frozen_citations == (citation,)
 
 
 async def test_prepare_deduplicates_owner_and_idempotency_key(

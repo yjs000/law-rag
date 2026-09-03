@@ -37,10 +37,16 @@ def execution_generation_hits(execution: Any, hits: list[SearchHit]) -> list[Sea
 
 
 def freeze_citations(hits: list[SearchHit]) -> tuple[FrozenCitation, ...]:
-    """Store only the citation ID and immutable quote used by grounding."""
+    """Store immutable quote and source identity used by grounding."""
 
     return tuple(
-        FrozenCitation(id=f"C{index}", quote=hit.content) for index, hit in enumerate(hits, 1)
+        FrozenCitation(
+            id=f"C{index}",
+            quote=hit.content,
+            document_title=hit.document_title,
+            path=hit.path,
+        )
+        for index, hit in enumerate(hits, 1)
     )
 
 

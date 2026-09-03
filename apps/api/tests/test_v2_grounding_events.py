@@ -1,5 +1,11 @@
+from datetime import date
+from uuid import uuid4
+
+from app.application.v2.evidence import freeze_citations
 from app.domain.answer_events import AnswerEvent, EventProtocolError
+from app.domain.catalog import SourceKind
 from app.domain.grounding import CitationRegistry, FrozenCitation, GroundedSentence
+from app.domain.schemas import SearchHit
 
 
 def _registry() -> CitationRegistry:
@@ -30,6 +36,29 @@ def test_grounding_rejects_unsupported_number_norm_and_overclaim() -> None:
 
 def test_grounding_accepts_a_directly_supported_norm() -> None:
     assert _registry().verify(GroundedSentence("허가를 받아야 합니다.", ("C1",)))
+
+
+def test_grounding_accepts_article_numbers_from_frozen_source_metadata() -> None:
+    hit = SearchHit(
+        provision_id=uuid4(),
+        document_id=uuid4(),
+        document_title="전기사업법",
+        source_kind=SourceKind.LAW,
+        version_label="MST 1",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        path="제7조",
+        content="① 전기사업을 하려는 자는 허가를 받아야 한다.",
+        source_url="https://www.law.go.kr/법령/전기사업법/제7조",
+    )
+
+    frozen = freeze_citations([hit])
+
+    assert frozen[0].document_title == "전기사업법"
+    assert frozen[0].path == "제7조"
+    assert CitationRegistry(frozen).verify(
+        GroundedSentence("전기사업법 제7조 제1항은 전기사업 허가를 규정합니다.", ("C1",))
+    )
 
 
 def test_complete_cannot_be_combined_with_error_or_cancelled() -> None:

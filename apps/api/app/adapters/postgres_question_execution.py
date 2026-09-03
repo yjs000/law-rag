@@ -67,7 +67,12 @@ class PostgresQuestionExecutionRepository:
                         "private_payload": json.dumps(dict(private_payload or {})),
                         "frozen_citations": json.dumps(
                             [
-                                {"id": citation.id, "quote": citation.quote}
+                                {
+                                    "id": citation.id,
+                                    "quote": citation.quote,
+                                    "document_title": citation.document_title,
+                                    "path": citation.path,
+                                }
                                 for citation in frozen_citations
                             ]
                         ),
@@ -542,7 +547,16 @@ def _record_from_row(row: Mapping[str, object]) -> StoredQuestionExecution:
         if not isinstance(value, list):
             return ()
         return tuple(
-            FrozenCitation(id=item["id"], quote=item["quote"])
+            FrozenCitation(
+                id=item["id"],
+                quote=item["quote"],
+                document_title=item.get("document_title", "")
+                if isinstance(item.get("document_title", ""), str)
+                else "",
+                path=item.get("path", "")
+                if isinstance(item.get("path", ""), str)
+                else "",
+            )
             for item in value
             if isinstance(item, Mapping)
             and isinstance(item.get("id"), str)
