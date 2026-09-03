@@ -3,11 +3,14 @@
 > 유형: `Feature`
 > 보조 라벨: `Evaluation`
 > 선행 조건: 사용자가 착수를 명시하고 source_kind 신호를 쓰면 0041 완료를 확인해야 한다.
+> 다음 행동: 0041의 source_kind 신호를 확인하고 착수 범위를 결정
 > 참고 범위:
 > - `apps/api/scripts/experiment_d_local_rerank.py` L158-L175 — 기존 D-10 rerank_case의 raw 후보·점수 입력 계약
 > - `docs/exec-plans/completed/0041-parse-law-type-classification-code.md` L26-L45 — source_kind 저장·응답 결정과 재순위 의존성
 
 # 0042: 재순위를 실제 검색 경로에 연결
+
+## 계획 본문
 
 상태: `제안됨 · 미착수`
 

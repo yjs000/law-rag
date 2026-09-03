@@ -3,11 +3,14 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
 > 선행 조건: D-full 일반화·release gate 필요성을 확인하고 대상 문항·인력·외부 호출 비용 상한을 다시 확정해야 한다.
+> 다음 행동: 실제 일반화·회귀 필요 시에만 착수
 > 참고 범위:
 > - `docs/exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md` L12-L17 — D-10 Gold의 고정 10문항·사용자 adjudication 봉인 경계
 > - `docs/exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md` L30-L35 — 나머지 990문항 D-full과 일반 release 주장 제외 범위
 
 # 0029: 필요 시 D-full Gold 제작
+
+## 계획 본문
 
 상태: `보류 · 미착수`
 

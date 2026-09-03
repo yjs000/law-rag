@@ -12,6 +12,7 @@ dependencies = [
   "law-rag-llamaindex",
   "openai>=1.99,<3",
   "pgvector>=0.4,<1",
+  "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.10,<3",
   "sqlalchemy[asyncio]>=2.0.41,<3",
   "uvicorn[standard]>=0.35,<1",

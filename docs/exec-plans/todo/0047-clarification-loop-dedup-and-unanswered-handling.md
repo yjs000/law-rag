@@ -3,11 +3,14 @@
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: 답변하지 않음 판정 기준과 재질문 상한 도달 시 문구·후속 액션을 사용자가 승인해야 한다.
+> 다음 행동: v2 LangGraph 전환의 clarification 루프 입력으로 반영
 > 참고 범위:
 > - `apps/api/app/application/answering.py` L192-L220 — 기존 재제출 템플릿은 원 질문과 누락 사실을 한 메시지로 보내며 턴을 자동 병합하지 않음
 > - `apps/api/app/domain/answer_actions.py` L14-L30 — 현재 `clarification_required`·`unanswerable` action 매핑과 D-10 검증 전 경계
 
 # 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리
+
+## 계획 본문
 
 상태: `제안됨 (2026-08-10), 2026-08-18 갱신 — v2 아키텍처(LangGraph 기반 재작성)로 전환하며
 같은 문제를 LangGraph의 상태 그래프·조건부 엣지로 해결할 예정이라 별도 즉시 착수 대상이

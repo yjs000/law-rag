@@ -3,11 +3,14 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
 > 선행 조건: E-10 base 결과가 기록되어 있고, 재개 전 품질 원인 진단 범위를 선택해야 한다.
+> 다음 행동: 품질 원인 진단 범위를 선택
 > 참고 범위:
 > - `apps/api/app/adapters/openai_answerer.py` L362-L377 — 구조 검증과 검색·재순위 품질 책임의 현재 진단 경계
 > - `docs/exec-plans/completed/0025-approved-questions-to-grounded-answer-roadmap.md` L600-L604 — E-10 안전 gate는 일반 품질·release 근거가 아니며 별도 범위 판단이 필요함
 
 # 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)
+
+## 계획 본문
 
 상태: `E-10 base 실행 완료(2026-08-08) — 라우팅 7/7 gold 일치, 생성 6회 중 완전 성공 0건
 (503 공유 용량 1건, timeout 1건, grounding_failed 4건) — 안전 gate는 전부 통과했으나

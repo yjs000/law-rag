@@ -27,7 +27,7 @@ $apiPytestTemp = Join-Path $tempRoot "pytest-api"
 $collectorPytestTemp = Join-Path $tempRoot "pytest-collector"
 $env:TEMP = $tempRoot
 $env:TMP = $tempRoot
-$env:PYTHONPATH = "$(Join-Path $repoRoot 'apps\api');$(Join-Path $repoRoot 'packages\law-rag-core\src')"
+$env:PYTHONPATH = "$(Join-Path $repoRoot 'apps\api');$(Join-Path $repoRoot 'apps\collector\src');$(Join-Path $repoRoot 'packages\law-rag-core\src')"
 
 function Assert-LastExitCode {
     if ($LASTEXITCODE -ne 0) {
@@ -54,6 +54,8 @@ Assert-LastExitCode
 uv run --project apps/collector ruff check apps/collector/src apps/collector/tests
 Assert-LastExitCode
 uv run --project apps/api python scripts/check_docs.py
+Assert-LastExitCode
+uv run --project apps/api python scripts/check_roadmap.py
 Assert-LastExitCode
 pnpm.cmd lint:web
 Assert-LastExitCode
