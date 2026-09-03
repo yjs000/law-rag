@@ -32,6 +32,42 @@ def test_v2_resources_factory_uses_active_generation_provider_not_legacy_table(
     main_module._build_llamaindex_resources.cache_clear()
 
 
+def test_v2_catalog_engine_disables_asyncpg_statement_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.bootstrap as bootstrap
+
+    captured: dict[str, object] = {}
+
+    class AsyncEngine:
+        async def dispose(self) -> None:
+            return None
+
+    class SyncEngine:
+        def dispose(self) -> None:
+            return None
+
+    def create_async_engine(url: str, **kwargs: object) -> AsyncEngine:
+        captured["url"] = url
+        captured.update(kwargs)
+        return AsyncEngine()
+
+    monkeypatch.setattr(bootstrap, "create_async_engine", create_async_engine)
+    monkeypatch.setattr(bootstrap, "create_engine", lambda *args, **kwargs: SyncEngine())
+
+    resources = bootstrap.build_llamaindex_resources(
+        "postgresql://pooler.example/law",
+        "key",
+        llamaindex_settings=object(),
+        delegate=object(),
+        embedder_factory=lambda settings: object(),
+        repository_factory=lambda delegate, provider, embedder: object(),
+    )
+
+    assert resources is not None
+    assert captured["connect_args"] == {"statement_cache_size": 0}
+
+
 def test_v2_repository_does_not_request_legacy_query_embedding() -> None:
     import app.main as main_module
     from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
