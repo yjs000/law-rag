@@ -1,25 +1,39 @@
 # 0066 final whole-branch review
 
-## Verdict
+## Verdict chronology
 
-**IMPLEMENTATION PASS / COMPLETION CLOSED.** The committed implementation in
-`158cc47..d1f41d6` satisfies the approved design, all five task specifications, and the global
-constraints. I found no P0-P2 implementation defect. The milestone must not yet be declared
-complete because the repository-wide verification contract is not green and the authoritative
-plan/ledger lifecycle records are unfinished.
+### Initial verdict — 2026-09-03 (historical)
+
+**IMPLEMENTATION PASS / COMPLETION BLOCKED.** At the time of the initial review, the committed
+implementation in `158cc47..d1f41d6` satisfied the approved design, all five task specifications,
+and the global constraints. I found no P0-P2 implementation defect. The milestone could not then
+be declared complete because the repository-wide verification contract was not green and the
+authoritative plan/ledger lifecycle records were unfinished.
+
+### Final closure — 2026-09-03
+
+**COMPLETION CLOSED.** The dated completion gates below were resolved in the scoped commits
+listed in [Completion-gate resolution](#completion-gate-resolution-2026-09-03), the plan is now
+`Done` at its completed lifecycle path, and the latest full verification succeeded. The historical
+blocked verdict remains below as an audit record; it is not the current lifecycle status.
 
 ## Review scope
 
 - Approved design: `docs/superpowers/specs/2026-09-03-roadmap-registry-and-context-diet-design.md`.
-- Implementation plan: `docs/exec-plans/todo/0066-roadmap-registry-and-context-diet.md`, including
-  all five tasks, spec-coverage review, and global constraints.
+- Implementation plan at initial review (historical path):
+  `docs/exec-plans/todo/0066-roadmap-registry-and-context-diet.md`, including all five tasks,
+  spec-coverage review, and global constraints.
+- Current lifecycle record: `docs/exec-plans/completed/0066-roadmap-registry-and-context-diet.md`
+  with status `Done`.
 - SDD ledger and task evidence under
   `.superpowers/sdd/0066-roadmap-registry-and-context-diet/`.
-- Every commit and changed path in `158cc47..d1f41d6`, plus current diff/status.
+- Initial implementation range: `158cc47..d1f41d6`.
+- Completion-gate and lifecycle range: `02f06c3..d86e35f` (`02f06c3`, `b2bd49d`, `025dc2f`,
+  `0569bf3`, and `d86e35f`), plus current diff/status.
 - Core implementation: registry/parser, renderer, checker, hook installer, tests, CI/local gate,
   migrated plan metadata, generated roadmap, lifecycle navigation, and operator documentation.
 
-## Blocking findings
+## Initial blocking findings — 2026-09-03 (historical)
 
 No blocking implementation finding was found.
 
@@ -64,7 +78,7 @@ The following are blocking **completion conditions**, not defects introduced by 
   hierarchy, completed-plan bulk conversion, auto-fix/commit, `hooksPath` mutation, credential,
   private-case, legal-corpus, database, deployment, or runtime behavior change was introduced.
 
-## Fresh evidence
+## Initial evidence — 2026-09-03 (historical)
 
 - `uv run --project apps/api python -m unittest scripts.tests.test_roadmap_registry -v` — **PASS,
   38/38** (elevated rerun was required because Windows sandbox ACLs prevent temporary fixture
@@ -94,6 +108,9 @@ All original completion conditions are now satisfied.
   regression-only refresh without changing its ratings.
 - The 0066 checklist, SDD ledger, and `Done`/`completed` lifecycle record have been updated, and
   the generated roadmap was regenerated from that source header.
+- Resolution commits: `02f06c3` (collector import path), `b2bd49d` (API driver dependency),
+  `025dc2f` (maintenance-package import), `0569bf3` (quality-score evidence), and `d86e35f`
+  (plan lifecycle, generated roadmap, and SDD closure records).
 
 Latest full verification passed: core 26 tests; API 687 passed and 3 skipped; collector 97 passed
 and 5 skipped; documentation and roadmap checks; web lint, typecheck, 95 tests, and production

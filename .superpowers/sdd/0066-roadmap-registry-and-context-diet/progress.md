@@ -1,4 +1,6 @@
-# SDD ledger — plan: docs/exec-plans/todo/0066-roadmap-registry-and-context-diet.md
+# SDD ledger — current plan: `docs/exec-plans/completed/0066-roadmap-registry-and-context-diet.md`
+
+Initial review evidence referred to the historical `todo/` path before the plan was completed.
 
 ## Pre-flight interface scan
 
@@ -31,8 +33,13 @@ Ruling: Task 2 cannot regenerate or make the repository `docs/ROADMAP.md` pass v
 [Ledger: Task 4: complete (commits c30a74a and 9a7fee5, re-review clean)]
 [Ledger: Task 5: complete (commits 22d260b and d1f41d6, re-review clean)]
 
-[Ledger: final-review completion gates resolved (2026-09-03): collector import path,
-API psycopg runtime dependency, and maintenance-script package resolution fixed; QUALITY_SCORE
-freshness refreshed with current verification evidence. Full verification passed: core 26; API 687
-passed/3 skipped; collector 97 passed/5 skipped; docs/roadmap checks; web lint/typecheck/95 tests/build.
-Pre-existing graphify artifacts remained outside scope.]
+[Ledger: final-review initial verdict (historical, 2026-09-03): IMPLEMENTATION PASS / COMPLETION
+BLOCKED. Completion was blocked by the missing collector import path, stale QUALITY_SCORE document,
+unfinished plan lifecycle/checklist, and incomplete Task 4-5/final-review ledger entries.]
+
+[Ledger: final closure (2026-09-03; commits 02f06c3, b2bd49d, 025dc2f, 0569bf3, d86e35f):
+collector import path, API psycopg runtime dependency, and maintenance-script package resolution
+fixed; QUALITY_SCORE freshness refreshed with current verification evidence; plan moved to
+completed/ with status Done and ROADMAP regenerated. Full verification passed: core 26; API 687
+passed/3 skipped; collector 97 passed/5 skipped; docs/roadmap checks; web lint/typecheck/95
+tests/build. Pre-existing graphify artifacts remained outside scope.]
