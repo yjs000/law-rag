@@ -50,20 +50,22 @@ def select_generation_hits(
         raise ValueError("evidence budget must be positive")
     if max_articles <= 0:
         raise ValueError("article limit must be positive")
-    selected: list[SearchHit] = []
-    seen_articles: set[tuple[object, str]] = set()
-    used = 0
+    preferred_by_article: dict[tuple[object, str], SearchHit] = {}
     for hit in hits:
         path_root = hit.path.split("/", 1)[0]
         article = hit.path if path_root == "본문" else path_root
         article_key = (hit.document_id, article)
-        if article_key in seen_articles:
-            continue
+        current = preferred_by_article.get(article_key)
+        if current is None or hit.path.count("/") > current.path.count("/"):
+            preferred_by_article[article_key] = hit
+
+    selected: list[SearchHit] = []
+    used = 0
+    for hit in preferred_by_article.values():
         size = len(hit.document_title) + len(hit.path) + len(hit.version_label) + len(hit.content)
         if selected and used + size > max_characters:
             continue
         selected.append(hit)
-        seen_articles.add(article_key)
         used += size
         if used >= max_characters or len(selected) >= max_articles:
             break

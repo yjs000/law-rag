@@ -52,6 +52,20 @@ def test_generation_context_keeps_only_highest_ranked_leaf_per_article() -> None
     assert selected == [top, other]
 
 
+def test_generation_context_prefers_specific_path_over_higher_ranked_article_header() -> None:
+    document_id = uuid4()
+    header = _hit("제7조(전기사업의 허가)", document_id=document_id, path="제7조")
+    requested_paragraph = _hit(
+        "① 전기사업을 하려는 자는 허가를 받아야 한다.",
+        document_id=document_id,
+        path="제7조/항①",
+    )
+
+    selected = select_generation_hits([header, requested_paragraph], 10_000)
+
+    assert selected == [requested_paragraph]
+
+
 def test_generation_context_is_limited_to_five_articles() -> None:
     document_id = uuid4()
     hits = [
