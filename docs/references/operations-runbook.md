@@ -39,7 +39,8 @@ corpus 임베딩을 갱신한다. 두 번째 명령은 그 결과로 새 V2 immu
 
 - corpus 갱신: `LAW_OPEN_API_OC`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
   `NVIDIA_API_KEY`
-- V2 generation: `DATABASE_URL`, `NVIDIA_API_KEY`와 해당 embedding 설정
+- V2 generation: `DATABASE_URL` 또는 fallback `DIRECT_URL`, `NVIDIA_API_KEY`와 해당 embedding 설정.
+  저장소 루트의 `.env`와 `.env.local`은 실행 위치와 무관하게 자동으로 읽는다.
 - 국가법령정보 호출: 등록된 고정 공인 출구 IP 머신에서 실행
 
 ## 정상 실행
