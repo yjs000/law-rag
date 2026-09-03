@@ -54,13 +54,14 @@ async def _stream_execution_phase(
     except ExecutionNotFound as exc:
         raise HTTPException(status_code=404, detail="질문 실행을 찾을 수 없습니다.") from exc
 
+    try:
+        persisted = await main.v2_question_execution_service.await_phase(run)
+    except (ExecutionConflict, ValueError):
+        persisted = (AnswerEvent.error("phase_not_ready"),)
+    except ExecutionNotFound:
+        persisted = (AnswerEvent.error("execution_not_found"),)
+
     async def events():
-        try:
-            persisted = await main.v2_question_execution_service.await_phase(run)
-        except (ExecutionConflict, ValueError):
-            persisted = (AnswerEvent.error("phase_not_ready"),)
-        except ExecutionNotFound:
-            persisted = (AnswerEvent.error("execution_not_found"),)
         for event in persisted:
             yield _sse(event.event_type, dict(event.payload))
 

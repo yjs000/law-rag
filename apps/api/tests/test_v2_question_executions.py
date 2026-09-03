@@ -1,9 +1,11 @@
+import asyncio
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.adapters.openai_answerer import CoreDraft, DraftAnswer
 from app.application.question_phase_coordinator import PhaseResult
@@ -78,6 +80,54 @@ def test_v2_phase_cors_allows_the_execution_capability() -> None:
 
     assert response.status_code == 200
     assert "x-execution-capability" in response.headers["access-control-allow-headers"].lower()
+
+
+@pytest.mark.asyncio
+async def test_v2_phase_finishes_before_returning_serverless_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v2.sse as sse_module
+
+    release = asyncio.Event()
+
+    class Service:
+        async def begin_core(self, request):
+            return object()
+
+        async def await_phase(self, run):
+            await release.wait()
+            return (
+                AnswerEvent(
+                    event_type="phase_complete", payload={"next_action": "generate_detail"}
+                ),
+            )
+
+    fake_main = SimpleNamespace(
+        v2_question_execution_service=Service(),
+        _capability_hash=lambda value: value,
+        _question_owner=lambda request, user: "anonymous:test",
+    )
+
+    async def anonymous(_authorization):
+        return None
+
+    monkeypatch.setattr(sse_module, "main_module", lambda: fake_main)
+    monkeypatch.setattr(sse_module, "_optional_user", anonymous)
+
+    response_task = asyncio.create_task(
+        sse_module._stream_execution_phase(
+            uuid4(),
+            Request({"type": "http", "headers": []}),
+            "core",
+            "capability",
+        )
+    )
+    await asyncio.sleep(0)
+
+    assert not response_task.done()
+    release.set()
+    response = await response_task
+    assert response.media_type == "text/event-stream"
 
 
 def test_obsolete_v2_single_question_route_is_removed() -> None:
