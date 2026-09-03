@@ -96,6 +96,7 @@ def _v2_service_dependencies():
             check_quota=_check_v2_quota,
             require_supported_date=_require_supported_as_of_date,
             save_authenticated=_save_if_authenticated,
+            clarification_cases=dependencies.clarification_cases,
             execution_capability=_execution_capability,
             capability_hash=_capability_hash,
             admit_phase=_admit_v2_provider_phase,

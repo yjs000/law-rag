@@ -11,6 +11,7 @@ from uuid import UUID
 from law_rag_core.ports.repository import LegalRepository
 
 from app.application.clarification_workflow import (
+    ClarificationOutcome,
     ContinuationFactIntentExtractor,
     InitialClarificationJudge,
 )
@@ -49,6 +50,7 @@ class V2ExecutionDependencies:
     """
 
     executions: QuestionExecutionRepository
+    clarification_cases: ClarificationCaseRepository | None
     resolve_repository: Callable[[], Awaitable[LegalRepository]]
     active_provider: Callable[[], ActiveGenerationProvider]
     retrieve_evidence: Callable[
@@ -99,6 +101,7 @@ class PrepareQuestion:
     idempotency_key: str
     user: MockUser | None
     clarification: ClarificationGrounding | None = None
+    clarification_outcome: ClarificationOutcome | None = None
 
 
 @dataclass(frozen=True)

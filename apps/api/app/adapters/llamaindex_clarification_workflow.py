@@ -173,20 +173,6 @@ class LlamaIndexClarificationWorkflow(Workflow):
             policy = "full"
         else:
             policy = "interim"
-        if policy == "interim":
-            state.record = await self._dependencies.repository.mark_waiting(
-                record.case_id,
-                state.owner.owner_scope,
-                expected_version=record.version,
-                capability_hash=state.owner.capability_hash,
-            )
-        else:
-            state.record = await self._dependencies.repository.complete(
-                record.case_id,
-                state.owner.owner_scope,
-                expected_version=record.version,
-                capability_hash=state.owner.capability_hash,
-            )
         return PolicySelected(request_id=event.request_id, policy=policy)
 
     @step
@@ -194,9 +180,18 @@ class LlamaIndexClarificationWorkflow(Workflow):
         record = self._state(event.request_id).record
         if record is None:
             raise RuntimeError("clarification case is unavailable")
+        next_status = (
+            None
+            if record.status is ClarificationCaseStatus.CANCELLED
+            else (
+                ClarificationCaseStatus.WAITING_FOR_USER
+                if event.policy == "interim"
+                else ClarificationCaseStatus.COMPLETED
+            )
+        )
         facts = (
             group_remaining_facts(record.case.remaining_facts())
-            if record.status is ClarificationCaseStatus.WAITING_FOR_USER
+            if next_status is ClarificationCaseStatus.WAITING_FOR_USER
             else ()
         )
         return StopEvent(
@@ -204,6 +199,7 @@ class LlamaIndexClarificationWorkflow(Workflow):
                 case=record,
                 policy=event.policy,
                 question_format=ClarificationQuestionFormat(facts),
+                next_status=next_status,
             )
         )
 

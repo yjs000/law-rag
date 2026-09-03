@@ -17,6 +17,8 @@ from app.domain.clarification import (
 from app.domain.grounding import CitationRegistry, GroundedSentence
 from app.domain.schemas import Citation, QuestionRequest, QuestionResponse
 
+ClaimTarget = tuple[str, int | None]
+
 
 @dataclass(frozen=True)
 class ClarificationGrounding:
@@ -80,7 +82,11 @@ class ClarificationGrounding:
 
 
 def claims_are_grounded(
-    claims: Iterable[GroundedClaim], grounding: ClarificationGrounding, registry: CitationRegistry
+    claims: Iterable[GroundedClaim],
+    grounding: ClarificationGrounding,
+    registry: CitationRegistry,
+    *,
+    required_targets: Iterable[ClaimTarget] | None = None,
 ) -> bool:
     """Validate F-006 claims by structure, frozen IDs, and fact state only.
 
@@ -91,7 +97,50 @@ def claims_are_grounded(
 
     if grounding.policy == "full" and not grounding.case.all_blocking_facts_answered():
         return False
-    return all(validate_claim(claim, grounding.case, registry) for claim in claims)
+    frozen_claims = tuple(claims)
+    if not frozen_claims or not all(
+        validate_claim(claim, grounding.case, registry) for claim in frozen_claims
+    ):
+        return False
+    if required_targets is None:
+        return True
+
+    targets = tuple(required_targets)
+    claim_targets = tuple(_claim_target(claim) for claim in frozen_claims)
+    return (
+        bool(targets)
+        and all(target is not None for target in claim_targets)
+        and len(claim_targets) == len(set(claim_targets))
+        and set(claim_targets) == set(targets)
+    )
+
+
+def _claim_target(claim: GroundedClaim) -> ClaimTarget | None:
+    if claim.surface == "summary":
+        return (claim.surface, None) if claim.surface_index is None else None
+    if claim.surface not in {"section_claim", "section_explanation", "checklist_label"}:
+        return None
+    if isinstance(claim.surface_index, int) and not isinstance(claim.surface_index, bool):
+        return (claim.surface, claim.surface_index) if claim.surface_index >= 0 else None
+    return None
+
+
+def detail_claim_targets(draft: Any) -> tuple[ClaimTarget, ...]:
+    """Return every legal-bearing detail field without inspecting its wording."""
+
+    targets: list[ClaimTarget] = [("summary", None)]
+    targets.extend(("section_claim", index) for index, _section in enumerate(draft.sections))
+    targets.extend(
+        ("section_explanation", index) for index, _section in enumerate(draft.sections)
+    )
+    targets.extend(("checklist_label", index) for index, _item in enumerate(draft.checklist))
+    return tuple(targets)
+
+
+def core_claim_targets(_core: Any) -> tuple[ClaimTarget, ...]:
+    """The core phase publishes only its summary as a legal-bearing field."""
+
+    return (("summary", None),)
 
 
 def clarification_grounding_from_payload(payload: object) -> ClarificationGrounding | None:

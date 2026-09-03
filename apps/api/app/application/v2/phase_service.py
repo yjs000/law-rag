@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Literal
+from uuid import UUID
 
 from app.application.answering import route_guidance_fallback, search_only_answer
 from app.application.question_phase_coordinator import PhaseResult, QuestionPhaseCoordinator
@@ -26,15 +27,23 @@ from app.application.v2.grounding import (
     ClarificationGrounding,
     claims_are_grounded,
     clarification_grounding_from_payload,
+    core_claim_targets,
     core_degraded_response,
     core_is_grounded,
+    detail_claim_targets,
     grounding_fallback,
     response_is_grounded,
 )
 from app.domain.answer_events import AnswerEvent
 from app.domain.grounding import CitationRegistry
 from app.domain.question_execution import ExecutionSnapshot, ExecutionStatus, next_action_for
-from app.domain.schemas import MockUser, QuestionResponse
+from app.domain.schemas import (
+    ClarificationContinuation,
+    ClarificationFactPrompt,
+    MockUser,
+    QuestionResponse,
+)
+from app.ports.clarification_case import ClarificationCaseStatus
 from app.ports.question_execution import ExecutionNotFound, QuestionExecutionRecord
 
 
@@ -102,6 +111,11 @@ class V2QuestionExecutionService:
         }
         if request.clarification is not None:
             private_payload["clarification_grounding"] = request.clarification.to_payload()
+        if request.clarification_outcome is not None:
+            private_payload["clarification_outcome"] = self._clarification_outcome_payload(
+                request,
+                dependencies,
+            )
         execution = await dependencies.executions.prepare_or_get(
             owner_scope=request.owner_scope,
             prepare_idempotency_key=request.idempotency_key,
@@ -191,7 +205,10 @@ class V2QuestionExecutionService:
         if not dependencies.validate_response(draft, generation_hits):
             raise ValueError("generated answer did not satisfy the citation contract")
         if clarification is not None and not claims_are_grounded(
-            draft.grounded_claims, clarification, CitationRegistry(execution.frozen_citations)
+            draft.grounded_claims,
+            clarification,
+            CitationRegistry(execution.frozen_citations),
+            required_targets=detail_claim_targets(draft),
         ):
             raise ValueError(
                 "generated clarification claims did not satisfy the grounding contract"
@@ -256,6 +273,7 @@ class V2QuestionExecutionService:
                 core.grounded_claims,
                 clarification,
                 CitationRegistry(execution.frozen_citations),
+                required_targets=core_claim_targets(core),
             )
             if clarification is not None
             else core_is_grounded(core, CitationRegistry(execution.frozen_citations))
@@ -331,6 +349,16 @@ class V2QuestionExecutionService:
         elif core is not None:
             response.summary = core.summary
             response.action = core.action
+        if clarification is not None and not degraded:
+            try:
+                response = await self._persist_clarification_outcome(
+                    dependencies,
+                    execution,
+                    response,
+                )
+            except Exception:
+                response = core_degraded_response(payload, core, execution.private_payload)
+                degraded = True
         response = await dependencies.save_authenticated(user, payload, response)
         response_data = response.model_dump(mode="json")
         return PhaseResult(
@@ -492,6 +520,106 @@ class V2QuestionExecutionService:
         self, execution: QuestionExecutionRecord
     ) -> ClarificationGrounding | None:
         return clarification_grounding_from_payload(execution.private_payload)
+
+    def _clarification_outcome_payload(
+        self,
+        request: PrepareQuestion,
+        dependencies: V2ExecutionDependencies,
+    ) -> dict[str, object]:
+        """Persist only transition metadata needed after a grounded finalize."""
+
+        outcome = request.clarification_outcome
+        clarification = request.clarification
+        if (
+            outcome is None
+            or clarification is None
+            or outcome.case is None
+            or outcome.next_status is None
+        ):
+            raise ValueError("clarification outcome is incomplete")
+        if outcome.policy != clarification.policy or outcome.case.case != clarification.case:
+            raise ValueError("clarification outcome does not match the frozen grounding state")
+        if outcome.next_status not in {
+            ClarificationCaseStatus.WAITING_FOR_USER,
+            ClarificationCaseStatus.COMPLETED,
+        }:
+            raise ValueError("clarification outcome has an unsupported transition")
+        return {
+            "case_id": str(outcome.case.case_id),
+            "expected_version": outcome.case.version,
+            "next_status": outcome.next_status.value,
+            "question_format": [
+                {
+                    "id": fact.id,
+                    "label": fact.label,
+                    "why_needed": fact.why_needed,
+                    "group": fact.group,
+                    "priority": fact.priority,
+                }
+                for fact in outcome.question_format.facts
+            ],
+            "remaining_count": len(outcome.case.case.remaining_facts()),
+            "capability_hash": dependencies.capability_hash(
+                request.payload.clarification_capability
+            ),
+        }
+
+    async def _persist_clarification_outcome(
+        self,
+        dependencies: V2ExecutionDependencies,
+        execution: QuestionExecutionRecord,
+        response: QuestionResponse,
+    ) -> QuestionResponse:
+        """Make a case wait or complete only after creating a grounded response."""
+
+        raw = execution.private_payload.get("clarification_outcome")
+        if raw is None:
+            return response
+        if not isinstance(raw, dict) or dependencies.clarification_cases is None:
+            raise ValueError("clarification transition is unavailable")
+        raw_case_id = raw.get("case_id")
+        expected_version = raw.get("expected_version")
+        raw_status = raw.get("next_status")
+        raw_capability_hash = raw.get("capability_hash")
+        raw_questions = raw.get("question_format")
+        remaining_count = raw.get("remaining_count")
+        if (
+            not isinstance(raw_case_id, str)
+            or not isinstance(expected_version, int)
+            or isinstance(expected_version, bool)
+            or raw_status not in {"waiting_for_user", "completed"}
+            or raw_capability_hash is not None
+            and not isinstance(raw_capability_hash, str)
+            or not isinstance(raw_questions, list)
+            or not isinstance(remaining_count, int)
+            or isinstance(remaining_count, bool)
+            or remaining_count < 0
+        ):
+            raise ValueError("clarification transition payload is invalid")
+        case_id = UUID(raw_case_id)
+        status = ClarificationCaseStatus(raw_status)
+        question_format = [
+            ClarificationFactPrompt.model_validate(item) for item in raw_questions
+        ]
+        transition = (
+            dependencies.clarification_cases.mark_waiting
+            if status is ClarificationCaseStatus.WAITING_FOR_USER
+            else dependencies.clarification_cases.complete
+        )
+        await transition(
+            case_id,
+            execution.owner_scope,
+            expected_version=expected_version,
+            capability_hash=raw_capability_hash,
+        )
+        if status is ClarificationCaseStatus.WAITING_FOR_USER:
+            response.clarification = ClarificationContinuation(
+                case_id=case_id,
+                status="waiting_for_user",
+                question_format=question_format,
+                remaining_count=remaining_count,
+            )
+        return response
 
 
 __all__ = ["V2QuestionExecutionService", "grounding_fallback"]

@@ -156,6 +156,7 @@ class V2ApplicationCallbacks:
     save_authenticated: Callable[
         [MockUser | None, QuestionRequest, QuestionResponse], Awaitable[QuestionResponse]
     ]
+    clarification_cases: Any
     execution_capability: Callable[[str, str], str]
     capability_hash: Callable[[str | None], str | None]
     admit_phase: Callable[[QuestionExecutionRecord, Literal["core", "finalize"]], Awaitable[Any]]
@@ -230,6 +231,7 @@ def build_v2_execution_dependencies(
 
     return V2ExecutionDependencies(
         executions=executions,
+        clarification_cases=callbacks.clarification_cases,
         resolve_repository=callbacks.resolve_repository,
         active_provider=callbacks.active_provider,
         retrieve_evidence=callbacks.retrieve_evidence,

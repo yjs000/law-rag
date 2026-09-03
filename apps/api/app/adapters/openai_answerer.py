@@ -233,7 +233,10 @@ def build_messages_v2(
             " 이번 답변은 clarification 정책 '"
             + clarification.policy
             + "'를 따른다. 구조화된 grounded_claims에는 summary·section·checklist의 모든 법률 "
-            "주장을 claim_kind, citation_ids, required_fact_ids와 함께 넣는다. 일반 규칙은 "
+            "주장을 claim_kind, citation_ids, required_fact_ids, surface, "
+            "surface_index와 함께 넣는다. "
+            "surface는 summary, section_claim, section_explanation, checklist_label 중 하나이고 "
+            "summary의 surface_index는 null, 나머지는 해당 배열 index다. 일반 규칙은 "
             "required_fact_ids를 비우고, 개별 적용은 answered 사실만, 남은 사실에 따른 설명은 "
             "conditional claim으로 쓴다. confirmed_fact_ids="
             + json.dumps(answered, ensure_ascii=False)

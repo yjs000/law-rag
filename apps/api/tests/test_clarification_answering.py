@@ -6,14 +6,20 @@ from uuid import uuid4
 
 import pytest
 
+from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.openai_answerer import ClarificationCoreDraft, ClarificationDraftAnswer, CoreDraft
+from app.application.clarification_workflow import (
+    ClarificationOutcome,
+    ClarificationQuestionFormat,
+)
 from app.application.v2.dependencies import PrepareQuestion
 from app.application.v2.grounding import ClarificationGrounding, claims_are_grounded
 from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.clarification import ClarificationCase, FactStatus, GroundedClaim, RequiredFact
 from app.domain.grounding import CitationRegistry, FrozenCitation
 from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit, SourceKind
+from app.ports.clarification_case import ClarificationCaseStatus
 
 
 def _hit() -> SearchHit:
@@ -82,6 +88,39 @@ def _draft(*, claims: list[GroundedClaim]) -> ClarificationDraftAnswer:
     )
 
 
+def _detail_claims() -> list[GroundedClaim]:
+    return [
+        GroundedClaim(
+            "요약의 문구는 원문과 일치할 필요가 없습니다.",
+            "general_rule",
+            ("C1",),
+            surface="summary",
+            surface_index=None,
+        ),
+        GroundedClaim(
+            "소제목의 문구는 원문과 일치할 필요가 없습니다.",
+            "general_rule",
+            ("C1",),
+            surface="section_claim",
+            surface_index=0,
+        ),
+        GroundedClaim(
+            "설명의 문구는 원문과 일치할 필요가 없습니다.",
+            "general_rule",
+            ("C1",),
+            surface="section_explanation",
+            surface_index=0,
+        ),
+        GroundedClaim(
+            "체크 항목의 문구는 원문과 일치할 필요가 없습니다.",
+            "general_rule",
+            ("C1",),
+            surface="checklist_label",
+            surface_index=0,
+        ),
+    ]
+
+
 class _CapturingAnswerer:
     def __init__(self, *, claims: list[GroundedClaim]) -> None:
         self.claims = claims
@@ -116,6 +155,8 @@ class _CapturingAnswerer:
 
 def _service(
     answerer: _CapturingAnswerer,
+    *,
+    clarification_cases: MemoryClarificationCaseRepository | None = None,
 ) -> tuple[V2QuestionExecutionService, MemoryQuestionExecutionRepository]:
     executions = MemoryQuestionExecutionRepository()
     now = datetime(2026, 9, 3, tzinfo=UTC)
@@ -137,6 +178,7 @@ def _service(
 
     dependencies = SimpleNamespace(
         executions=executions,
+        clarification_cases=clarification_cases,
         resolve_repository=_resolve_repository,
         active_provider=lambda: SimpleNamespace(
             active=lambda: _active_generation()
@@ -170,9 +212,32 @@ async def _active_generation() -> SimpleNamespace:
     return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
 
 
+async def _case_record(
+    cases: MemoryClarificationCaseRepository, context: ClarificationGrounding
+):
+    return await cases.create_or_get(
+        owner_scope="anonymous:test",
+        capability_hash=None,
+        original_question="전기사업 허가가 필요한가요?",
+        as_of_date=date(2026, 9, 3),
+        project_stage="planning",
+        conversation_id=None,
+        case=context.case,
+        expires_at=datetime(2026, 9, 4, tzinfo=UTC),
+    )
+
+
 @pytest.mark.asyncio
 async def test_prepare_and_core_preserve_policy_and_sanitized_fact_state() -> None:
-    claims = [GroundedClaim("전혀 다른 표현의 일반 규칙입니다.", "general_rule", ("C1",))]
+    claims = [
+        GroundedClaim(
+            "전혀 다른 표현의 일반 규칙입니다.",
+            "general_rule",
+            ("C1",),
+            surface="summary",
+            surface_index=None,
+        )
+    ]
     answerer = _CapturingAnswerer(claims=claims)
     service, _executions = _service(answerer)
     context = _context("interim")
@@ -202,21 +267,218 @@ async def test_prepare_and_core_preserve_policy_and_sanitized_fact_state() -> No
     assert core.target.value == "core_answered"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("policy", "site_status", "next_status"),
+    [
+        ("interim", FactStatus.UNANSWERED, ClarificationCaseStatus.WAITING_FOR_USER),
+        ("full", FactStatus.ANSWERED, ClarificationCaseStatus.COMPLETED),
+    ],
+)
+async def test_grounded_finalize_persists_the_pending_case_transition(
+    policy: str, site_status: FactStatus, next_status: ClarificationCaseStatus
+) -> None:
+    context = _context(policy, site_status=site_status)
+    cases = MemoryClarificationCaseRepository()
+    record = await _case_record(cases, context)
+    outcome = ClarificationOutcome(
+        case=record,
+        policy=policy,
+        question_format=ClarificationQuestionFormat(record.case.remaining_facts()),
+        next_status=next_status,
+    )
+    service, _executions = _service(
+        _CapturingAnswerer(claims=_detail_claims()), clarification_cases=cases
+    )
+
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key=f"persist-{policy}",
+            user=None,
+            clarification=context,
+            clarification_outcome=outcome,
+        )
+    )
+    before_finalize = await cases.get_owned(record.case_id, "anonymous:test")
+
+    result = await service.run_finalize(prepared.execution, None)
+
+    persisted = await cases.get_owned(record.case_id, "anonymous:test")
+    assert before_finalize.version == 0
+    assert persisted.version == 1
+    assert persisted.status is next_status
+    published = result.events[0].payload["response"]
+    if next_status is ClarificationCaseStatus.WAITING_FOR_USER:
+        assert published["clarification"] == {
+            "case_id": str(record.case_id),
+            "status": "waiting_for_user",
+            "question_format": [
+                {
+                    "id": "site",
+                    "label": "설치 위치",
+                    "why_needed": "관할을 판단합니다.",
+                    "group": "사업 정보",
+                    "priority": 2,
+                }
+            ],
+            "remaining_count": 1,
+        }
+    else:
+        assert published["clarification"] is None
+
+
+@pytest.mark.asyncio
+async def test_ungrounded_finalize_leaves_the_pending_case_untransitioned() -> None:
+    context = _context("full", site_status=FactStatus.ANSWERED)
+    cases = MemoryClarificationCaseRepository()
+    record = await _case_record(cases, context)
+    outcome = ClarificationOutcome(
+        case=record,
+        policy="full",
+        question_format=ClarificationQuestionFormat(()),
+        next_status=ClarificationCaseStatus.COMPLETED,
+    )
+    service, _executions = _service(
+        _CapturingAnswerer(
+            claims=[
+                GroundedClaim(
+                    "미검증 구조입니다.",
+                    "general_rule",
+                    ("C1",),
+                    surface="summary",
+                    surface_index=None,
+                )
+            ]
+        ),
+        clarification_cases=cases,
+    )
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="ungrounded-does-not-complete-case",
+            user=None,
+            clarification=context,
+            clarification_outcome=outcome,
+        )
+    )
+
+    await service.run_finalize(prepared.execution, None)
+
+    persisted = await cases.get_owned(record.case_id, "anonymous:test")
+    assert persisted.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert persisted.version == 0
+
+
+@pytest.mark.asyncio
+async def test_invalid_waiting_metadata_leaves_the_case_untransitioned() -> None:
+    context = _context("interim")
+    cases = MemoryClarificationCaseRepository()
+    record = await _case_record(cases, context)
+    outcome = ClarificationOutcome(
+        case=record,
+        policy="interim",
+        question_format=ClarificationQuestionFormat(record.case.remaining_facts()),
+        next_status=ClarificationCaseStatus.WAITING_FOR_USER,
+    )
+    service, _executions = _service(
+        _CapturingAnswerer(claims=_detail_claims()), clarification_cases=cases
+    )
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="invalid-waiting-metadata",
+            user=None,
+            clarification=context,
+            clarification_outcome=outcome,
+        )
+    )
+    prepared.execution.private_payload["clarification_outcome"]["question_format"] = [
+        {"id": ""}
+    ]
+
+    await service.run_finalize(prepared.execution, None)
+
+    persisted = await cases.get_owned(record.case_id, "anonymous:test")
+    assert persisted.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert persisted.version == 0
+
+
 def test_interim_claims_are_structural_and_allow_answered_case_application() -> None:
     context = _context("interim")
     registry = CitationRegistry((FrozenCitation(id="C1", quote="원문과 무관한 문구"),))
 
     assert claims_are_grounded(
         (
-            GroundedClaim("전혀 다른 표현의 일반 규칙입니다.", "general_rule", ("C1",)),
-            GroundedClaim("설치 위치에 따라 결과가 달라집니다.", "conditional", ("C1",), ("site",)),
             GroundedClaim(
-                "용량 사실에 따른 안내입니다.", "case_application", ("C1",), ("capacity",)
+                "전혀 다른 표현의 일반 규칙입니다.",
+                "general_rule",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+            ),
+            GroundedClaim(
+                "설치 위치에 따라 결과가 달라집니다.",
+                "conditional",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+                required_fact_ids=("site",),
+            ),
+            GroundedClaim(
+                "용량 사실에 따른 안내입니다.",
+                "case_application",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+                required_fact_ids=("capacity",),
             ),
         ),
         context,
         registry,
     )
+
+
+def test_claim_gate_rejects_an_empty_claim_list() -> None:
+    context = _context("interim")
+    registry = CitationRegistry((FrozenCitation(id="C1", quote="공식 원문"),))
+
+    assert not claims_are_grounded((), context, registry)
+
+
+def test_grounded_claim_declares_its_published_target() -> None:
+    assert {"surface", "surface_index"} <= set(GroundedClaim.__dataclass_fields__)
+
+
+def test_claim_gate_requires_complete_unique_structural_coverage() -> None:
+    context = _context("interim")
+    registry = CitationRegistry((FrozenCitation(id="C1", quote="공식 원문"),))
+    summary = GroundedClaim(
+        "원문과 다른 표현의 일반 규칙입니다.",
+        "general_rule",
+        ("C1",),
+        surface="summary",
+        surface_index=None,
+    )
+    section = GroundedClaim(
+        "이 설명의 문구는 원문과 일치할 필요가 없습니다.",
+        "general_rule",
+        ("C1",),
+        surface="section_claim",
+        surface_index=0,
+    )
+    targets = (("summary", None), ("section_claim", 0))
+
+    assert not claims_are_grounded(
+        (summary,), context, registry, required_targets=targets
+    )
+    assert not claims_are_grounded(
+        (summary, summary), context, registry, required_targets=(("summary", None),)
+    )
+    assert claims_are_grounded((summary, section), context, registry, required_targets=targets)
 
 
 @pytest.mark.parametrize(
@@ -227,14 +489,26 @@ def test_interim_claims_are_structural_and_allow_answered_case_application() -> 
             FactStatus.ANSWERED,
             FactStatus.ANSWERED,
             GroundedClaim(
-                "확정 사실에 따른 안내입니다.", "case_application", ("C1",), ("capacity",)
+                "확정 사실에 따른 안내입니다.",
+                "case_application",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+                required_fact_ids=("capacity",),
             ),
         ),
         (
             "conditional",
             FactStatus.ANSWERED,
             FactStatus.UNANSWERED,
-            GroundedClaim("설치 위치에 따라 결과가 달라집니다.", "conditional", ("C1",), ("site",)),
+            GroundedClaim(
+                "설치 위치에 따라 결과가 달라집니다.",
+                "conditional",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+                required_fact_ids=("site",),
+            ),
         ),
     ],
 )
@@ -250,7 +524,16 @@ def test_full_and_explicit_conditional_policies_accept_their_grounded_claims(
 @pytest.mark.asyncio
 async def test_invalid_claim_is_replaced_before_terminal_sse_publication() -> None:
     answerer = _CapturingAnswerer(
-        claims=[GroundedClaim("근거 없는 사례 적용입니다.", "case_application", ("C1",), ("site",))]
+        claims=[
+            GroundedClaim(
+                "근거 없는 사례 적용입니다.",
+                "case_application",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+                required_fact_ids=("site",),
+            )
+        ]
     )
     service, executions = _service(answerer)
     context = _context("interim")
@@ -283,3 +566,43 @@ async def test_invalid_claim_is_replaced_before_terminal_sse_publication() -> No
     published = result.events[0].payload["response"]
     assert published["sections"] == []
     assert "근거 없는 사례 적용" not in str(published)
+
+
+@pytest.mark.asyncio
+async def test_unbound_published_detail_is_replaced_before_terminal_sse_publication() -> None:
+    answerer = _CapturingAnswerer(
+        claims=[
+            GroundedClaim(
+                "문구와 무관한 일반 규칙입니다.",
+                "general_rule",
+                ("C1",),
+                surface="summary",
+                surface_index=None,
+            )
+        ]
+    )
+    service, executions = _service(answerer)
+    context = _context("interim")
+    hit = _hit()
+    execution = await executions.prepare_or_get(
+        owner_scope="anonymous:test",
+        prepare_idempotency_key="unbound-detail",
+        generation_id=uuid4(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        private_payload={
+            "request": QuestionRequest(
+                question="전기사업 허가가 필요한가요?"
+            ).model_dump(mode="json"),
+            "hits": [hit.model_dump(mode="json")],
+            "generation_hits": [hit.model_dump(mode="json")],
+            "route": "legal_search",
+            "clarification_grounding": context.to_payload(),
+        },
+        frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+    )
+
+    result = await service.run_finalize(execution, None)
+
+    published = result.events[0].payload["response"]
+    assert published["sections"] == []
+    assert published["checklist"] == []

@@ -107,8 +107,9 @@ class ClarificationContinuation(BaseModel):
     """Optional continuation metadata for a waiting clarification response."""
 
     case_id: UUID
-    policy: Literal["interim", "full", "conditional"]
-    facts: list[ClarificationFactPrompt] = Field(default_factory=list)
+    status: Literal["waiting_for_user"]
+    question_format: list[ClarificationFactPrompt] = Field(default_factory=list)
+    remaining_count: int = Field(ge=0)
 
 
 class QuestionRequest(BaseModel):

@@ -1,3 +1,5 @@
+import pytest
+
 from app.domain.clarification import (
     ClarificationCase,
     FactStatus,
@@ -38,8 +40,49 @@ def test_case_application_claim_requires_citation_and_answered_fact():
     case = ClarificationCase((_fact("capacity", status=FactStatus.ANSWERED), _fact("site")))
     citations = CitationRegistry((FrozenCitation(id="C1", quote="법령 근거"),))
     assert validate_claim(
-        GroundedClaim("용량", "case_application", ("C1",), ("capacity",)), case, citations
+        GroundedClaim(
+            "용량",
+            "case_application",
+            ("C1",),
+            surface="summary",
+            surface_index=None,
+            required_fact_ids=("capacity",),
+        ),
+        case,
+        citations,
     )
     assert not validate_claim(
-        GroundedClaim("입지", "case_application", ("C1",), ("site",)), case, citations
+        GroundedClaim(
+            "입지",
+            "case_application",
+            ("C1",),
+            surface="summary",
+            surface_index=None,
+            required_fact_ids=("site",),
+        ),
+        case,
+        citations,
     )
+
+
+def test_case_application_with_an_unknown_fact_id_is_rejected_without_raising() -> None:
+    case = ClarificationCase((_fact("capacity", status=FactStatus.ANSWERED),))
+    citations = CitationRegistry((FrozenCitation(id="C1", quote="법령 근거"),))
+
+    assert not validate_claim(
+        GroundedClaim(
+            "알 수 없는 사실",
+            "case_application",
+            ("C1",),
+            surface="summary",
+            surface_index=None,
+            required_fact_ids=("missing",),
+        ),
+        case,
+        citations,
+    )
+
+
+def test_grounded_claim_requires_an_explicit_published_target() -> None:
+    with pytest.raises(TypeError):
+        GroundedClaim("일반 규칙", "general_rule", ("C1",))

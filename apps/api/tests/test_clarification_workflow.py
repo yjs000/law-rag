@@ -156,6 +156,8 @@ async def test_initial_turn_formats_every_blocking_fact() -> None:
         "fact-3",
     )
     assert all(fact.blocking for fact in outcome.question_format.facts)
+    assert outcome.case.version == 0
+    assert outcome.next_status is ClarificationCaseStatus.WAITING_FOR_USER
     assert interpreter.initial_calls == 1
     assert interpreter.continuation_calls == 0
 
@@ -208,6 +210,8 @@ async def test_continuation_removes_answered_and_declined_facts_from_question_fo
     assert outcome.case is not None
     assert outcome.case.case_id == initial.case.case_id
     assert outcome.case.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert outcome.case.version == 1
+    assert outcome.next_status is ClarificationCaseStatus.WAITING_FOR_USER
     assert tuple(fact.id for fact in outcome.question_format.facts) == ("fact-3",)
     assert outcome.policy == "interim"
     assert interpreter.initial_calls == 1
@@ -268,7 +272,8 @@ async def test_answered_blocking_facts_complete_the_case_with_full_policy() -> N
 
     assert outcome.case is not None
     assert outcome.policy == "full"
-    assert outcome.case.status is ClarificationCaseStatus.COMPLETED
+    assert outcome.case.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert outcome.next_status is ClarificationCaseStatus.COMPLETED
     assert outcome.question_format.facts == ()
 
 
@@ -290,7 +295,8 @@ async def test_explicit_answer_request_completes_case_with_conditional_policy() 
 
     assert outcome.case is not None
     assert outcome.policy == "conditional"
-    assert outcome.case.status is ClarificationCaseStatus.COMPLETED
+    assert outcome.case.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert outcome.next_status is ClarificationCaseStatus.COMPLETED
     assert outcome.question_format.facts == ()
 
 

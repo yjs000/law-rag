@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -68,6 +68,8 @@ class GroundedClaim:
     text: str
     claim_kind: str
     citation_ids: tuple[str, ...]
+    surface: Literal["summary", "section_claim", "section_explanation", "checklist_label"]
+    surface_index: int | None
     required_fact_ids: tuple[str, ...] = ()
 
 
@@ -79,14 +81,17 @@ def validate_claim(
     known = {item.id for item in citations.citations}
     if any(identifier not in known for identifier in claim.citation_ids):
         return False
+    facts_by_id = {fact.id: fact for fact in case.required_facts}
     if claim.claim_kind == "general_rule":
         return not claim.required_fact_ids
     if claim.claim_kind == "case_application":
         return bool(claim.required_fact_ids) and all(
-            case.fact(i).status is FactStatus.ANSWERED for i in claim.required_fact_ids
+            facts_by_id.get(identifier) is not None
+            and facts_by_id[identifier].status is FactStatus.ANSWERED
+            for identifier in claim.required_fact_ids
         )
     if claim.claim_kind == "conditional":
         return bool(claim.required_fact_ids) and all(
-            any(f.id == i for f in case.required_facts) for i in claim.required_fact_ids
+            identifier in facts_by_id for identifier in claim.required_fact_ids
         )
     return False

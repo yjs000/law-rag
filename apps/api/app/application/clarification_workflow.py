@@ -11,7 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from app.domain.clarification import ClarificationCase, FactStatus, RequiredFact
-from app.ports.clarification_case import ClarificationCaseRecord
+from app.ports.clarification_case import ClarificationCaseRecord, ClarificationCaseStatus
 
 ClarificationIntent = Literal[
     "provide_facts",
@@ -98,6 +98,8 @@ class ClarificationOutcome:
     case: ClarificationCaseRecord | None
     policy: AnswerPolicy
     question_format: ClarificationQuestionFormat
+    # V2 persists this transition only after it creates a grounded response.
+    next_status: ClarificationCaseStatus | None = None
     error_code: str | None = None
 
 
