@@ -21,7 +21,13 @@ set -eu
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-if git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(docs/exec-plans/|docs/ROADMAP\\.md$)'; then
+staged_paths=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR) || {{
+    status=$?
+    echo "Unable to inspect staged paths; refusing to commit." >&2
+    exit "$status"
+}}
+
+if printf '%s\\n' "$staged_paths" | grep -Eq '^(docs/exec-plans/|docs/ROADMAP\\.md$)'; then
     exec python scripts/check_roadmap.py --staged
 fi
 

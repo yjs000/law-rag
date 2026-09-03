@@ -808,6 +808,61 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             "--staged\n--staged\n",
         )
 
+    def test_pre_commit_dispatcher_rejects_staged_path_discovery_failure(self) -> None:
+        hooks = self._init_fixture_repo()
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
+
+        (self.root / "README.md").write_text("staged\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md"], cwd=self.root, check=True)
+        (self.root / "broken-index").write_bytes(b"not a git index")
+        hook = hooks / "pre-commit"
+        hook.write_text(
+            "#!/bin/sh\nexport GIT_INDEX_FILE=broken-index\n"
+            + hook.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            ["git", "commit", "-qm", "broken index"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    def test_pre_commit_dispatcher_handles_git_quoted_non_ascii_plan_path(self) -> None:
+        self._init_fixture_repo()
+        checker = self.root / "scripts" / "check_roadmap.py"
+        checker.parent.mkdir()
+        checker.write_text(
+            "from pathlib import Path\n"
+            "import sys\n"
+            "Path('checker-invocations.txt').open('a', encoding='utf-8').write(' '.join(sys.argv[1:]) + '\\n')\n",
+            encoding="utf-8",
+        )
+        (self.root / "README.md").write_text("initial\n", encoding="utf-8")
+        subprocess.run(["git", "add", "README.md", "scripts/check_roadmap.py"], cwd=self.root, check=True)
+        subprocess.run(["git", "commit", "-qm", "initial"], cwd=self.root, check=True)
+        subprocess.run(["git", "config", "core.quotePath", "true"], cwd=self.root, check=True)
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            self.assertEqual(install_git_hooks.main(["--repo-root", str(self.root)]), 0)
+
+        non_ascii_plan = self.root / "docs" / "exec-plans" / "todo" / "0001-한글.md"
+        non_ascii_plan.write_text("plan\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "docs/exec-plans/todo/0001-한글.md"],
+            cwd=self.root,
+            check=True,
+        )
+        subprocess.run(["git", "commit", "-qm", "non-ascii plan"], cwd=self.root, check=True)
+
+        invocations = self.root / "checker-invocations.txt"
+        self.assertTrue(invocations.exists())
+        self.assertEqual(invocations.read_text(encoding="utf-8"), "--staged\n")
+
     def test_installer_discovers_repository_root_by_default(self) -> None:
         self._init_fixture_repo()
         completed = subprocess.run(
