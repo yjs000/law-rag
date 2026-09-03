@@ -1,4 +1,4 @@
-import type { CorpusStatus, QuestionResponse } from "./contracts";
+import type { QuestionResponse } from "./contracts";
 
 export type AnswerPreference = "terra" | "search_only";
 
@@ -10,28 +10,12 @@ export type AnswerModeResolution = {
   notice: string | null;
 };
 
-export function isTerraUnavailable(
-  status: Pick<CorpusStatus, "ai_available"> | null,
-): boolean {
-  return status?.ai_available === false;
-}
-
 export function isTerraAvailabilityFailure(
   reason: QuestionResponse["fallback_reason"],
 ): boolean {
   return reason === "ai_disabled"
     || reason === "quota_exhausted"
     || reason === "billing_or_quota_error";
-}
-
-export function resolveCorpusAnswerMode(
-  status: Pick<CorpusStatus, "ai_available">,
-  searchOnlyEnabled = true,
-): AnswerModeResolution {
-  if (status.ai_available) return { preference: "terra", notice: null };
-  return searchOnlyEnabled
-    ? { preference: "search_only", notice: TERRA_FALLBACK_NOTICE }
-    : { preference: "terra", notice: AI_UNAVAILABLE_NOTICE };
 }
 
 export function resolveResponseAnswerMode(

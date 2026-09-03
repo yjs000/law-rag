@@ -7,7 +7,6 @@ import {
   deleteAccount,
   deleteConversation,
   downloadPdf,
-  getCorpusStatus,
   getStoredUser,
   listConversations,
   listConversationTurns,
@@ -26,8 +25,6 @@ import { consumeQuestionDraft } from "../lib/composer-state";
 import {
   type AnswerPreference,
   isTerraAvailabilityFailure,
-  isTerraUnavailable,
-  resolveCorpusAnswerMode,
   resolveResponseAnswerMode,
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
@@ -50,14 +47,12 @@ import {
   type DocumentKind,
 } from "../lib/source-filter";
 import type {
-  CorpusStatus,
   ConversationSummary,
   MockUser,
   QuestionResponse,
 } from "../lib/contracts";
 import {
   ACCOUNT_SETTINGS_TITLE,
-  accountDialogCopy,
   answerModeBadgeLabel,
 } from "../lib/provider-neutral-copy";
 import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
@@ -131,6 +126,18 @@ export const HYDRATE_THROTTLE_MS = 60_000;
 /** KST calendar date (YYYY-MM-DD), matching the server's `korea_today()` used to bound `as_of_date`. */
 export function koreaTodayIsoDate(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
+}
+
+/** Delay until the next KST calendar day, so date input bounds update without a page refresh. */
+export function millisecondsUntilNextKoreaMidnight(now: Date = new Date()): number {
+  const koreaOffsetMs = 9 * 60 * 60 * 1_000;
+  const koreaClock = new Date(now.getTime() + koreaOffsetMs);
+  const nextKoreaMidnight = Date.UTC(
+    koreaClock.getUTCFullYear(),
+    koreaClock.getUTCMonth(),
+    koreaClock.getUTCDate() + 1,
+  ) - koreaOffsetMs;
+  return nextKoreaMidnight - now.getTime();
 }
 
 /** Prevents picking an as-of date after the KST "today" the server accepts, including direct keyboard entry. */
@@ -257,18 +264,16 @@ function AuthDialog({ notice, onClose, onGoogleContinue, onSwitch, view }: {
   );
 }
 
-function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
-  corpus: CorpusStatus | null;
+function AccountDialog({ onClose, onDelete, onLogout, user }: {
   onClose: () => void;
   onDelete: () => Promise<void>;
   onLogout: () => Promise<void>;
   user: MockUser;
 }) {
-  const copy = accountDialogCopy(corpus?.ai_available === true);
   return (
     <Dialog onClose={onClose} titleId="account-title">
       <p className="eyebrow">Account dashboard</p>
-      <h2 id="account-title">{copy.title}</h2>
+      <h2 id="account-title">{ACCOUNT_SETTINGS_TITLE}</h2>
       <div className="account-profile">
         <div className="avatar">{user.display_name.slice(0, 1)}</div>
         <div><strong>{user.display_name}</strong><span>{user.email}</span></div>
@@ -276,7 +281,6 @@ function AccountDialog({ corpus, onClose, onDelete, onLogout, user }: {
       <dl className="policy-grid">
         <div><dt>로그인</dt><dd>Google</dd></div>
         <div><dt>질문 보존</dt><dd>생성일로부터 1년</dd></div>
-        <div><dt>AI 모드</dt><dd className={corpus?.ai_available ? "available" : "limited"}>{copy.status}</dd></div>
         <div><dt>장애 시 동작</dt><dd>다른 모델 없이 검색 전용</dd></div>
         <div><dt>계정 사용 한도</dt><dd>제한 없음</dd></div>
       </dl>
@@ -327,13 +331,13 @@ function AnswerView({
 
 export default function Home() {
   const [question, setQuestion] = useState("");
-  const [asOf, setAsOf] = useState(koreaTodayIsoDate());
+  const [today, setToday] = useState(koreaTodayIsoDate);
+  const [asOf, setAsOf] = useState(today);
   const [answerPreference, setAnswerPreference] = useState<AnswerPreference>("terra");
   const [result, setResult] = useState<QuestionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [modeNotice, setModeNotice] = useState("");
-  const [corpus, setCorpus] = useState<CorpusStatus | null>(null);
   const [terraUnavailableFromResponse, setTerraUnavailableFromResponse] = useState(false);
   const [user, setUser] = useState<MockUser | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
@@ -362,6 +366,16 @@ export default function Home() {
   const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshTodayAtKoreaMidnight = () => {
+      setToday(koreaTodayIsoDate());
+      timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
+    };
+    timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
+    return () => clearTimeout(timer);
+  }, []);
 
   const clearAuthenticatedWorkspace = useCallback(() => {
     authEpoch.current += 1;
@@ -437,14 +451,6 @@ export default function Home() {
         void Promise.resolve().then(() => hydrateUser());
       }
     });
-    getCorpusStatus().then((status) => {
-      setCorpus(status);
-      const resolution = resolveCorpusAnswerMode(status, SEARCH_ONLY_ENABLED);
-      if (!status.ai_available) {
-        setModeNotice(resolution.notice ?? "");
-        setAnswerPreference(resolution.preference);
-      }
-    }).catch(() => setCorpus(null));
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -608,11 +614,6 @@ export default function Home() {
       setAnswerPreference(resolution.preference);
       if (isTerraAvailabilityFailure(answer.fallback_reason)) {
         setTerraUnavailableFromResponse(true);
-        setCorpus((current) => current ? {
-          ...current,
-          ai_available: false,
-          ai_unavailable_reason: answer.fallback_reason === "ai_disabled" ? "ai_disabled" : "quota_exhausted",
-        } : current);
       }
       setResult(answer);
       setActiveChat((current) => ({
@@ -759,7 +760,7 @@ export default function Home() {
     }
   }
 
-  const terraUnavailable = terraUnavailableFromResponse || isTerraUnavailable(corpus);
+  const terraUnavailable = terraUnavailableFromResponse;
 
   function refineQuestion() {
     setShowAnonymousNudge(false);
@@ -846,7 +847,7 @@ export default function Home() {
             <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
             <div className="composer-footer">
               <fieldset className="document-filters"><legend className="sr-only">원문 문서 종류</legend>{Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => { const kind = value as DocumentKind; return <label key={kind}><input checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} type="checkbox" />{label}</label>; })}</fieldset>
-              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={koreaTodayIsoDate()} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, koreaTodayIsoDate()))} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
+              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={today} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, today))} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
             </div>
           </form>
           <p className="composer-disclaimer">법률 자문을 대체하지 않습니다. 중요한 결정은 원문과 전문가 검토를 함께 확인하세요.</p>
@@ -854,7 +855,7 @@ export default function Home() {
       </section>
 
       {showAuth && <AuthDialog notice={authNotice} onClose={closeAuth} onGoogleContinue={handleGoogleAuth} onSwitch={switchAuthView} view={authView} />}
-      {showAccount && user && <AccountDialog corpus={corpus} onClose={closeAccount} onDelete={handleDeleteAccount} onLogout={handleLogout} user={user} />}
+      {showAccount && user && <AccountDialog onClose={closeAccount} onDelete={handleDeleteAccount} onLogout={handleLogout} user={user} />}
     </main>
   );
 }

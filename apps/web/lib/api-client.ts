@@ -1,5 +1,4 @@
 import type {
-  CorpusStatus,
   ConversationPage,
   ConversationTurnPage,
   MockUser,
@@ -103,10 +102,6 @@ export async function logout(): Promise<void> {
 export async function deleteAccount(): Promise<void> {
   await request<void>("/v1/account", { method: "DELETE" });
   await createClient().auth.signOut({ scope: "local" });
-}
-
-export function getCorpusStatus(): Promise<CorpusStatus> {
-  return request("/v1/corpus/status");
 }
 
 export async function askQuestion(

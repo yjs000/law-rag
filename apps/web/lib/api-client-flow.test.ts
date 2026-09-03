@@ -4,7 +4,6 @@ import {
   deleteConversation,
   deleteQuestionHistory,
   downloadPdf,
-  getCorpusStatus,
   getStoredUser,
   listConversations,
   listConversationTurns,
@@ -91,6 +90,10 @@ describe("Supabase authenticated question workflow", () => {
     expect((await askQuestion(history.request, controller.signal)).request_id).toBe("history-1");
     const questionCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/question-executions"));
     expect(questionCall?.[1]?.signal).toBe(controller.signal);
+    expect(JSON.parse(String(questionCall?.[1]?.body))).toMatchObject({
+      as_of_date: "2026-07-14",
+      question: "허가를 확인해줘",
+    });
     expect(await listQuestionHistory()).toEqual([history]);
     expect((await listConversations()).items[0].title).toBe("허가를 확인해줘");
     expect((await listConversationTurns("chat-1")).items).toEqual([history]);
@@ -116,7 +119,7 @@ describe("structured API error details (0039)", () => {
       },
     }, { status: 503 })));
 
-    await expect(getCorpusStatus()).rejects.toThrow(
+    await expect(listQuestionHistory()).rejects.toThrow(
       "법령 corpus를 갱신하는 동안 검색이 일시 중지됩니다.",
     );
   });
@@ -127,7 +130,7 @@ describe("structured API error details (0039)", () => {
       detail: "유효하지 않은 인증 세션입니다.",
     }, { status: 401 })));
 
-    await expect(getCorpusStatus()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
+    await expect(listQuestionHistory()).rejects.toThrow("유효하지 않은 인증 세션입니다.");
   });
 });
 
