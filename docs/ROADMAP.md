@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 83eb4800469e9961c285da0de3134c21a85198265d259587d976820af24000ea -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: b4ee149e592ef3cd8bc24ac82972927259e84b1709bc7c4eb072f0e466935cae -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 2의 안전한 attempt ledger 실패 테스트부터 작성한다.
 
 ## Todo
 
@@ -26,7 +27,6 @@
 
 ## Blocked
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: 사용자 reviewer가 D-10 adjudication을 `approved_gold`로 seal한 뒤 Task 0 preflight를 재실행한다.
 
 ## Done
 

@@ -45,6 +45,7 @@ from scripts.experiment_d_corpus import (
 )
 from scripts.experiment_d_gold_contract import (
     ExperimentDGoldAdjudicationManifest,
+    ExperimentDGoldCase,
     ExperimentDGoldDataset,
     ExperimentDQuestionApprovalManifest,
 )
@@ -342,6 +343,27 @@ def load_gold_artifacts(
     ):
         raise GoldRunError("approval_manifest_artifact_name_mismatch")
     return artifacts
+
+
+def select_cases(
+    dataset: ExperimentDGoldDataset,
+    case_ids: Sequence[str],
+) -> tuple[ExperimentDGoldCase, ...]:
+    selected_ids = tuple(case_ids)
+    if not selected_ids:
+        raise GoldRunError("case_selector_empty")
+    if any(not isinstance(case_id, str) or not case_id for case_id in selected_ids):
+        raise GoldRunError("case_selector_invalid")
+    if len(set(selected_ids)) != len(selected_ids):
+        raise GoldRunError("case_selector_duplicate")
+    known_ids = {case.id for case in dataset.cases}
+    if unknown_ids := set(selected_ids) - known_ids:
+        raise GoldRunError(
+            "case_selector_unknown",
+            details={"unknown_case_count": len(unknown_ids)},
+        )
+    requested_ids = set(selected_ids)
+    return tuple(case for case in dataset.cases if case.id in requested_ids)
 
 
 async def _load_retrieval_state(connection: AsyncConnection) -> RetrievalState:
@@ -685,7 +707,7 @@ def _validate_query_vector(vector: Sequence[float]) -> list[float]:
 
 
 async def _embed_all_questions(
-    dataset: ExperimentDGoldDataset,
+    cases: Sequence[ExperimentDGoldCase],
     embedder: QueryEmbedder,
     *,
     batch_size: int,
@@ -693,16 +715,16 @@ async def _embed_all_questions(
     if not 1 <= batch_size <= 128:
         raise GoldRunError("embedding_batch_size_out_of_range")
     vectors: list[list[float]] = []
-    for start in range(0, len(dataset.cases), batch_size):
-        cases = dataset.cases[start : start + batch_size]
-        embedded = await embedder.embed([case.question for case in cases])
-        if len(embedded) != len(cases):
+    for start in range(0, len(cases), batch_size):
+        batch = cases[start : start + batch_size]
+        embedded = await embedder.embed([case.question for case in batch])
+        if len(embedded) != len(batch):
             raise GoldRunError(
                 "query_embedding_batch_count_mismatch",
-                details={"expected": len(cases), "actual": len(embedded)},
+                details={"expected": len(batch), "actual": len(embedded)},
             )
         vectors.extend(_validate_query_vector(vector) for vector in embedded)
-    if len(vectors) != len(dataset.cases):
+    if len(vectors) != len(cases):
         raise GoldRunError("query_embedding_total_count_mismatch")
     return vectors
 
@@ -901,12 +923,12 @@ def _normalize_explain_plan(value: object) -> list[dict[str, object]]:
 
 
 async def _capture_query_plans(
-    dataset: ExperimentDGoldDataset,
+    cases: Sequence[ExperimentDGoldCase],
     query_vectors: Sequence[list[float]],
     reader: LockedDenseReader,
 ) -> tuple[list[dict[str, object]], str]:
     representative_by_date: dict[date, tuple[str, list[float]]] = {}
-    for case, vector in zip(dataset.cases, query_vectors, strict=True):
+    for case, vector in zip(cases, query_vectors, strict=True):
         representative_by_date.setdefault(case.as_of_date, (case.id, vector))
     records: list[dict[str, object]] = []
     for as_of_date in sorted(representative_by_date):
@@ -941,15 +963,22 @@ async def evaluate_approved_gold(
     started_at: datetime,
     completed_at_factory: Callable[[], datetime],
     code_provenance: Mapping[str, object],
+    case_ids: Sequence[str] | None = None,
 ) -> dict[str, object]:
     validated_code_provenance = _validate_code_provenance(code_provenance)
+    selected_cases = (
+        tuple(artifacts.dataset.cases)
+        if case_ids is None
+        else select_cases(artifacts.dataset, case_ids)
+    )
+    partial_execution = case_ids is not None
     initial_snapshot = await backend.snapshot()
     initial_preflight = _audit_or_raise("initial", artifacts, initial_snapshot)
     _validate_retrieval_state("initial", initial_snapshot)
 
     embedder = embedder_factory()
     query_vectors = await _embed_all_questions(
-        artifacts.dataset,
+        selected_cases,
         embedder,
         batch_size=batch_size,
     )
@@ -961,11 +990,11 @@ async def evaluate_approved_gold(
         locked_preflight = _audit_or_raise("locked", artifacts, locked_snapshot)
         _validate_retrieval_state("locked", locked_snapshot)
         query_plans, query_plans_sha256 = await _capture_query_plans(
-            artifacts.dataset,
+            selected_cases,
             query_vectors,
             reader,
         )
-        for case, vector in zip(artifacts.dataset.cases, query_vectors, strict=True):
+        for case, vector in zip(selected_cases, query_vectors, strict=True):
             candidates = _validate_dense_candidates(
                 await reader.search(
                     as_of_date=case.as_of_date,
@@ -991,11 +1020,6 @@ async def evaluate_approved_gold(
                 }
             )
 
-    metrics = evaluate_dense_retrieval(
-        metric_cases_from_gold(artifacts.dataset),
-        rankings_by_case,
-        ks=tuple(artifacts.dataset.metric_protocol.cutoffs),
-    )
     retrieval_observation_sha256 = _retrieval_observation_sha256(case_records)
     corpus_snapshot_id = locked_preflight.current_corpus_snapshot_id
     if corpus_snapshot_id is None:
@@ -1003,23 +1027,6 @@ async def evaluate_approved_gold(
     as_of_population_fingerprints = [
         asdict(population) for population in locked_preflight.current_as_of_populations
     ]
-    metric_payload = {
-        "dataset_sha256": artifacts.dataset_sha256,
-        "adjudication_manifest_sha256": artifacts.adjudication_manifest_sha256,
-        "question_set_sha256": artifacts.dataset.source_bank.question_set_sha256,
-        "question_scope_set_sha256": (artifacts.dataset.source_bank.question_scope_set_sha256),
-        "corpus_snapshot_id": corpus_snapshot_id,
-        "as_of_population_fingerprints": as_of_population_fingerprints,
-        "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
-        "embedding_batch_size": batch_size,
-        "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
-        "retrieval_state_fingerprint_sha256": (
-            locked_snapshot.retrieval_state.state_fingerprint_sha256
-        ),
-        "query_plans_sha256": query_plans_sha256,
-        "rankings_by_case": rankings_by_case,
-        "metrics": metrics,
-    }
     completed_at = completed_at_factory()
     payload: dict[str, object] = {
         "schema_version": 4,
@@ -1055,10 +1062,36 @@ async def evaluate_approved_gold(
         "retrieval_state": locked_snapshot.retrieval_state.to_dict(),
         "query_plans": query_plans,
         "retrieval_observation_sha256": retrieval_observation_sha256,
-        "metrics": metrics,
-        "metric_payload_sha256": _sha256(_canonical_json_bytes(metric_payload)),
         "cases": case_records,
     }
+    if partial_execution:
+        payload["execution_scope"] = "partial"
+        payload["selected_case_ids"] = [case.id for case in selected_cases]
+    else:
+        metrics = evaluate_dense_retrieval(
+            metric_cases_from_gold(artifacts.dataset),
+            rankings_by_case,
+            ks=tuple(artifacts.dataset.metric_protocol.cutoffs),
+        )
+        metric_payload = {
+            "dataset_sha256": artifacts.dataset_sha256,
+            "adjudication_manifest_sha256": artifacts.adjudication_manifest_sha256,
+            "question_set_sha256": artifacts.dataset.source_bank.question_set_sha256,
+            "question_scope_set_sha256": (artifacts.dataset.source_bank.question_scope_set_sha256),
+            "corpus_snapshot_id": corpus_snapshot_id,
+            "as_of_population_fingerprints": as_of_population_fingerprints,
+            "embedding_profile_key": NVIDIA_NEMOTRON_512_PROFILE.key,
+            "embedding_batch_size": batch_size,
+            "retrieval_execution_mode": RETRIEVAL_EXECUTION_MODE,
+            "retrieval_state_fingerprint_sha256": (
+                locked_snapshot.retrieval_state.state_fingerprint_sha256
+            ),
+            "query_plans_sha256": query_plans_sha256,
+            "rankings_by_case": rankings_by_case,
+            "metrics": metrics,
+        }
+        payload["metrics"] = metrics
+        payload["metric_payload_sha256"] = _sha256(_canonical_json_bytes(metric_payload))
     payload["payload_without_self_hash_sha256"] = _sha256(_canonical_json_bytes(payload))
     _canonical_json_bytes(payload)
     return payload
@@ -1115,6 +1148,7 @@ async def run_and_publish_approved_gold(
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     run_id_factory: Callable[[], str] | None = None,
     publisher: Callable[[Path, str, dict[str, object]], tuple[Path, str]] = _atomic_publish,
+    case_ids: Sequence[str] | None = None,
 ) -> PublishedGoldRun:
     started_at = clock()
     run_id = (
@@ -1135,6 +1169,7 @@ async def run_and_publish_approved_gold(
         started_at=started_at,
         completed_at_factory=clock,
         code_provenance=code_provenance,
+        case_ids=case_ids,
     )
     path, file_sha = publisher(output_dir, run_id, payload)
     return PublishedGoldRun(path=path, file_sha256=file_sha, payload=payload)
