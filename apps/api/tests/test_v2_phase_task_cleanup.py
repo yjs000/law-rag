@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -65,7 +66,8 @@ async def test_completed_phase_reports_timeout_releasing_capacity_lease_without_
     release_records = [
         record for record in caplog.records if record.name == "law_rag.phase_lease_release"
     ]
-    assert [(record.levelno, record.message, record.error_type) for record in release_records] == [
-        (logging.ERROR, "phase lease release failed", "TimeoutError")
-    ]
+    assert len(release_records) == 1
+    assert release_records[0].levelno == logging.ERROR
+    assert release_records[0].message.startswith("{")
+    assert json.loads(release_records[0].message) == {"error_type": "TimeoutError"}
     assert secret not in caplog.text

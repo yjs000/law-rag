@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -474,7 +475,7 @@ class V2QuestionExecutionService:
             release_task.result()
         except Exception as error:
             lease_release_logger.error(
-                "phase lease release failed", extra={"error_type": type(error).__name__}
+                json.dumps({"error_type": type(error).__name__}, ensure_ascii=True)
             )
 
     async def _release_phase_task(self, execution_id: object, task: Any, lease: Any) -> None:
