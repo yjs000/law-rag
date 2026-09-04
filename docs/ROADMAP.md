@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: bd82a81965330222e4bc23e8f9a855be3fb6647f60fcfde43713b901a3b889d4 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7e818f9fcfc7f23321eb30d671183878490b3519a613bf69c57de17bf32fc13d -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/active/0067-provider-capacity-and-busy-notice.md) — 다음 행동: busy 응답을 재시도하지 않는 고정 사용자 안내 계약의 실패 테스트부터 작성한다.
 
 ## Todo
 
@@ -35,4 +34,5 @@
 - [F-006-B · Feature — F-006-B 대화형 clarification workflow Implementation Plan](exec-plans/completed/0065-conversational-clarification-workflow.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 - [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
+- [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [완료 계획 색인](exec-plans/completed/README.md)

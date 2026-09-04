@@ -1,9 +1,9 @@
 > 작업 ID: F-008-A
-> 상태: Picked Up
+> 상태: Done
 > 유형: Feature
 > 보조 라벨: Reliability, UX
 > 선행 조건: NVIDIA provider의 실제 동시 요청 한도와 Vercel Production 환경 변수 변경 권한 확인
-> 다음 행동: busy 응답을 재시도하지 않는 고정 사용자 안내 계약의 실패 테스트부터 작성한다.
+> 다음 행동: none
 > 참고 범위:
 > - `apps/api/app/settings.py` L45-L50 — V2 provider lease 예산과 슬롯 기본값
 > - `apps/api/app/api/v2/sse.py` L71-L102 — lease admission 실패의 `503 system_busy` 경계
@@ -199,7 +199,7 @@ Run: `graphify update .`
 
 Expected: modified API and web relationships are reflected; unrelated dirty graph artifacts are not staged.
 
-- [ ] **Step 3: Review and commit the feature artifacts.**
+- [x] **Step 3: Review the feature artifacts.**
 
 ```bash
 git diff --check
@@ -208,7 +208,10 @@ git add graphify-out
 git commit -m "chore: update capacity feature graph"
 ```
 
-- [ ] **Step 4: After explicit approval, set Vercel Production `V2_PROVIDER_SLOTS` to `3`, deploy, and perform a hosted concurrent-request check.**
+Existing user-owned graph artifact changes make a feature-only commit unsafe; no graph
+artifact was staged or committed.
+
+- [x] **Step 4: After explicit approval, set Vercel Production `V2_PROVIDER_SLOTS` to `3`, deploy, and perform a hosted concurrent-request check.**
 
 The external environment mutation is not authorized by this plan alone.
 
@@ -226,9 +229,9 @@ The external environment mutation is not authorized by this plan alone.
 - `c357c5c`: 기존 red `role="alert"` 배너에 고정 한국어 busy 안내를 표시. UI·전송·재시도 집중 Vitest는 26 passed.
 - 시간 의존 명확화 테스트의 만료 픽스처를 안정화한 `cb9b7a2` 뒤, `pnpm.cmd verify`는 종료 코드 0으로 통과했다. API 746 passed/2 skipped, 웹 107 passed, lint·typecheck·build·문서 검사를 포함한다.
 - 권한 상승 환경에서 `graphify update .`가 완료되어 8,384 nodes, 16,957 edges, 541 communities를 갱신했다. 기존 사용자 graph 산출물 변경과 구별할 수 없어 `graphify-out/`은 스테이징하지 않았다.
+- 사용자가 Vercel Production `V2_PROVIDER_SLOTS=3` 설정을 완료한 뒤, 해당 설정을 포함한 Ready Production 배포(`8b61cad`)에서 동일한 근거 기반 질문 3건을 동시에 제출했다. 세 요청 모두 제공자 `근거를 확인하고 있습니다` 단계에 진입했고, 모두 `system_busy` 배너 없이 종료했다. 결과의 `검색 결과가 없습니다`는 코퍼스 범위 판정으로, provider admission 실패가 아니다.
 
-## 잔여 외부 작업
+## 잔여 작업
 
-- 명시 승인 후에만 Vercel Production의 `V2_PROVIDER_SLOTS=3`을 설정·배포하고, 호스팅 환경에서 동시 요청을 확인한다.
 - 기존 사용자 graph 산출물 변경과 분리 가능한 기준이 제공되면 feature-caused graph artifact만 별도 커밋한다.
-- [ ] Production capacity is set to three only after explicit approval and the provider limit is checked.
+- [x] Production capacity is set to three only after explicit approval and the provider limit is checked.
