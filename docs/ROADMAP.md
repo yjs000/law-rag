@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: b4ee149e592ef3cd8bc24ac82972927259e84b1709bc7c4eb072f0e466935cae -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 67982108ccd86c86e941e9d30dead77b2edeecf46f371a866a3571030b7f5020 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 2의 안전한 attempt ledger 실패 테스트부터 작성한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 3의 단일 문항 failure-driven orchestrator 실패 테스트부터 작성한다.
 
 ## Todo
 

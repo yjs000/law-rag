@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1788515553.2343066,
-    "seen": 1788515861.5252807,
-    "ast_hash": "fef1e00d3cdfcb8d0e9c2fee3c0ecc18",
+    "mtime": 1788515877.6961,
+    "seen": 1788516118.9343455,
+    "ast_hash": "48d3334cc63bc1b06fb81f0322ee5a9e",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1788515547.169654,
-    "seen": 1788515861.5253236,
-    "ast_hash": "3ed3b6397cbe4c3dd572ebf86081d093",
+    "mtime": 1788516074.886466,
+    "seen": 1788516118.9398878,
+    "ast_hash": "0a28e4fcec55097b459580c0ad4ba9a6",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
@@ -3807,6 +3807,18 @@
     "mtime": 1788513730.9946764,
     "seen": 1788515861.525387,
     "ast_hash": "fab4a3beb564ef0a25265f0d19509ceb",
+    "semantic_hash": ""
+  },
+  "apps/api/scripts/d10_failure_ledger.py": {
+    "mtime": 1788516052.2560828,
+    "seen": 1788516118.8754954,
+    "ast_hash": "f8e292db7bba809c7f7ef0f5b32f32a8",
+    "semantic_hash": ""
+  },
+  "apps/api/tests/test_d10_failure_ledger.py": {
+    "mtime": 1788516034.8054924,
+    "seen": 1788516118.8845325,
+    "ast_hash": "52e4bfb6b9d9b9e453aff64f64e7c48c",
     "semantic_hash": ""
   }
 }
