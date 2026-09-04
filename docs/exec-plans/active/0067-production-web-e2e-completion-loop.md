@@ -79,6 +79,37 @@ DB `TimeoutError`가 미관측 background 예외로 남는 것도 재현했다. 
 `검증된 요약만 제공합니다.`로 강등되어 checklist를 반환하지 않았다. 따라서 Markdown/CSV
 내보내기와 인증 전 저장 경계의 후속 검증은 아직 통과 처리하지 않는다.
 
+### Task 2.1: P0 core repair 실패 진단·복구
+
+**Files:**
+- Modify if a defect is reproduced: `apps/api/app/application/v2/phase_service.py`,
+  `apps/api/app/application/v2/grounding.py`, 또는 관련 V2 execution 경계
+- Test if a defect is reproduced: `apps/api/tests/test_v2_question_executions.py`,
+  `apps/api/tests/test_question_phase_coordinator.py`, 또는 새 focused 회귀 테스트
+- Evidence: 실행 ID와 화면 결과를 포함한 Task 2 오류 증빙
+
+**Interfaces:**
+- Consumes: `core_repair_required`로 끝난 운영 V2 execution과 frozen evidence/core grounding 계약
+- Produces: 원인 분류, 재현 자동화, 정상 core 또는 사용자에게 복구 가능한 안전 종료, 배포 재검증
+
+- [x] **Step 1: execution `83bc14d8-5b26-48ee-84e2-9edcb3e253ff`의 core repair 원인을 로그·persisted 상태에서 분류한다.**
+- [x] **Step 2: 같은 core repair 조건을 재현하는 focused regression을 RED로 추가한다.**
+- [x] **Step 3: core repair 경로가 무한 대기·빈 결과를 만들지 않도록 최소 수정하고 focused GREEN을 확인한다.**
+- [x] **Step 4: 배포 환경에서 같은 정상 질문의 prepare → core → finalize와 화면 답변·체크리스트를 재검증한다.**
+- [x] **Step 5: Task 2 P0 항목을 다시 점검하고, 통과하지 않은 항목은 오류 증빙과 재개 조건을 유지한다.**
+
+**오류 증빙 (2026-09-04):** 운영 execution
+`83bc14d8-5b26-48ee-84e2-9edcb3e253ff`의 core 단계가
+`core_repair_required`와 `next_action=repair_core`로 끝났다. 이후 finalize는 완료됐지만
+화면에는 `검색 결과가 없습니다` 안전 응답만 표시됐다. P0 AI 실행과 추천 질문의 답변·체크리스트
+조건은 미통과이며, Step 1–4 재검증 전에는 통과 처리하지 않는다.
+
+Vercel의 동일 core 요청 로그는 `{"error_type": "TimeoutError"}`를 기록했다. 서버는 core 예외를
+`core_repair_required`로 일반화하지만 상세 원인을 SSE에 보존하지 않는다. 이어 웹 클라이언트는
+`repair_core`를 core 재시도가 아니라 finalize로 매핑한다. `verified_core`가 없는 finalize는
+`grounding_fallback()`으로 강등되어 위의 빈 안전 응답을 반환한다. 따라서 timeout 자체와
+`repair_core` phase 매핑 결함을 분리하여 회귀 테스트·수정·배포 검증한다.
+
 ### Task 3: P0 인증·대화·이력 정상 흐름
 
 **Files:**
