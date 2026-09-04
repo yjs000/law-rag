@@ -1,7 +1,61 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const clientMountHooks = vi.hoisted(() => {
+  type Effect = () => void | (() => void);
+
+  const states: unknown[] = [];
+  const effects: Effect[] = [];
+  let cursor = 0;
+  let serverRenderedToday: string | undefined;
+
+  return {
+    beginRender() {
+      cursor = 0;
+      effects.length = 0;
+    },
+    currentEffects() {
+      return [...effects];
+    },
+    reset(today: string) {
+      states.length = 0;
+      effects.length = 0;
+      cursor = 0;
+      serverRenderedToday = today;
+    },
+    useEffect(effect: Effect) {
+      effects.push(effect);
+    },
+    useRef<T>(current: T) {
+      return { current };
+    },
+    useState<T>(initial: T | (() => T)) {
+      const slot = cursor++;
+      if (slot === states.length) {
+        states.push(slot === 1 ? serverRenderedToday : typeof initial === "function" ? (initial as () => T)() : initial);
+      }
+      const setState = (next: T | ((previous: T) => T)) => {
+        states[slot] = typeof next === "function" ? (next as (previous: T) => T)(states[slot] as T) : next;
+      };
+      return [states[slot] as T, setState] as const;
+    },
+  };
+});
+
+vi.mock("react", async (importOriginal) => {
+  const react = await importOriginal<typeof import("react")>();
+  return {
+    ...react,
+    useCallback: <T,>(callback: T) => callback,
+    useEffect: clientMountHooks.useEffect,
+    useRef: clientMountHooks.useRef,
+    useState: clientMountHooks.useState,
+  };
+});
+
 import {
   authEventAction,
   clampAsOfDate,
+  default as Home,
   HYDRATE_THROTTLE_MS,
   koreaTodayIsoDate,
   millisecondsUntilNextKoreaMidnight,
@@ -10,6 +64,24 @@ import {
   shouldHydrateNow,
 } from "../app/page";
 import type { MockUser } from "./contracts";
+
+function dateInputMaximum(node: unknown): string {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      try {
+        return dateInputMaximum(child);
+      } catch {
+        // Keep looking through sibling elements.
+      }
+    }
+  }
+  if (node && typeof node === "object") {
+    const props = (node as { props?: { "aria-label"?: string; children?: unknown; max?: string } }).props;
+    if (props?.["aria-label"] === "법령 기준일") return props.max ?? "";
+    if (props?.children !== undefined) return dateInputMaximum(props.children);
+  }
+  throw new Error("Date input not found");
+}
 
 describe("auth page state", () => {
   it("shows an actionable retry message for an OAuth error or cancellation", () => {
@@ -103,6 +175,28 @@ describe("millisecondsUntilNextKoreaMidnight (F-006)", () => {
   it("schedules a full Korean day just after KST midnight", () => {
     // 2026-08-08 15:00:00 UTC = 2026-08-09 00:00:00 KST
     expect(millisecondsUntilNextKoreaMidnight(new Date("2026-08-08T15:00:00Z"))).toBe(86_400_000);
+  });
+});
+
+describe("KST date bound client mount refresh (B-004)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("replaces a stale server-rendered maximum with today's KST date immediately on mount", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-03T15:30:00Z")); // 2026-09-04 00:30 KST
+    clientMountHooks.reset("2026-09-03");
+
+    clientMountHooks.beginRender();
+    expect(dateInputMaximum(Home())).toBe("2026-09-03");
+    const [refreshToday] = clientMountHooks.currentEffects();
+    const cleanup = refreshToday();
+    await Promise.resolve();
+
+    clientMountHooks.beginRender();
+    expect(dateInputMaximum(Home())).toBe("2026-09-04");
+    if (typeof cleanup === "function") cleanup();
   });
 });
 

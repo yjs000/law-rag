@@ -374,6 +374,7 @@ export default function Home() {
       setToday(koreaTodayIsoDate());
       timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     };
+    queueMicrotask(() => setToday(koreaTodayIsoDate()));
     timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     return () => clearTimeout(timer);
   }, []);
