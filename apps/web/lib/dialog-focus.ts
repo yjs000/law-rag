@@ -11,6 +11,7 @@ export function dialogKeyAction(input: {
 }): DialogKeyAction {
   if (input.key === "Escape") return { type: "close" };
   if (input.key !== "Tab" || input.controlCount < 1) return { type: "none" };
+  if (input.activeIndex < 0) return { type: "focus", index: input.shiftKey ? input.controlCount - 1 : 0 };
   if (input.shiftKey && input.activeIndex <= 0) {
     return { type: "focus", index: input.controlCount - 1 };
   }

@@ -6,6 +6,8 @@ describe("dialog keyboard focus", () => {
   it("wraps Tab and Shift+Tab inside the dialog", () => {
     expect(dialogKeyAction({ key: "Tab", shiftKey: false, activeIndex: 1, controlCount: 2 })).toEqual({ type: "focus", index: 0 });
     expect(dialogKeyAction({ key: "Tab", shiftKey: true, activeIndex: 0, controlCount: 2 })).toEqual({ type: "focus", index: 1 });
+    expect(dialogKeyAction({ key: "Tab", shiftKey: false, activeIndex: -1, controlCount: 2 })).toEqual({ type: "focus", index: 0 });
+    expect(dialogKeyAction({ key: "Tab", shiftKey: true, activeIndex: -1, controlCount: 2 })).toEqual({ type: "focus", index: 1 });
   });
 
   it("closes on Escape and ignores unrelated keys", () => {
@@ -19,7 +21,7 @@ describe("dialog keyboard focus", () => {
     expect(focus).toHaveBeenCalledOnce();
   });
 
-  it("puts initial focus on the Google login action", () => {
+  it("puts initial focus on the dialog surface", () => {
     const focus = vi.fn();
     focusInitial({ focus });
     expect(focus).toHaveBeenCalledOnce();
@@ -28,6 +30,6 @@ describe("dialog keyboard focus", () => {
     const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
     expect(page).toContain("dialogKeyAction({");
-    expect(page).toContain("onKeyDown={handleKeyDown}");
+    expect(page).toContain('document.addEventListener("keydown", handleKeyDown)');
   });
 });
