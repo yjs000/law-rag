@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4b41a3ef10eb034bc588c5da31a82d2911324a870fc25680fcaa8669845f3029 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: bed3872ecea8c1422c0a34bf9bee0c09efa57585391faec6cb900ebfdb248cf0 -->
 
 # 프로젝트 로드맵
 
@@ -23,7 +23,7 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: v2 temporal adapter 경계를 확정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/todo/0069-d10-gold-failure-driven-regression.md) — 다음 행동: D-10 승인 상태와 runner의 case 단위 실행 경계를 preflight로 확인하고, 안전한 문항별 실행 기록 계약의 실패 테스트부터 작성한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/todo/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 0의 D-10 approval preflight를 실행해 외부 gate를 판정하고, 통과하면 Task 1의 case 선택 실패 테스트부터 작성한다.
 
 ## Blocked
 
