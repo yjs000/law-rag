@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { dialogKeyAction, focusInitial, restoreFocus } from "./dialog-focus";
 
@@ -22,5 +23,11 @@ describe("dialog keyboard focus", () => {
     const focus = vi.fn();
     focusInitial({ focus });
     expect(focus).toHaveBeenCalledOnce();
+  });
+  it("wires the focus-loop action into the rendered dialog", () => {
+    const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+    expect(page).toContain("dialogKeyAction({");
+    expect(page).toContain("onKeyDown={handleKeyDown}");
   });
 });

@@ -29,6 +29,7 @@ import {
 } from "../lib/answer-mode";
 import { getEmptyResultMessage } from "../lib/empty-result";
 import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
+import { dialogKeyAction, focusInitial, restoreFocus } from "../lib/dialog-focus";
 import {
   appendPendingTurn,
   applyLiveCoreSummary,
@@ -202,18 +203,33 @@ function Dialog({ children, onClose, titleId }: { children: ReactNode; onClose: 
   const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    dialog.current?.focus();
+    focusInitial(dialog.current);
     const closeOnEscape = (event: globalThis.KeyboardEvent) => event.key === "Escape" && onClose();
     document.addEventListener("keydown", closeOnEscape);
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
-      previous?.focus();
+      restoreFocus(previous);
     };
   }, [onClose]);
 
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") ?? []);
+    const action = dialogKeyAction({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      activeIndex: controls.indexOf(document.activeElement as HTMLElement),
+      controlCount: controls.length,
+    });
+    if (action.type === "close") return;
+    if (action.type === "focus") {
+      event.preventDefault();
+      controls[action.index]?.focus();
+    }
+  }
+
   return (
     <div className="modal-backdrop" onMouseDown={onClose} role="presentation">
-      <section aria-labelledby={titleId} aria-modal="true" className="modal" onMouseDown={(event) => event.stopPropagation()} ref={dialog} role="dialog" tabIndex={-1}>
+      <section aria-labelledby={titleId} aria-modal="true" className="modal" onKeyDown={handleKeyDown} onMouseDown={(event) => event.stopPropagation()} ref={dialog} role="dialog" tabIndex={-1}>
         <button aria-label="닫기" className="icon-button modal-close" onClick={onClose}><Icon name="close" /></button>
         {children}
       </section>
