@@ -229,7 +229,7 @@ async def _case_record(
         project_stage="planning",
         conversation_id=None,
         case=context.case,
-        expires_at=datetime(2026, 9, 4, tzinfo=UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
     )
 
 
