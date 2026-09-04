@@ -1,5 +1,5 @@
 > 작업 ID: F-008-A
-> 상태: Todo
+> 상태: Picked Up
 > 유형: Feature
 > 보조 라벨: Reliability, UX
 > 선행 조건: NVIDIA provider의 실제 동시 요청 한도와 Vercel Production 환경 변수 변경 권한 확인
@@ -40,7 +40,7 @@
 **Interfaces:**
 - Produces: `Settings().v2_provider_slots == 3`, retaining the allowed range `1..100`.
 
-- [ ] **Step 1: Write the failing default-value test.**
+- [x] **Step 1: Write the failing default-value test.**
 
 ```python
 def test_v2_provider_slots_default_is_three(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,25 +48,25 @@ def test_v2_provider_slots_default_is_three(monkeypatch: pytest.MonkeyPatch) -> 
     assert Settings().v2_provider_slots == 3
 ```
 
-- [ ] **Step 2: Prove it fails.**
+- [x] **Step 2: Prove it fails.**
 
 Run: `uv run --directory apps/api pytest tests/test_settings.py -q`
 
 Expected: the assertion fails because the current default is `1`.
 
-- [ ] **Step 3: Make the smallest implementation change.**
+- [x] **Step 3: Make the smallest implementation change.**
 
 ```python
 v2_provider_slots: int = Field(default=3, ge=1, le=100)
 ```
 
-- [ ] **Step 4: Verify settings and lease behavior.**
+- [x] **Step 4: Verify settings and lease behavior.**
 
 Run: `uv run --directory apps/api pytest tests/test_settings.py tests/test_capacity_leases.py -q`
 
 Expected: PASS; explicit one-slot test fixtures still work.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add apps/api/app/settings.py apps/api/tests/test_settings.py
@@ -85,7 +85,7 @@ git commit -m "feat(api): allow three concurrent v2 provider phases"
 - Consumes: HTTP `503` body `{ "detail": "system_busy" }`.
 - Produces: `ApiError` with `code: "system_busy"`; retry policy rethrows it without another request.
 
-- [ ] **Step 1: Write failing classification and no-retry tests.**
+- [x] **Step 1: Write failing classification and no-retry tests.**
 
 ```ts
 await expect(askQuestion(input)).rejects.toMatchObject({
@@ -95,13 +95,13 @@ await expect(askQuestionWithRetry(input, deps)).rejects.toMatchObject({ code: "s
 expect(deps.ask).toHaveBeenCalledTimes(1);
 ```
 
-- [ ] **Step 2: Prove the tests fail.**
+- [x] **Step 2: Prove the tests fail.**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/api-client-flow.test.ts lib/generation-retry.test.ts`
 
 Expected: FAIL because `ApiError` has no code and all 503s are retryable.
 
-- [ ] **Step 3: Add a closed error code and alter only busy retry eligibility.**
+- [x] **Step 3: Add a closed error code and alter only busy retry eligibility.**
 
 ```ts
 export type ApiErrorCode = "system_busy" | null;
@@ -120,13 +120,13 @@ return error instanceof ApiError
 
 Map only the exact V2 detail `system_busy` to this code; keep all other messages and retry behavior unchanged.
 
-- [ ] **Step 4: Verify focused client regressions.**
+- [x] **Step 4: Verify focused client regressions.**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/api-client-flow.test.ts lib/generation-retry.test.ts`
 
 Expected: PASS; a busy response makes exactly one phase submission.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add apps/web/lib/api-client.ts apps/web/lib/generation-retry.ts apps/web/lib/api-client-flow.test.ts apps/web/lib/generation-retry.test.ts
@@ -143,7 +143,7 @@ git commit -m "fix(web): stop retrying busy v2 executions"
 - Consumes: `ApiError { status: 503, code: "system_busy" }`.
 - Produces: `시스템이 바쁩니다. 잠시 후 다시 실행해 주세요.` in `.error-banner[role="alert"]`.
 
-- [ ] **Step 1: Write a failing page-level busy notice test.**
+- [x] **Step 1: Write a failing page-level busy notice test.**
 
 ```tsx
 expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -151,13 +151,13 @@ expect(await screen.findByRole("alert")).toHaveTextContent(
 );
 ```
 
-- [ ] **Step 2: Prove it fails with the raw machine code.**
+- [x] **Step 2: Prove it fails with the raw machine code.**
 
 Run: `pnpm.cmd --dir apps/web vitest run app/page.test.tsx`
 
 Expected: FAIL because the current catch block renders `Error.message`.
 
-- [ ] **Step 3: Map the typed error to fixed Korean copy before `setError`.**
+- [x] **Step 3: Map the typed error to fixed Korean copy before `setError`.**
 
 ```ts
 const message = cause instanceof ApiError && cause.code === "system_busy"
@@ -168,13 +168,13 @@ setError(message);
 
 Do not add a second notification: the existing error banner is red and has `role="alert"`.
 
-- [ ] **Step 4: Verify the UI and transport regressions.**
+- [x] **Step 4: Verify the UI and transport regressions.**
 
 Run: `pnpm.cmd --dir apps/web vitest run app/page.test.tsx lib/api-client-flow.test.ts lib/generation-retry.test.ts`
 
 Expected: PASS; fixed copy appears, raw `system_busy` does not, and no retry occurs.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add apps/web/app/page.tsx apps/web/app/page.test.tsx
@@ -187,13 +187,13 @@ git commit -m "fix(web): show busy execution notice"
 - Modify: feature-caused `graphify-out/` artifacts
 - Modify: deployment documentation only if it names the old default
 
-- [ ] **Step 1: Run repository verification.**
+- [x] **Step 1: Run repository verification.**
 
 Run: `pnpm.cmd verify`
 
 Expected: PASS.
 
-- [ ] **Step 2: Refresh the codebase graph.**
+- [x] **Step 2: Refresh the codebase graph.**
 
 Run: `graphify update .`
 
@@ -214,8 +214,21 @@ The external environment mutation is not authorized by this plan alone.
 
 ## Completion Conditions
 
-- [ ] `Settings()` defaults to three slots and preserves safe overrides.
-- [ ] Exact `503 system_busy` is not auto-retried and exposes no machine code to users.
-- [ ] The existing red accessible banner shows exactly `시스템이 바쁩니다. 잠시 후 다시 실행해 주세요.`.
-- [ ] API/web tests pass and graph artifacts are refreshed.
+- [x] `Settings()` defaults to three slots and preserves safe overrides.
+- [x] Exact `503 system_busy` is not auto-retried and exposes no machine code to users.
+- [x] The existing red accessible banner shows exactly `시스템이 바쁩니다. 잠시 후 다시 실행해 주세요.`.
+- [x] API/web tests pass and graph artifacts are refreshed.
+
+## 실행 증빙 — 2026-09-04 KST
+
+- `6d69020`: V2 provider 슬롯 기본값을 3으로 변경. `tests/test_settings.py tests/test_capacity_leases.py`는 20 passed.
+- `6c51578`: 정확한 V2 `503 system_busy`를 유형화하고 재시도를 차단. 집중 Vitest는 25 passed.
+- `c357c5c`: 기존 red `role="alert"` 배너에 고정 한국어 busy 안내를 표시. UI·전송·재시도 집중 Vitest는 26 passed.
+- 시간 의존 명확화 테스트의 만료 픽스처를 안정화한 `cb9b7a2` 뒤, `pnpm.cmd verify`는 종료 코드 0으로 통과했다. API 746 passed/2 skipped, 웹 107 passed, lint·typecheck·build·문서 검사를 포함한다.
+- 권한 상승 환경에서 `graphify update .`가 완료되어 8,384 nodes, 16,957 edges, 541 communities를 갱신했다. 기존 사용자 graph 산출물 변경과 구별할 수 없어 `graphify-out/`은 스테이징하지 않았다.
+
+## 잔여 외부 작업
+
+- 명시 승인 후에만 Vercel Production의 `V2_PROVIDER_SLOTS=3`을 설정·배포하고, 호스팅 환경에서 동시 요청을 확인한다.
+- 기존 사용자 graph 산출물 변경과 분리 가능한 기준이 제공되면 feature-caused graph artifact만 별도 커밋한다.
 - [ ] Production capacity is set to three only after explicit approval and the provider limit is checked.

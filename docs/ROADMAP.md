@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f19943c6a8e65e008091436f377fdfc1a7646669fff43bc5f769b17453b13ba9 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: bd82a81965330222e4bc23e8f9a855be3fb6647f60fcfde43713b901a3b889d4 -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/active/0067-provider-capacity-and-busy-notice.md) — 다음 행동: busy 응답을 재시도하지 않는 고정 사용자 안내 계약의 실패 테스트부터 작성한다.
 
 ## Todo
 
@@ -23,7 +24,7 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: v2 temporal adapter 경계를 확정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
-- [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/todo/0067-provider-capacity-and-busy-notice.md) — 다음 행동: busy 응답을 재시도하지 않는 고정 사용자 안내 계약의 실패 테스트부터 작성한다.
+- [F-009 · Feature — F-009 V2 실행 진단과 고정 Evidence Manifest](exec-plans/todo/0068-v2-execution-diagnostics-and-evidence-manifest.md) — 다음 행동: 진단 이벤트 도메인 모델과 안전한 직렬화의 실패 테스트부터 작성한다.
 
 ## Blocked
 
