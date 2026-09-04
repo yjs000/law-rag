@@ -96,6 +96,11 @@ class QuestionPhaseCoordinator:
             owner_scope,
             expected_version=current.version,
             target=running,
+            private_payload=(
+                {"finalize_source_status": current.status.value}
+                if phase == "finalize"
+                else None
+            ),
             capability_hash=capability_hash,
         )
         if not claim.started:

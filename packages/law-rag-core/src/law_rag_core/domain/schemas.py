@@ -270,7 +270,7 @@ class QuestionResponse(BaseModel):
     # 검색에 사용한 코퍼스의 기준 시각.
     corpus_as_of: datetime | None = None
     # 검색 결과 존재 여부.
-    result_status: Literal["results", "no_results"] = "results"
+    result_status: Literal["results", "no_results", "grounding_failed"] = "results"
     # 검색 결과가 없을 때의 사유.
     no_results_reason: Literal["requested_path_not_found", "no_matching_evidence"] | None = None
     # 클라이언트가 요청한 응답 방식.

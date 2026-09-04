@@ -122,6 +122,7 @@ class MemoryQuestionExecutionRepository:
         *,
         expected_version: int,
         target: ExecutionStatus,
+        private_payload: Mapping[str, object] | None = None,
         capability_hash: str | None = None,
     ) -> PhaseClaim:
         async with self._lock:
@@ -133,7 +134,16 @@ class MemoryQuestionExecutionRepository:
                 ExecutionSnapshot(status=current.status, version=current.version), target
             )
             return PhaseClaim(
-                execution=self._replace(current, status=updated.status, version=updated.version),
+                execution=self._replace(
+                    current,
+                    status=updated.status,
+                    version=updated.version,
+                    private_payload=(
+                        {**current.private_payload, **private_payload}
+                        if private_payload is not None
+                        else current.private_payload
+                    ),
+                ),
                 started=True,
             )
 

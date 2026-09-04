@@ -198,7 +198,7 @@ def grounding_fallback(payload: QuestionRequest) -> QuestionResponse:
         checklist=[],
         citations=[],
         limitations=["이 서비스는 법률 자문을 대체하지 않습니다."],
-        result_status="no_results",
+        result_status="grounding_failed",
         requested_answer_mode=payload.answer_mode,
         action="unanswerable",
         route="legal_search",

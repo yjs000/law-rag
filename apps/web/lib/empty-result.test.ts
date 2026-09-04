@@ -80,4 +80,7 @@ describe("empty search result messaging", () => {
       }],
     }), "전기사업법 제1조는?")).toBeNull();
   });
+  it("keeps a grounding failure visible as a recoverable safe response", () => {
+    expect(getEmptyResultMessage(response({ result_status: "grounding_failed" }), "safe question")).toBeNull();
+  });
 });

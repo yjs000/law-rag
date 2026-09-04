@@ -20,7 +20,7 @@ export type QuestionResponse = {
   mode: "ai" | "search_only";
   requested_answer_mode?: "terra" | "search_only";
   fallback_reason?: "ai_disabled" | "quota_exhausted" | "billing_or_quota_error" | "embedding_error" | "generation_error" | "grounding_failed" | "no_evidence" | null;
-  result_status?: "results" | "no_results";
+  result_status?: "results" | "no_results" | "grounding_failed";
   no_results_reason?: string | null;
   summary: string;
   scope: string;

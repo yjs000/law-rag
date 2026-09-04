@@ -14,6 +14,7 @@ export function getEmptyResultMessage(
 ): EmptyResultMessage | null {
   const hasNoResults = response.result_status === "no_results"
     || (response.result_status !== "results"
+      && response.result_status !== "grounding_failed"
       && response.sections.length === 0
       && response.citations.length === 0);
 

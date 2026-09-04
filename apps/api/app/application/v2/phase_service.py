@@ -357,18 +357,51 @@ class V2QuestionExecutionService:
         payload, _hits, _corpus_as_of = execution_request_and_hits(execution)
         stored_core = execution.private_payload.get("verified_core")
         core = self._core_from_payload(dependencies, stored_core)
-        degraded = execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED
+        degraded = (
+            execution.status is ExecutionStatus.CORE_REPAIR_REQUIRED
+            or execution.private_payload.get("finalize_source_status")
+            == ExecutionStatus.CORE_REPAIR_REQUIRED.value
+        )
+        repaired_core_payload: dict[str, object] | None = None
+        force_grounding_fallback = False
+        if degraded:
+            core = None
+            try:
+                candidate, citations, used_safe_fallback = (
+                    await self._core_result_from_frozen_evidence(execution)
+                )
+                if self._core_is_publishable(
+                    candidate, execution, used_safe_fallback
+                ):
+                    core = candidate
+                    degraded = False
+                    core_data = core.model_dump(mode="json", exclude={"grounded_claims"})
+                    repaired_core_payload = {
+                        "verified_core": core_data,
+                        "verified_core_citations": [
+                            citation.model_dump(mode="json") for citation in citations
+                        ],
+                    }
+                else:
+                    force_grounding_fallback = True
+            except Exception:
+                force_grounding_fallback = True
+        private_payload = repaired_core_payload or execution.private_payload
         produce_response = response_from_frozen_evidence or self.response_from_frozen_evidence
         try:
-            response = await produce_response(execution)
+            response = (
+                grounding_fallback(payload)
+                if force_grounding_fallback
+                else await produce_response(execution)
+            )
         except Exception:
-            response = core_degraded_response(payload, core, execution.private_payload)
+            response = core_degraded_response(payload, core, private_payload)
             degraded = True
         clarification = self._clarification_grounding(execution)
         if clarification is None and not response_is_grounded(
             response, CitationRegistry(execution.frozen_citations)
         ):
-            response = core_degraded_response(payload, core, execution.private_payload)
+            response = core_degraded_response(payload, core, private_payload)
             degraded = True
         elif core is not None:
             response.summary = core.summary
@@ -381,18 +414,37 @@ class V2QuestionExecutionService:
                     response,
                 )
             except Exception:
-                response = core_degraded_response(payload, core, execution.private_payload)
+                response = core_degraded_response(payload, core, private_payload)
                 degraded = True
         response = await dependencies.save_authenticated(user, payload, response)
         response_data = response.model_dump(mode="json")
         return PhaseResult(
             target=ExecutionStatus.COMPLETED,
             response=response_data,
+            private_payload=repaired_core_payload,
             events=(
                 AnswerEvent.complete(
                     {"response": response_data, "outcome": "degraded" if degraded else "normal"}
                 ),
             ),
+        )
+
+    def _core_is_publishable(
+        self,
+        core: Any,
+        execution: QuestionExecutionRecord,
+        used_safe_fallback: bool,
+    ) -> bool:
+        clarification = self._clarification_grounding(execution)
+        if clarification is None:
+            return core_is_grounded(core, CitationRegistry(execution.frozen_citations))
+        if used_safe_fallback:
+            return True
+        return claims_are_grounded(
+            core.grounded_claims,
+            clarification,
+            CitationRegistry(execution.frozen_citations),
+            required_targets=core_claim_targets(core),
         )
 
     def prepared_response(self, prepared: PreparedExecution) -> dict[str, object]:

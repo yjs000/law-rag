@@ -18,6 +18,7 @@ from app.application.v2.grounding import ClarificationGrounding, claims_are_grou
 from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.clarification import ClarificationCase, FactStatus, GroundedClaim, RequiredFact
 from app.domain.grounding import CitationRegistry, FrozenCitation
+from app.domain.question_execution import ExecutionStatus
 from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit, SourceKind
 from app.ports.clarification_case import ClarificationCaseStatus
 
@@ -685,3 +686,188 @@ async def test_unbound_published_detail_is_replaced_before_terminal_sse_publicat
     published = result.events[0].payload["response"]
     assert published["sections"] == []
     assert published["checklist"] == []
+
+
+@pytest.mark.asyncio
+async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallback() -> None:
+    """A failed repair must not be presented as an ordinary empty search result."""
+
+    class AlwaysUngroundedCoreAnswerer:
+        def __init__(self) -> None:
+            self.core_calls = 0
+            self.detail_calls = 0
+
+        async def answer_core(
+            self, _request: QuestionRequest, _hits: list[SearchHit]
+        ) -> CoreDraft:
+            self.core_calls += 1
+            return CoreDraft(
+                summary="근거와 일치하지 않는 요약입니다.",
+                citation_ids=["C2"],
+                action="partially_answerable",
+            )
+
+        async def answer(
+            self, _request: QuestionRequest, _hits: list[SearchHit]
+        ) -> ClarificationDraftAnswer:
+            self.detail_calls += 1
+            raise AssertionError("core repair failure must not start detail generation")
+
+    answerer = AlwaysUngroundedCoreAnswerer()
+    service, executions = _service(answerer)  # type: ignore[arg-type]
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="core-repair-safe-completion",
+            user=None,
+        )
+    )
+    claim = await executions.claim_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=prepared.execution.version,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+    core = await service.run_core(claim.execution)
+    assert core.target is ExecutionStatus.CORE_REPAIR_REQUIRED
+    await executions.finish_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=claim.execution.version,
+        target=core.target,
+        phase="core",
+        events=core.events,
+    )
+    repair_required = await executions.get_owned(
+        prepared.execution.execution_id, "anonymous:test"
+    )
+    finalize_claim = await executions.claim_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=repair_required.version,
+        target=ExecutionStatus.FINALIZE_RUNNING,
+        private_payload={
+            "finalize_source_status": repair_required.status.value,
+        },
+    )
+    repair_required = finalize_claim.execution
+
+    finalized = await service.run_finalize(repair_required, None)
+
+    published = finalized.events[0].payload["response"]
+    assert answerer.core_calls == 2
+    assert answerer.detail_calls == 0
+    assert finalized.events[0].payload["outcome"] == "degraded"
+    assert published["result_status"] == "grounding_failed"
+    assert published["summary"] == (
+        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
+    )
+    assert published["sections"] == []
+    assert published["checklist"] == []
+    assert published["citations"] == []
+    assert published["action"] == "unanswerable"
+
+
+@pytest.mark.asyncio
+async def test_successful_core_repair_persists_clarification_transition() -> None:
+    """A repaired, grounded core must resume the normal clarification finish path."""
+
+    class RepairingClarificationAnswerer:
+        def __init__(self) -> None:
+            self.core_calls = 0
+            self.detail_calls = 0
+
+        async def answer_core(
+            self,
+            _request: QuestionRequest,
+            _hits: list[SearchHit],
+            *,
+            clarification: ClarificationGrounding,
+        ) -> ClarificationCoreDraft:
+            self.core_calls += 1
+            claims = (
+                _detail_claims()
+                if self.core_calls == 1
+                else [
+                    GroundedClaim(
+                        "A verified repair claim.",
+                        "general_rule",
+                        ("C1",),
+                        surface="summary",
+                        surface_index=None,
+                    )
+                ]
+            )
+            return ClarificationCoreDraft(
+                summary="A verified repair claim.",
+                citation_ids=["C1"],
+                action="partially_answerable",
+                grounded_claims=claims,
+            )
+
+        async def answer(
+            self,
+            _request: QuestionRequest,
+            _hits: list[SearchHit],
+            *,
+            clarification: ClarificationGrounding,
+        ) -> ClarificationDraftAnswer:
+            self.detail_calls += 1
+            return _draft(claims=_detail_claims())
+
+    now = datetime(2026, 9, 3, tzinfo=UTC)
+    context = _context("interim")
+    cases = MemoryClarificationCaseRepository(now=lambda: now)
+    record = await _case_record(cases, context)
+    outcome = ClarificationOutcome(
+        case=record,
+        policy="interim",
+        question_format=ClarificationQuestionFormat(record.case.remaining_facts()),
+        next_status=ClarificationCaseStatus.WAITING_FOR_USER,
+    )
+    answerer = RepairingClarificationAnswerer()
+    service, executions = _service(  # type: ignore[arg-type]
+        answerer,
+        clarification_cases=cases,
+    )
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="successful-core-repair-clarification",
+            user=None,
+            clarification=context,
+            clarification_outcome=outcome,
+        )
+    )
+    claim = await executions.claim_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=prepared.execution.version,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+    core = await service.run_core(claim.execution)
+    assert core.target is ExecutionStatus.CORE_REPAIR_REQUIRED
+    await executions.finish_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=claim.execution.version,
+        target=core.target,
+        phase="core",
+        events=core.events,
+    )
+    repair_required = await executions.get_owned(
+        prepared.execution.execution_id, "anonymous:test"
+    )
+
+    finalized = await service.run_finalize(repair_required, None)
+
+    persisted = await cases.get_owned(record.case_id, "anonymous:test")
+    published = finalized.events[0].payload["response"]
+    assert answerer.core_calls == 2
+    assert answerer.detail_calls == 1
+    assert persisted.version == 1
+    assert persisted.status is ClarificationCaseStatus.WAITING_FOR_USER
+    assert finalized.events[0].payload["outcome"] == "normal"
+    assert published["clarification"]["status"] == "waiting_for_user"

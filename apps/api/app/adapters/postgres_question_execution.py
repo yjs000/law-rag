@@ -162,6 +162,7 @@ class PostgresQuestionExecutionRepository:
         *,
         expected_version: int,
         target: ExecutionStatus,
+        private_payload: Mapping[str, object] | None = None,
         capability_hash: str | None = None,
     ) -> PhaseClaim:
         async with self._engine.begin() as connection:
@@ -180,7 +181,11 @@ class PostgresQuestionExecutionRepository:
                 await connection.execute(
                     text(
                         f"""UPDATE question_executions SET
-                        status=:status,version=:version,updated_at=now()
+                        status=:status,version=:version,
+                        private_payload=CASE
+                          WHEN CAST(:private_payload AS jsonb) IS NULL THEN private_payload
+                          ELSE private_payload || CAST(:private_payload AS jsonb) END,
+                        updated_at=now()
                         WHERE execution_id=:execution_id AND owner_scope=:owner_scope
                           AND version=:expected_version
                         RETURNING {_RECORD_COLUMNS}"""
@@ -188,6 +193,11 @@ class PostgresQuestionExecutionRepository:
                     {
                         "status": updated.status.value,
                         "version": updated.version,
+                        "private_payload": (
+                            json.dumps(dict(private_payload))
+                            if private_payload is not None
+                            else None
+                        ),
                         "execution_id": execution_id,
                         "owner_scope": owner_scope,
                         "expected_version": expected_version,
