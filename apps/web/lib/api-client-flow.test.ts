@@ -131,6 +131,13 @@ describe("Supabase authenticated question workflow", () => {
 });
 
 describe("structured API error details (0039)", () => {
+  it("returns a recoverable message when PDF export fails", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+
+    await expect(downloadPdf(history.id)).rejects.toThrow("PDF 출력본을 만들지 못했습니다.");
+  });
+
   it("shows the message from an object detail", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({
