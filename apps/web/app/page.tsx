@@ -333,6 +333,7 @@ function AnswerView({
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [today, setToday] = useState(koreaTodayIsoDate);
+  const [, setDateBoundRefreshRevision] = useState(0);
   const [asOf, setAsOf] = useState(today);
   const [answerPreference, setAnswerPreference] = useState<AnswerPreference>("terra");
   const [result, setResult] = useState<QuestionResponse | null>(null);
@@ -374,7 +375,10 @@ export default function Home() {
       setToday(koreaTodayIsoDate());
       timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     };
-    queueMicrotask(() => setToday(koreaTodayIsoDate()));
+    queueMicrotask(() => {
+      setToday(koreaTodayIsoDate());
+      setDateBoundRefreshRevision((revision) => revision + 1);
+    });
     timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     return () => clearTimeout(timer);
   }, []);

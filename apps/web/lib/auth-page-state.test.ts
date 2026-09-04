@@ -6,7 +6,8 @@ const clientMountHooks = vi.hoisted(() => {
   const states: unknown[] = [];
   const effects: Effect[] = [];
   let cursor = 0;
-  let serverRenderedToday: string | undefined;
+  let hydratedDateInputMaximum: string | undefined;
+  let updateScheduled = false;
 
   return {
     beginRender() {
@@ -16,11 +17,16 @@ const clientMountHooks = vi.hoisted(() => {
     currentEffects() {
       return [...effects];
     },
-    reset(today: string) {
+    commitDateInputMaximum(renderedMaximum: string) {
+      if (updateScheduled) hydratedDateInputMaximum = renderedMaximum;
+      return hydratedDateInputMaximum ?? renderedMaximum;
+    },
+    reset(serverRenderedMaximum: string) {
       states.length = 0;
       effects.length = 0;
       cursor = 0;
-      serverRenderedToday = today;
+      hydratedDateInputMaximum = serverRenderedMaximum;
+      updateScheduled = false;
     },
     useEffect(effect: Effect) {
       effects.push(effect);
@@ -31,10 +37,14 @@ const clientMountHooks = vi.hoisted(() => {
     useState<T>(initial: T | (() => T)) {
       const slot = cursor++;
       if (slot === states.length) {
-        states.push(slot === 1 ? serverRenderedToday : typeof initial === "function" ? (initial as () => T)() : initial);
+        states.push(typeof initial === "function" ? (initial as () => T)() : initial);
       }
       const setState = (next: T | ((previous: T) => T)) => {
-        states[slot] = typeof next === "function" ? (next as (previous: T) => T)(states[slot] as T) : next;
+        const resolved = typeof next === "function" ? (next as (previous: T) => T)(states[slot] as T) : next;
+        if (!Object.is(states[slot], resolved)) {
+          states[slot] = resolved;
+          updateScheduled = true;
+        }
       };
       return [states[slot] as T, setState] as const;
     },
@@ -183,19 +193,21 @@ describe("KST date bound client mount refresh (B-004)", () => {
     vi.useRealTimers();
   });
 
-  it("replaces a stale server-rendered maximum with today's KST date immediately on mount", async () => {
+  it("patches a stale server-rendered maximum even when client KST state is already current", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-03T15:30:00Z")); // 2026-09-04 00:30 KST
     clientMountHooks.reset("2026-09-03");
 
     clientMountHooks.beginRender();
-    expect(dateInputMaximum(Home())).toBe("2026-09-03");
+    const hydratedPage = Home();
+    expect(dateInputMaximum(hydratedPage)).toBe("2026-09-04");
+    expect(clientMountHooks.commitDateInputMaximum(dateInputMaximum(hydratedPage))).toBe("2026-09-03");
     const [refreshToday] = clientMountHooks.currentEffects();
     const cleanup = refreshToday();
     await Promise.resolve();
 
     clientMountHooks.beginRender();
-    expect(dateInputMaximum(Home())).toBe("2026-09-04");
+    expect(clientMountHooks.commitDateInputMaximum(dateInputMaximum(Home()))).toBe("2026-09-04");
     if (typeof cleanup === "function") cleanup();
   });
 });
