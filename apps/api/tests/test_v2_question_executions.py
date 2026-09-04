@@ -398,6 +398,13 @@ async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
 
     assert result.response is not None
     assert result.response["summary"] == "전기사업자는 허가를 받아야 합니다."
+    assert result.response["checklist"] == [
+        {
+            "label": "C1 원문에서 적용 주체, 요건 및 예외를 확인하세요.",
+            "status": "check",
+            "citation_ids": ["C1"],
+        }
+    ]
     assert result.events[0].payload["outcome"] == "degraded"
 
 

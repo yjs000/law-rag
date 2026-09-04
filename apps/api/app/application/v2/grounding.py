@@ -220,7 +220,14 @@ def core_degraded_response(
         summary=core.summary,
         scope="상세 설명 검증 실패",
         sections=[],
-        checklist=[],
+        checklist=[
+            {
+                "label": f"{citation.id} 원문에서 적용 주체, 요건 및 예외를 확인하세요.",
+                "status": "check",
+                "citation_ids": [citation.id],
+            }
+            for citation in citations
+        ],
         citations=citations,
         limitations=["검증된 요약만 제공합니다.", "이 서비스는 법률 자문을 대체하지 않습니다."],
         requested_answer_mode=payload.answer_mode,
