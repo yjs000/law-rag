@@ -61,11 +61,11 @@
 - Consumes: 배포 URL과 P0 첫 진입부터 익명 저장 경계까지의 체크 항목
 - Produces: 정상 질문, V2 실행, 인용, 필터, 기준일, Markdown/CSV, 익명 안내의 브라우저 증거
 
-- [ ] **Step 1: 1280px에서 첫 진입과 세 추천 질문을 실행해 Network·Console·화면 결과를 기록한다.**
-- [ ] **Step 2: 직접 입력, Enter/Shift+Enter, 근거 이동, 문서 필터, 오늘·과거 기준일을 검증한다.**
-- [ ] **Step 3: Markdown/CSV 내보내기와 익명 로그인 안내·비소급 저장 계약을 검증한다.**
-- [ ] **Step 4: 실패가 있으면 재현 테스트 RED → 최소 수정 → focused GREEN → 배포 재검증을 반복한다.**
-- [ ] **Step 5: P0 익명 항목을 증거와 함께 갱신하고 전체 완료 체크를 실행한다.**
+- [x] **Step 1: 1280px에서 첫 진입과 세 추천 질문을 실행해 Network·Console·화면 결과를 기록한다.**
+- [x] **Step 2: 직접 입력, Enter/Shift+Enter, 근거 이동, 문서 필터, 오늘·과거 기준일을 검증한다.**
+- [x] **Step 3: Markdown/CSV 내보내기와 익명 로그인 안내·비소급 저장 계약을 검증한다.**
+- [x] **Step 4: 실패가 있으면 재현 테스트 RED → 최소 수정 → focused GREEN → 배포 재검증을 반복한다.**
+- [x] **Step 5: P0 익명 항목을 증거와 함께 갱신하고 전체 완료 체크를 실행한다.**
 
 **오류 증빙 (2026-09-04):** 운영 `finalize` 상세 생성에서 NVIDIA HTTP 503이 발생하면 검증된
 core 요약으로 강등되어 checklist가 빈 응답이 됐다. 같은 로그에서 detached phase lease 반환의
@@ -75,9 +75,8 @@ DB `TimeoutError`가 미관측 background 예외로 남는 것도 재현했다. 
 기록하지 않는다. `graphify update .`는 Windows 접근 거부가 난 기존 `pytest-cache-files-*`
 임시 디렉터리 때문에 실패했으므로 graph 산출물은 커밋하지 않았다.
 
-**재검증 결과:** lease 관측 수정이 배포된 뒤에도 P0 추천 질문은 5건의 인용과 core 요약 뒤
-`검증된 요약만 제공합니다.`로 강등되어 checklist를 반환하지 않았다. 따라서 Markdown/CSV
-내보내기와 인증 전 저장 경계의 후속 검증은 아직 통과 처리하지 않는다.
+**해결:** Task 2.1의 repair-core 회귀 수정·배포 뒤 같은 P0 흐름을 재검증했다. 이후
+Markdown/CSV와 인증 전 저장 경계를 포함한 Task 2 항목을 완료 처리했다.
 
 ### Task 2.1: P0 core repair 실패 진단·복구
 
