@@ -37,6 +37,7 @@ from app.application.v2.grounding import (
 from app.domain.answer_events import AnswerEvent
 from app.domain.grounding import CitationRegistry
 from app.domain.question_execution import ExecutionSnapshot, ExecutionStatus, next_action_for
+from app.domain.routing import RouteDecision
 from app.domain.schemas import (
     ClarificationContinuation,
     ClarificationFactPrompt,
@@ -87,7 +88,10 @@ class V2QuestionExecutionService:
         await dependencies.require_supported_date(request.payload.as_of_date, repository)
 
         route, missing_fields = await self._route(
-            dependencies, request.payload.question, request.payload.answer_mode
+            dependencies,
+            request.payload.question,
+            request.payload.answer_mode,
+            request.route_decision,
         )
         active = await dependencies.active_provider().active()
         hits, corpus_as_of = await self._retrieve_if_legal(
@@ -470,9 +474,12 @@ class V2QuestionExecutionService:
         dependencies: V2ExecutionDependencies,
         question: str,
         answer_mode: str,
+        route_decision: RouteDecision | None,
     ) -> tuple[str, tuple[str, ...]]:
         if answer_mode != "terra":
             return "legal_search", ()
+        if route_decision is not None:
+            return route_decision.route, route_decision.missing_fields
         try:
             decision = await dependencies.route(question)
             return decision.route, decision.missing_fields

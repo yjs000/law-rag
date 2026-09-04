@@ -17,6 +17,7 @@ from app.application.clarification_workflow import (
 )
 from app.application.question_phase_coordinator import PhaseResult
 from app.application.v2.grounding import ClarificationGrounding
+from app.domain.routing import RouteDecision
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.clarification_case import ClarificationCaseRepository
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
@@ -102,6 +103,7 @@ class PrepareQuestion:
     user: MockUser | None
     clarification: ClarificationGrounding | None = None
     clarification_outcome: ClarificationOutcome | None = None
+    route_decision: RouteDecision | None = None
 
 
 @dataclass(frozen=True)

@@ -196,50 +196,53 @@ def test_v2_prepare_passes_anonymous_case_capability_only_to_clarification_workf
     assert "private-case-capability" not in response.text
 
 
-def test_v2_prepare_skips_optional_clarification_when_route_classifier_times_out(
+def test_v2_prepare_persists_one_routing_unavailable_decision_after_optional_router_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An optional route-classifier outage cannot block normal V2 preparation."""
+    """One failed classifier decision is frozen instead of retried during prepare."""
     import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 
-    workflow_calls: list[object] = []
+    executions = MemoryQuestionExecutionRepository()
+    router_calls = 0
 
     class Workflow:
-        async def run_turn(self, request, _owner):
-            workflow_calls.append(request)
+        async def run_turn(self, _request, _owner):
             return SimpleNamespace(case=None, next_status=None)
 
-    class Service:
-        async def prepare(self, _request):
-            return SimpleNamespace(execution=SimpleNamespace(execution_id=uuid4()))
+    class Provider:
+        async def active(self):
+            return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
 
-        def prepared_response(self, _prepared):
-            return {
-                "execution_id": "execution-1",
-                "status": "prepared",
-                "next_action": "generate_core",
-            }
+    async def fake_repository():
+        return object()
 
     async def provider_timeout(*_args):
+        nonlocal router_calls
+        router_calls += 1
         raise TimeoutError("NVIDIA route classifier timed out")
 
+    monkeypatch.setattr(main_module, "question_execution_repository", executions)
+    monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
+    monkeypatch.setattr(
+        main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
+    )
     monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+    monkeypatch.setattr(main_module, "_question_router", lambda: object())
     monkeypatch.setattr(main_module, "route_question", provider_timeout)
-    monkeypatch.setattr(main_module, "v2_question_execution_service", Service())
 
     response = TestClient(main_module.app, raise_server_exceptions=False).post(
         "/v2/question-executions",
         headers={"Idempotency-Key": "route-timeout"},
-        json={"question": "전기사업 허가가 필요한가요?"},
+        json={"question": "전기사업 허가가 필요한가요?", "answer_mode": "terra"},
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "execution_id": "execution-1",
-        "status": "prepared",
-        "next_action": "generate_core",
-    }
-    assert workflow_calls == []
+    assert response.json()["status"] == "prepared"
+    assert router_calls == 1
+    execution = executions._records[UUID(response.json()["execution_id"])]
+    assert execution.private_payload["route"] == "routing_unavailable"
 
 
 def test_v2_prepare_hides_foreign_clarification_cases_as_not_found(

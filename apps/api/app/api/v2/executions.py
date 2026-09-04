@@ -15,6 +15,7 @@ from app.application.clarification_workflow import ClarificationOwner, Clarifica
 from app.application.question_phase_coordinator import PhaseResult
 from app.application.v2.dependencies import PhaseRequest, PreparedExecution, PrepareQuestion
 from app.application.v2.grounding import ClarificationGrounding
+from app.domain.routing import RouteDecision
 from app.domain.schemas import Citation, MockUser, QuestionRequest, QuestionResponse
 from app.observability import emit_execution_phase
 from app.ports.clarification_case import ClarificationCaseNotFound
@@ -86,7 +87,7 @@ async def prepare_question_execution(
     main = main_module()
     user = await _optional_user(request.headers.get("authorization"))
     owner_scope = main._question_owner(request, user)
-    clarification, clarification_outcome = await _prepare_clarification_turn(
+    clarification, clarification_outcome, route_decision = await _prepare_clarification_turn(
         main, payload, owner_scope, user
     )
     prepared = await main.v2_question_execution_service.prepare(
@@ -97,6 +98,7 @@ async def prepare_question_execution(
             user=user,
             clarification=clarification,
             clarification_outcome=clarification_outcome,
+            route_decision=route_decision,
         )
     )
     emit_execution_phase(str(prepared.execution.execution_id), "prepare", "prepared")
@@ -108,21 +110,28 @@ async def _prepare_clarification_turn(
     payload: QuestionRequest,
     owner_scope: str,
     user: MockUser | None,
-) -> tuple[ClarificationGrounding | None, Any | None]:
+) -> tuple[ClarificationGrounding | None, Any | None, RouteDecision | None]:
     """Resolve one optional clarification turn without persisting its capability."""
 
     workflow = getattr(main, "clarification_workflow", None)
     if workflow is None:
-        return None, None
+        return None, None, None
 
     is_continuation = payload.clarification_case_id is not None
+    route_decision: RouteDecision | None = None
     if not is_continuation:
         try:
-            route = await main.route_question(payload.question, main._question_router())
+            route_decision = await main.route_question(payload.question, main._question_router())
+        except TimeoutError:
+            route_decision = RouteDecision(
+                route="routing_unavailable", reason_code="routing_timeout", confidence=0.0
+            )
         except Exception:  # noqa: BLE001 - optional provider routing must not block prepare
-            return None, None
-        if getattr(route, "route", None) != "clarification_required":
-            return None, None
+            route_decision = RouteDecision(
+                route="routing_unavailable", reason_code="routing_provider_error", confidence=0.0
+            )
+        if route_decision.route != "clarification_required":
+            return None, None, route_decision
 
     try:
         outcome = await workflow.run_turn(
@@ -145,8 +154,12 @@ async def _prepare_clarification_turn(
         raise HTTPException(status_code=404, detail="보완 질문을 찾을 수 없습니다.") from exc
 
     if outcome.case is None or outcome.next_status is None:
-        return None, None
-    return ClarificationGrounding(policy=outcome.policy, case=outcome.case.case), outcome
+        return None, None, route_decision
+    return (
+        ClarificationGrounding(policy=outcome.policy, case=outcome.case.case),
+        outcome,
+        route_decision,
+    )
 
 
 @router.delete("/v2/question-executions/{execution_id}", status_code=202)
