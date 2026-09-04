@@ -6,8 +6,6 @@ const clientMountHooks = vi.hoisted(() => {
   const states: unknown[] = [];
   const effects: Effect[] = [];
   let cursor = 0;
-  let hydratedDateInputMaximum: string | undefined;
-  let updateScheduled = false;
 
   return {
     beginRender() {
@@ -17,16 +15,10 @@ const clientMountHooks = vi.hoisted(() => {
     currentEffects() {
       return [...effects];
     },
-    commitDateInputMaximum(renderedMaximum: string) {
-      if (updateScheduled) hydratedDateInputMaximum = renderedMaximum;
-      return hydratedDateInputMaximum ?? renderedMaximum;
-    },
-    reset(serverRenderedMaximum: string) {
+    reset() {
       states.length = 0;
       effects.length = 0;
       cursor = 0;
-      hydratedDateInputMaximum = serverRenderedMaximum;
-      updateScheduled = false;
     },
     useEffect(effect: Effect) {
       effects.push(effect);
@@ -40,11 +32,7 @@ const clientMountHooks = vi.hoisted(() => {
         states.push(typeof initial === "function" ? (initial as () => T)() : initial);
       }
       const setState = (next: T | ((previous: T) => T)) => {
-        const resolved = typeof next === "function" ? (next as (previous: T) => T)(states[slot] as T) : next;
-        if (!Object.is(states[slot], resolved)) {
-          states[slot] = resolved;
-          updateScheduled = true;
-        }
+        states[slot] = typeof next === "function" ? (next as (previous: T) => T)(states[slot] as T) : next;
       };
       return [states[slot] as T, setState] as const;
     },
@@ -75,20 +63,27 @@ import {
 } from "../app/page";
 import type { MockUser } from "./contracts";
 
-function dateInputMaximum(node: unknown): string {
+type DateInputProps = {
+  "aria-label"?: string;
+  children?: unknown;
+  max?: string;
+  ref?: { current: { max: string } | null } | null;
+};
+
+function dateInputProps(node: unknown): DateInputProps {
   if (Array.isArray(node)) {
     for (const child of node) {
       try {
-        return dateInputMaximum(child);
+        return dateInputProps(child);
       } catch {
         // Keep looking through sibling elements.
       }
     }
   }
   if (node && typeof node === "object") {
-    const props = (node as { props?: { "aria-label"?: string; children?: unknown; max?: string } }).props;
-    if (props?.["aria-label"] === "법령 기준일") return props.max ?? "";
-    if (props?.children !== undefined) return dateInputMaximum(props.children);
+    const props = (node as { props?: DateInputProps }).props;
+    if (props?.["aria-label"] === "법령 기준일") return props;
+    if (props?.children !== undefined) return dateInputProps(props.children);
   }
   throw new Error("Date input not found");
 }
@@ -193,21 +188,22 @@ describe("KST date bound client mount refresh (B-004)", () => {
     vi.useRealTimers();
   });
 
-  it("patches a stale server-rendered maximum even when client KST state is already current", async () => {
+  it("synchronizes a stale hydrated maximum even when client KST state is already current", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-03T15:30:00Z")); // 2026-09-04 00:30 KST
-    clientMountHooks.reset("2026-09-03");
+    clientMountHooks.reset();
 
     clientMountHooks.beginRender();
     const hydratedPage = Home();
-    expect(dateInputMaximum(hydratedPage)).toBe("2026-09-04");
-    expect(clientMountHooks.commitDateInputMaximum(dateInputMaximum(hydratedPage))).toBe("2026-09-03");
+    const dateInput = dateInputProps(hydratedPage);
+    expect(dateInput.max).toBe("2026-09-04");
+    const hydratedDomInput = { max: "2026-09-03" };
+    if (dateInput.ref && typeof dateInput.ref === "object") dateInput.ref.current = hydratedDomInput;
     const [refreshToday] = clientMountHooks.currentEffects();
     const cleanup = refreshToday();
     await Promise.resolve();
 
-    clientMountHooks.beginRender();
-    expect(clientMountHooks.commitDateInputMaximum(dateInputMaximum(Home()))).toBe("2026-09-04");
+    expect(hydratedDomInput.max).toBe("2026-09-04");
     if (typeof cleanup === "function") cleanup();
   });
 });

@@ -333,7 +333,6 @@ function AnswerView({
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [today, setToday] = useState(koreaTodayIsoDate);
-  const [, setDateBoundRefreshRevision] = useState(0);
   const [asOf, setAsOf] = useState(today);
   const [answerPreference, setAnswerPreference] = useState<AnswerPreference>("terra");
   const [result, setResult] = useState<QuestionResponse | null>(null);
@@ -364,6 +363,7 @@ export default function Home() {
   const [turnLoadingMore, setTurnLoadingMore] = useState(false);
   const [documentKinds, setDocumentKinds] = useState<Set<DocumentKind>>(() => new Set(Object.keys(DOCUMENT_KIND_LABELS) as DocumentKind[]));
   const composer = useRef<HTMLTextAreaElement>(null);
+  const asOfDateInput = useRef<HTMLInputElement>(null);
   const authEpoch = useRef(0);
   const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
@@ -376,8 +376,9 @@ export default function Home() {
       timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     };
     queueMicrotask(() => {
-      setToday(koreaTodayIsoDate());
-      setDateBoundRefreshRevision((revision) => revision + 1);
+      const currentToday = koreaTodayIsoDate();
+      setToday(currentToday);
+      if (asOfDateInput.current) asOfDateInput.current.max = currentToday;
     });
     timer = setTimeout(refreshTodayAtKoreaMidnight, millisecondsUntilNextKoreaMidnight());
     return () => clearTimeout(timer);
@@ -858,7 +859,7 @@ export default function Home() {
             <textarea aria-label="법령 질문" maxLength={2000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="에너지 법령을 질문하세요" ref={composer} rows={1} value={question} />
             <div className="composer-footer">
               <fieldset className="document-filters"><legend className="sr-only">원문 문서 종류</legend>{Object.entries(DOCUMENT_KIND_LABELS).map(([value, label]) => { const kind = value as DocumentKind; return <label key={kind}><input checked={documentKinds.has(kind)} onChange={() => toggleDocumentKind(kind)} type="checkbox" />{label}</label>; })}</fieldset>
-              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={today} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, today))} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
+              <div className="composer-actions"><label className="date-control"><span>기준일</span><input aria-label="법령 기준일" max={today} onChange={(event) => setAsOf(clampAsOfDate(event.target.value, today))} ref={asOfDateInput} type="date" value={asOf} /></label>{loading ? <button aria-label="응답 생성 중지" className="send-button stop-button" onClick={stopGeneration} type="button" /> : <button aria-label="법령 근거 조사" className="send-button" disabled={question.trim().length < 2}><Icon name="arrow" /></button>}</div>
             </div>
           </form>
           <p className="composer-disclaimer">법률 자문을 대체하지 않습니다. 중요한 결정은 원문과 전문가 검토를 함께 확인하세요.</p>
