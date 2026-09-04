@@ -3,6 +3,7 @@
 import type { AuthChangeEvent } from "@supabase/supabase-js";
 import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
+  ApiError,
   askQuestion,
   deleteAccount,
   deleteConversation,
@@ -698,7 +699,9 @@ export default function Home() {
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setActiveChat((current) => stopPendingTurn(current, requestId));
       } else {
-        const message = cause instanceof Error ? cause.message : "연결 오류";
+        const message = cause instanceof ApiError && cause.code === "system_busy"
+          ? "시스템이 바쁩니다. 잠시 후 다시 실행해 주세요."
+          : cause instanceof Error ? cause.message : "연결 오류";
         setActiveChat((current) => failPendingTurn(current, requestId, message));
         setError(message);
       }
