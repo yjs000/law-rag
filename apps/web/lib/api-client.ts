@@ -18,8 +18,14 @@ const CONSENT_KEY = "law-rag-pending-consent";
 export const TERMS_VERSION = "beta-2026-07-15";
 export const PRIVACY_VERSION = "beta-2026-07-15";
 
+export type ApiErrorCode = "system_busy" | null;
+
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: ApiErrorCode = null,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -125,7 +131,8 @@ export async function askQuestion(
         : typeof (detail as { message?: unknown } | null)?.message === "string"
           ? (detail as { message: string }).message
           : "요청을 처리하지 못했습니다.";
-      throw new ApiError(message, error.status);
+      const code: ApiErrorCode = detail === "system_busy" ? "system_busy" : null;
+      throw new ApiError(message, error.status, code);
     }
     throw error;
   }

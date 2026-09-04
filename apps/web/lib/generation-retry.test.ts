@@ -273,6 +273,20 @@ describe("askQuestionWithRetry - generation_error fallback matrix (0045)", () =>
     }
   });
 
+  it("does not retry a provider admission busy response", async () => {
+    const error = new ApiError("system_busy", 503, "system_busy");
+    const ask = vi.fn().mockRejectedValue(error);
+    const cancel = vi.fn();
+
+    await expect(askQuestionWithRetry(input, {
+      ask,
+      cancel,
+      nextClientRequestId: () => "attempt-2",
+      outerSignal: new AbortController().signal,
+    })).rejects.toBe(error);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(cancel).not.toHaveBeenCalled();
+  });
   it("stops immediately on non-retryable HTTP statuses (400/401/402/409/429)", async () => {
     for (const status of [400, 401, 402, 409, 429]) {
       const error = new ApiError("재시도 불가 오류", status);

@@ -163,6 +163,16 @@ describe("structured API error details (0039)", () => {
 });
 
 describe("typed HTTP status on ApiError (0045)", () => {
+  it("classifies a V2 system_busy response without exposing a retryable generic 503", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ detail: "system_busy" }, { status: 503 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      code: "system_busy",
+    });
+  });
   it("preserves a 503 retrieval-timeout status alongside its fixed message", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({

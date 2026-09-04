@@ -32,7 +32,9 @@ function isAbortError(error: unknown): error is DOMException {
 }
 
 function isRetryableHttpError(error: unknown): error is ApiError {
-  return error instanceof ApiError && [502, 503, 504].includes(error.status);
+  return error instanceof ApiError
+    && error.code !== "system_busy"
+    && [502, 503, 504].includes(error.status);
 }
 
 function isRetryableFallback(response: QuestionResponse): boolean {
