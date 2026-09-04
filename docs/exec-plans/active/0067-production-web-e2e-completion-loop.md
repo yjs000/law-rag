@@ -75,6 +75,10 @@ DB `TimeoutError`가 미관측 background 예외로 남는 것도 재현했다. 
 기록하지 않는다. `graphify update .`는 Windows 접근 거부가 난 기존 `pytest-cache-files-*`
 임시 디렉터리 때문에 실패했으므로 graph 산출물은 커밋하지 않았다.
 
+**재검증 결과:** lease 관측 수정이 배포된 뒤에도 P0 추천 질문은 5건의 인용과 core 요약 뒤
+`검증된 요약만 제공합니다.`로 강등되어 checklist를 반환하지 않았다. 따라서 Markdown/CSV
+내보내기와 인증 전 저장 경계의 후속 검증은 아직 통과 처리하지 않는다.
+
 ### Task 3: P0 인증·대화·이력 정상 흐름
 
 **Files:**
