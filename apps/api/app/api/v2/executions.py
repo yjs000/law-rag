@@ -117,7 +117,10 @@ async def _prepare_clarification_turn(
 
     is_continuation = payload.clarification_case_id is not None
     if not is_continuation:
-        route = await main.route_question(payload.question, main._question_router())
+        try:
+            route = await main.route_question(payload.question, main._question_router())
+        except Exception:  # noqa: BLE001 - optional provider routing must not block prepare
+            return None, None
         if getattr(route, "route", None) != "clarification_required":
             return None, None
 

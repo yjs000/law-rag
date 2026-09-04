@@ -196,6 +196,52 @@ def test_v2_prepare_passes_anonymous_case_capability_only_to_clarification_workf
     assert "private-case-capability" not in response.text
 
 
+def test_v2_prepare_skips_optional_clarification_when_route_classifier_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An optional route-classifier outage cannot block normal V2 preparation."""
+    import app.main as main_module
+
+    workflow_calls: list[object] = []
+
+    class Workflow:
+        async def run_turn(self, request, _owner):
+            workflow_calls.append(request)
+            return SimpleNamespace(case=None, next_status=None)
+
+    class Service:
+        async def prepare(self, _request):
+            return SimpleNamespace(execution=SimpleNamespace(execution_id=uuid4()))
+
+        def prepared_response(self, _prepared):
+            return {
+                "execution_id": "execution-1",
+                "status": "prepared",
+                "next_action": "generate_core",
+            }
+
+    async def provider_timeout(*_args):
+        raise TimeoutError("NVIDIA route classifier timed out")
+
+    monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+    monkeypatch.setattr(main_module, "route_question", provider_timeout)
+    monkeypatch.setattr(main_module, "v2_question_execution_service", Service())
+
+    response = TestClient(main_module.app, raise_server_exceptions=False).post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "route-timeout"},
+        json={"question": "전기사업 허가가 필요한가요?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "execution_id": "execution-1",
+        "status": "prepared",
+        "next_action": "generate_core",
+    }
+    assert workflow_calls == []
+
+
 def test_v2_prepare_hides_foreign_clarification_cases_as_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
