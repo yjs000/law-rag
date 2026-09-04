@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 67982108ccd86c86e941e9d30dead77b2edeecf46f371a866a3571030b7f5020 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 1d288c3bbfa3861c908d8dc3b84b5214cdaa45545f81dc5e3c848dd2d9237ff9 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 3의 단일 문항 failure-driven orchestrator 실패 테스트부터 작성한다.
 
 ## Todo
 
@@ -27,6 +26,7 @@
 
 ## Blocked
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: D-10 sealed artifact schema와 1,000-case Gold runner 사이의 adapter/runner boundary를 설계·승인한 뒤 Task 3을 재개한다.
 
 ## Done
 

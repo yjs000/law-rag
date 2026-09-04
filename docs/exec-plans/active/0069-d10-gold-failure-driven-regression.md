@@ -1,9 +1,9 @@
 > 작업 ID: `E-006`
-> 상태: `Picked Up`
+> 상태: `Blocked`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold가 사용자 adjudication을 거쳐 `approved_gold` 상태여야 하며, 읽기 전용 평가 DB, NVIDIA embedding credential, clean code provenance가 준비되어야 한다.
-> 다음 행동: Task 3의 단일 문항 failure-driven orchestrator 실패 테스트부터 작성한다.
+> 다음 행동: D-10 sealed artifact schema와 1,000-case Gold runner 사이의 adapter/runner boundary를 설계·승인한 뒤 Task 3을 재개한다.
 > 참고 범위:
 > - `experiments/d_gold_10/README.md` L1-L31 — D-10의 10문항 범위, 사용자 검토 gate, 허용 preflight 명령
 > - `apps/api/scripts/evaluate_experiment_d_gold.py` L1140-L1205 — approved Gold runner의 credential·DB 사전조건과 안전한 오류 payload
