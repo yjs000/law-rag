@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
@@ -46,6 +47,8 @@ from app.domain.schemas import (
 )
 from app.ports.clarification_case import ClarificationCaseStatus
 from app.ports.question_execution import ExecutionNotFound, QuestionExecutionRecord
+
+lease_release_logger = logging.getLogger("law_rag.phase_lease_release")
 
 
 @dataclass(frozen=True)
@@ -452,12 +455,27 @@ class V2QuestionExecutionService:
 
         if owns_task:
             task.add_done_callback(
-                lambda completed: asyncio.create_task(
-                    self._release_phase_task(request.execution_id, completed, lease)
+                lambda completed: self._schedule_phase_release(
+                    request.execution_id, completed, lease
                 )
             )
             start_gate.set()
         return PhaseRun(task=task, owns_task=owns_task)
+
+    def _schedule_phase_release(self, execution_id: object, task: Any, lease: Any) -> None:
+        release_task = asyncio.create_task(self._release_phase_task(execution_id, task, lease))
+        release_task.add_done_callback(self._observe_phase_release_failure)
+
+    @staticmethod
+    def _observe_phase_release_failure(release_task: asyncio.Task[None]) -> None:
+        if release_task.cancelled():
+            return
+        try:
+            release_task.result()
+        except Exception as error:
+            lease_release_logger.error(
+                "phase lease release failed", extra={"error_type": type(error).__name__}
+            )
 
     async def _release_phase_task(self, execution_id: object, task: Any, lease: Any) -> None:
         if self._phase_tasks.get(execution_id) is task:
