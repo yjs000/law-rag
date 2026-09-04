@@ -67,6 +67,14 @@
 - [ ] **Step 4: 실패가 있으면 재현 테스트 RED → 최소 수정 → focused GREEN → 배포 재검증을 반복한다.**
 - [ ] **Step 5: P0 익명 항목을 증거와 함께 갱신하고 전체 완료 체크를 실행한다.**
 
+**오류 증빙 (2026-09-04):** 운영 `finalize` 상세 생성에서 NVIDIA HTTP 503이 발생하면 검증된
+core 요약으로 강등되어 checklist가 빈 응답이 됐다. 같은 로그에서 detached phase lease 반환의
+DB `TimeoutError`가 미관측 background 예외로 남는 것도 재현했다. 후자는 `ef931da`,
+`278bbb9`에서 예외를 관측하고 오류 유형만 JSON 로그로 남기도록 수정했으며, focused API
+회귀 21건과 Ruff를 통과했다. provider 503으로 checklist UI가 열리지 않은 경우는 정상 통과로
+기록하지 않는다. `graphify update .`는 Windows 접근 거부가 난 기존 `pytest-cache-files-*`
+임시 디렉터리 때문에 실패했으므로 graph 산출물은 커밋하지 않았다.
+
 ### Task 3: P0 인증·대화·이력 정상 흐름
 
 **Files:**
