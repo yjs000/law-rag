@@ -49,7 +49,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .history-open small { display: block; margin-top: 4px; color: var(--subtle); font-size: 10px; }
 .history-delete { display: none; width: 36px; border: 0; color: var(--danger); background: transparent; }
 .history-delete .icon { width: 16px; }
-.history-item:hover .history-delete, .history-delete:focus-visible { display: grid; place-items: center; }
+.history-item:hover .history-delete, .history-item:focus-within .history-delete, .history-delete:focus-visible { display: grid; place-items: center; } .history-delete:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
 .sidebar-empty { margin: 8px 5px; padding: 16px; border: 1px solid var(--line); border-radius: 11px; color: var(--muted); background: var(--surface); font-size: 12px; line-height: 1.5; }
 .sidebar-empty p { margin: 0 0 11px; }
 .sidebar-empty button { padding: 0; border: 0; color: var(--accent); background: transparent; font-weight: 800; }
