@@ -129,6 +129,11 @@ def test_request_budget_timeout_defaults() -> None:
     assert settings.embedding_timeout_seconds == 30
 
 
+def test_v2_provider_slots_default_is_three(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("V2_PROVIDER_SLOTS", raising=False)
+    assert Settings().v2_provider_slots == 3
+
+
 def test_request_timeout_seconds_separate_from_question_request_timeout() -> None:
     settings = Settings(_env_file=None)
 
