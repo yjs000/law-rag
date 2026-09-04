@@ -107,6 +107,27 @@ export function oauthRedirectMessage(search: string): string | null {
   return "Google 로그인을 완료하지 못했습니다. 인증을 취소했거나 요청이 만료되었을 수 있습니다. 다시 시도해 주세요.";
 }
 
+export function conversationIdFromSearch(search: string): string | null {
+  const conversationId = new URLSearchParams(search).get("conversation")?.trim();
+  return conversationId || null;
+}
+
+export function conversationSearch(search: string, conversationId: string | null): string {
+  const params = new URLSearchParams(search);
+  if (conversationId) params.set("conversation", conversationId);
+  else params.delete("conversation");
+  const nextSearch = params.toString();
+  return nextSearch ? `?${nextSearch}` : "";
+}
+
+export function shouldApplyConversationRestore(expectedAuthEpoch: number, currentAuthEpoch: number, expectedConversationEpoch: number, currentConversationEpoch: number): boolean {
+  return expectedAuthEpoch === currentAuthEpoch && expectedConversationEpoch === currentConversationEpoch;
+}
+
+function replaceConversationUrl(conversationId: string | null) {
+  window.history.replaceState(null, "", `${window.location.pathname}${conversationSearch(window.location.search, conversationId)}${window.location.hash}`);
+}
+
 /**
  * `hasActiveSession` distinguishes a real sign-in from Supabase's tab-refocus
  * `SIGNED_IN` noise (0040): once a session is already hydrated, further
@@ -368,6 +389,7 @@ export default function Home() {
   const activeRequest = useRef<{ id: string; controller: AbortController } | null>(null);
   const historySentinel = useRef<HTMLDivElement>(null);
   const historyCursorRef = useRef<string | null>(null);
+  const conversationEpoch = useRef(0);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -386,6 +408,8 @@ export default function Home() {
 
   const clearAuthenticatedWorkspace = useCallback(() => {
     authEpoch.current += 1;
+    conversationEpoch.current += 1;
+    replaceConversationUrl(null);
     setUser(null);
     setHistory([]);
     historyCursorRef.current = null;
@@ -478,6 +502,7 @@ export default function Home() {
         historyCursorRef.current = page.next_cursor ?? null;
         setHistoryHasMore(page.has_more);
       }
+      return page;
     } catch (cause) {
       if (authEpoch.current === epoch) setError(cause instanceof Error ? cause.message : "질문 이력을 불러오지 못했습니다.");
     } finally {
@@ -489,7 +514,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (user) void Promise.resolve().then(() => refreshHistory());
+    if (!user) return;
+    void Promise.resolve().then(async () => {
+      const sessionEpoch = authEpoch.current;
+      const navigationEpoch = conversationEpoch.current;
+      const page = await refreshHistory();
+      if (!shouldApplyConversationRestore(sessionEpoch, authEpoch.current, navigationEpoch, conversationEpoch.current)) return;
+      const conversationId = conversationIdFromSearch(window.location.search);
+      if (conversationId) await openHistory({ id: conversationId, title: page?.items.find((item) => item.id === conversationId)?.title ?? "" });
+    });
   }, [refreshHistory, user]);
 
   useEffect(() => {
@@ -551,6 +584,8 @@ export default function Home() {
   }
 
   function startNewChat(seed = "") {
+    replaceConversationUrl(null);
+    conversationEpoch.current += 1;
     activeRequest.current?.controller.abort();
     activeRequest.current = null;
     setQuestion(seed);
@@ -569,6 +604,7 @@ export default function Home() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (loading) return;
+    conversationEpoch.current += 1;
     const submission = consumeQuestionDraft(question);
     if (!submission) return;
     const { submittedQuestion: trimmed, nextDraft } = submission;
@@ -634,6 +670,7 @@ export default function Home() {
         confirmed: answer.conversation_id != null || current.confirmed,
       }));
       setSelectedCitationId(null);
+      if (user && answer.conversation_id) replaceConversationUrl(answer.conversation_id);
       setCurrentHistoryId(user ? (answer.request_id ?? null) : null);
       if (user) {
         historyCursorRef.current = null;
@@ -673,11 +710,14 @@ export default function Home() {
     }
   }
 
-  async function openHistory(item: ConversationSummary) {
+  async function openHistory(item: Pick<ConversationSummary, "id" | "title">) {
     setError("");
+    const sessionEpoch = authEpoch.current;
+    const navigationEpoch = ++conversationEpoch.current;
     try {
       activeRequest.current?.controller.abort();
       const page = await listConversationTurns(item.id);
+      if (!shouldApplyConversationRestore(sessionEpoch, authEpoch.current, navigationEpoch, conversationEpoch.current)) return;
       const ordered = [...page.items].reverse();
       const messages = ordered.flatMap((detail) => [
         { id: `user-${detail.id}`, role: "user" as const, text: detail.request.question, asOf: detail.request.as_of_date, status: "sent" as const },
@@ -685,7 +725,7 @@ export default function Home() {
       ]);
       const latest = ordered.at(-1);
       if (!latest) throw new Error("대화에 표시할 질문이 없습니다.");
-      setActiveChat({ id: item.id, title: item.title, messages, contextMessageCount: item.turn_count * 2, confirmed: true });
+      setActiveChat({ id: item.id, title: item.title || latest.request.question, messages, contextMessageCount: messages.length, confirmed: true });
       setTurnCursor(page.next_cursor ?? null);
       setTurnHasMore(page.has_more);
       setQuestion("");
@@ -698,6 +738,7 @@ export default function Home() {
       setResult(latest.response);
       setSelectedCitationId(null);
       setCurrentHistoryId(latest.id);
+      replaceConversationUrl(item.id);
       setSidebarOpen(false);
       document.querySelector<HTMLElement>("#conversation")?.focus();
     } catch (cause) {

@@ -53,6 +53,9 @@ vi.mock("react", async (importOriginal) => {
 import {
   authEventAction,
   clampAsOfDate,
+  conversationIdFromSearch,
+  conversationSearch,
+  shouldApplyConversationRestore,
   default as Home,
   HYDRATE_THROTTLE_MS,
   koreaTodayIsoDate,
@@ -224,5 +227,22 @@ describe("clampAsOfDate (0035)", () => {
   it("passes through an empty or malformed value unchanged", () => {
     expect(clampAsOfDate("", today)).toBe("");
     expect(clampAsOfDate("not-a-date", today)).toBe("not-a-date");
+  });
+});
+
+describe("authenticated conversation refresh restoration (B-004)", () => {
+  it("preserves the active conversation id in the URL and reads it after refresh", () => {
+    expect(conversationSearch("?auth=success", "chat-42")).toBe("?auth=success&conversation=chat-42");
+    expect(conversationIdFromSearch("?auth=success&conversation=chat-42")).toBe("chat-42");
+  });
+
+  it("removes only the conversation id when starting a new conversation", () => {
+    expect(conversationSearch("?auth=success&conversation=chat-42", null)).toBe("?auth=success");
+  });
+
+  it("drops a delayed restore after sign-out or a new conversation", () => {
+    expect(shouldApplyConversationRestore(4, 4, 8, 8)).toBe(true);
+    expect(shouldApplyConversationRestore(4, 5, 8, 8)).toBe(false);
+    expect(shouldApplyConversationRestore(4, 4, 8, 9)).toBe(false);
   });
 });
