@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4b2f769d6eb5ffc6aacccb8fd9c909ae6ab1e2d403c06dd4a65ac7ff5c2ddce5 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f19943c6a8e65e008091436f377fdfc1a7646669fff43bc5f769b17453b13ba9 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/active/0067-production-web-e2e-completion-loop.md) — 다음 행동: P0 첫 진입부터 AI 질문·근거 원문 정상 흐름을 배포 환경에서 검증
 
 ## Todo
 
@@ -34,4 +33,5 @@
 - [F-006-A · Feature — Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan](exec-plans/completed/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-006-B · Feature — F-006-B 대화형 clarification workflow Implementation Plan](exec-plans/completed/0065-conversational-clarification-workflow.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
+- [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 - [완료 계획 색인](exec-plans/completed/README.md)
