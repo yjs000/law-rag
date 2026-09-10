@@ -88,6 +88,14 @@ def test_v2_action_prompt_keeps_conditional_legal_guidance_partial() -> None:
     assert "조건부로 설명할 수 있으면 'partially_answerable'" in text
     assert "실질적인 답을 전혀 제공할 수 없을 때만 'clarification_required'" in text
     assert "개별 결론을 확정할 수 없다는 이유만으로 'clarification_required'" in text
+    assert "어느 경로가 적용되는지" in text
+    assert "결정 사실의 실제 값" in text
+    assert "결정축을 질문에서 직접 지목" in text
+    assert "특정 설비에 적용될 경로" in text
+    assert "하나라도 빠졌다면 'clarification_required'를 우선" in text
+    assert "상충하면 이 규칙이 'partially_answerable' 일반 설명 규칙보다 우선" in text
+    assert "허가·신고의 종류와 일반 구분 기준" in text
+    assert "용량과 사용 방식에 따라 달라지는 자기 설비의 절차" in text
 
 
 def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:

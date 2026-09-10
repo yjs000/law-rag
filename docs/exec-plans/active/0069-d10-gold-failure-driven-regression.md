@@ -3,7 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold의 `approved_gold` 상태, `.env.local`, NVIDIA와 Supabase V2 E2E 전체 접근 승인, clean code provenance가 준비되어야 한다.
-> 다음 행동: `lay-energy-0251`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
+> 다음 행동: `lay-energy-0346`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L75 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
@@ -115,3 +115,4 @@
 - 2026-09-10: `lay-energy-0111`에서 V2 router가 누락된 사업 결정사실을 `legal_search`로 분류하고, 수정 뒤에는 core가 `clarification_required`를 `unanswerable`로 덮으며, 마지막으로 ledger가 의도된 비검색 0-evidence pass를 거부하는 세 결함을 순서대로 재현했다. prompt 우선순위, non-legal core action 보존, `ask_clarifying_question`/`insufficient_evidence` 전용 zero-evidence 허용 테스트를 추가한 뒤 r6 실행이 pass했다.
 - 2026-09-10: `lay-energy-0201` attempt 2는 `blocked/answer_unavailable`였다. read-only 진단 결과 원격 DB는 Alembic `0016`이고 `clarification_cases`가 없어 `create_or_get`에서 `UndefinedTableError`가 발생한다. 명시적 `--case-id`가 기존 nonpass 뒤 재시도되지 않는 runner 결함은 실패 테스트 후 수정했으며, migration `0017` schema write 승인 뒤 같은 r6 ledger에 재시도한다.
 - 2026-09-10: 사용자의 승인으로 migration `0017`을 적용하고 table·index·version을 검증했다. `lay-energy-0201`에서는 개별 가능 여부와 조건부 허가 절차를 구분하도록 router/core action prompt를 정렬하고, 비어 있지 않은 summary를 answer-present로 보도록 judge를 수정했다. 간헐적 NVIDIA router 503은 새 attempt로 재실행했으며 attempt 9가 근거·citation 각 5건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
+- 2026-09-10: `lay-energy-0251` attempts 10~12는 결정축의 실제 값이 없는데도 `partial_answer_with_limits`를 반환했다. 동일 질문의 provider `missing_fields`가 0개와 2개 사이에서 변동해 prompt-only 판정이 재현 불가능함을 확인했다. 명시적 설비 적용 표지, 또는 기준값 없는 “소규모 설비”와 `결정축에 따라 달라지는가`가 함께 나타난 미해결 비교에서만 용량·전압·사용 방식·공사 종류의 값을 검사하는 좁은 router guardrail을 추가했다. provider 자유형 누락값만으로 승격하지 않고 로컬 검증 누락값만 `legal_search` 후보보다 우선하며, 일반 taxonomy·소규모 설비 축별 기준·일반 설비 비교 질문은 검색 가능하게 유지한다. 관련 회귀 65개와 이미 통과한 일반 절차 질문의 실제 `legal_search` 비회귀를 확인했다. attempt 13의 NVIDIA 503은 새 시도로 처리했고, 최종 리뷰 수정 후 attempt 17이 `ask_clarifying_question`, judge code 없음으로 pass했다.

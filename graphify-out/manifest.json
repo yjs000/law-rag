@@ -66,15 +66,15 @@
     "semantic_hash": ""
   },
   "apps/api/app/adapters/nvidia_nim_route_classifier.py": {
-    "mtime": 1788441030.665107,
-    "seen": 1789039836.003643,
-    "ast_hash": "f2b35a572ee6021aab2322c2327fd1f9",
+    "mtime": 1789048974.5061316,
+    "seen": 1789049088.0742705,
+    "ast_hash": "17372cb7ccbe0a90b4fe8c3f9c78775d",
     "semantic_hash": ""
   },
   "apps/api/app/adapters/openai_answerer.py": {
-    "mtime": 1789045805.5947886,
-    "seen": 1789045846.4061952,
-    "ast_hash": "500669fabea0590f7a06af503d1d77a7",
+    "mtime": 1789048510.2705846,
+    "seen": 1789048660.6957471,
+    "ast_hash": "349e60f914b2caccce78ff0684b92a79",
     "semantic_hash": ""
   },
   "apps/api/app/adapters/postgres_identity.py": {
@@ -198,9 +198,9 @@
     "semantic_hash": "83c351390798534fe44e24183f558bb2"
   },
   "apps/api/app/domain/routing.py": {
-    "mtime": 1789045805.5937898,
-    "seen": 1789045846.414629,
-    "ast_hash": "fde9c7d2eb9447bd16c438ca31fa9eca",
+    "mtime": 1789048510.269584,
+    "seen": 1789048660.7049768,
+    "ast_hash": "78598a379b147f447439054f75d82577",
     "semantic_hash": ""
   },
   "apps/api/app/domain/schemas.py": {
@@ -870,9 +870,9 @@
     "semantic_hash": "b4b762f2d848d6e0d77d5665923ccdb5"
   },
   "apps/api/tests/test_layperson_prompt_v2.py": {
-    "mtime": 1789045805.5937898,
-    "seen": 1789045846.4351208,
-    "ast_hash": "fe3d3d430d36668f2787d0c44143b266",
+    "mtime": 1789048510.269584,
+    "seen": 1789048660.729454,
+    "ast_hash": "25b1fea0213faf16b10cd825800e7ad6",
     "semantic_hash": ""
   },
   "apps/api/tests/test_llamaindex_repository.py": {
@@ -972,9 +972,9 @@
     "semantic_hash": "85730617c45c34aa9f1e6d22dcd96297"
   },
   "apps/api/tests/test_routing_pipeline.py": {
-    "mtime": 1789045805.5947886,
-    "seen": 1789045846.4382248,
-    "ast_hash": "94da9c4609ae6a9bbee7d116ad0d0d40",
+    "mtime": 1789048974.5071325,
+    "seen": 1789049088.1079476,
+    "ast_hash": "74d80a8d78d7d7fcb97e4e299f62ba82",
     "semantic_hash": ""
   },
   "apps/api/tests/test_runtime_path_contract.py": {
@@ -2035,7 +2035,7 @@
   },
   "pyproject.toml": {
     "mtime": 1787114286.1499307,
-    "seen": 1789044538.6632009,
+    "seen": 1789046444.7505727,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789045761.8230357,
-    "seen": 1789045846.4806738,
-    "ast_hash": "edd8019028b9bc33d490c85da4dd289f",
+    "mtime": 1789048160.60426,
+    "seen": 1789048318.6738765,
+    "ast_hash": "579bfe583948c0cf0442d2b7b1a76f1c",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789045757.9802794,
-    "seen": 1789045846.486471,
-    "ast_hash": "b85ca395f537cc7a955b6dbbae878ace",
+    "mtime": 1789049034.7155185,
+    "seen": 1789049088.155867,
+    "ast_hash": "e5a93c693121bdb59b63b4a6cafb6521",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
@@ -3846,9 +3846,9 @@
     "semantic_hash": ""
   },
   "docs/design-docs/experiment-d-10-end-to-end-failure-regression.md": {
-    "mtime": 1789045757.5582798,
-    "seen": 1789045846.4824646,
-    "ast_hash": "0c943b1d2cfd201578399eab0daea1e8",
+    "mtime": 1789049034.2975445,
+    "seen": 1789049088.1518893,
+    "ast_hash": "7ccfca86b731e0bbe04aab5556176f27",
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_answer_judge.py": {

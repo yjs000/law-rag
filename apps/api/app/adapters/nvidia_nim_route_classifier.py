@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -18,12 +19,83 @@ from app.domain.routing import (
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
 _ROUTER_LOGGER = logging.getLogger("law_rag.route_provider")
 
+_CAPACITY_VALUE = re.compile(
+    r"(?:\d+(?:[.,]\d+)?|[일이삼사오육칠팔구십백천만]+)\s*"
+    r"(?:kW|MW|GW|킬로와트|메가와트|기가와트)",
+    re.IGNORECASE,
+)
+_VOLTAGE_VALUE = re.compile(
+    r"(?:\d+(?:[.,]\d+)?)\s*(?:V|kV|볼트|킬로볼트)|저압|고압|특고압",
+    re.IGNORECASE,
+)
+
+
+def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
+    """Find named decision axes whose concrete value is absent.
+
+    This is a narrow deterministic guardrail over provider output, not an
+    answerability classifier. It only acts when the question itself names an
+    axis and asks for a specific applicable path, so general permit-taxonomy
+    questions remain searchable.
+    """
+
+    asks_specific_path = any(
+        marker in question
+        for marker in (
+            "내 설비",
+            "제 설비",
+            "우리 설비",
+            "이 설비",
+            "해당 설비",
+            "설치하려",
+            "설치할 수",
+            "어느 경로",
+            "어느 절차",
+            "어떤 경로가 적용",
+            "어떤 절차가 적용",
+        )
+    ) or (
+        "소규모 설비" in question
+        and "따라" in question
+        and ("달라" in question or "나뉘" in question)
+    )
+    if not asks_specific_path:
+        return ()
+
+    missing: list[str] = []
+    if ("용량" in question or "설비규모" in question) and not _CAPACITY_VALUE.search(question):
+        missing.append("설비용량")
+    if "전압" in question and not _VOLTAGE_VALUE.search(question):
+        missing.append("전압")
+
+    mentions_usage = "사용 방식" in question or "사용방식" in question
+    has_sale = "판매" in question
+    has_self_consumption = "자가소비" in question or "자가 소비" in question
+    if mentions_usage and has_sale == has_self_consumption:
+        missing.append("전기 사용 방식")
+
+    mentions_construction = "공사 종류" in question or "공사종류" in question
+    has_new_installation = "신규 설치" in question or "신규설치" in question
+    has_change_work = "변경공사" in question or "변경 공사" in question
+    if mentions_construction and has_new_installation == has_change_work:
+        missing.append("공사 종류")
+    return tuple(missing)
+
 
 class _RouteJudgmentSchema(BaseModel):
     route: ProviderQuestionRoute
     confidence: float
     reason: str
-    missing_fields: list[str] = Field(default_factory=list)
+    missing_fields: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Question-mentioned decision dimensions whose concrete values are absent. "
+            "Extract this independently of the proposed route. For example, a question "
+            "that says the result depends on capacity but supplies no number or unit is "
+            "missing facility capacity; a question that says it depends on usage but "
+            "does not choose sale or self-consumption is missing electricity usage mode."
+        ),
+    )
 
 
 class NvidiaNimQuestionRouter:
@@ -109,11 +181,24 @@ class NvidiaNimQuestionRouter:
         if not content:
             raise ValueError("NVIDIA NIM returned no route judgment")
         parsed = _RouteJudgmentSchema.model_validate_json(content)
+        provider_missing_fields = tuple(
+            dict.fromkeys(field.strip() for field in parsed.missing_fields if field.strip())
+        )
+        guarded_missing_fields = _missing_named_decision_fields(question)
+        route: ProviderQuestionRoute = parsed.route
+        if route == "legal_search":
+            missing_fields = guarded_missing_fields
+            if missing_fields:
+                route = "clarification_required"
+        else:
+            missing_fields = tuple(
+                dict.fromkeys((*provider_missing_fields, *guarded_missing_fields))
+            )
         return RouteJudgment(
-            route=parsed.route,
+            route=route,
             confidence=parsed.confidence,
             reason=parsed.reason,
-            missing_fields=tuple(parsed.missing_fields),
+            missing_fields=missing_fields,
         )
 
     async def aclose(self) -> None:

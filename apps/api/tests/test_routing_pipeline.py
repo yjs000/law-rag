@@ -192,8 +192,148 @@ async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -
     assert "설치할 수 있는지" in messages[1]["content"]
     assert "허가·신고·절차의 조건부 목록" in messages[1]["content"]
     assert "누락됐다는 이유만으로 clarification_required" in messages[1]["content"]
+    assert "어느 경로가 적용되는지" in messages[1]["content"]
+    assert "결정 사실의 실제 값" in messages[1]["content"]
+    assert "결정축을 질문에서 직접 지목" in messages[1]["content"]
+    assert "특정 설비에 적용될 경로" in messages[1]["content"]
+    assert "하나라도 빠졌다면" in messages[1]["content"]
+    assert "clarification_required를 우선" in messages[1]["content"]
+    assert "상충하면 이 규칙이 legal_search 일반" in messages[1]["content"]
+    assert "설명 규칙보다 우선" in messages[1]["content"]
+    assert "허가·신고의 종류와 일반 구분 기준" in messages[1]["content"]
+    assert "용량과 사용 방식에 따라 달라지는 자기 설비의 절차" in messages[1]["content"]
+    assert "route 판단과 별개로 missing_fields를 먼저 추출" in messages[1]["content"]
+    assert "1. missing_fields를 먼저 추출" in messages[1]["content"]
+    assert "숫자·단위가 없으면 '설비용량'" in messages[1]["content"]
+    assert "판매용·자가소비용 선택이 없으면 '전기 사용 방식'" in messages[1]["content"]
     assert "유사" not in " ".join(message["content"] for message in messages)
     assert "hint" not in " ".join(message["content"] for message in messages).lower()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_router_ignores_unvalidated_provider_missing_facts() -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "legal_search",
+                                "confidence": 0.9,
+                                "reason": "조건부 일반 설명이 가능합니다.",
+                                "missing_fields": ["설비용량"],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route("결정 사실의 실제 값이 없는 질문")
+
+    assert judgment.route == "legal_search"
+    assert judgment.missing_fields == ()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_router_deterministically_finds_named_axes_without_values() -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "legal_search",
+                                "confidence": 0.95,
+                                "reason": "일반 설명이 가능합니다.",
+                                "missing_fields": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route(
+        "소규모 설비는 용량과 전기 사용 방식에 따라 절차가 어떻게 달라지나요?"
+    )
+
+    assert judgment.route == "clarification_required"
+    assert judgment.missing_fields == ("설비용량", "전기 사용 방식")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "question",
+    [
+        "어떤 허가나 신고가 필요한지 어떻게 구분하나요?",
+        "용량별 허가·신고 기준을 알려주세요.",
+        "소규모 설비의 용량별 허가·신고 기준을 알려주세요.",
+        "태양광 설비는 용량에 따라 허가나 신고가 어떻게 달라지나요?",
+        "전기 사용 방식별 절차를 알려주세요.",
+        "공사 종류별 신고 기준을 알려주세요.",
+        "제 설비는 용량 3000kW, 전압 저압, 전기 사용 방식은 자가소비용이고 "
+        "공사 종류는 신규 설치입니다.",
+    ],
+)
+async def test_nvidia_router_keeps_general_permit_taxonomy_searchable(question: str) -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "legal_search",
+                                "confidence": 0.95,
+                                "reason": "일반 설명이 가능합니다.",
+                                "missing_fields": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route(question)
+
+    assert judgment.route == "legal_search"
+    assert judgment.missing_fields == ()
 
 
 def _payload_json(**overrides: object) -> dict[str, object]:
