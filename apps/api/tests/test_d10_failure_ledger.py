@@ -82,6 +82,29 @@ def test_zero_retrieved_evidence_rejects_pass_status(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("actual_action", ("ask_clarifying_question", "insufficient_evidence"))
+def test_zero_evidence_allows_answer_pass_for_non_search_action(
+    tmp_path: Path, actual_action: str
+) -> None:
+    record = append_attempt(
+        tmp_path / "attempts.jsonl",
+        AttemptRecord(
+            attempt_number=1,
+            case_id="lay-energy-0111",
+            status="pass",
+            error_code=None,
+            retrieved_evidence_count=0,
+            citation_count=0,
+            citation_reason="validated_by_answer_runner",
+            evaluation_stage="answer",
+            actual_action=actual_action,
+            judge_codes=(),
+        ),
+    )
+
+    assert record.status == "pass"
+
+
 def test_zero_retrieved_evidence_allows_blocked_external_gate(tmp_path: Path) -> None:
     record = append_attempt(
         tmp_path / "attempts.jsonl",

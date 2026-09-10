@@ -253,13 +253,28 @@ class V2QuestionExecutionService:
 
         dependencies = self._dependencies()
         payload, hits, corpus_as_of = execution_request_and_hits(execution)
-        fallback = search_only_answer(payload, hits, corpus_as_of)
         route = execution.private_payload.get("route", "legal_search")
-        if (
-            route != "legal_search"
-            or payload.answer_mode != "terra"
-            or not dependencies.ai_available()
-        ):
+        if route != "legal_search":
+            missing_fields = execution.private_payload.get("missing_fields", [])
+            fallback = route_guidance_fallback(
+                payload,
+                str(route),
+                missing_fields=tuple(item for item in missing_fields if isinstance(item, str))
+                if isinstance(missing_fields, list)
+                else (),
+            )
+            return (
+                dependencies.make_core_draft(
+                    fallback.summary,
+                    [],
+                    fallback.action or "unanswerable",
+                ),
+                [],
+                True,
+            )
+
+        fallback = search_only_answer(payload, hits, corpus_as_of)
+        if payload.answer_mode != "terra" or not dependencies.ai_available():
             return (
                 dependencies.make_core_draft(
                     fallback.summary,
@@ -367,12 +382,12 @@ class V2QuestionExecutionService:
         if degraded:
             core = None
             try:
-                candidate, citations, used_safe_fallback = (
-                    await self._core_result_from_frozen_evidence(execution)
-                )
-                if self._core_is_publishable(
-                    candidate, execution, used_safe_fallback
-                ):
+                (
+                    candidate,
+                    citations,
+                    used_safe_fallback,
+                ) = await self._core_result_from_frozen_evidence(execution)
+                if self._core_is_publishable(candidate, execution, used_safe_fallback):
                     core = candidate
                     degraded = False
                     core_data = core.model_dump(mode="json", exclude={"grounded_claims"})
@@ -692,9 +707,7 @@ class V2QuestionExecutionService:
             raise ValueError("clarification transition payload is invalid")
         case_id = UUID(raw_case_id)
         status = ClarificationCaseStatus(raw_status)
-        question_format = [
-            ClarificationFactPrompt.model_validate(item) for item in raw_questions
-        ]
+        question_format = [ClarificationFactPrompt.model_validate(item) for item in raw_questions]
         transition = (
             dependencies.clarification_cases.mark_waiting
             if status is ClarificationCaseStatus.WAITING_FOR_USER

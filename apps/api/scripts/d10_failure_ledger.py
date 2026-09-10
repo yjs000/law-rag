@@ -30,6 +30,7 @@ _SAFE_CODE = re.compile(r"[a-z0-9_]+")
 _ANSWER_ACTIONS = frozenset(
     {"answer", "partial_answer_with_limits", "ask_clarifying_question", "insufficient_evidence"}
 )
+_ZERO_EVIDENCE_ANSWER_ACTIONS = frozenset({"ask_clarifying_question", "insufficient_evidence"})
 
 
 class LedgerValidationError(ValueError):
@@ -102,8 +103,18 @@ class AttemptRecord:
             or self.retrieved_evidence_count < 0
         ):
             raise LedgerValidationError("retrieved_evidence_count_invalid")
+        zero_evidence_answer_pass = (
+            self.status == "pass"
+            and self.error_code is None
+            and self.evaluation_stage == "answer"
+            and self.actual_action in _ZERO_EVIDENCE_ANSWER_ACTIONS
+            and self.citation_count == 0
+            and not self.judge_codes
+        )
         if self.retrieved_evidence_count == 0 and not (
-            self.status == "failure" or (self.status == "blocked" and self.error_code is not None)
+            self.status == "failure"
+            or (self.status == "blocked" and self.error_code is not None)
+            or zero_evidence_answer_pass
         ):
             raise LedgerValidationError("zero_evidence_requires_failure")
         if self.evaluation_stage == "retrieval":

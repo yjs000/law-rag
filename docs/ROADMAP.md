@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7c8f9b68ccc3082fa2eeeb7b54d9438c74f4d9569d14f58a6a1df044f0105fa2 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 859c6b21260d36fca26f3cc296d0439b7e547da960fbf1260cbc0f3761f73146 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: V1 answer executor를 V2 prepare→core→finalize executor로 교체하는 실패 테스트를 작성하고 V2 57초/55초 예산 계약을 연결한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: `lay-energy-0201`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
 
 ## Todo
 
@@ -24,7 +24,6 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: v2 temporal adapter 경계를 확정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
-- [F-009 · Feature — F-009 V2 실행 진단과 고정 Evidence Manifest](exec-plans/todo/0068-v2-execution-diagnostics-and-evidence-manifest.md) — 다음 행동: 진단 이벤트 도메인 모델과 안전한 직렬화의 실패 테스트부터 작성한다.
 
 ## Blocked
 

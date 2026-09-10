@@ -19,6 +19,7 @@ from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.clarification import ClarificationCase, FactStatus, GroundedClaim, RequiredFact
 from app.domain.grounding import CitationRegistry, FrozenCitation
 from app.domain.question_execution import ExecutionStatus
+from app.domain.routing import RouteDecision
 from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit, SourceKind
 from app.ports.clarification_case import ClarificationCaseStatus
 
@@ -186,9 +187,7 @@ def _service(
         executions=executions,
         clarification_cases=clarification_cases,
         resolve_repository=_resolve_repository,
-        active_provider=lambda: SimpleNamespace(
-            active=lambda: _active_generation()
-        ),
+        active_provider=lambda: SimpleNamespace(active=lambda: _active_generation()),
         retrieve_evidence=_retrieve,
         route=_route,
         answerer=lambda: answerer,
@@ -218,9 +217,34 @@ async def _active_generation() -> SimpleNamespace:
     return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
 
 
-async def _case_record(
-    cases: MemoryClarificationCaseRepository, context: ClarificationGrounding
-):
+@pytest.mark.asyncio
+async def test_initial_clarification_route_preserves_clarification_action_in_core() -> None:
+    answerer = _CapturingAnswerer(claims=[])
+    service, _executions = _service(answerer)
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="특정 설비에 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="initial-clarification",
+            user=None,
+            route_decision=RouteDecision(
+                route="clarification_required",
+                reason_code="router_judgment",
+                confidence=0.9,
+                missing_fields=("설비용량",),
+            ),
+        )
+    )
+
+    core = await service.run_core(prepared.execution)
+
+    assert core.target is ExecutionStatus.CORE_ANSWERED
+    assert core.private_payload is not None
+    assert core.private_payload["verified_core"]["action"] == "clarification_required"
+    assert answerer.core_calls == 0
+
+
+async def _case_record(cases: MemoryClarificationCaseRepository, context: ClarificationGrounding):
     return await cases.create_or_get(
         owner_scope="anonymous:test",
         capability_hash=None,
@@ -476,9 +500,7 @@ async def test_invalid_waiting_metadata_leaves_the_case_untransitioned() -> None
             clarification_outcome=outcome,
         )
     )
-    prepared.execution.private_payload["clarification_outcome"]["question_format"] = [
-        {"id": ""}
-    ]
+    prepared.execution.private_payload["clarification_outcome"]["question_format"] = [{"id": ""}]
 
     await service.run_finalize(prepared.execution, None)
 
@@ -552,9 +574,7 @@ def test_claim_gate_requires_complete_unique_structural_coverage() -> None:
     )
     targets = (("summary", None), ("section_claim", 0))
 
-    assert not claims_are_grounded(
-        (summary,), context, registry, required_targets=targets
-    )
+    assert not claims_are_grounded((summary,), context, registry, required_targets=targets)
     assert not claims_are_grounded(
         (summary, summary), context, registry, required_targets=(("summary", None),)
     )
@@ -624,9 +644,9 @@ async def test_invalid_claim_is_replaced_before_terminal_sse_publication() -> No
         generation_id=uuid4(),
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
         private_payload={
-            "request": QuestionRequest(
-                question="전기사업 허가가 필요한가요?"
-            ).model_dump(mode="json"),
+            "request": QuestionRequest(question="전기사업 허가가 필요한가요?").model_dump(
+                mode="json"
+            ),
             "hits": [hit.model_dump(mode="json")],
             "generation_hits": [hit.model_dump(mode="json")],
             "route": "legal_search",
@@ -670,9 +690,9 @@ async def test_unbound_published_detail_is_replaced_before_terminal_sse_publicat
         generation_id=uuid4(),
         expires_at=datetime.now(UTC) + timedelta(minutes=10),
         private_payload={
-            "request": QuestionRequest(
-                question="전기사업 허가가 필요한가요?"
-            ).model_dump(mode="json"),
+            "request": QuestionRequest(question="전기사업 허가가 필요한가요?").model_dump(
+                mode="json"
+            ),
             "hits": [hit.model_dump(mode="json")],
             "generation_hits": [hit.model_dump(mode="json")],
             "route": "legal_search",
@@ -697,9 +717,7 @@ async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallba
             self.core_calls = 0
             self.detail_calls = 0
 
-        async def answer_core(
-            self, _request: QuestionRequest, _hits: list[SearchHit]
-        ) -> CoreDraft:
+        async def answer_core(self, _request: QuestionRequest, _hits: list[SearchHit]) -> CoreDraft:
             self.core_calls += 1
             return CoreDraft(
                 summary="근거와 일치하지 않는 요약입니다.",
@@ -739,9 +757,7 @@ async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallba
         phase="core",
         events=core.events,
     )
-    repair_required = await executions.get_owned(
-        prepared.execution.execution_id, "anonymous:test"
-    )
+    repair_required = await executions.get_owned(prepared.execution.execution_id, "anonymous:test")
     finalize_claim = await executions.claim_phase(
         prepared.execution.execution_id,
         "anonymous:test",
@@ -857,9 +873,7 @@ async def test_successful_core_repair_persists_clarification_transition() -> Non
         phase="core",
         events=core.events,
     )
-    repair_required = await executions.get_owned(
-        prepared.execution.execution_id, "anonymous:test"
-    )
+    repair_required = await executions.get_owned(prepared.execution.execution_id, "anonymous:test")
 
     finalized = await service.run_finalize(repair_required, None)
 

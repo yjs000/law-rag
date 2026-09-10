@@ -2,7 +2,7 @@
 
 ## 상태
 
-승인됨 — 2026-09-10 사용자 대화에서 retrieval 전용 E-006을 answer·citation·guardrail까지 확장하고, 아래 V2 실행 계약·고정 예산·외부 접근 범위 전체를 승인했다.
+승인됨 — 2026-09-10 사용자는 V2 실행 계약·고정 예산과 아래 NVIDIA·Supabase egress 및 원격 V2 상태 변경의 scope-specific 범위를 승인했다.
 
 ## 목표와 범위
 
@@ -14,18 +14,25 @@ D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경�
 - 질문, 검색 원문, prompt, credential, 예외 원문은 public result·ledger·summary에 기록하지 않는다.
 - 승인된 credential 또는 외부 서비스가 실제로 사용 불가능한 경우만 외부 gate다. 실행하지 못했음을 `blocked`와 안전 code로만 기록한다.
 - retrieval을 실행한 뒤 근거가 0개이면 `failure`다. `blocked`와 0건은 안전한 외부-gate code가 있을 때만 허용한다.
+- `clarification_required`, `realtime_required`, `external_document_required`처럼 정책상 검색을 시작하지 않는 route는 예외다. 기대 action과 일치하는 `ask_clarifying_question` 또는 `insufficient_evidence` answer 결과만 근거·citation 0건 `pass`를 허용한다.
 
 ## 승인된 외부 접근 계약
 
-2026-09-10 사용자는 E-006 D-10 E2E 실행에 필요한 다음 범위 전체를 승인했다.
+2026-09-10 사용자는 E-006 D-10 E2E 실행에 필요한 다음 범위 전체를 승인했다. 외부 서비스의
+기존 계정 사용량 외에 별도 구매는 하지 않으며, credential 원문은 출력·ledger·summary·문서에
+기록하지 않는다.
 
-- 로컬 `.env.local`에서 credential과 실행 설정을 읽는다. credential 원문은 출력·ledger·summary·문서에 기록하지 않는다.
-- `https://integrate.api.nvidia.com/v1`에 sealed D-10 질문을 routing·embedding 입력으로 보내고, V2 core·finalize에 필요한 검색 근거와 prompt/context를 보낸다. `NVIDIA_API_KEY` 사용을 포함한다.
-- `aws-1-ap-northeast-2.pooler.supabase.com`에 DB credential과 query embedding을 보내고 active generation·corpus·vector index를 읽는다.
-- V2 E2E 실행상태를 위해 Supabase의 `question_executions`, `question_execution_events`, `question_execution_issues`를 생성·갱신하고, 해당 임시 실행을 만료·취소 처리할 수 있다. 법률 corpus 원문·청크·embedding의 생성·수정·삭제는 승인 범위가 아니다.
-- `.data/experiments/d-gold-10/<run-id>/`에 public-safe ledger·summary를 기록한다.
-- 원인 확인에 필요한 Vercel 로그는 read-only로 조회할 수 있다.
-- 승인 범위에는 배포, `git push`, PR 생성·수정, 운영 corpus mutation, 상주형 Docker/로컬 DB 기동이 포함되지 않는다.
+| Boundary | Destination or resource | Operation | Data/credential involved | Mutation/retention | Purpose | Status and date | Runtime gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Harness and local tools | `C:\Users\Family\plugins\agent-operating-harness\scripts\harness.mjs` | `node` CLI start/status/evidence/review/check/complete | E-006 목표·검증 상태만 사용 | `.codex/harness/task.json` 갱신 | 완료조건과 증거 강제 | Approved — 2026-09-10 | PATH alias는 없으므로 direct script를 사용; MCP reload 불필요 |
+| Local configuration | repository `.env.local` | read | NVIDIA·Supabase·Vercel credential과 V2 timeout 설정 | 외부 보존 없음; 원문 로그 금지 | production-equivalent E2E 구성 | Approved — 2026-09-10 | sandbox/keyring 접근 시 platform runtime 승인이 별도로 나타날 수 있음 |
+| NVIDIA egress | `https://integrate.api.nvidia.com/v1` | routing·embedding·V2 core·finalize provider call | `NVIDIA_API_KEY`, sealed 질문, 검색 근거, prompt/context | 공급자 요청 처리 범위; 별도 구매 승인 없음 | 실제 모델 기반 V2 답변 생성 | Approved — 2026-09-10 | network escalation prompt는 설계 승인과 별도로 통과해야 함 |
+| Supabase corpus read | `aws-1-ap-northeast-2.pooler.supabase.com` active generation·corpus·vector index | read-only query/search | DB credential, query embedding, 기준일·snapshot identifier | corpus mutation 없음 | 근거 검색과 corpus binding 검증 | Approved — 2026-09-10 | network escalation prompt는 설계 승인과 별도로 통과해야 함 |
+| Supabase V2 execution state | `question_executions`, `question_execution_events`, `question_execution_issues` | create·update·expire/cancel/delete current temporary execution | DB credential, execution id/capability, phase/event/issue metadata | E-006 임시 execution 상태만 변경·정리 | prepare→core→finalize 및 실패 cleanup | Approved — 2026-09-10 | corpus 원문·청크·embedding mutation은 금지 |
+| Local evaluation artifacts | `.data/experiments/d-gold-10/<run-id>/` | create/update | public-safe case id·status·error code·counts·judge codes | 로컬 ledger·summary 보존 | stop/resume 및 회귀 증거 | Approved — 2026-09-10 | 질문·근거·prompt·credential·raw response 기록 금지 |
+| External diagnostics | Vercel logs for this application | read-only query | request/execution identifier와 인증정보 | 로그 변경·삭제 없음 | 외부 실패 원인 확인 | Approved — 2026-09-10 | 필요한 경우에만 사용; raw 민감 로그 재기록 금지 |
+| Repository state | local `main` checkout | local edit·test·Graphify update·commit | source, tests, design/plan, generated graph | 로컬 커밋만 생성 | 결함 수정과 증거 보존 | Approved — 2026-09-10 | `git push`, PR, deploy, migration은 Not required/out of scope |
+| Excluded operations | production corpus, remote Git, deployment, persistent Docker/local DB | no operation | 해당 없음 | corpus mutation·push·PR·deploy·상주 서비스 없음 | 범위 제한 | Not required — 2026-09-10 | 필요해지면 별도 설계 변경과 승인 필요 |
 
 ## 실행 구조
 
@@ -71,5 +78,9 @@ E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestB
 
 - 2026-09-10: D-10은 이미 RAG 개발에 사용된 calibration 문항이므로, answer 평가 역시 D-10 native contract를 사용한다. 1,000-case Gold 계약으로 adapter하지 않는다.
 - 2026-09-10: answer quality의 자동 판정은 expected action, grounding, citation binding, 금지된 action leak처럼 결정적인 경계에 한정한다. 법률적 정확성을 모델 자기평가나 문체 점수로 대체하지 않는다.
-- 2026-09-10: 사용자는 `.env.local`, NVIDIA 전송, Supabase corpus 읽기와 V2 실행상태 쓰기·정리, 로컬 안전 ledger, Vercel read-only 로그 조회를 포함한 E-006 외부 접근 범위 전체를 승인했다. corpus mutation·배포·push는 제외한다.
+- 2026-09-10: 앞선 일반 승인 표현은 platform runtime reviewer가 NVIDIA·Supabase의 데이터 종류와 mutation 범위를 명시한 scope-specific 승인으로 인정하지 않았다. 외부 전송은 발생하지 않았고 해당 세 행을 `Pending`으로 둔다.
 - 2026-09-10: E-006은 V2 prepare→core→finalize production 계약과 V2 phase 57초/provider 55초 예산을 사용한다. V1 `_answer_question`, `RequestBudget`, routing 8초 예산은 사용하지 않는다.
+- 2026-09-10: 사용자의 `design-document-grounding 승인함` 응답은 platform runtime reviewer에서 스킬 사용 승인으로만 해석됐다. scope-specific 외부 전송 승인을 받기 전에는 E2E 명령을 재시도하지 않는다.
+- 2026-09-10: 사용자는 “`.env.local`의 NVIDIA·Supabase 인증정보 사용, sealed D-10 질문·embedding·검색 근거·prompt의 NVIDIA 및 Supabase 전송, Supabase V2 execution 상태 생성·갱신·취소·삭제, corpus read-only 검색” 범위를 제시받고 `응승인`으로 승인했다. 운영 corpus 변경·배포·push는 제외한다.
+- 2026-09-10: 사용자는 `POST /v2/question-executions`에 V1 예산을 언급하거나 적용하지 않고, V2 router를 재시도 없는 단일 55초 provider 호출로 제한하며 endpoint 전체에는 57초 hard deadline을 두는 계약을 승인했다. 이번 변경은 V2 answerer와 다른 phase를 변경하지 않는다.
+- 2026-09-10: 첫 live case에서 특정 사업의 누락 결정사실은 `clarification_required`를 우선하도록 router 계약을 보강했다. V2 core는 비검색 route에 `route_guidance_fallback`을 사용해 clarification action을 보존하며, 의도적으로 검색하지 않는 clarification/insufficient-evidence 정답만 zero-evidence pass를 허용한다.

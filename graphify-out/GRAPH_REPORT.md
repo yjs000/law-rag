@@ -1,23 +1,23 @@
 # Graph Report - law-rag  (2026-09-10)
 
 ## Corpus Check
-- 636 files · ~523,446 words
+- 638 files · ~524,717 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8534 nodes · 17369 edges · 541 communities (456 shown, 85 thin omitted)
-- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 1527 edges (avg confidence: 0.91)
+- 8552 nodes · 17421 edges · 538 communities (448 shown, 90 thin omitted)
+- Extraction: 91% EXTRACTED · 9% INFERRED · 0% AMBIGUOUS · INFERRED: 1532 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9edffc14`
+- Built from commit: `e44f9b72`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - experiment_context.py
 - ProvisionRecord
-- LegalDocumentRecord
+- law_rag_core/domain/catalog.py
 - run.py
 - 실행 계획 0022: 검색 인덱스 재설계와 실험 D 1,000문항 평가셋
 - RawResponse
@@ -30,18 +30,18 @@
 - corpus_update_bundle.py
 - MemoryLegalRepository
 - 0025 Approved Questions to Grounded Answer Roadmap
-- test_question_timeout_budget.py
+- law_json.py
 - MemoryQuestionCancellationCoordinator
 - SearchTrace
-- experiment_embeddings.py
-- question_scope_sha256
+- NvidiaNimEmbedder
+- question_scope_set_sha256
 - test_experiment_d_gold_contract.py
-- PostgresQuestionExecutionRepository
+- v3 설계
 - LawOpenApiClient
 - Lay energy question bank v1 draft
 - evaluate_dense_retrieval
 - LlamaIndex Module Guides and law-rag v2
-- law_rag_core/domain/catalog.py
+- 분산 질문 취소 설계
 - devDependencies
 - V2QuestionExecutionService
 - append_attempt
@@ -59,48 +59,48 @@
 - Energy-law RAG architecture
 - test_ingest.py
 - chat-state.ts
-- bootstrap.py
-- completed/README.md
+- 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단
+- terra 모드 search_only 폴백 제거 (always-generate) Implementation Plan
 - load_registry
 - Vercel Web and FastAPI
 - experiment_d_local_rerank.py
 - test_layperson_energy_questions.py
 - 0043 Layperson Answer Contract v2
 - MockIdentityRepository
-- corpus.py
+- sse.py
 - SourceKind
-- SupabaseAuth
-- D10RunInput
-- test_security_boundaries.py
+- ClarificationTurnOrchestrator
+- d10_failure_runner.py
+- search_only_answer
 - get_settings
 - design-docs/index.md
 - experiment_d_manual_review_contract.py
 - _GenerationRepository
 - api-client.ts
-- test_experiment_d_manual_review.py
-- test_backfill_embeddings.py
+- CorpusSnapshot
+- _RowsResult
 - compilerOptions
 - CorpusSearchUnavailableError
-- ClarificationCase
-- backfill_embeddings.py
-- PipelineIssue
+- main_module
+- test_backfill_embeddings.py
+- ActiveGeneration
 - experiment_d_manual_review_results.py
-- law_json.py
+- ClarificationCaseRecord
 - page.tsx
 - 토큰 컨텍스트·서버 취소·검색 범위 개선
 - _answer_question
-- MemoryQuestionExecutionRepository
+- test_history_retention_postgres.py
 - 기술·로직 부채 감사
-- main.py
-- ClarificationCaseRecord
+- bootstrap.py
+- PostgresClarificationCaseRepository
 - DeletionRecord
 - experiment_d_pilot_contract.py
 - AGENTS.md
 - roadmap_registry.py
 - export_checklist
-- ports/question_execution.py
+- MemoryQuestionExecutionRepository
 - PostgresIdentityRepository
-- test_api_factory_composition.py
+- select_generation_hits
 - derive_answer_action
 - _LockConnection
 - AgentState
@@ -117,7 +117,7 @@
 - contracts.ts
 - Evidence-First Retrieval and Answers
 - 전기사업법 제12조 허가 취소 등
-- create_app
+- ClarificationCase
 - test_question_cancellation.py
 - RouteDecision
 - generation-retry.ts
@@ -132,25 +132,25 @@
 - 일반 사용자형 에너지 질문 의도 설계
 - Nemotron 3 Embed 1B
 - check_docs.py
-- search_only_answer
+- test_search_only_feature.py
 - 사용 중·조건부 추천 상세
 - Database schema
 - Alembic autogenerate
 - Energy Business Legal Chat
 - D-10 수동 검색·문맥 진단
 - PlanRecord
-- main_module
+- .provision
 - Google OAuth·Supabase Auth 연결 설계
 - MockCorpusRepository
-- sse.py
+- clarification_workflow.py
 - query/retriever.py
 - Security and Privacy
 - New User Onboarding
 - 4. 평가와 실험 읽기
 - test_completed_phase_reports_timeout_releasing_capacity_lease_without_breaking_result
-- run_d10_failure_driven.py
+- D10RunInput
 - GenerationResult
-- parse_provision_references
+- .route
 - test_clarification_answering.py
 - System Map and Execution Boundaries
 - Discord Error Ledger
@@ -161,13 +161,13 @@
 - V2: LlamaIndex 프레임워크 파이프라인 개편 설계
 - test_graph.py
 - experiment_search.py
-- executions.py
+- test_layperson_prompt_v2.py
 - 실행 계획 0020: 실험 D — 검색 문맥 구성
 - RAG 평가 방법 공식 자료
 - scripts
 - RetrievalGeneration
 - Web E2E 검증 명세
-- test_generations.py
+- PostgresGenerationRepository
 - 실행 계획 0017: 실험 B — NVIDIA NIM 두 문장 임베딩과 코사인 유사도
 - CollectorSettings
 - checklist-export.ts
@@ -177,16 +177,16 @@
 - Operational vector index build report
 - 실험 C Dense 검색 후보 관찰
 - test_experiment_d_local_rerank.py
-- test_mock_auth_history.py
+- test_answer_quality_contract.py
 - Settings
-- _generate_bundle_cache
+- route_question
 - Reliability
 - Dense article-level search baseline
 - Experiment D search context safety gate
 - R1 plus A
 - Reciprocal Rank Fusion
 - 0045: Web/API 질문 timeout 예산 정렬 Implementation Plan
-- questions.py
+- run_experiment_e10.py
 - history.py
 - Traffic Routing Calibration Review
 - V2 Chunking Ablation
@@ -196,7 +196,7 @@
 - Qwen3:4b 연결 준비사항
 - 검색 인덱스와 임베딩 계보 설계
 - test_prepared_publisher_postgres.py
-- AnswerEvent
+- 실험 D — 검색 문맥 안전 게이트 평가
 - ActiveGenerationIndexProvider
 - validate_node
 - Corpus Support Range
@@ -228,7 +228,7 @@
 - 학습 노트 통합 실행 계획
 - Article 12 license cancellation
 - account.py
-- 6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나
+- parse_provision_references
 - 0034: 웹 프런트 탭 포커스 시 불필요한 인증·이력 재조회 억제
 - Application Trust Boundary
 - v2 Dense Retriever
@@ -242,11 +242,11 @@
 - 로드맵 정본·컨텍스트 절약 설계
 - 3. 근거 우선 검색과 답변
 - Vercel·Supabase 운영 전환 설계
-- LegalRepository
+- CorpusSearchStatus
 - web/proxy.ts
 - Current State Session Start Pointer
 - experiment_d_10_gold_review.py
-- test_supabase_authenticated_flow.py
+- SupabaseAuthError
 - Execution-Plan Metadata Contract
 - Effective-Date Half-Open Interval
 - Korean translation materials
@@ -271,7 +271,7 @@
 - layout.tsx
 - LlamaIndexLegalRepository
 - Completed Execution Plans Index
-- CorpusSnapshot
+- DenseCandidate
 - NVIDIA 로컬 추론과 Vercel 연결 검토
 - RLS and auth.uid ownership
 - Issue-template configuration
@@ -280,7 +280,7 @@
 - vector_index_contract.py
 - next.config.ts
 - postcss.config.mjs
-- test_d10_answer_judge.py
+- judge_execution
 - Tasks 12-16 Not Started
 - P0-P3 Priority Levels
 - corpus.search_ready capability gate
@@ -298,7 +298,8 @@
 - context/__init__.py
 - law_rag_core/__init__.py
 - sharp and unrs-resolver build allowlist
-- RequestBudget
+- verify.ps1
+- 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리
 - RAG 파이프라인 설계
 - Normal Guidance Routes
 - XSS and SSRF
@@ -345,8 +346,8 @@
 - text-embedding-ada-002
 - Nine corpus documents
 - 3,066 current provisions
-- ExecutionSnapshot
-- RouteJudgment
+- PostgresExperimentDBackend
+- test_routing_pipeline.py
 - V3 LangGraph 에이전트 기본 골격 구현 계획
 - 실행 계획 0019: 실험 C — 검색 후보 관찰·기록·평가
 - 0028: 검색 전 질문 라우팅과 조건부 query 보강
@@ -364,32 +365,32 @@
 - NVIDIA RAG 및 이벤트 기반 취소 실행 계획
 - 단계 구조
 - Auto Generating Migrations
-- .write_nodes
+- _LifecycleResult
 - 실행 계획 0007: Production 자연어 검색과 단계별 관측
 - Vector embeddings(벡터 임베딩)
 - v1 to LangChain/LangGraph/LlamaIndex Evolution
-- 0046 기준 질문 파이프라인 지도 설계
+- 0029: 필요 시 D-full Gold 제작
 - 분산 질문 취소 실행 계획
 - Python docstring 정책
 - 에너지 법령 RAG 아키텍처
 - law_rag_collector/service.py
 - Path
-- v3 설계
+- [역사 문서] terra 모드에서 search_only 폴백 제거 (always-generate)
 - 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음
-- test_search_experiment.py
+- test_mock_auth_history.py
 - Use cases
 - Matryoshka Representation Learning
 - 근거 우선 검색 품질 설계
 - install_git_hooks.py
 - 국가법령정보 Open API 수집 계약
-- 실험 D 일반 사용자 질문 승인 검토표 v1
-- terra 모드 search_only 폴백 제거 (always-generate) Implementation Plan
+- 실험 D 일반 사용자 질문은행과 gold 주석 경계
+- QuestionTaskRegistry
 - test_v2_search.py
 - 5. 사용자·개인정보·장애 안전
 - Target File Structure
-- 분산 질문 취소 설계
+- .__init__
 - 실험 D-10 전수 qrel과 사용자 adjudication
-- 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)
+- 기술 부채 추적기
 - 실험 D-10 end-to-end 실패-회귀 평가
 - 청크
 - electricity-business-license-out-of-scope
@@ -400,29 +401,28 @@
 - Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan
 - Task 3 실행 보고서: v1/v2 HTTP router 분리
 - v1 to v2 to v3 Pipeline Diagram
-- run_cli
+- test_search_experiment.py
 - Global Constraints
 - 평가 전략
 - 검토한 선택지
-- 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단
+- _require_successful_sse
 - 이전 finding 확인
 - 기술 스택 ADR
-- debug_retrieval_pipeline.py
+- run_cli
 - D-010 Single-Stage Router and Safe Routing-Unavailable Response Implementation Plan
 - 운영 벡터 인덱스 구축 결과
 - 보안 및 개인정보
 - QuestionRequest
 - Task 3 실행 보고서: v2 API 리소스 지연 초기화
-- [역사 문서] terra 모드에서 search_only 폴백 제거 (always-generate)
 - 답변 근거 검증 설계 (validate_draft)
-- 2026-07-19 사건
+- legal_search_router
 - 실험 D-10 수동 검색·문맥 진단
 - 단일 단계 라우터와 라우터 불가 응답
 - anonymous_rate_limit_subject
 - 프론트엔드 아키텍처
 - Q: 다른곳도 웹만져서 e2e테스트할것임. 무엇을 테스트할지 기본흐름, 경계흐름 목록 만들어.
 - test_experiment_d_manual_review_results.py
-- _read_cache
+- 0044: 공급자 중립 답변 모델 선택 계약
 - 신뢰성
 - 0046 기준 질문 파이프라인 지도 갱신 설계
 - 실험 D — 검색 문맥 구성
@@ -431,17 +431,14 @@
 - ADR-NNNN: 결정 제목
 - 실험 D-10 M2 동결과 M3 소표본 calibration
 - 시간 효력 모델
-- 실험 D 일반 사용자 질문은행과 gold 주석 경계
-- 0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리
+- test_api_factory_composition.py
 - F-006 대화형 clarification workflow 설계
-- Discord 에이전트 오버레이
+- _VerificationResult
 - PhaseDeadline
 - Task 2 실행 보고서: 관리형 v2 HNSW 인덱스
 - D-010 Task 3 Report
-- .search_with_trace
 - V2 준비 상태와 HNSW 구현 계획
 - api/__init__.py
-- ActiveGeneration
 - 단계
 - 실행 순서와 에이전트별 TODO
 - 에이전트별 TODO
@@ -451,10 +448,8 @@
 - 실행 계획 운영법
 - 검색 성능과 관측 공식 자료
 - PULL_REQUEST_TEMPLATE.md
-- GenerationProfile
-- _MappingsResult
+- 0041: 법제처 API의 법종구분코드를 실제로 파싱해 저장·응답에 반영
 - Global Constraints
-- test_answer_quality_contract.py
 - 2026-07-14 병렬 품질 강화 TODO
 - 단계
 - RAG 디버깅 보고서 계약
@@ -462,7 +457,7 @@
 - 실험 D-10-R1 부모 표제·직접성 로컬 재정렬 결과
 - 실험 D-10 사용자 확인 수동 진단
 - 제품 디자인 원칙
-- test_history_retention_postgres.py
+- require_supported_corpus_date
 - CLAUDE.md
 - Findings
 - 단계별 구조화 관측
@@ -470,7 +465,6 @@
 - Task 4 report: Scoped pre-commit installation and CI enforcement
 - 품질 점수표
 - 실험 A — 기존 법령 파서 청킹 관찰
-- 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산
 - 범위와 비범위
 - F-006 Task 4 report — V2 policy-aware generation and grounding
 - 실험 D-10 Gold review draft 요약
@@ -480,14 +474,9 @@
 - 체크리스트 내보내기 프런트 제거 Implementation Plan
 - frontend-api-boundary.test.ts
 - F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan
-- 실험 D — 검색 문맥 안전 게이트 평가
-- .provision
-- NvidiaNimEmbedder
+- RouteJudgment
 - 설계 문서 색인
-- V2LlamaIndexResources
 - test_v2_questions.py
-- ExecutionStatus
-- _RowsResult
 - 질문 사전 라우팅 설계 (0028, 대체됨)
 - check_roadmap.py
 - Task 2 구현·self-review 보고서
@@ -509,32 +498,40 @@
 - page.test.tsx
 - _has_index_header
 - Task 2 independent review
+- 0042: 재순위를 실제 검색 경로에 연결
 - Task 4 review — changes requested
-- test_memory_retrieval_quality.py
 - SDD ledger — current plan: `docs/exec-plans/completed/0066-roadmap-registry-and-context-diet.md`
 - scripts/__init__.py
-- 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI
+- GitHub 이슈와 PR 운영
 - task-1-brief.md
 - task-2-brief.md
 - task-3-brief.md
 - task-4-brief.md
-- _VerificationResult
 - LlamaIndexLegalRepository
-- 실험 C — Dense 검색 후보 관찰
-- 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리
+- LegalDocumentRecord
 - Production 검색 디버깅 결과: DB revision 0004
+- 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹
+- .search_with_trace
+- 실험 D-full 1,000문항 평가 설계
+- 6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나
+- 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산
+- test_run_python.py
+- 실험 C — Dense 검색 후보 관찰
+- 실험 D-10 M4 — AI 입력 문맥 조립 calibration 요약
+- _BeginContext
+- .ready_state_has_complete_bounds
 
 ## God Nodes (most connected - your core abstractions)
-1. `SourceKind` - 111 edges
-2. `main_module()` - 110 edges
-3. `SearchHit` - 86 edges
-4. `QuestionRequest` - 84 edges
+1. `main_module()` - 114 edges
+2. `SourceKind` - 111 edges
+3. `QuestionRequest` - 86 edges
+4. `SearchHit` - 86 edges
 5. `PostgresLegalRepository` - 82 edges
 6. `MemoryLegalRepository` - 60 edges
 7. `RawResponse` - 53 edges
 8. `MemoryQuestionExecutionRepository` - 47 edges
-9. `Settings` - 47 edges
-10. `LegalDocumentRecord` - 47 edges
+9. `ExecutionStatus` - 47 edges
+10. `Settings` - 47 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `임베딩 모델·차원·버전 분리` --semantically_similar_to--> `모델·차원·버전 필터 검색`  [INFERRED] [semantically similar]
@@ -551,7 +548,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (541 total, 85 thin omitted)
+## Communities (538 total, 90 thin omitted)
 
 ### Community 0 - "experiment_context.py"
 Cohesion: 0.16
@@ -561,9 +558,9 @@ Nodes (30): _article_chunks(), _atomic_write_many(), _build(), build_context_pac
 Cohesion: 0.16
 Nodes (26): build_nodes(), changed_provision_ids(), Any, ProvisionRecord, TextNode, Pure source-change detection and LlamaIndex node transformations., Return new or changed provisions by comparing canonical passage hashes., Build deterministic LlamaIndex nodes with citation metadata. (+18 more)
 
-### Community 2 - "LegalDocumentRecord"
-Cohesion: 0.07
-Nodes (27): _async_url(), _batches(), _embedding_eligible_version(), _mark_corpus_search_unready(), _ordered_ids(), ProvisionSyncPlan, AsyncEngine, date (+19 more)
+### Community 2 - "law_rag_core/domain/catalog.py"
+Cohesion: 0.05
+Nodes (47): ActivationMetadata, _clean(), _json_values(), _markers(), Any, date, 활성 manifest에 들어가기 전에 문서 단위 불변조건을 모두 확인한다., 검색·임베딩 전에 원문 위치와 부모 관계를 결정적으로 검증한다. (+39 more)
 
 ### Community 3 - "run.py"
 Cohesion: 0.10
@@ -575,27 +572,27 @@ Nodes (31): 2026-08-03 retrieval 계보 재감사, approved gold, content-derive
 
 ### Community 5 - "RawResponse"
 Cohesion: 0.06
-Nodes (52): _source(), RawResponse, plan_provision_sync(), ProvisionRecord, _corpus_gate_call_indices(), _deletion_repository(), _DeletionConnection, _DeletionEngine (+44 more)
+Nodes (53): RawResponse, plan_provision_sync(), ProvisionRecord, raw_object_path(), SupabaseRawStorage, _corpus_gate_call_indices(), _deletion_repository(), _DeletionConnection (+45 more)
 
 ### Community 6 - "test_clarification_workflow.py"
-Cohesion: 0.08
-Nodes (60): CaseLoaded, CaseMerged, InterpreterFailed, LlamaIndexClarificationWorkflow, PolicySelected, Event, LlamaIndex implementation of the clarification orchestration boundary., Private data for one invocation; never serialized into workflow events. (+52 more)
+Cohesion: 0.24
+Nodes (26): ClarificationTurnJudgment, FactSubmission, BaseModel, A provider proposal, normalized by the server before it becomes state., A candidate update for an already server-assigned fact id., Structured provider or transport output consumed by orchestration., RequiredFactCandidate, ClarificationCaseStatus (+18 more)
 
 ### Community 7 - "evaluate_experiment_d_gold.py"
 Cohesion: 0.10
-Nodes (43): _arguments(), _atomic_publish(), _audit_or_raise(), _candidate_record(), _canonical_json_bytes(), _capture_query_plans(), _current_code_provenance(), _embed_all_questions() (+35 more)
+Nodes (44): _arguments(), _atomic_publish(), _audit_or_raise(), _candidate_record(), _canonical_json_bytes(), _capture_query_plans(), _current_code_provenance(), _embed_all_questions() (+36 more)
 
 ### Community 8 - "experiment_d_manual_review.py"
-Cohesion: 0.09
-Nodes (50): korea_today(), Return the product's legal-current date, independent of server timezone., _arguments(), _article_contexts(), _article_root(), _atomic_publish_run(), _atomic_write_query_cache(), _cache_file_sha256() (+42 more)
+Cohesion: 0.10
+Nodes (46): korea_today(), Return the product's legal-current date, independent of server timezone., _arguments(), _article_contexts(), _article_root(), _atomic_publish_run(), _atomic_write_query_cache(), _cache_file_sha256() (+38 more)
 
 ### Community 9 - "postgres_repository.py"
 Cohesion: 0.09
-Nodes (27): _async_url(), _corpus_items(), _corpus_search_status(), _dense_search_parameters(), _dense_search_statement(), _elapsed_ms(), _execute_dense_search(), _execute_keyword_search() (+19 more)
+Nodes (32): _async_url(), _corpus_items(), _corpus_temporal_population_statement(), _corpus_temporal_state(), _dense_search_parameters(), _dense_search_statement(), _elapsed_ms(), _execute_dense_search() (+24 more)
 
 ### Community 10 - "test_experiment_d_gold_preflight.py"
 Cohesion: 0.07
-Nodes (72): embedding_text_sha256(), EmbeddingProfile, legal_provision_embedding_text(), Build the versioned passage text used for provision embeddings., load_provisions(), load_provisions_from_connection(), AsyncConnection, Current-parser corpus records used by Experiment D validation and retrieval. (+64 more)
+Nodes (71): embedding_text_sha256(), EmbeddingProfile, legal_provision_embedding_text(), Build the versioned passage text used for provision embeddings., load_provisions(), load_provisions_from_connection(), AsyncConnection, Current-parser corpus records used by Experiment D validation and retrieval. (+63 more)
 
 ### Community 11 - "실행 계획 0002: 실제 서비스 연결"
 Cohesion: 0.11
@@ -606,44 +603,44 @@ Cohesion: 0.08
 Nodes (64): test_content_snapshot_identity_does_not_include_the_calendar_date(), _bundle(), BundleState, _atomic_write(), _build_manifest(), canonical_corpus_population_fingerprint(), canonical_corpus_publish_snapshot_id(), canonical_corpus_snapshot_id() (+56 more)
 
 ### Community 13 - "MemoryLegalRepository"
-Cohesion: 0.09
-Nodes (34): _date_or_none(), MemoryLegalRepository, date, Path, UUID, parse_provision_reference(), 사용자 표기(예: 1조2항)를 저장 경로(제1조/항2)로 정규화한다., test_quota_resets_on_next_day() (+26 more)
+Cohesion: 0.08
+Nodes (39): _date_or_none(), MemoryLegalRepository, date, Path, UUID, parse_provision_reference(), 사용자 표기(예: 1조2항)를 저장 경로(제1조/항2)로 정규화한다., test_quota_resets_on_next_day() (+31 more)
 
 ### Community 14 - "0025 Approved Questions to Grounded Answer Roadmap"
 Cohesion: 0.05
 Nodes (46): Apply Prepared Transaction, Atomic Corpus Publication, Base Snapshot Fingerprint, Embedding Cache Generation, 0024 Maintenance Corpus Publish, Prepare Current Bundle, Search Ready Gate, Corpus-First Answer Roadmap (+38 more)
 
-### Community 15 - "test_question_timeout_budget.py"
-Cohesion: 0.28
-Nodes (16): _allow_quota(), client(), _hit(), _LegalRouter, _payload_json(), asyncio, fixture, TestClient (+8 more)
+### Community 15 - "law_json.py"
+Cohesion: 0.27
+Nodes (19): asyncio, test_domain_alias_finds_formal_renewable_energy_title(), test_future_version_is_excluded_before_effective_date(), _clean(), _date(), _first(), _flat_subitem_groups(), _flat_subitem_parents() (+11 more)
 
 ### Community 16 - "MemoryQuestionCancellationCoordinator"
 Cohesion: 0.12
 Nodes (26): CancelSignalResult, ExecutionNotOwnedError, ExecutionStatus, InvalidExecutionTransitionError, MemoryQuestionCancellationCoordinator, _now(), datetime, Event (+18 more)
 
 ### Community 17 - "SearchTrace"
+Cohesion: 0.08
+Nodes (41): _elapsed_ms(), _match_score(), _natural_trace(), datetime, Keep the highest-ranked leaf for each document/article pair., _stage_trace(), _unique_article_hits(), _anchored_query() (+33 more)
+
+### Community 18 - "NvidiaNimEmbedder"
+Cohesion: 0.07
+Nodes (43): NvidiaNimEmbedder, NVIDIA hosted NIM embedding adapter with the existing batch contract., Release the process-owned NVIDIA HTTP client., GenerationProfile, 0025 M5 item 4: model/prompt/schema/context/sampling settings, versioned…, _atomic_write(), _code_fence(), _display_float() (+35 more)
+
+### Community 19 - "question_scope_set_sha256"
 Cohesion: 0.11
-Nodes (32): _elapsed_ms(), _match_score(), _natural_trace(), datetime, Keep the highest-ranked leaf for each document/article pair., _stage_trace(), _unique_article_hits(), _row_matching_terms() (+24 more)
-
-### Community 18 - "experiment_embeddings.py"
-Cohesion: 0.13
-Nodes (28): _atomic_write(), _code_fence(), _display_float(), Embedder, _embedding_digest(), _load_runs(), _max_absolute_difference(), _norm() (+20 more)
-
-### Community 19 - "question_scope_sha256"
-Cohesion: 0.12
-Nodes (46): _arguments(), _artifact_name(), atomic_write_worklist(), build_pilot_worklist(), create_pilot_worklist(), _file_sha256(), _load_json_object(), main() (+38 more)
+Nodes (49): _arguments(), _artifact_name(), atomic_write_worklist(), build_pilot_worklist(), create_pilot_worklist(), _file_sha256(), _load_json_object(), main() (+41 more)
 
 ### Community 20 - "test_experiment_d_gold_contract.py"
-Cohesion: 0.11
-Nodes (45): canonical_gold_case_payload_sha256(), ExperimentDGoldCase, ExperimentDGoldDataset, GoldMetricProtocol, Hash one complete validated gold-case payload using canonical JSON., gold_adjudication_manifest_errors(), Return deterministic cross-artifact errors for the sealed gold decision., _append_direct_supported_facet() (+37 more)
+Cohesion: 0.12
+Nodes (42): canonical_gold_case_payload_sha256(), ExperimentDGoldCase, ExperimentDGoldDataset, Hash one complete validated gold-case payload using canonical JSON., _append_direct_supported_facet(), _case(), _corpus_snapshot(), _dataset() (+34 more)
 
-### Community 21 - "PostgresQuestionExecutionRepository"
-Cohesion: 0.23
-Nodes (12): _json_mapping(), PostgresQuestionExecutionRepository, AsyncEngine, datetime, ExecutionStatus, UUID, Atomically commit a completed phase and its replayable event log., Short-transaction PostgreSQL implementation; provider calls remain outside this… (+4 more)
+### Community 21 - "v3 설계"
+Cohesion: 0.15
+Nodes (13): API (`apps/api`), State와 영속화, V3: LangGraph 에이전트 기본 골격 설계, v3 설계, 결정 기록, 노드 설계, 목표, 미결정 (+5 more)
 
 ### Community 22 - "LawOpenApiClient"
 Cohesion: 0.11
-Nodes (27): _compact_date(), LawOpenApiClient, LawOpenApiError, ParsedResponse, AsyncClient, date, DeletionKind, RuntimeError (+19 more)
+Nodes (26): _compact_date(), LawOpenApiClient, LawOpenApiError, ParsedResponse, AsyncClient, date, RuntimeError, T (+18 more)
 
 ### Community 23 - "Lay energy question bank v1 draft"
 Cohesion: 0.05
@@ -657,9 +654,9 @@ Nodes (39): _answerability_diagnostic_report(), _case_metrics(), _control_pair_d
 Cohesion: 0.20
 Nodes (16): v2 LlamaIndex search, D-10 Recall authority, LlamaIndex Module Guides and law-rag v2, Domain-owned routing, date filtering, and validation, LlamaIndex evaluation module, Explicit changed-node ingestion, High-level query and agent exclusion, Ingestion Pipeline (+8 more)
 
-### Community 26 - "law_rag_core/domain/catalog.py"
-Cohesion: 0.14
-Nodes (23): ActivationMetadata, _clean(), _json_values(), _markers(), Any, date, 활성 manifest에 들어가기 전에 문서 단위 불변조건을 모두 확인한다., 검색·임베딩 전에 원문 위치와 부모 관계를 결정적으로 검증한다. (+15 more)
+### Community 26 - "분산 질문 취소 설계"
+Cohesion: 0.18
+Nodes (11): 결정, 결정 기록, 목적, 보안, 분산 질문 취소 설계, 영속 상태, 왜 LISTEN/NOTIFY만 사용하지 않는가, 제한과 관측 (+3 more)
 
 ### Community 27 - "devDependencies"
 Cohesion: 0.05
@@ -667,19 +664,19 @@ Nodes (39): dependencies, next, react, react-dom, @supabase/ssr, @supabase/supab
 
 ### Community 28 - "V2QuestionExecutionService"
 Cohesion: 0.05
-Nodes (47): PhaseRequest, Validated transport ownership input for a core or finalize phase., citations_for_hits(), execution_generation_hits(), execution_request_and_hits(), Any, Citation, datetime (+39 more)
+Nodes (40): PhaseRequest, Validated transport ownership input for a core or finalize phase., citations_for_hits(), execution_generation_hits(), execution_request_and_hits(), Any, Citation, Read the persisted prepare payload without triggering a second retrieval. (+32 more)
 
 ### Community 29 - "append_attempt"
 Cohesion: 0.22
-Nodes (23): append_attempt(), AttemptRecord, _coerce_attempt(), LedgerValidationError, _load_attempts(), Path, ValueError, Safe append-only attempt ledger for D-10 failure-driven evaluation. (+15 more)
+Nodes (24): append_attempt(), AttemptRecord, _coerce_attempt(), LedgerValidationError, _load_attempts(), Path, ValueError, Safe append-only attempt ledger for D-10 failure-driven evaluation. (+16 more)
 
 ### Community 30 - "PostgresLegalRepository"
-Cohesion: 0.16
-Nodes (31): PostgresLegalRepository, _ConnectionContext, _document(), _FakeConnection, _FakeEngine, asyncio, parametrize, _row() (+23 more)
+Cohesion: 0.11
+Nodes (33): PostgresLegalRepository, _ConnectionContext, _document(), _FakeConnection, _FakeEngine, _MappingsResult, asyncio, parametrize (+25 more)
 
 ### Community 31 - "experiment_d_gold_contract.py"
-Cohesion: 0.10
-Nodes (21): ApprovalManifestSourceBank, ApprovedQuestion, ExperimentDGoldAdjudicationManifest, GoldAdjudicatedCase, GoldAnnotationProtocol, GoldAnnotationReview, GoldAsOfPopulation, GoldCorpusSnapshot (+13 more)
+Cohesion: 0.09
+Nodes (24): ApprovalManifestSourceBank, ApprovedQuestion, canonical_gold_corpus_snapshot_id(), ExperimentDGoldAdjudicationManifest, GoldAdjudicatedCase, GoldAnnotationProtocol, GoldAnnotationReview, GoldAsOfPopulation (+16 more)
 
 ### Community 32 - "Single QuestionRouter"
 Cohesion: 0.06
@@ -690,32 +687,32 @@ Cohesion: 0.14
 Nodes (35): _arguments(), atomic_write_manifest(), build_question_approval_manifest(), _canonical_sha256(), create_question_approval(), load_question_bank(), main(), parse_approved_at() (+27 more)
 
 ### Community 34 - "test_experiment_d_gold_runner.py"
-Cohesion: 0.21
-Nodes (32): run_and_publish_approved_gold(), FakeBackend, FakeEmbedder, _fixed_clock(), gold_bundle(), GoldFixtureBundle, PublisherSpy, asyncio (+24 more)
+Cohesion: 0.22
+Nodes (31): run_and_publish_approved_gold(), FakeBackend, FakeEmbedder, _fixed_clock(), gold_bundle(), GoldFixtureBundle, PublisherSpy, asyncio (+23 more)
 
 ### Community 35 - "HnswIndexManager"
 Cohesion: 0.09
 Nodes (24): HnswIndexManager, main(), AsyncEngine, Explicit, operator-controlled lifecycle for the v2 pgvector HNSW index., Manage the optional v2 HNSW index without coupling it to ingestion., Return whether the exact v2 index exists in the public catalog., Create the index if it is absent and report whether creation was requested., Create the v2 cosine HNSW index using a non-transactional connection. (+16 more)
 
 ### Community 36 - "ingestion/service.py"
-Cohesion: 0.06
-Nodes (59): Compatibility facade and CLI for the v2 LlamaIndex ingestion pipeline. The…, Readable stages for the v2 LlamaIndex ingestion pipeline., _changed_provisions(), GenerationIngestionService, _has_unchanged_source(), IncrementalIngestionService, IngestionResult, _mark_generation_failed() (+51 more)
+Cohesion: 0.05
+Nodes (61): Compatibility facade and CLI for the v2 LlamaIndex ingestion pipeline. The…, Readable stages for the v2 LlamaIndex ingestion pipeline., _changed_provisions(), GenerationIngestionService, _has_unchanged_source(), IncrementalIngestionService, IngestionResult, _mark_generation_failed() (+53 more)
 
 ### Community 37 - "law_rag_core/domain/schemas.py"
 Cohesion: 0.09
-Nodes (33): AiFailureCategory, AiRuntimeState, ChangeItem, ChecklistExportFormat, Citation, ClarificationContinuation, ClarificationFactPrompt, ConversationPage (+25 more)
+Nodes (35): AiFailureCategory, AiFallbackReason, AiRuntimeState, ChangeItem, ChecklistExportFormat, Citation, ClarificationContinuation, ClarificationFactPrompt (+27 more)
 
 ### Community 38 - "SearchHit"
 Cohesion: 0.09
-Nodes (57): _contains_normative_assertion(), DraftAnswer, _evidence_for_citations(), 구조 검증만 한다: 인용 ID가 실제 제공된 근거를 가리키는지, action별로 요구되는 필드가 채워졌는지. 문장 내용이 근거와 의미적으로…, 근거와 겹치는 용어 비율(>=50%)을 요구해 무근거 주장을 막는다. 2026-08-08: `unanswerable` action의…, Keep at most one ranked leaf per article within the provider input budget., select_generation_hits(), _strip_epistemic_hedges() (+49 more)
+Nodes (54): DraftAnswer, BaseModel, 구조 검증만 한다: 인용 ID가 실제 제공된 근거를 가리키는지, action별로 요구되는 필드가 채워졌는지. 문장 내용이 근거와 의미적으로…, validate_draft(), _draft_from_dict(), _hit_from_dict(), main(), 검증기(validate_draft) 코드를 고친 뒤 실제 근거·draft로 재검증한다 - 새 NVIDIA 호출 0회. 2026-08-08… (+46 more)
 
 ### Community 39 - "experiment_d_10_frozen_contract.py"
 Cohesion: 0.14
 Nodes (31): _arguments(), ArtifactBinding, ArtifactBindings, FrozenCase, FrozenD10ContractError, FrozenD10EvaluationContract, FrozenRunBinding, load_frozen_contract() (+23 more)
 
 ### Community 40 - "Settings"
-Cohesion: 0.07
-Nodes (42): build_checkpointer_context(), _psycopg_database_url(), Settings, get_settings(), BaseSettings, Settings, test_build_checkpointer_context_normalizes_url_and_returns_context_manager(), test_build_checkpointer_context_requires_database_url() (+34 more)
+Cohesion: 0.08
+Nodes (41): build_checkpointer_context(), _psycopg_database_url(), Settings, get_settings(), BaseSettings, Settings, test_build_checkpointer_context_normalizes_url_and_returns_context_manager(), test_build_checkpointer_context_requires_database_url() (+33 more)
 
 ### Community 41 - "Energy-law RAG architecture"
 Cohesion: 0.08
@@ -723,19 +720,19 @@ Nodes (34): Task 2 HNSW execution report, Concurrent HNSW DDL, HnswIndexManager,
 
 ### Community 42 - "test_ingest.py"
 Cohesion: 0.05
-Nodes (53): main(), Any, IngestionResult, Run the legacy mutable-table service through its original import path., Build and publish the next retrieval generation from configured services., Run the generation service while retaining the established injection seams., Run the transform stage through the original pipeline-factory seam., run_generation_ingestion() (+45 more)
+Nodes (55): main(), Any, IngestionResult, Run the legacy mutable-table service through its original import path., Build and publish the next retrieval generation from configured services., Run the generation service while retaining the established injection seams., Run the transform stage through the original pipeline-factory seam., run_generation_ingestion() (+47 more)
 
 ### Community 43 - "chat-state.ts"
 Cohesion: 0.10
 Nodes (35): coreCitations(), stopGeneration(), submit(), liveCoreResponse(), appendPendingTurn(), applyLiveCoreSummary(), AssistantChatMessage, ChatMessage (+27 more)
 
-### Community 44 - "bootstrap.py"
-Cohesion: 0.06
-Nodes (44): _content(), NvidiaNimClarificationInterpreter, NVIDIA NIM structured-output adapter for clarification turns., Use NVIDIA Ultra once for initial facts and only extract later turns., Reject a publishable core summary that names evidence it did not receive., validate_core_draft(), _free_text_intent(), Non-NVIDIA structured continuation intent and fact extraction. (+36 more)
+### Community 44 - "실행 계획 0026: 실험 D-10 수동 검색·문맥 진단"
+Cohesion: 0.20
+Nodes (10): 검증과 롤백, 결정 로그, 구현 순서, 목적과 사용자 결과, 미결정과 차단 요소, 범위와 비범위, 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단, 완료 조건 (+2 more)
 
-### Community 45 - "completed/README.md"
-Cohesion: 0.04
-Nodes (39): 결정 기록, 목적, 비교값, 성공 판정, 실험 D-10-R1 부모 표제·직접성 로컬 재정렬, 입력과 불변조건, 직접성 규칙 v1, 0038: 모델 호출 없는 API는 전부 1초 이내 응답 (+31 more)
+### Community 45 - "terra 모드 search_only 폴백 제거 (always-generate) Implementation Plan"
+Cohesion: 0.18
+Nodes (10): Global Constraints, Task 1: `validate_draft` 근거 0건 게이트 완화, Task 2: `build_messages_v2`에 빈 근거 지시 추가, Task 3: 라우팅 차단 전용 프롬프트 + `NvidiaNimAnswerer.answer_blocked_route`, Task 4: 검색 후 근거 0건 분기가 항상 생성 단계로 진행하게 배선, Task 5: 사전 라우팅 차단 분기를 LLM 생성으로 배선, Task 6: 문서 정합성 확인 (완료), Task 7: 0046 파이프라인 지도와 활성 계획 목록 정합성 (+2 more)
 
 ### Community 46 - "load_registry"
 Cohesion: 0.17
@@ -746,8 +743,8 @@ Cohesion: 0.08
 Nodes (26): Ownership Checks and RLS, Privacy-Safe Logs, DB TTL Capacity Lease, FinalAnswerCoordinator, Frozen CitationRegistry, Grounded Sentence Verifier, Pipeline Issue Ledger, Authoritative question_execution (+18 more)
 
 ### Community 48 - "experiment_d_local_rerank.py"
-Cohesion: 0.13
-Nodes (31): Task, _active_concepts(), _arguments(), _article_path(), _atomic_publish(), build_comparison(), _canonical_json_bytes(), _cli_path() (+23 more)
+Cohesion: 0.15
+Nodes (30): _active_concepts(), _arguments(), _article_path(), _atomic_publish(), build_comparison(), _canonical_json_bytes(), _cli_path(), _concept_matches() (+22 more)
 
 ### Community 49 - "test_layperson_energy_questions.py"
 Cohesion: 0.06
@@ -758,52 +755,48 @@ Cohesion: 0.07
 Nodes (31): As-of Date Clamping, Future-Date Boundary, Korea-Date Picker Limit, 0035 As-of Date Future Limit, Single-Connection Corpus Overview, Non-Model Endpoint One-Second SLA, One-Second Latency Test, 0038 Non-Model Endpoint Latency (+23 more)
 
 ### Community 51 - "MockIdentityRepository"
-Cohesion: 0.16
-Nodes (10): MockIdentityRepository, MockSession, _one_year_after(), ConversationSummary, datetime, MockUser, QuestionResponse, UUID (+2 more)
+Cohesion: 0.14
+Nodes (11): MockIdentityRepository, MockSession, _one_year_after(), ConversationSummary, datetime, MockUser, QuestionResponse, UUID (+3 more)
 
-### Community 52 - "corpus.py"
-Cohesion: 0.09
-Nodes (28): changes(), corpus_status(), health(), provision(), date, get, post, Request (+20 more)
+### Community 52 - "sse.py"
+Cohesion: 0.05
+Nodes (52): changes(), corpus_status(), health(), provision(), date, get, post, Request (+44 more)
 
 ### Community 53 - "SourceKind"
 Cohesion: 0.09
 Nodes (46): parametrize, test_open_api_error_is_not_treated_as_empty_search(), parametrize, test_admin_rule_json_sections_get_stable_article_paths(), test_chapter_marker_does_not_replace_first_article(), test_exact_allowlist_title_is_enforced(), test_flat_json_subitems_are_restored_under_their_numbered_items(), test_flat_json_subitems_skip_deleted_numbered_item_when_counts_match() (+38 more)
 
-### Community 54 - "SupabaseAuth"
-Cohesion: 0.20
-Nodes (13): AsyncClient, UUID, SupabaseAuth, asyncio, parametrize, test_auth_provider_network_failure_is_distinct_from_invalid_token(), test_delete_user_network_failure_is_a_controlled_auth_error(), test_http_client_is_reused_and_can_be_closed() (+5 more)
+### Community 54 - "ClarificationTurnOrchestrator"
+Cohesion: 0.22
+Nodes (7): ClarificationTurnOrchestrator, ContinuationFactIntentExtractor, InitialClarificationJudge, Protocol, Initial fact-candidate judgment, implemented by the configured Ultra adapter., Structured continuation extraction without initial-route reasoning., Application-facing orchestration boundary, independent of workflow SDKs.
 
-### Community 55 - "D10RunInput"
-Cohesion: 0.10
-Nodes (39): AnswerExecutor, application_answer_executor(), _contract_error(), D10FailureRunnerError, D10RunInput, DenseReader, live_application_answer_executor(), load_d10_run_input() (+31 more)
+### Community 55 - "d10_failure_runner.py"
+Cohesion: 0.09
+Nodes (37): application_answer_executor(), _contract_error(), D10FailureRunnerError, DenseReader, live_application_answer_executor(), load_d10_run_input(), Any, date (+29 more)
 
-### Community 56 - "test_security_boundaries.py"
-Cohesion: 0.08
-Nodes (32): emit_execution_phase(), emit_question_outcome(), emit_question_stage_timing(), emit_route_outcome(), ExecutionPhaseEvent, fallback_reason_metrics_snapshot(), BaseModel, QuestionStageTimingOutcome (+24 more)
+### Community 56 - "search_only_answer"
+Cohesion: 0.03
+Nodes (111): _answering_http_error(), cancel_question(), _handle_question(), HTTPException, post, QuestionResponse, QuestionStageTimingOutcome, Request (+103 more)
 
 ### Community 57 - "get_settings"
-Cohesion: 0.16
-Nodes (13): get_settings(), do_run_migrations(), run_async_migrations(), _arguments(), Namespace, 계정 질문 이력의 검색 단계별 진단을 읽기 전용 JSON으로 출력한다., _run(), _arguments() (+5 more)
+Cohesion: 0.12
+Nodes (21): get_settings(), do_run_migrations(), run_async_migrations(), _arguments(), Namespace, 계정 질문 이력의 검색 단계별 진단을 읽기 전용 JSON으로 출력한다., _run(), _arguments() (+13 more)
 
 ### Community 58 - "design-docs/index.md"
-Cohesion: 0.07
-Nodes (13): AI 차별화와 안전 설계, 결정 기록, 제품 표현 원칙, 핵심 신념, GitHub 이슈와 PR 운영, PR, 이슈, 프로젝트 보드 (+5 more)
+Cohesion: 0.08
+Nodes (9): AI 차별화와 안전 설계, 결정 기록, 제품 표현 원칙, 핵심 신념, 1차 자료, RAG 검색·근거 선택 참고 자료, 프로젝트에 적용한 경계, D-10 Gold 사용자 검토 workflow (+1 more)
 
 ### Community 59 - "experiment_d_manual_review_contract.py"
-Cohesion: 0.16
-Nodes (25): ExperimentD10QuestionInput, _file_sha256(), FrozenQuestionIdentity, load_manual_pilot_artifacts(), ManualPilotInputError, BaseModel, model_validator, Path (+17 more)
+Cohesion: 0.14
+Nodes (27): ExperimentD10QuestionInput, _file_sha256(), FrozenQuestionIdentity, load_manual_pilot_artifacts(), ManualPilotArtifacts, ManualPilotInputError, ManualPilotQuestion, BaseModel (+19 more)
 
 ### Community 61 - "api-client.ts"
 Cohesion: 0.15
 Nodes (24): accessToken(), ApiError, ApiErrorCode, askQuestion(), authHeaders(), deleteAccount(), deleteConversation(), deleteQuestionHistory() (+16 more)
 
-### Community 62 - "test_experiment_d_manual_review.py"
-Cohesion: 0.26
-Nodes (18): RetrievalState, _candidates(), _code_provenance(), FakeBackend, FakeEmbedder, FakeLockedReader, _provision(), _provisions() (+10 more)
-
-### Community 63 - "test_backfill_embeddings.py"
-Cohesion: 0.12
-Nodes (23): _verify_dense_search(), _BeginContext, _EmbeddingConnection, _EmbeddingEngine, asyncio, parametrize, _row(), test_database_state_interpolates_the_searchable_corpus_sql() (+15 more)
+### Community 62 - "CorpusSnapshot"
+Cohesion: 0.19
+Nodes (19): CorpusSnapshot, RetrievalState, _candidates(), _code_provenance(), FakeBackend, FakeEmbedder, FakeLockedReader, _provision() (+11 more)
 
 ### Community 64 - "compilerOptions"
 Cohesion: 0.07
@@ -813,25 +806,25 @@ Nodes (26): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModu
 Cohesion: 0.21
 Nodes (10): CorpusSearchUnavailableError, RuntimeError, Raised when the current corpus generation is not safe to search., MonkeyPatch, test_anonymous_question_search_failure_returns_safe_temporary_error(), test_closed_corpus_is_not_reported_as_no_matching_evidence(), test_direct_search_failure_returns_the_same_safe_temporary_error(), test_provision_returns_corpus_unready_instead_of_not_found() (+2 more)
 
-### Community 66 - "ClarificationCase"
-Cohesion: 0.08
-Nodes (42): _facts_json(), date, datetime, Short-transaction PostgreSQL clarification-case repository., _record_from_row(), merge_submitted_facts(), Apply only validated updates to known, server-assigned fact ids., freeze_citations() (+34 more)
+### Community 66 - "main_module"
+Cohesion: 0.04
+Nodes (99): main_module(), _optional_user(), MockUser, QuestionResponse, Shared transport dependencies that preserve ``app.main`` test seams., Resolve the composition entry lazily to retain monkeypatch compatibility., _require_mock_auth(), _save_if_authenticated() (+91 more)
 
-### Community 67 - "backfill_embeddings.py"
-Cohesion: 0.15
-Nodes (32): _acquire_corpus_mutation_lock(), _acquire_corpus_sync_run_lock(), _arguments(), _backfill_database(), _database_state(), _deactivate_embedding_profile(), _embed_with_retry(), _embedder() (+24 more)
+### Community 67 - "test_backfill_embeddings.py"
+Cohesion: 0.06
+Nodes (93): _acquire_corpus_mutation_lock(), _acquire_corpus_sync_run_lock(), _append_cache(), _arguments(), _backfill_database(), _bundle_passages(), _cache_batch_values(), _cache_file_lock() (+85 more)
 
-### Community 68 - "PipelineIssue"
-Cohesion: 0.33
-Nodes (7): FinalAnswer, FinalAnswerCoordinator, Choose one authoritative terminal response from already verified content., VerifiedAnswer, PipelineIssue, test_pipeline_issue_normalizes_a_valid_phase_before_persistence(), test_verified_core_survives_a_recoverable_finalize_failure()
+### Community 68 - "ActiveGeneration"
+Cohesion: 0.25
+Nodes (7): ActiveGeneration, ActiveGenerationProvider, PhaseLease, Protocol, The frozen generation and index used for one prepare operation., Port for resolving the current generation once at prepare time., A provider-capacity lease whose owner performs its own cleanup.
 
 ### Community 69 - "experiment_d_manual_review_results.py"
 Cohesion: 0.19
 Nodes (24): _arguments(), _atomic_create_json(), _canonical_json_bytes(), _cli_path(), CompletedJudgment, _final_judgment(), finalize_confirmed_review(), main() (+16 more)
 
-### Community 70 - "law_json.py"
-Cohesion: 0.27
-Nodes (19): asyncio, test_domain_alias_finds_formal_renewable_energy_title(), test_future_version_is_excluded_before_effective_date(), _clean(), _date(), _first(), _flat_subitem_groups(), _flat_subitem_parents() (+11 more)
+### Community 70 - "ClarificationCaseRecord"
+Cohesion: 0.18
+Nodes (9): MemoryClarificationCaseRepository, date, datetime, UUID, ClarificationCaseRecord, ClarificationCaseRepository, datetime, Protocol (+1 more)
 
 ### Community 71 - "page.tsx"
 Cohesion: 0.10
@@ -845,33 +838,33 @@ Nodes (18): 입력 토큰 예산 24,576, 조문 경로 검색 파서, 출력 토
 Cohesion: 0.08
 Nodes (25): ACCOUNT_QUOTA_ENABLED, answer_generation stage, _answer_question, answer_validation stage, Authenticated and consented storage, Blocked-route generation, Citation source_kind, clarification_required action (+17 more)
 
-### Community 74 - "MemoryQuestionExecutionRepository"
-Cohesion: 0.23
-Nodes (7): MemoryQuestionExecutionRepository, datetime, ExecutionStatus, UUID, Persist a phase result and every public event under one lock. A provider call…, In-memory reference implementation of the authoritative execution contract., StoredQuestionExecution
+### Community 74 - "test_history_retention_postgres.py"
+Cohesion: 0.61
+Nodes (7): apply_migration(), drop_database_objects(), load_migration(), asyncio, reset_database(), test_retention_avoids_delete_deadlock_and_counts_actual_export_deletes(), test_retention_is_safe_during_concurrent_turn_save_and_has_strict_acl()
 
 ### Community 75 - "기술·로직 부채 감사"
 Cohesion: 0.07
 Nodes (28): 생성 실패 시 검색 전용 폴백, Outbound 추론 작업 큐, Provider-neutral Answerer 포트, Qwen 장애 시 검색 전용 폴백, 구조화 출력·Grounding 검증, 대화 컨텍스트 중복 제거, 분산 취소 Tombstone 검증, 정확 조문 경로 매칭 (+20 more)
 
-### Community 76 - "main.py"
+### Community 76 - "bootstrap.py"
 Cohesion: 0.05
-Nodes (66): _execution_capability(), Any, Citation, MockUser, QuestionResponse, Resolve the active-generation repository through the patchable main seam., Return the active generation provider only when resources are configured., Derive a replay-safe opaque anonymous capability without storing plaintext. (+58 more)
+Nodes (52): _content(), NvidiaNimClarificationInterpreter, NVIDIA NIM structured-output adapter for clarification turns., Use NVIDIA Ultra once for initial facts and only extract later turns., Non-NVIDIA structured continuation intent and fact extraction., Accept structured client facts without invoking the initial Ultra judge., StructuredClarificationContinuationExtractor, ClarificationWorkflowDependencies (+44 more)
 
-### Community 77 - "ClarificationCaseRecord"
-Cohesion: 0.09
-Nodes (29): MemoryClarificationCaseRepository, date, datetime, UUID, In-memory clarification case repository for deterministic tests., PostgresClarificationCaseRepository, AsyncEngine, UUID (+21 more)
+### Community 77 - "PostgresClarificationCaseRepository"
+Cohesion: 0.14
+Nodes (21): In-memory clarification case repository for deterministic tests., _facts_json(), PostgresClarificationCaseRepository, AsyncEngine, date, datetime, UUID, Short-transaction PostgreSQL clarification-case repository. (+13 more)
 
 ### Community 78 - "DeletionRecord"
-Cohesion: 0.13
-Nodes (25): _clean(), _date(), DeletionPage, DeletionRecord, _first(), _json_records(), parse_deletions_json(), parse_deletions_xml() (+17 more)
+Cohesion: 0.18
+Nodes (22): DeletionKind, _clean(), _date(), DeletionPage, DeletionRecord, _first(), _json_records(), parse_deletions_json() (+14 more)
 
 ### Community 79 - "experiment_d_pilot_contract.py"
 Cohesion: 0.15
 Nodes (20): canonical_pilot_worklist_payload_sha256(), ExperimentDPilotAnnotationWorklist, PilotQuestion, PilotQuestionApprovalBinding, PilotSelection, PilotSourceBankBinding, BaseModel, model_validator (+12 more)
 
 ### Community 80 - "AGENTS.md"
-Cohesion: 0.13
-Nodes (14): Discord 전용 오버레이, Docker·로컬 DB 정책, GitHub 인증 확인, graphify, Subagent 모델·reasoning 정책, 개발 작업 워크플로우, 검증 계약, 권위 문서 (+6 more)
+Cohesion: 0.05
+Nodes (38): Discord 전용 오버레이, Docker·로컬 DB 정책, GitHub 인증 확인, graphify, Subagent 모델·reasoning 정책, 개발 작업 워크플로우, 검증 계약, 권위 문서 (+30 more)
 
 ### Community 81 - "roadmap_registry.py"
 Cohesion: 0.12
@@ -881,21 +874,21 @@ Nodes (33): _canonical_reference(), _display_path(), _error(), _git_output(), _h
 Cohesion: 0.25
 Nodes (15): export_checklist(), alias, StreamingResponse, 인증된 사용자의 질문 이력에서 체크리스트 파일을 내보낸다., _markdown_item(), _minimal_unicode_pdf(), ChecklistItem, 외부 PDF 엔진 없이 만드는 표지·브랜딩 없는 단순 텍스트 출력본. (+7 more)
 
-### Community 83 - "ports/question_execution.py"
-Cohesion: 0.17
-Nodes (9): datetime, Authoritative, replay-safe v2 phase coordination. Provider work is supplied as…, PhaseClaim, datetime, Protocol, UUID, QuestionExecutionRecord, QuestionExecutionRepository (+1 more)
+### Community 83 - "MemoryQuestionExecutionRepository"
+Cohesion: 0.06
+Nodes (68): MemoryQuestionExecutionRepository, datetime, ExecutionStatus, UUID, Persist a phase result and every public event under one lock. A provider call…, In-memory reference implementation of the authoritative execution contract., StoredQuestionExecution, _json_mapping() (+60 more)
 
 ### Community 84 - "PostgresIdentityRepository"
 Cohesion: 0.13
-Nodes (8): PostgresIdentityRepository, AsyncEngine, ConversationSummary, date, datetime, MockUser, QuestionResponse, UUID
+Nodes (9): PostgresIdentityRepository, AsyncEngine, ConversationSummary, date, datetime, MockUser, QuestionResponse, UUID (+1 more)
 
-### Community 85 - "test_api_factory_composition.py"
-Cohesion: 0.10
-Nodes (17): _Connection, _Engine, _FactoryRepository, asyncio, date, MonkeyPatch, Regression coverage for factory-scoped transport dependencies and seams., Fail if the v1 route bypasses a patched app.main._answer_question seam. (+9 more)
+### Community 85 - "select_generation_hits"
+Cohesion: 0.47
+Nodes (9): Keep at most one ranked leaf per article within the provider input budget., select_generation_hits(), _hit(), test_budget_keeps_one_oversized_top_provision(), test_budget_keeps_whole_ranked_provisions(), test_flat_body_paths_are_not_collapsed_into_one_article(), test_generation_context_is_limited_to_five_articles(), test_generation_context_keeps_only_highest_ranked_leaf_per_article() (+1 more)
 
 ### Community 86 - "derive_answer_action"
-Cohesion: 0.19
-Nodes (15): AnswerAction, derive_answer_action(), ChecklistItem, _git_sha(), load_d10_cases(), main(), 0032 실행: 실험 E-10 base — D-10 10문항을 실제 파이프라인(routing + Postgres 검색 + NVIDIA…, _router() (+7 more)
+Cohesion: 0.29
+Nodes (10): AnswerAction, derive_answer_action(), derive_fallback_action(), ChecklistItem, _item(), ChecklistItem, test_all_required_or_not_applicable_is_fully_answerable(), test_any_check_status_is_clarification_required() (+2 more)
 
 ### Community 87 - "_LockConnection"
 Cohesion: 0.12
@@ -923,23 +916,23 @@ Nodes (21): Advisory lock coordination, As-of populations, Atomic evaluation res
 
 ### Community 93 - "prepared_publisher.py"
 Cohesion: 0.05
-Nodes (54): _apply_prepared_transaction(), _BoundEngine, _BoundTransactionContext, _chunks(), current_corpus_snapshot_id(), _embedding_source_sha256(), publish_prepared_bundle(), AsyncConnection (+46 more)
+Nodes (53): _apply_prepared_transaction(), _BoundEngine, _BoundTransactionContext, _chunks(), current_corpus_snapshot_id(), _embedding_source_sha256(), publish_prepared_bundle(), AsyncConnection (+45 more)
 
 ### Community 94 - "experiment_d_10_context_assembly.py"
 Cohesion: 0.21
 Nodes (19): article_key(), assemble_variant_a(), assemble_variant_b(), AssembledArticle, Candidate, CorpusRecord, evaluate_combo(), load_context_verdicts() (+11 more)
 
 ### Community 95 - "CorpusTemporalState"
-Cohesion: 0.10
-Nodes (28): _corpus_temporal_population_statement(), _corpus_temporal_state(), Build the read-only current-population identity query., date, ValueError, Dynamic temporal contract for the currently searchable legal corpus. The…, Raised when a request falls outside the current dynamic corpus bounds., Return a supported date or fail before quota and provider work begins. (+20 more)
+Cohesion: 0.21
+Nodes (15): _BoundaryOnlyRepository, date, MonkeyPatch, parametrize, _ready_state(), test_content_snapshot_identity_rejects_invalid_population_contracts(), test_corpus_status_exposes_dynamic_supported_date_window(), test_corpus_status_exposes_null_identity_when_current_population_is_unready() (+7 more)
 
 ### Community 96 - "실행 계획 0008: 4단계 검색, 1초 지연 목표, RAG 디버깅"
 Cohesion: 0.11
 Nodes (22): 1초 지연 목표와 측정 경계, 1단계 모든 핵심어 일치, 3단계 필수 앵커 검증, 핵심어 정규화, 직접 조문 경로 검색, 4단계 근거 부족, 2단계 최소 2개 후보 풀, 검색 절대 deadline 1,000ms (+14 more)
 
 ### Community 97 - "test_v2_question_executions.py"
-Cohesion: 0.17
-Nodes (18): _allow_supported_date(), _legal_search_route(), asyncio, MonkeyPatch, A case capability authorizes the workflow but never reaches a public payload., One failed classifier decision is frozen instead of retried during prepare., Foreign, expired, and invalid case ids share one non-enumerable response., test_prepare_core_finalize_replays_authoritative_phase_events() (+10 more)
+Cohesion: 0.15
+Nodes (22): _allow_supported_date(), _legal_search_route(), asyncio, MonkeyPatch, A case capability authorizes the workflow but never reaches a public payload., One failed classifier decision is frozen instead of retried during prepare., Foreign, expired, and invalid case ids share one non-enumerable response., HTTP phase routes keep the documented main-module monkeypatch seams. (+14 more)
 
 ### Community 98 - "corpus_preflight.py"
 Cohesion: 0.07
@@ -957,9 +950,9 @@ Nodes (19): Embedding profile lineage, Candidate grouping and five-context budge
 Cohesion: 0.14
 Nodes (19): 전기사업법 제10조 양수·분할·합병 인가, 전기사업법 제11조 사업 승계, 전기사업법 제12조 허가 취소 등, 전기사업법 제34조 차액계약, 전기사업법 제53조 전기위원회, 전기사업법 제61조 공사계획 인가, 전기사업법 제7조 사업의 허가, 전기사업법 제8조 결격사유 (+11 more)
 
-### Community 102 - "create_app"
-Cohesion: 0.10
-Nodes (22): bind_app_dependencies(), _FactoryCompositionMain, Any, Module-like request facade that binds routes to one app factory's adapters., Bind a non-production app factory's resources for one HTTP request., Restore the previous factory binding after a request completes., reset_app_dependencies(), build_router() (+14 more)
+### Community 102 - "ClarificationCase"
+Cohesion: 0.18
+Nodes (18): _record_from_row(), _free_text_intent(), merge_submitted_facts(), Apply only validated updates to known, server-assigned fact ids., ClarificationCase, FactStatus, group_remaining_facts(), StrEnum (+10 more)
 
 ### Community 103 - "test_question_cancellation.py"
 Cohesion: 0.51
@@ -994,8 +987,8 @@ Cohesion: 0.13
 Nodes (15): Prepared Transaction Gate 반영, 코퍼스 검색 게이트, SHA 벡터 재사용 캐시, 고정 출구 IP 수동 실행, 예약 실행 없음, Prepare Current Bundle, 롤백·검색 전용 유지, 롤백 (+7 more)
 
 ### Community 111 - "ExecutionPhase"
-Cohesion: 0.12
-Nodes (21): CapacityLeaseStore, Lease, MemoryConcurrencyLimiter, _MemoryLease, PostgresCapacityLeaseStore, PostgresConcurrencyLimiter, _PostgresLease, AsyncEngine (+13 more)
+Cohesion: 0.13
+Nodes (20): CapacityLeaseStore, Lease, MemoryConcurrencyLimiter, _MemoryLease, PostgresCapacityLeaseStore, PostgresConcurrencyLimiter, _PostgresLease, AsyncEngine (+12 more)
 
 ### Community 112 - "실행 계획 0025: 승인 질문에서 근거 기반 AI 답변까지"
 Cohesion: 0.05
@@ -1017,9 +1010,9 @@ Nodes (18): NIM Embedding API 계약, Hosted Free Endpoint Trial 경계, L2 재�
 Cohesion: 0.19
 Nodes (16): check_d010_active_experiment_contract(), check_d010_current_contract_docs(), check_d010_routing_contract(), check_d010_superseded_designs(), check_freshness(), check_links(), main(), markdown_files() (+8 more)
 
-### Community 117 - "search_only_answer"
-Cohesion: 0.06
-Nodes (50): clarification_resubmission_summary(), post_generation_clarification_answer(), QuestionResponse, 0028 "비용 최소화 결정"의 재제출 템플릿. route_guidance_fallback(사전 라우팅)와…, 2026-08-08: DraftAnswer.action == "clarification_required"일 때 쓴다 - 사전 라우팅이 못 잡고…, Build the deterministic AI-mode fallback for a route without evidence.…, route_guidance_fallback(), search_only_answer() (+42 more)
+### Community 117 - "test_search_only_feature.py"
+Cohesion: 0.29
+Nodes (4): _LegalRouter, test_disabled_search_only_feature_reports_ai_unavailability_without_search_only_warning(), test_disabled_search_only_feature_returns_503_after_generation_failure(), test_search_only_feature_defaults_to_disabled_and_can_be_enabled()
 
 ### Community 118 - "사용 중·조건부 추천 상세"
 Cohesion: 0.06
@@ -1045,21 +1038,21 @@ Nodes (16): 프로젝트 1000문항·200 Scenario Family 설계, 30660개 사용
 Cohesion: 0.15
 Nodes (21): _atomic_replace(), main(), _parser(), _print_validation_errors(), ArgumentParser, Path, Render the generated roadmap from execution-plan index metadata., Validate the registry and atomically regenerate ``docs/ROADMAP.md``. (+13 more)
 
-### Community 124 - "main_module"
-Cohesion: 0.09
-Nodes (28): main_module(), Resolve the composition entry lazily to retain monkeypatch compatibility., legal_search_router(), fixture, MonkeyPatch, Let non-temporal API tests exercise their own downstream concern., Exercise legacy search-only contracts only when the feature is explicitly…, Keep normal AI-flow tests on the post-routing legal-search path. (+20 more)
+### Community 124 - ".provision"
+Cohesion: 0.29
+Nodes (4): UUID, 단일 조문 조회를 v1 저장소에 위임한다., 문서 upsert를 v1 저장소에 위임한다., 임베딩 upsert를 v1 저장소에 위임한다.
 
 ### Community 125 - "Google OAuth·Supabase Auth 연결 설계"
 Cohesion: 0.14
 Nodes (14): Google Cloud → Google 인증 플랫폼 → 클라이언트 → `law-rag-web`, Google OAuth·Supabase Auth 연결 설계, Production 결정, Supabase Dashboard → Authentication → Sign In / Providers → Google, Supabase Dashboard → Authentication → URL Configuration, 결정 기록, 공식 참고, 대표 오류 (+6 more)
 
 ### Community 126 - "MockCorpusRepository"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (19): _iso(), MockCorpusRepository, Any, date, Path, 첫 실행은 8일, 이후에는 마지막 성공일 하루 전부터 겹쳐 조회한다., Open API 레코드 삭제를 법적 폐지와 분리해 기록하고 체크포인트를 전진한다., Supabase 연결 전 사용하는 원자적 파일 기반 목업 저장소. (+11 more)
 
-### Community 127 - "sse.py"
-Cohesion: 0.21
-Nodes (16): core_question_execution(), finalize_question_execution(), alias, Header, post, Request, StreamingResponse, UUID (+8 more)
+### Community 127 - "clarification_workflow.py"
+Cohesion: 0.15
+Nodes (23): CaseLoaded, CaseMerged, InterpreterFailed, LlamaIndexClarificationWorkflow, PolicySelected, Event, LlamaIndex implementation of the clarification orchestration boundary., Private data for one invocation; never serialized into workflow events. (+15 more)
 
 ### Community 128 - "query/retriever.py"
 Cohesion: 0.22
@@ -1081,21 +1074,21 @@ Nodes (14): 4. 평가와 실험 읽기, RAG에는 하나의 총점이 없다, �
 Cohesion: 0.23
 Nodes (7): _CompletedCoordinator, _Executions, asyncio, datetime, LogCaptureFixture, MonkeyPatch, test_completed_phase_reports_timeout_releasing_capacity_lease_without_breaking_result()
 
-### Community 133 - "run_d10_failure_driven.py"
-Cohesion: 0.09
-Nodes (44): apply_answer_judgment(), evaluate_live_answer_case(), _existing_records(), main(), next_case_id(), parse_arguments(), _production_answer_executor(), Namespace (+36 more)
+### Community 133 - "D10RunInput"
+Cohesion: 0.11
+Nodes (41): AnswerExecutor, D10RunInput, evaluate_live_answer_case(), _existing_records(), main(), next_case_id(), parse_arguments(), _production_answer_executor() (+33 more)
 
 ### Community 134 - "GenerationResult"
 Cohesion: 0.33
 Nodes (10): build_generate_node(), _format_evidence(), generate_node(), GenerationResult, FakeStructuredLLM, asyncio, test_generate_node_ignores_citation_ids_outside_search_hits_range(), test_generate_node_maps_citation_ids_to_search_hits() (+2 more)
 
-### Community 135 - "parse_provision_references"
-Cohesion: 0.21
-Nodes (13): _compact(), _document_title(), _korean_number(), _normalize_korean_provision_numbers(), _number_value(), parse_provision_references(), ProvisionQuery, ProvisionReference (+5 more)
+### Community 135 - ".route"
+Cohesion: 0.29
+Nodes (3): _failure_kind(), Any, Exception
 
 ### Community 136 - "test_clarification_answering.py"
-Cohesion: 0.13
-Nodes (45): ClarificationCoreDraft, ClarificationDraftAnswer, CoreDraft, BaseModel, The clarification-only detail schema carrying structural legal claims., The deliberately small, publishable result of the v2 core phase., The clarification-only core schema carrying structural legal claims., ClarificationQuestionFormat (+37 more)
+Cohesion: 0.05
+Nodes (87): ClarificationCoreDraft, ClarificationDraftAnswer, The clarification-only detail schema carrying structural legal claims., The clarification-only core schema carrying structural legal claims., FinalAnswer, FinalAnswerCoordinator, Choose one authoritative terminal response from already verified content., VerifiedAnswer (+79 more)
 
 ### Community 137 - "System Map and Execution Boundaries"
 Cohesion: 0.14
@@ -1133,16 +1126,16 @@ Nodes (11): fake_generate(), fake_route_legal_search(), fake_search(), fake_vali
 Cohesion: 0.17
 Nodes (25): _article_evidence_presence(), _article_root(), _clean_text(), _cosine(), Embedder, _embedding_text(), evaluate_cases(), _exact_record() (+17 more)
 
-### Community 146 - "executions.py"
-Cohesion: 0.13
-Nodes (21): cancel_question_execution(), _capability_hash(), _not_ready_error(), _prepare_clarification_turn(), prepare_question_execution(), _prepared_execution_response(), alias, delete (+13 more)
+### Community 146 - "test_layperson_prompt_v2.py"
+Cohesion: 0.22
+Nodes (17): _hits(), v1 has "적용 여부를 추정하지 않는다" right after the summary/결론 guidance; v2 must carry the…, v1 ends its limitations guidance with "limitations에 새로운 법률 주장을 추가하지 않는다." v2…, _request(), test_v1_prompt_text_is_unchanged_by_v2_addition(), test_v2_system_prompt_caps_limitations_and_splits_confirmed_vs_unconfirmed(), test_v2_system_prompt_limits_one_condition_per_sentence(), test_v2_system_prompt_limits_summary_to_three_sentences() (+9 more)
 
 ### Community 147 - "실행 계획 0020: 실험 D — 검색 문맥 구성"
 Cohesion: 0.12
 Nodes (21): 조·항·호·목 계층 복원, Article Recall, 실험 D 검색 문맥 구성, corpus 정확성 우선, corpus validator, dense-only 최종 기준선, 직접 근거 1~5개, evidence closure (+13 more)
 
 ### Community 148 - "RAG 평가 방법 공식 자료"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (18): 미주석 질문 초안, 답변 Faithfulness·Groundedness 지표, BEIR, BEIR Annotation Hole·Pooling Bias, ID·Path·SHA 결정적 검색 지표, Ground Truth 기반 정확도 벤치마크, 독립 Graded Qrels·Adjudication, Labelled RAG Dataset (+10 more)
 
 ### Community 149 - "scripts"
@@ -1150,16 +1143,16 @@ Cohesion: 0.15
 Nodes (12): name, packageManager, private, scripts, build, build:web, dev:web, lint:web (+4 more)
 
 ### Community 150 - "RetrievalGeneration"
-Cohesion: 0.06
-Nodes (46): Generation catalog models, persistence and publication policy., generation_source_records(), generation_table_name(), GenerationSource, provision_fingerprint(), UUID, Pure generation catalog values and transformation fingerprints., Fingerprint the transformation contract that defines vector compatibility. (+38 more)
+Cohesion: 0.09
+Nodes (35): Generation catalog models, persistence and publication policy., generation_source_records(), generation_table_name(), GenerationSource, provision_fingerprint(), UUID, Pure generation catalog values and transformation fingerprints., Fingerprint the transformation contract that defines vector compatibility. (+27 more)
 
 ### Community 151 - "Web E2E 검증 명세"
 Cohesion: 0.15
 Nodes (12): P0 정상 흐름, P1 검색·답변 경계, P1 네트워크·실행 상태 경계, P1 모바일·키보드·접근성 경계, P1 인증·이력·내보내기 경계, P1 입력·날짜·필터 경계, Web E2E 검증 명세, 공통 합격 조건 (+4 more)
 
-### Community 152 - "test_generations.py"
-Cohesion: 0.09
-Nodes (21): _ActiveResult, _Connection, _Engine, asyncio, UUID, _ReadConnection, _ReadEngine, _record() (+13 more)
+### Community 152 - "PostgresGenerationRepository"
+Cohesion: 0.06
+Nodes (32): PostgresGenerationRepository, AsyncEngine, UUID, Read the stored lineage required to select safe vector copies., Switch active pointer only if the candidate has been verified., Persist generation transitions using short, caller-owned transactions., Record a failed candidate while retaining the current active pointer., Atomically restore an explicitly retained rollback generation. (+24 more)
 
 ### Community 153 - "실행 계획 0017: 실험 B — NVIDIA NIM 두 문장 임베딩과 코사인 유사도"
 Cohesion: 0.08
@@ -1197,17 +1190,17 @@ Nodes (14): pgvector HNSW 영구 제외, 후보에서 직접 근거로 가는 �
 Cohesion: 0.44
 Nodes (9): _candidate(), _canonical_sha256(), _case(), Path, test_rerank_does_not_overwrite_existing_output(), test_rerank_moves_target_evidence_to_top3_and_reduces_known_noise(), test_rerank_rejects_unconfirmed_review_without_output(), test_rerank_uses_case_text_without_relevance_labels() (+1 more)
 
-### Community 162 - "test_mock_auth_history.py"
-Cohesion: 0.26
-Nodes (11): _ask(), _login(), test_anonymous_question_is_not_saved_but_authenticated_question_is(), test_conversation_is_owner_scoped_and_delete_cascades_legacy_history(), test_conversation_summary_and_turn_cursors_do_not_duplicate_items(), test_history_expires_exactly_one_year_after_creation(), test_history_is_private_and_owner_can_delete_it(), test_invalid_or_wrong_cursor_kind_is_rejected() (+3 more)
+### Community 162 - "test_answer_quality_contract.py"
+Cohesion: 0.43
+Nodes (6): _answer_text(), _assert_terms(), _hits(), parametrize, test_expected_evidence_is_allowlisted_and_answer_contract_is_explicit(), test_search_only_answer_preserves_expected_evidence_and_avoids_overclaims()
 
 ### Community 163 - "Settings"
 Cohesion: 0.07
 Nodes (29): BaseSettings, model_validator, Settings, main(), 0025 M5 item 6: bounded hosted smoke test for real NVIDIA answer generation.…, DenyingPostgresIdentity, MonkeyPatch, consume_quota always denies, so a passing test proves the toggle controls it. (+21 more)
 
-### Community 164 - "_generate_bundle_cache"
-Cohesion: 0.14
-Nodes (27): _bundle_passages(), _cache_batch_values(), _cache_pending(), _cache_records_for_passages(), _cache_records_for_sha_reuse(), _cache_state(), CachedEmbedding, _database_reusable_embeddings() (+19 more)
+### Community 164 - "route_question"
+Cohesion: 0.20
+Nodes (13): Protocol, QuestionRouter, Single-stage question routing before evidence retrieval., route_question(), _build_router(), evaluate(), _load_env_local(), main() (+5 more)
 
 ### Community 165 - "Reliability"
 Cohesion: 0.22
@@ -1233,9 +1226,9 @@ Nodes (14): Retrieval catalog v1, retrieval_index_builds table, retrieval_profil
 Cohesion: 0.15
 Nodes (13): 0045: Web/API 질문 timeout 예산 정렬 Implementation Plan, Completion conditions, Decision log, File map, Global Constraints, Rollback, Task 1: API 요청 예산과 설정 계약, Task 2: Apply the shared budget to the API pipeline (+5 more)
 
-### Community 171 - "questions.py"
-Cohesion: 0.13
-Nodes (22): Version 1 HTTP transport routes., _answering_http_error(), cancel_question(), _handle_question(), HTTPException, post, QuestionResponse, QuestionStageTimingOutcome (+14 more)
+### Community 171 - "run_experiment_e10.py"
+Cohesion: 0.48
+Nodes (6): _git_sha(), load_d10_cases(), main(), 0032 실행: 실험 E-10 base — D-10 10문항을 실제 파이프라인(routing + Postgres 검색 + NVIDIA…, _router(), run_one()
 
 ### Community 172 - "history.py"
 Cohesion: 0.30
@@ -1273,9 +1266,9 @@ Nodes (13): BM25 확장 경계, passage 입력 계약, 검색 계보 catalog (`0
 Cohesion: 0.23
 Nodes (13): fixture, repository(), _assert_writer_locks_released(), _async_url(), _complete(), _isolated_repository(), _no_sleep(), asyncio (+5 more)
 
-### Community 181 - "AnswerEvent"
-Cohesion: 0.18
-Nodes (12): PhaseResult, QuestionPhaseCoordinator, Start exactly one phase or return its persisted authoritative replay., AnswerEvent, EventProtocolError, ValueError, The finalize producer must distinguish repair from ordinary missing-core states., test_finalize_claim_preserves_core_repair_source_for_the_producer() (+4 more)
+### Community 181 - "실험 D — 검색 문맥 안전 게이트 평가"
+Cohesion: 0.29
+Nodes (4): 결과, 실험 D — 검색 문맥 안전 게이트 평가, 판정, 한계
 
 ### Community 182 - "ActiveGenerationIndexProvider"
 Cohesion: 0.14
@@ -1370,8 +1363,8 @@ Cohesion: 0.11
 Nodes (22): 조문 전체 단위 청크, Markdown·JSON 원자 저장, law_json.parse_legal_document, 실험 A 일반 텍스트 청킹, ProvisionRecord, 텍스트 입력 어댑터, UI 잔여 줄 제거, 검증 및 롤백 (+14 more)
 
 ### Community 206 - "Harness Engineering 적용 메모"
-Cohesion: 0.14
-Nodes (11): AGENTS 작업 지도·계약, 아키텍처 경계와 의존성 방향, 문서 자동화·구조 테스트 부채, Harness Engineering 적용 메모, 점진적으로 읽는 분류 문서, 품질·보안·신뢰성 독립 문서, 아직 적용하지 않은 내용, 이 저장소에 적용한 내용 (+3 more)
+Cohesion: 0.12
+Nodes (17): AGENTS 작업 지도·계약, 아키텍처 경계와 의존성 방향, 문서 자동화·구조 테스트 부채, Harness Engineering 적용 메모, 점진적으로 읽는 분류 문서, 품질·보안·신뢰성 독립 문서, 버전 관리 실행 계획, 아직 적용하지 않은 내용 (+9 more)
 
 ### Community 207 - "route.ts"
 Cohesion: 0.71
@@ -1390,20 +1383,20 @@ Cohesion: 0.14
 Nodes (15): 익명 질문 비저장, 채팅 중심 반응형 셸, 로그인 대화 이력, 검색 전용 모드, gpt-5.6-terra 생성 모델, 검증과 롤백, 결과와 잔여 작업, 결정 로그 (+7 more)
 
 ### Community 211 - "학습 노트 통합 실행 계획"
-Cohesion: 0.11
-Nodes (24): HNSW 영구 제외, 승인 gold 미실행 상태, 법령 코퍼스 생애주기, 현재 dense-only 계약, 평가와 실험 읽기, 근거 우선 검색과 답변, 5개 장 학습 구조, HNSW 영구 제외 (+16 more)
+Cohesion: 0.10
+Nodes (25): exhaustive exact cosine 평가, HNSW 영구 제외, 승인 gold 미실행 상태, 법령 코퍼스 생애주기, 현재 dense-only 계약, 평가와 실험 읽기, 근거 우선 검색과 답변, 5개 장 학습 구조 (+17 more)
 
 ### Community 212 - "Article 12 license cancellation"
 Cohesion: 0.38
 Nodes (7): Article 10 transfer, split, and merger, Article 11 succession, Article 12 license cancellation, Article 53 electricity commission, Article 7 business license, Article 8 disqualification, Article 9 installation and start duty
 
 ### Community 213 - "account.py"
-Cohesion: 0.08
-Nodes (56): ConsentRequiredError, Exception, Exception, SupabaseAuthError, SupabaseAuthUnavailableError, _authenticated_user(), _bearer_token(), _optional_user() (+48 more)
+Cohesion: 0.10
+Nodes (45): _authenticated_user(), _bearer_token(), Header, conversation_turns(), conversations(), current_user(), _decode_conversation_cursor(), _decode_cursor() (+37 more)
 
-### Community 214 - "6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나"
-Cohesion: 0.22
-Nodes (9): 6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나, v1: 한 함수 안의 순차 파이프라인, v2: 검색 한 칸만 새로 짜기, v3: 노드 단위로 다시 짜고 대화를 영속화하기 (설계 단계, 아직 미구현), 상세 자료를 찾는 곳, 세 버전 비교표, 왜 세 버전이 동시에 존재하는가, 읽을 때 지킬 구분 (+1 more)
+### Community 214 - "parse_provision_references"
+Cohesion: 0.21
+Nodes (13): _compact(), _document_title(), _korean_number(), _normalize_korean_provision_numbers(), _number_value(), parse_provision_references(), ProvisionQuery, ProvisionReference (+5 more)
 
 ### Community 215 - "0034: 웹 프런트 탭 포커스 시 불필요한 인증·이력 재조회 억제"
 Cohesion: 0.08
@@ -1457,10 +1450,6 @@ Nodes (12): 3. 근거 우선 검색과 답변, RAG의 목적은 그럴듯한 문
 Cohesion: 0.09
 Nodes (23): API Vercel Project, FastAPI Vercel 배포 준비 조건, Terra 준비 상태의 의미, Vercel·Supabase 운영 전환 설계, Web·API 연결과 Preview CORS, Web Vercel Project, 결정 기록, 데이터베이스 연결 (+15 more)
 
-### Community 228 - "LegalRepository"
-Cohesion: 0.15
-Nodes (9): build_v1_query_embedding_capability(), Keep framework-specific v1 embedding policy at the composition boundary., Compatibility facade for callers that still provide a repository object., _requires_legacy_query_embedding(), LegalRepository, date, datetime, Protocol (+1 more)
-
 ### Community 229 - "web/proxy.ts"
 Cohesion: 0.60
 Nodes (3): updateSession(), config, proxy()
@@ -1473,9 +1462,9 @@ Nodes (5): Authoritative Question Execution, Current State Session Start Pointer
 Cohesion: 0.10
 Nodes (53): AnnotationProposal, _arguments(), ArtifactBinding, _atomic_publish_directory(), build_draft(), _canonical_bytes(), CorpusBinding, D10GoldReviewError (+45 more)
 
-### Community 232 - "test_supabase_authenticated_flow.py"
-Cohesion: 0.14
-Nodes (11): SupabaseIdentity, FakePostgresIdentity, FakeSupabaseAuth, _headers(), fixture, MockUser, UUID, supabase_flow() (+3 more)
+### Community 232 - "SupabaseAuthError"
+Cohesion: 0.09
+Nodes (27): AsyncClient, Exception, UUID, SupabaseAuth, SupabaseAuthError, SupabaseAuthUnavailableError, SupabaseIdentity, asyncio (+19 more)
 
 ### Community 233 - "Execution-Plan Metadata Contract"
 Cohesion: 0.40
@@ -1491,7 +1480,7 @@ Nodes (5): Alembic autogenerate translation, Korean translation materials, OpenA
 
 ### Community 236 - "실행 계획 0018: 실험 C — 지정 장·조 로컬 벡터 검색"
 Cohesion: 0.11
-Nodes (23): 로컬 corpus 원자 교체, 저작권법, 전기사업법, exhaustive cosine Top 3, LawOpenApiClient, 실험 C 지정 장·조 로컬 벡터 검색, NVIDIA passage embedding, 신재생에너지법 (+15 more)
+Nodes (22): 로컬 corpus 원자 교체, 저작권법, 전기사업법, exhaustive cosine Top 3, LawOpenApiClient, 실험 C 지정 장·조 로컬 벡터 검색, NVIDIA passage embedding, 신재생에너지법 (+14 more)
 
 ### Community 237 - "참고 자료 카탈로그"
 Cohesion: 0.40
@@ -1553,21 +1542,21 @@ Nodes (3): LlamaIndexLegalRepository, v1 Answer Pipeline Reuse, v2 Search and Qu
 Cohesion: 0.67
 Nodes (3): Verified Completed Plan Archive, Completed Execution Plans Index, Project Roadmap
 
-### Community 271 - "CorpusSnapshot"
-Cohesion: 0.08
-Nodes (18): _configure_search_path(), CorpusSnapshot, DenseCandidate, _load_retrieval_state(), LockedDenseReader, PostgresExperimentDBackend, _PostgresLockedDenseReader, AsyncConnection (+10 more)
+### Community 271 - "DenseCandidate"
+Cohesion: 0.14
+Nodes (8): DenseCandidate, LockedDenseReader, date, _candidate(), FakeLockedReader, date, Any, FakeBackend
 
 ### Community 272 - "NVIDIA 로컬 추론과 Vercel 연결 검토"
-Cohesion: 0.12
-Nodes (17): 1순위: outbound 작업 중계, 2026-07-19 Hosted NIM 결정, 2순위: NVIDIA-hosted NIM endpoint, 3순위: 인증된 reverse tunnel/gateway, NVIDIA 공식 참고자료, NVIDIA 로컬 추론과 Vercel 연결 검토, “NVIDIA가 최근 무료 배포했다”는 주장 확인, Qwen3:4b 대안 가능성 (+9 more)
+Cohesion: 0.09
+Nodes (19): 1순위: outbound 작업 중계, 2026-07-19 Hosted NIM 결정, 2순위: NVIDIA-hosted NIM endpoint, 3순위: 인증된 reverse tunnel/gateway, NVIDIA 공식 참고자료, NVIDIA 로컬 추론과 Vercel 연결 검토, “NVIDIA가 최근 무료 배포했다”는 주장 확인, Qwen3:4b 대안 가능성 (+11 more)
 
 ### Community 273 - "RLS and auth.uid ownership"
 Cohesion: 0.67
 Nodes (3): RLS and auth.uid ownership, user_consents table, user_profiles table
 
-### Community 281 - "test_d10_answer_judge.py"
-Cohesion: 0.25
-Nodes (14): AnswerJudgeInput, AnswerJudgeResult, judge_answer(), judge_execution(), Deterministic, text-free action and grounding checks for native D-10 runs., Judge only structural answer metadata; raw answer/evidence stays private., Extract only structural metadata from a private response for deterministic…, D10AnswerExecution (+6 more)
+### Community 281 - "judge_execution"
+Cohesion: 0.20
+Nodes (17): AnswerJudgeInput, AnswerJudgeResult, judge_answer(), judge_execution(), Deterministic, text-free action and grounding checks for native D-10 runs., Judge only structural answer metadata; raw answer/evidence stays private., Extract only structural metadata from a private response for deterministic…, D10AnswerExecution (+9 more)
 
 ### Community 285 - "audiovisual-rights-transfer-presumption"
 Cohesion: 0.17
@@ -1589,21 +1578,21 @@ Nodes (12): 10. 저작권법 제2조의2 — 0.15088479230342758, 1. 신에너�
 Cohesion: 0.17
 Nodes (12): 10. 전기사업법 제1조 — 0.16401504036431777, 1. 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 제2조 — 0.5738374923043102, 2. 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 제1조 — 0.390636921368038, 3. 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 제4조 — 0.37135226166757596, 4. 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 제5조 — 0.34012211395544883, 5. 전기사업법 제2조 — 0.2423786341266909, 6. 저작권법 제2조 — 0.24182255022059052, 7. 신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법 제3조 — 0.22048617126397796 (+4 more)
 
-### Community 308 - "RequestBudget"
-Cohesion: 0.29
-Nodes (9): T, RequestBudget, StageTimeoutError, asyncio, test_run_converts_asyncio_timeout_to_stage_timeout(), test_run_preserves_provider_timeout_error(), test_stage_timeout_rejects_work_when_only_response_reserve_remains(), test_stage_timeout_uses_smaller_of_cap_and_remaining_work_budget() (+1 more)
+### Community 308 - "0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리"
+Cohesion: 0.33
+Nodes (6): 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리, 목표, 비범위, 승격 조건, 완료 조건, 포함 범위
 
 ### Community 309 - "RAG 파이프라인 설계"
 Cohesion: 0.22
 Nodes (9): RAG 파이프라인 설계, 검색 단계, 결정 기록, 답변 계약, 목표, 문서 모델, 실패 모드, 캐시와 재현성 (+1 more)
 
-### Community 357 - "ExecutionSnapshot"
-Cohesion: 0.30
-Nodes (13): Map the persisted state to the transport-neutral prepare response., ExecutionSnapshot, InvalidExecutionTransition, next_action_for(), NextAction, StrEnum, ValueError, transition_execution() (+5 more)
+### Community 357 - "PostgresExperimentDBackend"
+Cohesion: 0.21
+Nodes (8): _configure_search_path(), PostgresExperimentDBackend, _PostgresLockedDenseReader, AsyncConnection, Backend holding one transaction-scoped shared lock for the evaluation., _set_read_committed_read_only(), _set_repeatable_read_only(), _snapshot_on_connection()
 
-### Community 358 - "RouteJudgment"
-Cohesion: 0.05
-Nodes (53): _failure_kind(), NvidiaNimQuestionRouter, Any, BaseModel, Exception, Release the process-owned NVIDIA HTTP client., Question router backed by one structured NVIDIA NIM request., _RouteJudgmentSchema (+45 more)
+### Community 358 - "test_routing_pipeline.py"
+Cohesion: 0.13
+Nodes (23): NvidiaNimQuestionRouter, Release the process-owned NVIDIA HTTP client., Question router backed by one structured NVIDIA NIM request., _configure_ai(), _FailingRouter, _hit(), _payload_json(), asyncio (+15 more)
 
 ### Community 359 - "V3 LangGraph 에이전트 기본 골격 구현 계획"
 Cohesion: 0.10
@@ -1634,8 +1623,8 @@ Cohesion: 0.12
 Nodes (18): Agent별 단계, 분산 취소 공유 저장소, 임베딩 공급자 결정, 한글 수사·복수 항·범위 파서, 로컬 NVIDIA 모델 하드웨어 제약, outbound queue 로컬 모델 연결 대안, prompt 신뢰 경계, sticky routing 배제 (+10 more)
 
 ### Community 366 - "test_postgres_identity.py"
-Cohesion: 0.15
-Nodes (14): _existing(), FakeConnection, FakeEngine, FakeResult, _identity(), asyncio, test_delete_history_locks_conversation_before_deleting_question(), test_existing_consented_profile_does_not_require_headers_again() (+6 more)
+Cohesion: 0.13
+Nodes (16): ConsentRequiredError, Exception, _existing(), FakeConnection, FakeEngine, FakeResult, _identity(), asyncio (+8 more)
 
 ### Community 367 - "NVIDIA Hosted NIM 생성 모델 연결"
 Cohesion: 0.14
@@ -1673,10 +1662,6 @@ Nodes (16): 2026-08-28 milestone sequencing decision, Plan self-review, Task 10:
 Cohesion: 0.12
 Nodes (16): Affecting the Rendering of Types Themselves, Applying Post Processing and Python Code Formatters to Generated Revisions, Auto Generating Migrations, Autogenerating Multiple MetaData collections, Basic Post Processor Configuration, Comparing and Rendering Types, Comparing Types, Controlling the Module Prefix (+8 more)
 
-### Community 376 - ".write_nodes"
-Cohesion: 0.25
-Nodes (5): Any, TextNode, Persist transformed nodes in the newly allocated generation table., Copy unchanged source vectors and verify their lineage count., Run the physical-table verifier before the catalog transition.
-
 ### Community 377 - "실행 계획 0007: Production 자연어 검색과 단계별 관측"
 Cohesion: 0.15
 Nodes (14): 한국어 자연어 검색, NFTC 기술기준 청킹, PGroonga 단계형 완화 검색, 검색 전용 독립 동작, 공유 질의 정규화, 검증 및 롤백, 결정 로그, 목적과 사용자 결과 (+6 more)
@@ -1689,9 +1674,9 @@ Nodes (12): Can I share my embeddings online?, Do V3 embedding models know about
 Cohesion: 0.23
 Nodes (15): _answer_question, Delegated v1 repository methods, v1 to LangChain/LangGraph/LlamaIndex Evolution, Experimental exposure guard, LangGraph route/search/generate/validate nodes, LlamaIndexLegalRepository, NvidiaNimAnswerer, Parallel version operation (+7 more)
 
-### Community 380 - "0046 기준 질문 파이프라인 지도 설계"
-Cohesion: 0.25
-Nodes (8): 버전 관리 실행 계획, Clarification Missing Information, Legal Search Terra 경로, 0046 기준 질문 파이프라인 지도 설계, 사전 차단 질문 전용 LLM 경로, Terra Always-generate 계약, 빈 근거 Unanswerable 응답, Insufficient Evidence 판정
+### Community 380 - "0029: 필요 시 D-full Gold 제작"
+Cohesion: 0.40
+Nodes (5): 0029: 필요 시 D-full Gold 제작, active 승격 조건, 목적, 보존 자산, 완료 조건
 
 ### Community 381 - "분산 질문 취소 실행 계획"
 Cohesion: 0.14
@@ -1710,20 +1695,20 @@ Cohesion: 0.05
 Nodes (52): main(), _parser(), ArgumentParser, Path, _run(), CorpusPreflightSettings, BaseSettings, The preflight intentionally needs only a direct PostgreSQL session URL. (+44 more)
 
 ### Community 385 - "Path"
-Cohesion: 0.16
-Nodes (26): _ask(), _atomic_write(), _atomic_write_many(), _display_path(), _evaluate(), load_corpus(), _load_evaluation_cases(), _load_search_runs() (+18 more)
+Cohesion: 0.23
+Nodes (16): _atomic_write(), _atomic_write_many(), _display_path(), _load_evaluation_cases(), _load_search_runs(), _markdown_cell(), Path, record_search_result() (+8 more)
 
-### Community 386 - "v3 설계"
+### Community 386 - "[역사 문서] terra 모드에서 search_only 폴백 제거 (always-generate)"
 Cohesion: 0.15
-Nodes (13): API (`apps/api`), State와 영속화, V3: LangGraph 에이전트 기본 골격 설계, v3 설계, 결정 기록, 노드 설계, 목표, 미결정 (+5 more)
+Nodes (13): 1. `validate_draft` 완화 ([openai_answerer.py:289](../../apps/api/app/adapters/openai_answerer.py#L289)), 2. 검색 후 0건 경로 ([main.py:515-533](../../apps/api/app/main.py#L515)), 3. 사전 라우팅 차단 경로 ([main.py:417-425](../../apps/api/app/main.py#L417)), 4. 생성 후 발견되는 clarification_required, 5. 관측성, 검증, 결과, 결정 (+5 more)
 
 ### Community 387 - "0033: 트래픽 축적 후 라우팅·관측 재검토 묶음"
 Cohesion: 0.29
 Nodes (7): 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음, A. (역사 기록) tier 1 사전 확장 재검토, B. 인증·비인증 사용자 이력 검토, 승격 조건, 완료 조건, 왜 묶었는가, 포함 항목
 
-### Community 388 - "test_search_experiment.py"
-Cohesion: 0.36
-Nodes (18): build_corpus(), _basis(), FixedEmbedder, asyncio, parametrize, _selected_sources(), test_builds_only_configured_chapters_and_articles_with_all_descendants(), test_embedder_batch_size_mismatch_is_rejected() (+10 more)
+### Community 388 - "test_mock_auth_history.py"
+Cohesion: 0.32
+Nodes (9): _ask(), _login(), test_anonymous_question_is_not_saved_but_authenticated_question_is(), test_conversation_is_owner_scoped_and_delete_cascades_legacy_history(), test_conversation_summary_and_turn_cursors_do_not_duplicate_items(), test_history_is_private_and_owner_can_delete_it(), test_invalid_or_wrong_cursor_kind_is_rejected(), test_logout_invalidates_session_and_account_delete_cascades() (+1 more)
 
 ### Community 389 - "Use cases"
 Cohesion: 0.15
@@ -1745,13 +1730,13 @@ Nodes (14): discover_repo_root(), _git_dir(), _git_output(), install(), _is_mana
 Cohesion: 0.17
 Nodes (12): Parser schema v3와 조문 식별자, 결정 기록, 국가법령정보 Open API 수집 계약, 로컬 cache의 SHA 재사용, 버전 식별과 효력 기간, 범위, 삭제 이력 동기화 계약, 수집 잠금과 벡터 활성화 경계 (+4 more)
 
-### Community 394 - "실험 D 일반 사용자 질문 승인 검토표 v1"
-Cohesion: 0.09
-Nodes (19): Intent별 대표 질문 15개, 고위험 질문 35개, 고정 식별자, 구조 확인, 승인 확인, 시점·실시간·개인 데이터가 필요한 후보 — 8개 (`time_or_live_data`), 실험 D 일반 사용자 질문 승인 검토표 v1, 이 문서에서 결정할 것 (+11 more)
+### Community 394 - "실험 D 일반 사용자 질문은행과 gold 주석 경계"
+Cohesion: 0.06
+Nodes (29): gold 평가셋으로 승격하는 절차, 결정 기록, 독립 주석과 blind 평가, 목적, 분할과 지표 계산 계약, 실험 D 일반 사용자 질문은행과 gold 주석 경계, 왜 질문과 정답을 동시에 자동 생성하지 않는가, 평가 자료의 관계 (+21 more)
 
-### Community 395 - "terra 모드 search_only 폴백 제거 (always-generate) Implementation Plan"
-Cohesion: 0.18
-Nodes (10): Global Constraints, Task 1: `validate_draft` 근거 0건 게이트 완화, Task 2: `build_messages_v2`에 빈 근거 지시 추가, Task 3: 라우팅 차단 전용 프롬프트 + `NvidiaNimAnswerer.answer_blocked_route`, Task 4: 검색 후 근거 0건 분기가 항상 생성 단계로 진행하게 배선, Task 5: 사전 라우팅 차단 분기를 LLM 생성으로 배선, Task 6: 문서 정합성 확인 (완료), Task 7: 0046 파이프라인 지도와 활성 계획 목록 정합성 (+2 more)
+### Community 395 - "QuestionTaskRegistry"
+Cohesion: 0.29
+Nodes (4): Task, UUID, QuestionTaskRegistry, Process-local active question tasks, scoped by a non-secret owner key.
 
 ### Community 396 - "test_v2_search.py"
 Cohesion: 0.23
@@ -1765,17 +1750,17 @@ Nodes (12): 5. 사용자·개인정보·장애 안전, AI provider와 폴백, ra
 Cohesion: 0.25
 Nodes (7): F-005 V2 가독성 중심 리팩터링 구현 계획, Global Constraints, Target File Structure, Task 1: LlamaIndex generation·ingestion·query 패키지 분리, Task 2: API composition root와 v2 application service 추출, Task 3: v1/v2 HTTP router 분리와 slim application entry point, Task 4: Whole-repository verification and documentation
 
-### Community 399 - "분산 질문 취소 설계"
-Cohesion: 0.18
-Nodes (11): 결정, 결정 기록, 목적, 보안, 분산 질문 취소 설계, 영속 상태, 왜 LISTEN/NOTIFY만 사용하지 않는가, 제한과 관측 (+3 more)
+### Community 399 - ".__init__"
+Cohesion: 0.50
+Nodes (3): _is_json_value(), Support concise internal construction without weakening JSON validation., JsonValue
 
 ### Community 400 - "실험 D-10 전수 qrel과 사용자 adjudication"
 Cohesion: 0.18
 Nodes (11): 0251·0521 필수 답변 요소의 위치와 의미, 검증과 seal, 결정 기록, 고정 계약, 목적, 사용자 검토 방법, 실제 실행 결과, 실험 D-10 전수 qrel과 사용자 adjudication (+3 more)
 
-### Community 401 - "0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)"
-Cohesion: 0.17
-Nodes (12): 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6), active 승격 조건, 결정 기록, 목적과 사용자 결과, 범위, 비범위, 역사적 E-10 실행 기록 (2026-08-08; D-010으로 대체됨), 완료 조건 (+4 more)
+### Community 401 - "기술 부채 추적기"
+Cohesion: 0.50
+Nodes (4): 기술 부채 추적기, 등급, 열린 항목, 종료된 항목
 
 ### Community 402 - "실험 D-10 end-to-end 실패-회귀 평가"
 Cohesion: 0.18
@@ -1817,9 +1802,9 @@ Nodes (7): Fix round 1 (review 반영), Graphify, Task 3 실행 보고서: v1/v2
 Cohesion: 0.36
 Nodes (10): v1 to v2 to v3 Pipeline Diagram, Node-level SSE streaming, Postgres checkpointer state snapshots, v1 operating lane, v2 LlamaIndex lane, v2 search replacement, v3 LangGraph lane, v3 reused v2 search (+2 more)
 
-### Community 412 - "run_cli"
-Cohesion: 0.29
-Nodes (13): main(), _parser(), ArgumentParser, run_cli(), _safe_error(), CaptureFixture, MonkeyPatch, Path (+5 more)
+### Community 412 - "test_search_experiment.py"
+Cohesion: 0.33
+Nodes (19): build_corpus(), _basis(), FixedEmbedder, asyncio, parametrize, _selected_sources(), _source(), test_builds_only_configured_chapters_and_articles_with_all_descendants() (+11 more)
 
 ### Community 413 - "Global Constraints"
 Cohesion: 0.29
@@ -1833,10 +1818,6 @@ Nodes (9): Production 검색 디버깅 시드, 결과 기록, 결정 기록, 결
 Cohesion: 0.22
 Nodes (9): 1. 질문 키워드로 법률을 직접 지정, 2. 로컬 lexical 검색과 dense 검색을 RRF로 결합, 3. production PGroonga 재사용, 4. 외부 reranker 사용, 검토한 선택지, 결론, 결정 기록, 실험 C — 키워드 결합 검색 보류 설계 (+1 more)
 
-### Community 416 - "실행 계획 0026: 실험 D-10 수동 검색·문맥 진단"
-Cohesion: 0.20
-Nodes (10): 검증과 롤백, 결정 로그, 구현 순서, 목적과 사용자 결과, 미결정과 차단 요소, 범위와 비범위, 실행 계획 0026: 실험 D-10 수동 검색·문맥 진단, 완료 조건 (+2 more)
-
 ### Community 417 - "이전 finding 확인"
 Cohesion: 0.14
 Nodes (13): Finding count, P1 — acceptance tests의 lifecycle/cardinality/actionability/body 경계 누락: 해결, P1 — headerless todo/active 누락: 해결, P1 — staged reference의 worktree fallback: 해결, P1 — `다음 행동` 한 문장: 해결, P1 — 전체 plan 본문 materialization: 해결, P2 — loose header grammar: 해결, P2 — 불필요한 compatibility alias surface: 해결 (+5 more)
@@ -1845,9 +1826,9 @@ Nodes (13): Finding count, P1 — acceptance tests의 lifecycle/cardinality/acti
 Cohesion: 0.22
 Nodes (9): 검색·AI 사용 원칙, 결정 기록, 구성과 데이터 흐름, 근거 파일, 기술 스택 ADR, 목적과 기준, 버전별 프레임워크 경계, 의도적으로 하지 않는 선택 (+1 more)
 
-### Community 419 - "debug_retrieval_pipeline.py"
-Cohesion: 0.20
-Nodes (12): _arguments(), _environment_snapshot(), _load_dataset(), Namespace, Path, 고정 질문셋의 원문·청크·질의·검색 단계와 시간을 JSON으로 기록한다., _run(), _source_snapshot() (+4 more)
+### Community 419 - "run_cli"
+Cohesion: 0.17
+Nodes (23): _ask(), _evaluate(), load_corpus(), main(), _parser(), _passage_embedder(), _prepare(), ArgumentParser (+15 more)
 
 ### Community 420 - "D-010 Single-Stage Router and Safe Routing-Unavailable Response Implementation Plan"
 Cohesion: 0.25
@@ -1863,23 +1844,19 @@ Nodes (23): 개인정보 흐름, 검증과 승인 조건, 결정 기록, 범위�
 
 ### Community 423 - "QuestionRequest"
 Cohesion: 0.07
-Nodes (72): NvidiaNimAnswerer, Any, QuestionRoute, Release the process-owned NVIDIA HTTP client., NVIDIA hosted NIM adapter with a schema-validated legal answer boundary., 0046: 사전 라우팅이 legal_search 밖으로 걸러낸 질문(embedding·검색 없음)에 근거 없이 LLM을 호출한다 -…, build_blocked_route_messages(), build_core_messages() (+64 more)
+Nodes (71): NvidiaNimAnswerer, Any, QuestionRoute, Release the process-owned NVIDIA HTTP client., NVIDIA hosted NIM adapter with a schema-validated legal answer boundary., 0046: 사전 라우팅이 legal_search 밖으로 걸러낸 질문(embedding·검색 없음)에 근거 없이 LLM을 호출한다 -…, build_blocked_route_messages(), build_core_messages() (+63 more)
 
 ### Community 424 - "Task 3 실행 보고서: v2 API 리소스 지연 초기화"
 Cohesion: 0.22
 Nodes (8): Fix round 1: 리소스 factory 초기화 실패의 stable 503 변환, Task 3 실행 보고서: v2 API 리소스 지연 초기화, TDD 및 수정, TDD 진행, 검증, 구현 내용, 원인, 작업 범위
 
-### Community 425 - "[역사 문서] terra 모드에서 search_only 폴백 제거 (always-generate)"
-Cohesion: 0.15
-Nodes (13): 1. `validate_draft` 완화 ([openai_answerer.py:289](../../apps/api/app/adapters/openai_answerer.py#L289)), 2. 검색 후 0건 경로 ([main.py:515-533](../../apps/api/app/main.py#L515)), 3. 사전 라우팅 차단 경로 ([main.py:417-425](../../apps/api/app/main.py#L417)), 4. 생성 후 발견되는 clarification_required, 5. 관측성, 검증, 결과, 결정 (+5 more)
-
 ### Community 426 - "답변 근거 검증 설계 (validate_draft)"
 Cohesion: 0.25
 Nodes (8): action 필드와 검증 강도 분기, unanswerable도 침묵하지 않는다, 검증 계약: 왜 텍스트 추측이 아니라 모델의 명시적 신호인가, 결정 기록, 답변 근거 검증 설계 (validate_draft), 목표, 발견하고 고친 오탐 두 가지, 재검증 비용 문제와 replay 도구
 
-### Community 427 - "2026-07-19 사건"
-Cohesion: 0.14
-Nodes (13): 1. 기존 checkout에 대한 중복 clone 시도, 2026-07-19 사건, 2. 활성 실행 계획 index와 실제 파일 불일치, 3. 로컬 Git 작성자 설정 누락, 4. `main` Python CI의 전 테스트 수집 실패, 5. 임시 PostgreSQL 검증 harness 실행 실패, 6. 외부 Claude 독립 review 시작 실패, 7. Retention과 새 질문 저장의 conversation 경합 (+5 more)
+### Community 427 - "legal_search_router"
+Cohesion: 0.33
+Nodes (8): legal_search_router(), fixture, MonkeyPatch, Let non-temporal API tests exercise their own downstream concern., Exercise legacy search-only contracts only when the feature is explicitly…, Keep normal AI-flow tests on the post-routing legal-search path., ready_corpus_temporal_state(), search_only_enabled()
 
 ### Community 428 - "실험 D-10 수동 검색·문맥 진단"
 Cohesion: 0.25
@@ -1905,9 +1882,9 @@ Nodes (4): Answer, Outcome, Q: 다른곳도 웹만져서 e2e테스트할것임. 
 Cohesion: 0.37
 Nodes (11): create_review_template(), _canonical_sha256(), _judgment(), MonkeyPatch, Path, _result(), test_cli_resolves_relative_artifact_paths_from_repository_root(), test_confirmed_review_computes_only_manual_diagnostics() (+3 more)
 
-### Community 434 - "_read_cache"
-Cohesion: 0.23
-Nodes (12): _append_cache(), _cache_file_lock(), _prepare_cache_tail_for_append(), Path, Prevent concurrent processes from reading or appending one checkpoint., _read_cache(), _validated_vector(), _vector_from_database() (+4 more)
+### Community 434 - "0044: 공급자 중립 답변 모델 선택 계약"
+Cohesion: 0.15
+Nodes (12): 0044: 공급자 중립 답변 모델 선택 계약, 목표, 비범위, 승격 조건, 완료 조건, 포함 범위, 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축, 목표 (+4 more)
 
 ### Community 435 - "신뢰성"
 Cohesion: 0.25
@@ -1922,8 +1899,8 @@ Cohesion: 0.25
 Nodes (8): 2026-08-03 실제 결과, 목적, 실행 CLI, 실험 A에서 재사용한 기록 원칙, 실험 D — 검색 문맥 구성, 완료 조건, 입력 계약, 출력 계약
 
 ### Community 438 - "실행 계획 0027: 실험 D-10-R1 로컬 재정렬"
-Cohesion: 0.20
-Nodes (9): 검증과 롤백, 결정 로그, 목적과 사용자 결과, 미결정과 차단 요소, 범위와 비범위, 실행 계획 0027: 실험 D-10-R1 로컬 재정렬, 완료 조건, 작업 TODO (+1 more)
+Cohesion: 0.05
+Nodes (30): 결정 기록, 목적, 비교값, 성공 판정, 실험 D-10-R1 부모 표제·직접성 로컬 재정렬, 입력과 불변조건, 직접성 규칙 v1, 검증과 롤백 (+22 more)
 
 ### Community 439 - "Law RAG Collector"
 Cohesion: 0.29
@@ -1941,21 +1918,13 @@ Nodes (7): D-full을 다시 여는 조건, M2 — 10문항 계약 동결, M3 —
 Cohesion: 0.29
 Nodes (7): 결정 기록, 날짜 구간, 마이그레이션과 검증, 버전 식별자, 법적 효력 구간과 corpus 지원 범위는 다르다, 서로 다른 세 가지 상태, 시간 효력 모델
 
-### Community 443 - "실험 D 일반 사용자 질문은행과 gold 주석 경계"
+### Community 443 - "test_api_factory_composition.py"
 Cohesion: 0.07
-Nodes (24): gold 불변조건, gold의 날짜와 콘텐츠 스냅샷, 결정 기록, 권위 입력, 목적, 실행 경계, 실험 D-full 1,000문항 평가 설계, 지표 (+16 more)
-
-### Community 444 - "0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리"
-Cohesion: 0.22
-Nodes (8): 0036: 계정 및 모델 정책 모달의 모델명 하드코딩 문구 정리, 구현 결과 (2026-08-09), 비범위, 승격 조건, 완료 조건, 원인, 재개 사유와 진행 기록 (2026-08-09), 확정 설계
+Nodes (29): bind_app_dependencies(), _FactoryCompositionMain, Any, Module-like request facade that binds routes to one app factory's adapters., Bind a non-production app factory's resources for one HTTP request., Restore the previous factory binding after a request completes., reset_app_dependencies(), _Connection (+21 more)
 
 ### Community 445 - "F-006 대화형 clarification workflow 설계"
 Cohesion: 0.11
 Nodes (17): F-006-B 대화형 clarification workflow Implementation Plan, Global Constraints, Plan self-review, Task 1: Case domain과 결정론적 claim 정책, Task 2: Case persistence, migration, ownership and expiry, Task 3: NVIDIA turn judgment and LlamaIndex clarification workflow, Task 4: V2 policy-aware generation and grounding, Task 5: V2 transport, web continuation UX, and completion docs (+9 more)
-
-### Community 446 - "Discord 에이전트 오버레이"
-Cohesion: 0.18
-Nodes (11): Discord 에이전트 오버레이, TODO와 위임, 보고 내용, 보고 시점, 오류 Ledger, 완료 체크리스트, 작업 시작 계약, 적용 범위와 우선순위 (+3 more)
 
 ### Community 447 - "PhaseDeadline"
 Cohesion: 0.52
@@ -1969,17 +1938,9 @@ Nodes (6): Fix round 1: P1 v2 테이블 경계 및 import 안전성, Task 2 실�
 Cohesion: 0.29
 Nodes (6): Commit record, D-010 Task 3 Report, Failure diagnosis and resolution, Files and contract alignment, Status, Verification evidence
 
-### Community 450 - ".search_with_trace"
-Cohesion: 0.25
-Nodes (5): date, Corpus 기준일 범위 상태 조회를 v1 저장소에 위임한다., v2 검색 결과만 반환하고 검색 추적 정보는 숨긴다., v2 dense 검색 결과와 관측용 검색 추적 정보를 반환한다. 호출자가 제공한 v1 임베딩 인자는 사용하지 않는다. v2 검색기가 자체…, 사용량 한도 소비를 v1 저장소에 위임한다.
-
 ### Community 451 - "V2 준비 상태와 HNSW 구현 계획"
 Cohesion: 0.15
 Nodes (12): Task 1: ingestion 실행 lifecycle, Task 2: v2 HNSW 인덱스 운영 모듈, Task 3: API 지연 초기화, Task 4: 정책·설계·전체 검증, V2 준비 상태와 HNSW 구현 계획, 결과 및 커밋, 결과 및 커밋, 결과 및 커밋 (+4 more)
-
-### Community 453 - "ActiveGeneration"
-Cohesion: 0.25
-Nodes (7): ActiveGeneration, ActiveGenerationProvider, PhaseLease, Protocol, The frozen generation and index used for one prepare operation., Port for resolving the current generation once at prepare time., A provider-capacity lease whose owner performs its own cleanup.
 
 ### Community 454 - "단계"
 Cohesion: 0.33
@@ -1998,8 +1959,8 @@ Cohesion: 0.33
 Nodes (6): 1단계: 모든 핵심어 일치, 2단계: 최소 2개 핵심어 후보 풀, 3단계: 필수 앵커와 나머지 핵심어, 4단계: 근거 부족, 검색 계약, 공통 전처리
 
 ### Community 459 - "ROADMAP.md"
-Cohesion: 0.04
-Nodes (39): 언제 더 읽어야 하는가, 이 파일을 갱신하는 시점, 지금 무엇이 진행 중인가, 현재 상태 (세션 시작 포인터), 활성 실행 계획, 0042: 재순위를 실제 검색 경로에 연결, 비범위, 세부 항목 (착수 시 검토) (+31 more)
+Cohesion: 0.05
+Nodes (39): 언제 더 읽어야 하는가, 이 파일을 갱신하는 시점, 지금 무엇이 진행 중인가, 현재 상태 (세션 시작 포인터), 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6), active 승격 조건, 결정 기록, 목적과 사용자 결과 (+31 more)
 
 ### Community 460 - "실행 계획 운영법"
 Cohesion: 0.33
@@ -2013,17 +1974,13 @@ Nodes (5): PGroonga, PostgreSQL, Supabase와 Vercel, 검색 성능과 관측 공
 Cohesion: 0.33
 Nodes (5): 검증, 근거·데이터·보안, 목적, 문서와 운영, 변경
 
-### Community 463 - "GenerationProfile"
-Cohesion: 0.28
-Nodes (4): GenerationProfile, 0025 M5 item 4: model/prompt/schema/context/sampling settings, versioned…, test_sha256_changes_when_a_sampling_value_changes(), test_sha256_is_stable_for_identical_profiles()
+### Community 464 - "0041: 법제처 API의 법종구분코드를 실제로 파싱해 저장·응답에 반영"
+Cohesion: 0.25
+Nodes (8): 0041: 법제처 API의 법종구분코드를 실제로 파싱해 저장·응답에 반영, 결정 사항 (사용자, 2026-08-08), 구현 결과 (2026-08-09), 비범위, 승격 조건, 완료 조건, 확인된 사실, 후속 결정: `source_kind`·`law_type_code` 통합 보류 (2026-08-09)
 
 ### Community 465 - "Global Constraints"
 Cohesion: 0.15
 Nodes (12): Global Constraints, Production Web E2E Completion Loop Implementation Plan, Task 1: 검증 명세·기준선 고정, Task 2.1: P0 core repair 실패 진단·복구, Task 2: P0 익명 정상 질문·근거 흐름, Task 3: P0 인증·대화·이력 정상 흐름, Task 4: P1 입력·검색·네트워크·인증 경계, Task 5: 반응형·접근성·전체 회귀 및 완료 (+4 more)
-
-### Community 466 - "test_answer_quality_contract.py"
-Cohesion: 0.43
-Nodes (6): _answer_text(), _assert_terms(), _hits(), parametrize, test_expected_evidence_is_allowlisted_and_answer_contract_is_explicit(), test_search_only_answer_preserves_expected_evidence_and_avoids_overclaims()
 
 ### Community 467 - "2026-07-14 병렬 품질 강화 TODO"
 Cohesion: 0.40
@@ -2053,9 +2010,9 @@ Nodes (4): 다음 결정, 실행 결박, 실험 D-10 사용자 확인 수동 진
 Cohesion: 0.33
 Nodes (5): 목표, 원칙, 접근성, 제품 디자인 원칙, 핵심 화면(초안)
 
-### Community 474 - "test_history_retention_postgres.py"
-Cohesion: 0.61
-Nodes (7): apply_migration(), drop_database_objects(), load_migration(), asyncio, reset_database(), test_retention_avoids_delete_deadlock_and_counts_actual_export_deletes(), test_retention_is_safe_during_concurrent_turn_save_and_has_strict_acl()
+### Community 474 - "require_supported_corpus_date"
+Cohesion: 0.31
+Nodes (8): date, ValueError, Dynamic temporal contract for the currently searchable legal corpus. The…, Raised when a request falls outside the current dynamic corpus bounds., Return a supported date or fail before quota and provider work begins., require_supported_corpus_date(), UnsupportedCorpusDateError, test_dynamic_corpus_rejects_dates_outside_the_current_window()
 
 ### Community 476 - "Findings"
 Cohesion: 0.15
@@ -2081,10 +2038,6 @@ Nodes (3): 갱신 규칙, 품질 점수표, 현재 평가 해석
 Cohesion: 0.50
 Nodes (3): 실패와 재실행, 실행, 실험 A — 기존 법령 파서 청킹 관찰
 
-### Community 482 - "0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산"
-Cohesion: 0.25
-Nodes (8): 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산, 목표, 문제 상황·원인·해결, 배경, 비범위, 승격 조건, 완료 조건, 포함 범위
-
 ### Community 485 - "범위와 비범위"
 Cohesion: 0.67
 Nodes (3): 범위, 범위와 비범위, 비범위
@@ -2109,33 +2062,17 @@ Nodes (3): Task 1: 내보내기 UI와 클라이언트 코드 제거, Task 2: 검
 Cohesion: 0.20
 Nodes (9): Completion Conditions, F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan, Global Constraints, Task 1: Set the V2 provider-slot default to three, Task 2: Classify busy responses and prevent their automatic retry, Task 3: Show the fixed busy notice in the red error banner, Task 4: Verify graph artifacts and change Production only with approval, 실행 증빙 — 2026-09-04 KST (+1 more)
 
-### Community 494 - "실험 D — 검색 문맥 안전 게이트 평가"
-Cohesion: 0.29
-Nodes (4): 결과, 실험 D — 검색 문맥 안전 게이트 평가, 판정, 한계
-
-### Community 495 - ".provision"
-Cohesion: 0.29
-Nodes (4): UUID, 단일 조문 조회를 v1 저장소에 위임한다., 문서 upsert를 v1 저장소에 위임한다., 임베딩 upsert를 v1 저장소에 위임한다.
-
-### Community 496 - "NvidiaNimEmbedder"
-Cohesion: 0.29
-Nodes (3): NvidiaNimEmbedder, NVIDIA hosted NIM embedding adapter with the existing batch contract., Release the process-owned NVIDIA HTTP client.
+### Community 494 - "RouteJudgment"
+Cohesion: 0.15
+Nodes (11): BaseModel, _RouteJudgmentSchema, A provider judgment for one of the four provider-resolvable routes., RouteJudgment, FakeRouter, _ProviderTimeoutRouter, test_route_decision_accepts_application_router_failure_route(), test_route_decision_rejects_out_of_range_confidence() (+3 more)
 
 ### Community 497 - "설계 문서 색인"
 Cohesion: 0.40
 Nodes (5): 문서, 버전 표기, 상태 정의, 새 문서가 필요한 경우, 설계 문서 색인
 
-### Community 498 - "V2LlamaIndexResources"
-Cohesion: 0.29
-Nodes (4): Lazily create and own the active-generation adapter bundle., Build at first use; retain the single shared framework bundle afterwards., Dispose the provider and its engines when the API process ends., V2LlamaIndexResources
-
 ### Community 499 - "test_v2_questions.py"
 Cohesion: 0.33
 Nodes (6): MonkeyPatch, Prevent a v1 retrieval path from recognizing framework adapter classes., test_v1_retrieval_uses_the_injected_query_embedding_capability(), test_v2_catalog_engine_disables_asyncpg_statement_cache(), test_v2_repository_does_not_request_legacy_query_embedding(), test_v2_resources_factory_uses_active_generation_provider_not_legacy_table()
-
-### Community 500 - "ExecutionStatus"
-Cohesion: 0.22
-Nodes (19): _admit_v2_provider_phase(), Acquire provider capacity before sending an SSE response when work will start., ExecutionStatus, asyncio, test_anonymous_owner_can_cancel_with_its_execution_capability(), test_event_sequence_is_persisted_once_before_any_replay_is_visible(), test_expiry_scrubs_private_payload_capability_and_terminal_response(), test_expiry_transitions_an_inflight_execution_and_keeps_its_idempotency_record() (+11 more)
 
 ### Community 502 - "질문 사전 라우팅 설계 (0028, 대체됨)"
 Cohesion: 0.50
@@ -2213,37 +2150,65 @@ Nodes (4): law-rag, 로컬 경로와 원격 저장소, 문서 시작점, 시작
 Cohesion: 0.33
 Nodes (5): Deferred repository ROADMAP, Evidence, Findings, Task 2 independent review, Verdicts
 
+### Community 526 - "0042: 재순위를 실제 검색 경로에 연결"
+Cohesion: 0.33
+Nodes (6): 0042: 재순위를 실제 검색 경로에 연결, 비범위, 세부 항목 (착수 시 검토), 승격 조건, 완료 조건, 원인
+
 ### Community 527 - "Task 4 review — changes requested"
 Cohesion: 0.40
 Nodes (4): Confirmed, Findings, Task 4 review — changes requested, Verification note
-
-### Community 528 - "test_memory_retrieval_quality.py"
-Cohesion: 0.67
-Nodes (5): _document(), asyncio, test_korean_particles_and_question_fillers_do_not_hide_relevant_provision(), test_only_question_fillers_return_an_explicit_empty_result(), test_title_heading_and_content_matches_rank_more_specific_evidence_first()
 
 ### Community 529 - "SDD ledger — current plan: `docs/exec-plans/completed/0066-roadmap-registry-and-context-diet.md`"
 Cohesion: 0.50
 Nodes (3): Pre-flight interface scan, SDD ledger — current plan: `docs/exec-plans/completed/0066-roadmap-registry-and-context-diet.md`, Task consistency scan
 
-### Community 531 - "0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI"
-Cohesion: 0.33
-Nodes (6): 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI, 결정 기록, 목적, 범위, 비범위, 승격 조건
+### Community 531 - "GitHub 이슈와 PR 운영"
+Cohesion: 0.40
+Nodes (4): GitHub 이슈와 PR 운영, PR, 이슈, 프로젝트 보드
 
 ### Community 537 - "LlamaIndexLegalRepository"
-Cohesion: 0.16
-Nodes (13): LlamaIndexLegalRepository, datetime, v2 LlamaIndex 검색과 v1 저장소 위임을 결합한다., Corpus 항목 상태 조회를 v1 저장소에 위임한다., Corpus 검색 상태 조회를 v1 저장소에 위임한다., 마지막 corpus 동기화 시각 조회를 v1 저장소에 위임한다., v2 검색기는 사용하고 나머지 저장소 계약은 v1에 위임한다., v1 위임 저장소와 v2 검색 의존성을 연결한다. (+5 more)
+Cohesion: 0.13
+Nodes (14): LlamaIndexLegalRepository, datetime, v2 LlamaIndex 검색과 v1 저장소 위임을 결합한다., Corpus 항목 상태 조회를 v1 저장소에 위임한다., Corpus 검색 상태 조회를 v1 저장소에 위임한다., 마지막 corpus 동기화 시각 조회를 v1 저장소에 위임한다., v2 검색기는 사용하고 나머지 저장소 계약은 v1에 위임한다., v1 위임 저장소와 v2 검색 의존성을 연결한다. (+6 more)
 
-### Community 538 - "실험 C — Dense 검색 후보 관찰"
-Cohesion: 0.29
-Nodes (7): corpus 범위, 고정 평가, 실패 동작, 실험 C — Dense 검색 후보 관찰, 질문, 후보 10개와 자동 기록, 현재 하지 않는 것, 환경변수와 준비
-
-### Community 539 - "0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리"
-Cohesion: 0.33
-Nodes (6): 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리, 목표, 비범위, 승격 조건, 완료 조건, 포함 범위
+### Community 540 - "LegalDocumentRecord"
+Cohesion: 0.23
+Nodes (6): CollectorRepository, Any, date, Protocol, Backward-compatible short alias for internal callers., LegalDocumentRecord
 
 ### Community 542 - "Production 검색 디버깅 결과: DB revision 0004"
 Cohesion: 0.40
 Nodes (4): Production 검색 디버깅 결과: DB revision 0004, 질문별 결과, 해석 제한, 환경
+
+### Community 547 - "0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹"
+Cohesion: 0.22
+Nodes (9): 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹, active 승격 조건, 결정 기록, 고정 조건, 목표, 범위, 비범위, 완료 조건 (+1 more)
+
+### Community 548 - ".search_with_trace"
+Cohesion: 0.25
+Nodes (5): date, Corpus 기준일 범위 상태 조회를 v1 저장소에 위임한다., v2 검색 결과만 반환하고 검색 추적 정보는 숨긴다., v2 dense 검색 결과와 관측용 검색 추적 정보를 반환한다. 호출자가 제공한 v1 임베딩 인자는 사용하지 않는다. v2 검색기가 자체…, 사용량 한도 소비를 v1 저장소에 위임한다.
+
+### Community 549 - "실험 D-full 1,000문항 평가 설계"
+Cohesion: 0.22
+Nodes (9): gold 불변조건, gold의 날짜와 콘텐츠 스냅샷, 결정 기록, 권위 입력, 목적, 실행 경계, 실험 D-full 1,000문항 평가 설계, 지표 (+1 more)
+
+### Community 551 - "6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나"
+Cohesion: 0.22
+Nodes (9): 6. v1에서 LangChain/LangGraph/LlamaIndex 버전으로: 로직이 어떻게 바뀌었나, v1: 한 함수 안의 순차 파이프라인, v2: 검색 한 칸만 새로 짜기, v3: 노드 단위로 다시 짜고 대화를 영속화하기 (설계 단계, 아직 미구현), 상세 자료를 찾는 곳, 세 버전 비교표, 왜 세 버전이 동시에 존재하는가, 읽을 때 지킬 구분 (+1 more)
+
+### Community 552 - "0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산"
+Cohesion: 0.25
+Nodes (8): 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산, 목표, 문제 상황·원인·해결, 배경, 비범위, 승격 조건, 완료 조건, 포함 범위
+
+### Community 553 - "test_run_python.py"
+Cohesion: 0.43
+Nodes (5): CompletedProcess, _run(), test_runner_keeps_ruff_cache_out_of_the_shared_workspace_cache(), test_runner_propagates_python_exit_code(), test_runner_uses_workspace_python_and_source_roots()
+
+### Community 556 - "실험 C — Dense 검색 후보 관찰"
+Cohesion: 0.29
+Nodes (7): corpus 범위, 고정 평가, 실패 동작, 실험 C — Dense 검색 후보 관찰, 질문, 후보 10개와 자동 기록, 현재 하지 않는 것, 환경변수와 준비
+
+### Community 558 - "실험 D-10 M4 — AI 입력 문맥 조립 calibration 요약"
+Cohesion: 0.33
+Nodes (5): 10개 조합 비교, 승자: R1 + A(현재 방식, 최대 5개 조문·60,000자), 실험 D-10 M4 — AI 입력 문맥 조립 calibration 요약, 해석 한계, 핵심 결론: B는 어떤 설정으로도 A를 이기지 못했다
 
 ## Ambiguous Edges - Review These
 - `routing_unavailable` → `HNSW Excluded from v2`  [AMBIGUOUS]
@@ -2254,7 +2219,7 @@ Nodes (4): Production 검색 디버깅 결과: DB revision 0004, 질문별 결�
 ## Knowledge Gaps
 - **2145 isolated node(s):** `EmbeddingProfile`, `Theme`, `$schema`, `icn1`, `maxDuration` (+2140 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **85 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **90 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -2263,13 +2228,13 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: semantically_similar_to) - confidence is low._
 - **What is the exact relationship between `Qwen3:4b 연결 준비` and `요청 ID 기반 서버 취소 endpoint`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `PostgresLegalRepository` connect `PostgresLegalRepository` to `LegalDocumentRecord`, `backfill_embeddings.py`, `_generate_bundle_cache`, `debug_retrieval_pipeline.py`, `evaluate_experiment_d_gold.py`, `postgres_repository.py`, `test_experiment_d_gold_preflight.py`, `bootstrap.py`, `CorpusSnapshot`, `SearchTrace`, `corpus.py`, `SourceKind`, `search_only_answer`, `get_settings`, `test_backfill_embeddings.py`, `CorpusTemporalState`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
-- **Why does `SourceKind` connect `SourceKind` to `law_rag_collector/service.py`, `LegalDocumentRecord`, `run.py`, `RawResponse`, `postgres_repository.py`, `corpus_update_bundle.py`, `MemoryLegalRepository`, `test_question_timeout_budget.py`, `test_memory_retrieval_quality.py`, `experiment_search.py`, `LawOpenApiClient`, `LlamaIndexLegalRepository`, `law_rag_core/domain/catalog.py`, `PostgresLegalRepository`, `_generate_bundle_cache`, `law_rag_core/domain/schemas.py`, `SearchHit`, `QuestionRequest`, `test_security_boundaries.py`, `ClarificationCase`, `law_json.py`, `DeletionRecord`, `test_answer_quality_contract.py`, `export_checklist`, `test_api_factory_composition.py`, `prepared_publisher.py`, `test_v2_question_executions.py`, `RouteJudgment`, `test_question_cancellation.py`, `search_only_answer`, `main_module`, `MockCorpusRepository`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
-- **Why does `LegalDocumentRecord` connect `LegalDocumentRecord` to `law_rag_collector/service.py`, `MockCorpusRepository`, `LegalRepository`, `RawResponse`, `law_json.py`, `postgres_repository.py`, `corpus_update_bundle.py`, `MemoryLegalRepository`, `DeletionRecord`, `.provision`, `experiment_search.py`, `SourceKind`, `LawOpenApiClient`, `search_only_answer`, `LlamaIndexLegalRepository`, `law_rag_core/domain/catalog.py`, `PostgresLegalRepository`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `PostgresLegalRepository` connect `PostgresLegalRepository` to `test_backfill_embeddings.py`, `CorpusSearchStatus`, `PostgresExperimentDBackend`, `evaluate_experiment_d_gold.py`, `postgres_repository.py`, `test_experiment_d_gold_preflight.py`, `bootstrap.py`, `SearchTrace`, `sse.py`, `SourceKind`, `get_settings`, `LegalDocumentRecord`, `CorpusTemporalState`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `SourceKind` connect `SourceKind` to `law_rag_collector/service.py`, `law_rag_core/domain/catalog.py`, `run.py`, `RawResponse`, `test_clarification_answering.py`, `postgres_repository.py`, `corpus_update_bundle.py`, `MemoryLegalRepository`, `law_json.py`, `experiment_search.py`, `test_layperson_prompt_v2.py`, `LawOpenApiClient`, `LlamaIndexLegalRepository`, `test_search_experiment.py`, `LegalDocumentRecord`, `PostgresLegalRepository`, `test_answer_quality_contract.py`, `law_rag_core/domain/schemas.py`, `SearchHit`, `QuestionRequest`, `search_only_answer`, `get_settings`, `test_api_factory_composition.py`, `main_module`, `test_backfill_embeddings.py`, `DeletionRecord`, `export_checklist`, `prepared_publisher.py`, `test_v2_question_executions.py`, `test_routing_pipeline.py`, `test_question_cancellation.py`, `test_search_only_feature.py`, `MockCorpusRepository`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `main_module()` connect `main_module` to `CorpusSearchUnavailableError`, `test_v2_question_executions.py`, `SearchHit`, `test_question_cancellation.py`, `test_routing_pipeline.py`, `SupabaseAuthError`, `legal_search_router`, `test_v2_search.py`, `MemoryLegalRepository`, `export_checklist`, `MemoryQuestionExecutionRepository`, `sse.py`, `account.py`, `test_search_only_feature.py`, `test_v2_questions.py`, `search_only_answer`, `test_api_factory_composition.py`, `CorpusTemporalState`?**
+  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+- **Are the 61 inferred relationships involving `main_module()` (e.g. with `legal_search_router()` and `ready_corpus_temporal_state()`) actually correct?**
+  _`main_module()` has 61 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 99 inferred relationships involving `SourceKind` (e.g. with `PostgresLegalRepository` and `._hit()`) actually correct?**
   _`SourceKind` has 99 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 60 inferred relationships involving `main_module()` (e.g. with `legal_search_router()` and `ready_corpus_temporal_state()`) actually correct?**
-  _`main_module()` has 60 INFERRED edges - model-reasoned connections that need verification._
