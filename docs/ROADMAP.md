@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 498e13eda7aa6a2b07869327197ed990b88a62a3e10b6cad8f57498ad44f62d2 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 11242fd3312af30759b3723e023ac48ae8b07d2b9458460206ab32bd71e42694 -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: `.env.local`과 외부 로그로 NVIDIA route-classifier timeout을 진단하고 `lay-energy-0111`을 같은 sealed artifact로 재실행한다.
 
 ## Todo
 
@@ -26,7 +27,6 @@
 
 ## Blocked
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: configured NVIDIA route-classifier provider의 timeout을 해소한 뒤 `lay-energy-0111`을 같은 sealed artifact로 재실행한다.
 
 ## Done
 

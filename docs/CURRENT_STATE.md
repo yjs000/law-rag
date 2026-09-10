@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 없다. F-008 V2 provider 용량을 3 슬롯으로 올리고, busy 응답의 자동 재시도를 막으며 접근 가능한 고정 한국어 안내를 추가했다. Vercel Production `V2_PROVIDER_SLOTS=3` 설정 뒤 호스팅 환경에서 동시 요청 3건이 provider admission busy 없이 종료함을 확인했다. 이후 우선순위는 [docs/ROADMAP.md](ROADMAP.md)에서 확인한다. 로드맵은 세션 시작용 얇은 색인이며 모든 실행계획을 읽으라는 뜻이 아니다.
+현재 `Picked Up` milestone은 [E-006 D-10 Gold 순차 실패-회귀 평가](exec-plans/active/0069-d10-gold-failure-driven-regression.md)다. `.env.local`과 승인된 외부 로그 조회로 NVIDIA route-classifier timeout을 진단하고, `lay-energy-0111`에서 시작해 고정 D-10을 한 문항씩 pass시킨다. 로드맵은 세션 시작용 얇은 색인이며 모든 실행계획을 읽으라는 뜻이 아니다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
