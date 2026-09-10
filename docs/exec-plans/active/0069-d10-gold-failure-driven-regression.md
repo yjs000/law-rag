@@ -1,11 +1,11 @@
 > 작업 ID: `E-006`
-> 상태: `Blocked`
+> 상태: `Picked Up`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
-> 선행 조건: D-10 Gold가 사용자 adjudication을 거쳐 `approved_gold` 상태여야 하며, 읽기 전용 평가 DB, NVIDIA embedding credential, clean code provenance가 준비되어야 한다.
-> 다음 행동: D-10 embedding과 DB credential의 `aws-1-ap-northeast-2.pooler.supabase.com` 전송을 승인받고 `lay-energy-0111`을 재실행한다.
+> 선행 조건: D-10 Gold의 `approved_gold` 상태, `.env.local`, NVIDIA와 Supabase V2 E2E 전체 접근 승인, clean code provenance가 준비되어야 한다.
+> 다음 행동: V1 answer executor를 V2 prepare→core→finalize executor로 교체하는 실패 테스트를 작성하고 V2 57초/55초 예산 계약을 연결한다.
 > 참고 범위:
-> - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L59 — end-to-end 판정 계약과 완료 조건
+> - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L75 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
 > - `apps/api/scripts/run_d10_failure_driven.py` L1-L175 — 한 문항씩 진행하는 failure-driven orchestrator와 CLI
 
@@ -18,7 +18,8 @@
 - answer 평가 결과는 실제 답변 본문·검색 원문·prompt·예외 전문을 노출하지 않는다. safe ledger에는 case ID, 상태, 안전 code, evidence/citation 수, action 판정만 남긴다.
 - 자동 판정은 `expected_action`, evidence/citation binding, clarification/insufficient-evidence action leak, partial limit처럼 결정적인 계약에 한정한다. 주관적 문체 평점이나 모델 자기채점으로 법률 정확성을 대체하지 않는다.
 - 모든 기록은 `.data/experiments/d-gold-10/<run-id>/`에만 쓴다. 질문·원문·prompt·예외 문자열·credential은 허용 필드가 아니다.
-- `pending_user_review`, credential 부재, 읽기 전용 DB 부재, corpus mutation lock은 코드 결함이 아닌 외부 gate다. 이를 우회하는 변경은 금지한다.
+- E-006은 V2 prepare→core→finalize endpoint를 사용하고 V2 phase 57초/provider 55초 예산을 적용한다. V1 `_answer_question`, `RequestBudget`, routing 8초 예산을 사용하지 않는다.
+- `.env.local`, NVIDIA 질문·근거·prompt 전송, Supabase corpus 읽기와 `question_executions`·events·issues 쓰기/정리, 로컬 안전 ledger, Vercel read-only 로그 조회는 승인됐다. corpus mutation·배포·push는 금지한다.
 
 ## Task 0 — sealed·외부 실행 gate를 먼저 판정한다
 
@@ -69,7 +70,7 @@
 
 1. judge pass일 때만 다음 case로 진행하고, judge failure/blocked이면 멈추는 실패 테스트를 작성한다.
 2. `--sealed-dir`, `--case-id`, `--resume`, `--output-dir` CLI를 추가한다. case ID는 한 번만 허용하고 resume은 마지막 pass의 다음 case만 선택한다.
-3. runtime settings에서 read-only DB와 NVIDIA credential을 조립하며, 부재 시 안전한 blocked attempt를 쓴다.
+3. runtime settings에서 V2 prepare→core→finalize transport, Supabase V2 실행상태 persistence, NVIDIA credential을 조립하고 V2 phase 57초/provider 55초 예산을 사용한다. 부재 시 안전한 blocked attempt를 쓴다.
 4. focused pytest와 ruff를 통과시킨다.
 
 **완료 증거:** 실행 가능한 한-case CLI, pass/failure/blocked stop-resume 회귀 테스트.
@@ -109,3 +110,5 @@
 - 2026-09-10: 공식 NVIDIA 카탈로그는 configured model과 `guided_json`/`enable_thinking=false` 계약을 현재 지원한다. 로컬 회귀는 모두 통과했지만 provider latency는 protected sealed 질문의 destination-specific egress 승인 없이 재검증할 수 없어 E-006을 다시 `Blocked`로 전이한다.
 - 2026-09-10: 사용자가 sealed D-10 질문과 `NVIDIA_API_KEY`를 `https://integrate.api.nvidia.com/v1`로 전송하는 destination-specific egress를 승인했다. `lay-energy-0111`부터 Task 5의 one-case pass/fix loop를 재개한다.
 - 2026-09-10: live case는 실행 전에 승인 심사에서 차단되어 새 attempt나 외부 전송이 발생하지 않았다. NVIDIA 외에도 질문에서 파생된 embedding vector와 read-only DB credential이 `aws-1-ap-northeast-2.pooler.supabase.com`으로 전송되므로 이 두 번째 destination-specific egress 승인을 재개 조건으로 기록한다.
+- 2026-09-10: 사용자는 `.env.local`, NVIDIA 질문·근거·prompt 전송, Supabase corpus 읽기와 V2 실행상태 쓰기·정리, 로컬 안전 ledger, Vercel read-only 로그 조회를 포함한 E-006 외부 접근 범위 전체를 승인했다. corpus mutation·배포·push는 승인하지 않았다.
+- 2026-09-10: 기존 Task 4 구현이 V1 `_answer_question`과 V1 `RequestBudget`을 사용한 것은 E2E 목표와 맞지 않는다. V2 prepare→core→finalize endpoint와 V2 phase 57초/provider 55초 예산으로 교체한 뒤 Task 5를 재개한다.

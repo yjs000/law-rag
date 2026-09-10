@@ -8,7 +8,11 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
+from uuid import uuid4
 
+import httpx
+
+from app.domain.schemas import QuestionResponse
 from scripts.d10_answer_judge import AnswerJudgeResult, judge_execution
 from scripts.d10_failure_ledger import (
     CITATION_REASON,
@@ -19,7 +23,6 @@ from scripts.d10_failure_ledger import (
 from scripts.d10_failure_runner import (
     AnswerExecutor,
     D10RunInput,
-    live_application_answer_executor,
     load_d10_run_input,
     run_single_answer_case,
 )
@@ -85,19 +88,104 @@ async def run_from_arguments(
     return await run_next_case(ledger_path, _execute, case_ids=case_ids)
 
 
-def _production_answer_executor() -> AnswerExecutor:
-    """Compose the existing v1 application boundary only when the CLI is executed."""
-    import app.main as main_module
-    from app.application.request_budget import RequestBudget
+def validate_v2_evaluation_budget(settings: object) -> None:
+    """Validate the fixed D-10 V2 evaluation budget contract."""
+    phase = getattr(settings, "v2_phase_timeout_seconds", None)
+    provider = getattr(settings, "v2_provider_budget_seconds", None)
+    if phase != 57 or provider != 55:
+        raise RuntimeError("d10_v2_budget_invalid")
 
-    return live_application_answer_executor(
-        answer_question=main_module._answer_question,
-        repository=main_module.repository,
-        budget_factory=lambda: RequestBudget.start(
-            main_module.settings.question_request_timeout_seconds,
-            main_module.settings.response_reserve_seconds,
-        ),
-    )
+
+def v2_application_answer_executor(*, app: object) -> AnswerExecutor:
+    """Compose the V2 HTTP execution boundary."""
+
+    async def _execute(case: D10RunInput) -> QuestionResponse:
+        transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        execution_id: str | None = None
+        capability: str | None = None
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://d10-evaluation.local", timeout=None
+        ) as client:
+            try:
+                prepared = await client.post(
+                    "/v2/question-executions",
+                    headers={"Idempotency-Key": f"d10-{case.case_id}-{uuid4()}"},
+                    json={
+                        "question": case.question,
+                        "as_of_date": case.as_of_date.isoformat(),
+                        "answer_mode": "terra",
+                    },
+                )
+                prepared.raise_for_status()
+                prepared_data = prepared.json()
+                execution_id = str(prepared_data["execution_id"])
+                capability = str(prepared_data["execution_capability"])
+                headers = {"X-Execution-Capability": capability}
+                core = await client.post(
+                    f"/v2/question-executions/{execution_id}/core", headers=headers
+                )
+                core.raise_for_status()
+                _require_successful_sse(core.text, terminal_event="phase_complete")
+                finalized = await client.post(
+                    f"/v2/question-executions/{execution_id}/finalize", headers=headers
+                )
+                finalized.raise_for_status()
+                complete = _require_successful_sse(finalized.text, terminal_event="complete")
+                response = complete.get("response")
+                if not isinstance(response, dict):
+                    raise RuntimeError("v2_answer_contract_invalid")
+                return QuestionResponse.model_validate(response)
+            except Exception:
+                if execution_id is not None and capability is not None:
+                    try:
+                        await client.delete(
+                            f"/v2/question-executions/{execution_id}",
+                            headers={"X-Execution-Capability": capability},
+                        )
+                    except Exception:
+                        pass
+                raise
+
+    return _execute
+
+
+def _require_successful_sse(body: str, *, terminal_event: str) -> dict[str, object]:
+    """Return one required terminal SSE payload or raise a safe contract error."""
+    for block in body.replace("\r\n", "\n").split("\n\n"):
+        event_type: str | None = None
+        data: str | None = None
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                event_type = line.removeprefix("event: ")
+            elif line.startswith("data: "):
+                data = line.removeprefix("data: ")
+        if event_type == "error":
+            raise RuntimeError("v2_phase_unavailable")
+        if event_type == terminal_event and data is not None:
+            payload = json.loads(data)
+            if isinstance(payload, dict):
+                return payload
+    raise RuntimeError("v2_answer_contract_invalid")
+
+
+def _production_answer_executor() -> AnswerExecutor:
+    """Compose the production V2 HTTP boundary only when the CLI is executed."""
+    import app.main as main_module
+
+    validate_v2_evaluation_budget(main_module.settings)
+    return v2_application_answer_executor(app=main_module.app)
+
+
+def safe_answer_executor_factory(factory: Callable[[], AnswerExecutor]) -> AnswerExecutor:
+    """Keep production preflight failures inside the safe per-case ledger boundary."""
+    try:
+        return factory()
+    except Exception:
+
+        async def _unavailable(_: D10RunInput) -> object:
+            raise RuntimeError("d10_v2_preflight_unavailable") from None
+
+        return _unavailable
 
 
 async def main(argv: list[str] | None = None) -> int:
@@ -106,7 +194,7 @@ async def main(argv: list[str] | None = None) -> int:
     record = await run_from_arguments(
         arguments,
         case_loader=load_d10_run_input,
-        answer_executor=_production_answer_executor(),
+        answer_executor=safe_answer_executor_factory(_production_answer_executor),
     )
     print(json.dumps(record.to_dict() if record is not None else {"status": "no_case"}))
     return 0

@@ -2,7 +2,7 @@
 
 ## 상태
 
-승인 전 초안 — 2026-09-10 사용자 대화에서 retrieval 전용 E-006을 answer·citation·guardrail까지 확장하는 방향을 승인했다. 이 문서는 구현 전 최종 검토 대상이다.
+승인됨 — 2026-09-10 사용자 대화에서 retrieval 전용 E-006을 answer·citation·guardrail까지 확장하고, 아래 V2 실행 계약·고정 예산·외부 접근 범위 전체를 승인했다.
 
 ## 목표와 범위
 
@@ -12,12 +12,26 @@ D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경�
 
 - sealed D-10 Gold의 hash·`approved_gold` 상태, frozen D-10의 case 순서·질문 hash·기준일·corpus binding을 실행 전에 검증한다.
 - 질문, 검색 원문, prompt, credential, 예외 원문은 public result·ledger·summary에 기록하지 않는다.
-- DB, NVIDIA credential, provider, corpus mutation lock 부재는 외부 gate다. retrieval을 실행하지 못했음을 `blocked`와 안전 code로만 기록한다.
+- 승인된 credential 또는 외부 서비스가 실제로 사용 불가능한 경우만 외부 gate다. 실행하지 못했음을 `blocked`와 안전 code로만 기록한다.
 - retrieval을 실행한 뒤 근거가 0개이면 `failure`다. `blocked`와 0건은 안전한 외부-gate code가 있을 때만 허용한다.
+
+## 승인된 외부 접근 계약
+
+2026-09-10 사용자는 E-006 D-10 E2E 실행에 필요한 다음 범위 전체를 승인했다.
+
+- 로컬 `.env.local`에서 credential과 실행 설정을 읽는다. credential 원문은 출력·ledger·summary·문서에 기록하지 않는다.
+- `https://integrate.api.nvidia.com/v1`에 sealed D-10 질문을 routing·embedding 입력으로 보내고, V2 core·finalize에 필요한 검색 근거와 prompt/context를 보낸다. `NVIDIA_API_KEY` 사용을 포함한다.
+- `aws-1-ap-northeast-2.pooler.supabase.com`에 DB credential과 query embedding을 보내고 active generation·corpus·vector index를 읽는다.
+- V2 E2E 실행상태를 위해 Supabase의 `question_executions`, `question_execution_events`, `question_execution_issues`를 생성·갱신하고, 해당 임시 실행을 만료·취소 처리할 수 있다. 법률 corpus 원문·청크·embedding의 생성·수정·삭제는 승인 범위가 아니다.
+- `.data/experiments/d-gold-10/<run-id>/`에 public-safe ledger·summary를 기록한다.
+- 원인 확인에 필요한 Vercel 로그는 read-only로 조회할 수 있다.
+- 승인 범위에는 배포, `git push`, PR 생성·수정, 운영 corpus mutation, 상주형 Docker/로컬 DB 기동이 포함되지 않는다.
 
 ## 실행 구조
 
-`D10AnswerCaseRunner`는 native D-10 loader가 만든 한 문항 입력을 실제 application answer 경계에 전달한다. runner의 내부 입력에는 질문·기준일·corpus binding이 있지만, public output에는 `case_id`, `status`, `error_code`, `retrieved_evidence_count`, `citation_count`, `citation_reason`, `actual_action`, `judge_codes`만 둔다.
+`D10AnswerCaseRunner`는 native D-10 loader가 만든 한 문항 입력을 실제 V2 HTTP application 경계에 전달한다. 실행 순서는 `POST /v2/question-executions` prepare, `POST /v2/question-executions/{execution_id}/core`, `POST /v2/question-executions/{execution_id}/finalize`이며 core·finalize의 SSE 결과를 판정 입력으로 사용한다. 중단·정리에는 기존 `DELETE /v2/question-executions/{execution_id}`만 사용한다. 현재 제품 계약에 없는 `GET /v2/question-executions/{execution_id}`를 E-006을 위해 새로 만들지 않는다. runner의 내부 입력에는 질문·기준일·corpus binding이 있지만, public output에는 `case_id`, `status`, `error_code`, `retrieved_evidence_count`, `citation_count`, `citation_reason`, `actual_action`, `judge_codes`만 둔다.
+
+E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestBudget`도 생성하지 않는다. 따라서 V1의 routing 8초, embedding 5초, retrieval 8초, answer 40초 예산은 이 평가에 적용하지 않는다. V2 production 설정의 phase deadline `57초`와 provider budget `55초`를 고정 사용한다. 각 V2 phase는 자기 deadline 안에서 완료하거나 안전한 timeout 상태를 기록하며, V1 8초 routing 제한을 V2 prepare에 재사용하지 않는다.
 
 `D10AnswerJudge`는 sealed case의 `expected_action`과 public answer metadata를 비교한다. 답변 본문과 citation evidence는 runner 내부에서만 검사하고, 통과/실패 code만 외부로 내보낸다. judge는 모델에게 채점시키지 않으며 결정적 규칙만 사용한다.
 
@@ -57,3 +71,5 @@ D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경�
 
 - 2026-09-10: D-10은 이미 RAG 개발에 사용된 calibration 문항이므로, answer 평가 역시 D-10 native contract를 사용한다. 1,000-case Gold 계약으로 adapter하지 않는다.
 - 2026-09-10: answer quality의 자동 판정은 expected action, grounding, citation binding, 금지된 action leak처럼 결정적인 경계에 한정한다. 법률적 정확성을 모델 자기평가나 문체 점수로 대체하지 않는다.
+- 2026-09-10: 사용자는 `.env.local`, NVIDIA 전송, Supabase corpus 읽기와 V2 실행상태 쓰기·정리, 로컬 안전 ledger, Vercel read-only 로그 조회를 포함한 E-006 외부 접근 범위 전체를 승인했다. corpus mutation·배포·push는 제외한다.
+- 2026-09-10: E-006은 V2 prepare→core→finalize production 계약과 V2 phase 57초/provider 55초 예산을 사용한다. V1 `_answer_question`, `RequestBudget`, routing 8초 예산은 사용하지 않는다.
