@@ -1,13 +1,13 @@
 > 작업 ID: `E-006`
-> 상태: `Picked Up`
+> 상태: `Blocked`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold가 사용자 adjudication을 거쳐 `approved_gold` 상태여야 하며, 읽기 전용 평가 DB, NVIDIA embedding credential, clean code provenance가 준비되어야 한다.
-> 다음 행동: Task 4의 live application executor와 `--sealed-dir` one-case CLI main을 TDD로 연결한다.
+> 다음 행동: 읽기 전용 평가 DB와 NVIDIA embedding credential을 제공한 뒤 `lay-energy-0111`을 같은 sealed artifact로 재실행한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L59 — end-to-end 판정 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
-> - `apps/api/scripts/run_d10_failure_driven.py` L1-L59 — 한 문항씩 진행하는 failure-driven orchestrator
+> - `apps/api/scripts/run_d10_failure_driven.py` L1-L175 — 한 문항씩 진행하는 failure-driven orchestrator와 CLI
 
 # D-10 Gold 순차 실패-회귀 평가 기록
 
@@ -104,3 +104,4 @@
 - 2026-09-04: 실패 발견 뒤 즉시 다음 문항으로 진행하지 않고, 문항별 회귀 테스트·수정·재실행을 완료한 후에만 진행한다.
 - 2026-09-10: D-10은 이미 RAG 개발에 쓰인 calibration 10문항이다. 이를 별도 1,000-case Gold runner에 adapter로 주입하지 않고, sealed D-10 계약을 직접 검증하는 native runner로 실행한다. 기존 partial runner 변경은 이 결정과 맞지 않아 되돌린다.
 - 2026-09-10: E-006은 retrieval-only가 아니라 routing·retrieval·answer·citation·guardrail의 end-to-end 경계를 점검한다. 자동 판정은 결정적 contract 위반에 한정한다.
+- 2026-09-10: Task 4의 one-case CLI는 `lay-energy-0111`을 안전한 answer-stage ledger로 실행했다. 현재 DB와 NVIDIA credential이 모두 미설정이므로 `answer_unavailable`/`blocked`가 기록됐으며, 이는 코드 failure가 아닌 Task 5의 외부 gate다.

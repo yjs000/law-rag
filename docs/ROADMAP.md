@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00ba42606cc7c44685c280bbcbbd0b5b4e35a3d8b0f489fafadeb7846fbc684b -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4dd3c519e9ba6f73ec1f093cc0d82475fcfefac2dd4db50ea9ecdc82ae87196a -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 4의 live application executor와 `--sealed-dir` one-case CLI main을 TDD로 연결한다.
 
 ## Todo
 
@@ -27,6 +26,7 @@
 
 ## Blocked
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: 읽기 전용 평가 DB와 NVIDIA embedding credential을 제공한 뒤 `lay-energy-0111`을 같은 sealed artifact로 재실행한다.
 
 ## Done
 
