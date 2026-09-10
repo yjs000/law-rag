@@ -64,3 +64,26 @@ def test_answer_judgment_turns_safe_answer_result_into_failure_record() -> None:
     assert result["status"] == "failure"
     assert result["error_code"] == "citation_not_in_retrieval_evidence"
     assert result["judge_codes"] == ["citation_not_in_retrieval_evidence"]
+
+
+@pytest.mark.asyncio
+async def test_answer_stage_is_preserved_in_ledger(tmp_path) -> None:
+    async def execute(_: str) -> dict[str, object]:
+        return {
+            "status": "pass",
+            "error_code": None,
+            "retrieved_evidence_count": 1,
+            "citation_count": 1,
+            "citation_reason": "validated_by_answer_runner",
+            "evaluation_stage": "answer",
+            "actual_action": "answer",
+            "judge_codes": [],
+        }
+
+    record = await run_next_case(
+        tmp_path / "attempts.jsonl", execute, case_ids=("lay-energy-0201",)
+    )
+
+    assert record.evaluation_stage == "answer"
+    assert record.citation_count == 1
+    assert record.actual_action == "answer"

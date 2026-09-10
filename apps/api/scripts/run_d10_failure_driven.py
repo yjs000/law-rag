@@ -60,13 +60,32 @@ async def run_next_case(
     if case_id is None:
         return None
     result = await executor(case_id)
-    record = AttemptRecord(
-        attempt_number=len(_existing_records(ledger_path)) + 1,
-        case_id=case_id,
-        status=str(result["status"]),  # validated before persistence
-        error_code=result.get("error_code") if isinstance(result.get("error_code"), str) else None,
-        retrieved_evidence_count=int(result["retrieved_evidence_count"]),
-        citation_count=None,
-        citation_reason=CITATION_REASON,
-    )
+    common = {
+        "attempt_number": len(_existing_records(ledger_path)) + 1,
+        "case_id": case_id,
+        "status": str(result["status"]),  # validated before persistence
+        "error_code": result.get("error_code")
+        if isinstance(result.get("error_code"), str)
+        else None,
+        "retrieved_evidence_count": int(result["retrieved_evidence_count"]),
+    }
+    if result.get("evaluation_stage") == "answer":
+        record = AttemptRecord(
+            **common,
+            citation_count=result.get("citation_count"),
+            citation_reason=str(result.get("citation_reason")),
+            evaluation_stage="answer",
+            actual_action=(
+                result.get("actual_action")
+                if isinstance(result.get("actual_action"), str)
+                else None
+            ),
+            judge_codes=tuple(result.get("judge_codes", ())),
+        )
+    else:
+        record = AttemptRecord(
+            **common,
+            citation_count=None,
+            citation_reason=CITATION_REASON,
+        )
     return append_attempt(ledger_path, record)
