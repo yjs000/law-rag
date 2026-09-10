@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: c0a34a3c6140dcabe8debcc6374ed0d2a6c93c81c4a3ffd0d76aa23343830820 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 8e6b27f412964a808afcad2934c05504b6bb669df84b1172b6929c7024f8c377 -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: 승인된 `https://integrate.api.nvidia.com/v1` 경계에서 `lay-energy-0111`을 재실행하고, pass일 때만 다음 고정 case로 진행한다.
 
 ## Todo
 
@@ -26,7 +27,6 @@
 
 ## Blocked
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: sealed D-10 질문과 `NVIDIA_API_KEY`를 `https://integrate.api.nvidia.com/v1`로 전송하는 것을 명시적으로 승인받은 뒤 `lay-energy-0111`을 재실행한다.
 
 ## Done
 

@@ -1,9 +1,9 @@
 > 작업 ID: `E-006`
-> 상태: `Blocked`
+> 상태: `Picked Up`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold가 사용자 adjudication을 거쳐 `approved_gold` 상태여야 하며, 읽기 전용 평가 DB, NVIDIA embedding credential, clean code provenance가 준비되어야 한다.
-> 다음 행동: sealed D-10 질문과 `NVIDIA_API_KEY`를 `https://integrate.api.nvidia.com/v1`로 전송하는 것을 명시적으로 승인받은 뒤 `lay-energy-0111`을 재실행한다.
+> 다음 행동: 승인된 `https://integrate.api.nvidia.com/v1` 경계에서 `lay-energy-0111`을 재실행하고, pass일 때만 다음 고정 case로 진행한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L59 — end-to-end 판정 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
@@ -107,3 +107,4 @@
 - 2026-09-10: Task 4의 one-case CLI는 `lay-energy-0111`을 안전한 answer-stage ledger로 실행했다. 현재 DB와 NVIDIA credential이 모두 미설정이므로 `answer_unavailable`/`blocked`가 기록됐으며, 이는 코드 failure가 아닌 Task 5의 외부 gate다.
 - 2026-09-10: `.env.local`로 live DB와 sealed corpus snapshot의 일치를 확인한 뒤 `lay-energy-0111`을 재실행했다. NVIDIA route classifier timeout은 v1의 `routing_unavailable` 응답으로 변환되며, D-10 runner가 이를 `insufficient_evidence` failure로 오인하던 결함을 회귀 테스트와 함께 수정했다. 재실행은 `routing_unavailable`/`blocked`로 안전하게 기록됐고, provider 복구 전에는 다음 case로 진행하지 않는다.
 - 2026-09-10: 공식 NVIDIA 카탈로그는 configured model과 `guided_json`/`enable_thinking=false` 계약을 현재 지원한다. 로컬 회귀는 모두 통과했지만 provider latency는 protected sealed 질문의 destination-specific egress 승인 없이 재검증할 수 없어 E-006을 다시 `Blocked`로 전이한다.
+- 2026-09-10: 사용자가 sealed D-10 질문과 `NVIDIA_API_KEY`를 `https://integrate.api.nvidia.com/v1`로 전송하는 destination-specific egress를 승인했다. `lay-energy-0111`부터 Task 5의 one-case pass/fix loop를 재개한다.
