@@ -462,9 +462,9 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/evaluate_experiment_d_gold.py": {
-    "mtime": 1788515710.7127593,
-    "seen": 1788515861.5248635,
-    "ast_hash": "6a49044852484e3cac81af0ead7dfb12",
+    "mtime": 1789025562.7414284,
+    "seen": 1789025623.8216574,
+    "ast_hash": "55aa9586f4fea79349706f9e9beb2e3b",
     "semantic_hash": ""
   },
   "apps/api/scripts/evaluate_retrieval.py": {
@@ -768,9 +768,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_experiment_d_gold_runner.py": {
-    "mtime": 1788515738.1566062,
-    "seen": 1788515861.5249314,
-    "ast_hash": "9f13a7765d0f43d010fff8134e4a3599",
+    "mtime": 1789025562.7404282,
+    "seen": 1789025623.8314624,
+    "ast_hash": "bbb105427f8550c03acaf3aa798c72a6",
     "semantic_hash": ""
   },
   "apps/api/tests/test_experiment_d_layperson_approval_review.py": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1788515877.6961,
-    "seen": 1788516118.9343455,
-    "ast_hash": "48d3334cc63bc1b06fb81f0322ee5a9e",
+    "mtime": 1789025562.5583117,
+    "seen": 1789025623.8809574,
+    "ast_hash": "c6d0dd97ecd6d81ffd0cf0002b7e19c4",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1788516074.886466,
-    "seen": 1788516118.9398878,
-    "ast_hash": "0a28e4fcec55097b459580c0ad4ba9a6",
+    "mtime": 1789025562.5593119,
+    "seen": 1789025623.8868167,
+    "ast_hash": "e28493788adc1d8fd1a0a607c16f9ebe",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
