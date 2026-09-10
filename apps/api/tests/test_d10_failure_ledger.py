@@ -74,11 +74,33 @@ def test_append_attempt_rejects_invalid_attempt_contract(
         append_attempt(tmp_path / "attempts.jsonl", record)
 
 
-def test_zero_retrieved_evidence_requires_failure_status(tmp_path: Path) -> None:
+def test_zero_retrieved_evidence_rejects_pass_status(tmp_path: Path) -> None:
     with pytest.raises(LedgerValidationError):
         append_attempt(
             tmp_path / "attempts.jsonl",
             _record(1, status="pass", retrieved_evidence_count=0),
+        )
+
+
+def test_zero_retrieved_evidence_allows_blocked_external_gate(tmp_path: Path) -> None:
+    record = append_attempt(
+        tmp_path / "attempts.jsonl",
+        _record(
+            1,
+            status="blocked",
+            error_code="nvidia_api_key_required",
+            retrieved_evidence_count=0,
+        ),
+    )
+
+    assert record.status == "blocked"
+
+
+def test_zero_retrieved_evidence_rejects_blocked_without_safe_code(tmp_path: Path) -> None:
+    with pytest.raises(LedgerValidationError):
+        append_attempt(
+            tmp_path / "attempts.jsonl",
+            _record(1, status="blocked", retrieved_evidence_count=0),
         )
 
 

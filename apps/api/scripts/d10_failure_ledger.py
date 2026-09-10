@@ -85,7 +85,9 @@ class AttemptRecord:
             or self.retrieved_evidence_count < 0
         ):
             raise LedgerValidationError("retrieved_evidence_count_invalid")
-        if self.retrieved_evidence_count == 0 and self.status != "failure":
+        if self.retrieved_evidence_count == 0 and not (
+            self.status == "failure" or (self.status == "blocked" and self.error_code is not None)
+        ):
             raise LedgerValidationError("zero_evidence_requires_failure")
         if self.citation_count is not None or self.citation_reason != CITATION_REASON:
             raise LedgerValidationError("retrieval_citation_contract_invalid")
