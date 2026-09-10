@@ -5,9 +5,7 @@ from sqlalchemy import text
 
 
 def test_initial_migration_executes_one_ddl_command_at_a_time(monkeypatch) -> None:
-    migration_path = (
-        Path(__file__).parents[1] / "migrations" / "versions" / "0001_legal_corpus.py"
-    )
+    migration_path = Path(__file__).parents[1] / "migrations" / "versions" / "0001_legal_corpus.py"
     spec = importlib.util.spec_from_file_location("initial_migration", migration_path)
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
@@ -24,10 +22,7 @@ def test_initial_migration_executes_one_ddl_command_at_a_time(monkeypatch) -> No
 
 def test_retrieval_migration_indexes_title_heading_and_content(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0004_retrieval_diagnostics.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0004_retrieval_diagnostics.py"
     )
     spec = importlib.util.spec_from_file_location("retrieval_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -47,10 +42,7 @@ def test_retrieval_migration_indexes_title_heading_and_content(monkeypatch) -> N
 
 def test_conversation_migration_backfills_ownership_and_cursor_indexes(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0005_conversation_history.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0005_conversation_history.py"
     )
     spec = importlib.util.spec_from_file_location("conversation_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -72,10 +64,7 @@ def test_conversation_migration_backfills_ownership_and_cursor_indexes(monkeypat
 
 def test_dense_profile_migration_removes_hybrid_and_tracks_vector_provenance(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0008_dense_embedding_profiles.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0008_dense_embedding_profiles.py"
     )
     spec = importlib.util.spec_from_file_location("dense_profile_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -99,10 +88,7 @@ def test_dense_profile_migration_removes_hybrid_and_tracks_vector_provenance(mon
 
 def test_temporal_version_migration_enforces_version_identity_and_state(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0009_temporal_document_versions.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0009_temporal_document_versions.py"
     )
     spec = importlib.util.spec_from_file_location("temporal_version_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -145,10 +131,7 @@ def test_temporal_version_migration_enforces_version_identity_and_state(monkeypa
 
 def test_corpus_search_readiness_migration_starts_fail_closed(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0010_corpus_search_readiness.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0010_corpus_search_readiness.py"
     )
     spec = importlib.util.spec_from_file_location("corpus_readiness_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -173,10 +156,7 @@ def test_corpus_search_readiness_migration_starts_fail_closed(monkeypatch) -> No
 
 def test_retrieval_catalog_migration_tracks_independent_generations(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0011_retrieval_catalog.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0011_retrieval_catalog.py"
     )
     spec = importlib.util.spec_from_file_location("retrieval_catalog_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -222,10 +202,7 @@ def test_retrieval_catalog_migration_tracks_independent_generations(monkeypatch)
 
 def test_law_type_classification_migration_adds_legal_documents_columns(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0012_law_type_classification.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0012_law_type_classification.py"
     )
     spec = importlib.util.spec_from_file_location("law_type_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -246,10 +223,7 @@ def test_law_type_classification_migration_adds_legal_documents_columns(monkeypa
 
 def test_v2_generation_migration_has_catalog_and_atomic_active_pointer(monkeypatch) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0015_v2_retrieval_generations.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0015_v2_retrieval_generations.py"
     )
     spec = importlib.util.spec_from_file_location("v2_generation_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -280,10 +254,7 @@ def test_v2_question_execution_migration_has_idempotency_events_and_capacity_lea
     monkeypatch,
 ) -> None:
     migration_path = (
-        Path(__file__).parents[1]
-        / "migrations"
-        / "versions"
-        / "0016_v2_question_executions.py"
+        Path(__file__).parents[1] / "migrations" / "versions" / "0016_v2_question_executions.py"
     )
     spec = importlib.util.spec_from_file_location("v2_execution_migration", migration_path)
     assert spec is not None and spec.loader is not None
@@ -311,3 +282,25 @@ def test_v2_question_execution_migration_has_idempotency_events_and_capacity_lea
     assert "UNIQUE(provider,slot)" in sql
     assert "UNIQUE(execution_id,phase)" in sql
     assert "question_text" not in sql
+
+
+def test_clarification_case_migration_follows_v2_execution_revision(monkeypatch) -> None:
+    migration_path = (
+        Path(__file__).parents[1] / "migrations" / "versions" / "0017_clarification_cases.py"
+    )
+    spec = importlib.util.spec_from_file_location("clarification_case_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert migration.revision == "0017"
+    assert migration.down_revision == "0016"
+    assert "CREATE TABLE clarification_cases" in sql
+    assert "original_question text NOT NULL" in sql
+    assert "capability_hash text" in sql
+    assert "CREATE INDEX clarification_cases_status_expires_at" in sql

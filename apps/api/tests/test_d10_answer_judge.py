@@ -1,6 +1,8 @@
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.d10_answer_judge import AnswerJudgeInput, judge_answer, judge_execution
 from scripts.d10_failure_runner import D10AnswerExecution, D10RunInput
 
@@ -87,3 +89,56 @@ def test_execution_judge_uses_private_response_only_for_structural_metadata() ->
 
     assert result.passed is True
     assert result.codes == ()
+
+
+def test_execution_judge_accepts_nonempty_summary_when_sections_are_empty() -> None:
+    execution = D10AnswerExecution(
+        case_id="lay-energy-0201",
+        response=SimpleNamespace(
+            action="partially_answerable",
+            summary="private grounded summary",
+            sections=(),
+            limitations=("private limit",),
+            citations=(SimpleNamespace(provision_id="p1", quote="private statute"),),
+        ),
+        retrieved_evidence_count=1,
+    )
+    case = D10RunInput(
+        "lay-energy-0201",
+        "private question",
+        date(2026, 8, 5),
+        "snapshot-1",
+        "partial_answer_with_limits",
+    )
+
+    result = judge_execution(case, execution)
+
+    assert result.passed is True
+    assert result.codes == ()
+
+
+@pytest.mark.parametrize("summary", ["", "   "])
+def test_execution_judge_rejects_empty_summary_when_sections_are_empty(summary: str) -> None:
+    execution = D10AnswerExecution(
+        case_id="lay-energy-0201",
+        response=SimpleNamespace(
+            action="partially_answerable",
+            summary=summary,
+            sections=(),
+            limitations=("private limit",),
+            citations=(SimpleNamespace(provision_id="p1", quote="private statute"),),
+        ),
+        retrieved_evidence_count=1,
+    )
+    case = D10RunInput(
+        "lay-energy-0201",
+        "private question",
+        date(2026, 8, 5),
+        "snapshot-1",
+        "partial_answer_with_limits",
+    )
+
+    result = judge_execution(case, execution)
+
+    assert result.passed is False
+    assert result.codes == ("answer_empty",)

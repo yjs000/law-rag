@@ -211,9 +211,12 @@ def build_messages_v2(
                 "재사용하지 말고 이번 요청에 제공된 C번호 근거로 다시 검증한다."
                 " action에 이 답변의 완결성을 스스로 밝힌다: 제공된 근거만으로 질문에 "
                 "충분히 답했으면 'fully_answerable', 일부만 답했거나 조건에 따라 갈리면 "
-                "'partially_answerable', 질문자의 개별 사실(설비용량·계약 조건 등)을 "
-                "알아야만 좁힐 수 있으면 'clarification_required', 제공된 근거가 질문과 "
-                "근본적으로 무관하거나 다루지 않으면 'unanswerable'을 쓴다. "
+                "'partially_answerable'을 쓴다. 특히 제공된 근거로 허가·신고·의무·절차와 "
+                "그 분기 기준을 조건부로 설명할 수 있으면 'partially_answerable'이다. "
+                "질문자의 개별 사실(설비용량·계약 조건 등)이 없어서 현재 근거로 실질적인 "
+                "답을 전혀 제공할 수 없을 때만 'clarification_required'를 쓴다. 개별 결론을 "
+                "확정할 수 없다는 이유만으로 'clarification_required'를 선택하지 않는다. "
+                "제공된 근거가 질문과 근본적으로 무관하거나 다루지 않으면 'unanswerable'을 쓴다. "
                 "'clarification_required'면 missing_information에 필요한 사실을 구체적으로 "
                 "적는다(예: '발전설비용량'). 'unanswerable'이면 sections·checklist는 "
                 "비워도 되고, summary에는 제공된 근거가 왜 부족한지만 쉬운 말로 쓴다 - "
@@ -228,9 +231,7 @@ def build_messages_v2(
         answered = [
             fact.id for fact in clarification.case.required_facts if fact.status.value == "answered"
         ]
-        unresolved = [
-            fact.id for fact in clarification.case.remaining_facts()
-        ]
+        unresolved = [fact.id for fact in clarification.case.remaining_facts()]
         messages[0]["content"] += (
             " 이번 답변은 clarification 정책 '"
             + clarification.policy
@@ -280,8 +281,7 @@ def build_core_messages(
     messages[0] = {
         "role": "system",
         "content": (
-            system
-            + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action"
+            system + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action"
             "과 grounded_claims만 출력한다. sections, checklist, scope, limitations은 생성하거나 "
             "암시하지 않는다. citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 "
             "C번호만 넣는다."
@@ -341,6 +341,8 @@ _EPISTEMIC_HEDGE_PATTERN = re.compile(
 
 def _strip_epistemic_hedges(text: str) -> str:
     return _EPISTEMIC_HEDGE_PATTERN.sub("", text)
+
+
 _OVERSTATEMENT_TERMS = ("모든", "항상", "예외 없이", "무조건", "오직", "즉시")
 _ASSERTIVE_NORMATIVE_PREDICATE = re.compile(
     r"(?:허가|신고|등록|검사|승인|인가|제출|점검|납부).{0,12}"
@@ -435,9 +437,7 @@ def build_blocked_route_messages(
         messages.append(
             {
                 "role": "user",
-                "content": (
-                    "참고(신뢰하지 않는 분류기 설명, 사실로 단정하지 말 것): " + reason
-                ),
+                "content": ("참고(신뢰하지 않는 분류기 설명, 사실로 단정하지 말 것): " + reason),
             }
         )
     messages.append({"role": "user", "content": f"질문: {request.question}"})
@@ -496,9 +496,7 @@ def _texts_match_citations(
     return all(_text_matches_evidence(text, evidence) for text in texts)
 
 
-def _evidence_for_citations(
-    citation_ids: list[str], hit_by_id: dict[str, SearchHit]
-) -> str:
+def _evidence_for_citations(citation_ids: list[str], hit_by_id: dict[str, SearchHit]) -> str:
     return " ".join(
         f"{hit_by_id[citation_id].document_title} {hit_by_id[citation_id].path} "
         f"{hit_by_id[citation_id].heading or ''} {hit_by_id[citation_id].content}"
@@ -546,10 +544,14 @@ def _text_matches_evidence(text: str, evidence: str, *, require_topic_overlap: b
 def _contains_normative_assertion(text: str) -> bool:
     text = _strip_epistemic_hedges(text)
     text_flat = "".join(re.findall(r"[가-힣a-z0-9]+", text.casefold()))
-    return any(term in text_flat for term in ("과태료", "벌금", "징역")) or any(
-        _NORMATIVE_SIGNAL_PATTERNS[signal].search(text)
-        for signal in ("obligation", "permission", "prohibition", "exemption")
-    ) or bool(_ASSERTIVE_NORMATIVE_PREDICATE.search(text))
+    return (
+        any(term in text_flat for term in ("과태료", "벌금", "징역"))
+        or any(
+            _NORMATIVE_SIGNAL_PATTERNS[signal].search(text)
+            for signal in ("obligation", "permission", "prohibition", "exemption")
+        )
+        or bool(_ASSERTIVE_NORMATIVE_PREDICATE.search(text))
+    )
 
 
 def _terms(value: str) -> list[str]:

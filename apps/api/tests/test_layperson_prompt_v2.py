@@ -83,6 +83,13 @@ def test_v2_system_prompt_still_forbids_new_claims_via_limitations() -> None:
     assert "limitations에도 새로운 법률 주장을 추가하지 않는다" in _v2_system_text()
 
 
+def test_v2_action_prompt_keeps_conditional_legal_guidance_partial() -> None:
+    text = _v2_system_text()
+    assert "조건부로 설명할 수 있으면 'partially_answerable'" in text
+    assert "실질적인 답을 전혀 제공할 수 없을 때만 'clarification_required'" in text
+    assert "개별 결론을 확정할 수 없다는 이유만으로 'clarification_required'" in text
+
+
 def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:
     v1_text = build_messages(_request(), _hits())[0]["content"]
     assert "최대 3문장" not in v1_text

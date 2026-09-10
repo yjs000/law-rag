@@ -1,7 +1,7 @@
 # 데이터베이스 스키마
 
-> 기준 시점: 2026-08-18
-> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0013_llamaindex_ingestion_runs.py`
+> 기준 시점: 2026-09-10
+> 생성 기준: `apps/api/migrations/versions/0001_legal_corpus.py` ~ `0017_clarification_cases.py`
 > 적용 명령: `cd apps/api; uv run alembic upgrade head`
 
 | 테이블 | 역할 |
@@ -33,6 +33,15 @@
 | `account_usage` | 로그인 계정별 일일 AI/검색 전용 사용량 |
 | `history_retention_runs` | 질문 이력 정리 실행 시각·cutoff·삭제/갱신 수·성공/실패의 비민감 감사 |
 | `law_rag_llamaindex_ingestion_runs` | v2 LlamaIndex ingestion의 시작·완료 시각, node 수, running/completed/failed 준비 상태 |
+| `v3_agent_threads` | v3 LangGraph agent의 사용자별 thread 최소 식별자와 생성 시각 |
+| `llamaindex_retrieval_generations` | 불변 LlamaIndex 물리 세대의 source/transform fingerprint, 상태, 수량과 발행 시각 |
+| `llamaindex_generation_sources` | 세대별 provision source fingerprint와 node 수, 이전 세대 복사 계보 |
+| `llamaindex_active_generation` | 현재 active LlamaIndex retrieval generation 하나를 가리키는 singleton pointer |
+| `question_executions` | V2 prepare→core→finalize 실행의 idempotency, 상태/version, frozen evidence와 검증 응답 |
+| `question_execution_events` | V2 실행 phase별 공개 SSE event의 순서와 payload |
+| `question_execution_issues` | V2 phase 실패의 공개 reason code와 복구 가능 여부 |
+| `provider_capacity_leases` | core/finalize provider slot의 execution별 단기 lease |
+| `clarification_cases` | 사용자별 clarification 사실 상태, capability hash, version과 만료 시각 |
 
 `0012`은 `legal_documents`에 `law_type_name`/`law_type_code` 컬럼을 추가한다. 법제처 Open API가 내려주는
 `법종구분`/`법종구분코드`(법령) 또는 `행정규칙종류`/`행정규칙종류코드`(행정규칙) 원 값을 코드 체계 재정의 없이
@@ -40,6 +49,12 @@
 대상이 아니라 매 upsert마다 최신 파싱 값으로 덮어써진다.
 
 `0013`은 `law_rag_llamaindex_ingestion_runs`를 추가한다. v2 ingestion은 시작 시 `running`을 기록하고 완료 시에만 `completed`로 바꾸며, 실패 시 `failed`를 기록한다. v2 API는 가장 최신 run이 `completed`일 때만 열리고, 마커 조회·연결·migration 오류는 준비되지 않은 상태로 닫는다.
+
+`0014`는 v3 agent가 `(user_id, thread_id)`를 조회할 수 있도록 `v3_agent_threads`와 사용자 인덱스를 추가한다. `0015`는 불변 LlamaIndex retrieval generation, 세대별 source 계보, active singleton pointer를 추가하며 active generation을 하나로 제한한다.
+
+`0016`은 idempotent V2 `question_executions`, phase event·issue, provider capacity lease를 추가한다. 질문·검색 근거·검증 응답은 execution의 private payload와 frozen citation 경계에 보존되며 공개 event에는 phase 진행에 필요한 payload만 기록한다.
+
+`0017`은 `clarification_cases`와 `(status, expires_at)` 인덱스를 추가한다. 개별 clarification 질문과 facts는 owner scope·capability hash·낙관적 version·만료 시각으로 보호하며, 2026-09-10 원격 개발·테스트 DB에서 Alembic `0017` 적용과 table/index 존재를 확인했다.
 
 `legal_documents.exact_title`과 `provisions.(heading, content)`에는 PGroonga 색인이 있다. 임베딩은 `embedding_profiles`의 전체 변환 계약과 `provision_embeddings.source_text_sha256`으로 계보를 추적한다. 현재 NVIDIA 프로필 행만 대상으로 `embedding::vector(512)` cosine HNSW partial expression index가 물리적으로 존재하지만 v1 운영·실험 dense SQL은 exhaustive exact cosine을 사용한다. 이 v1 인덱스는 사용·재구축·튜닝·평가·release 연결하지 않는 역사적 잔여물이며 새 v1 HNSW 인덱스나 build도 만들지 않는다. 물리 제거는 별도 additive cleanup migration 대상이다. 이 제한은 별도 `data_law_rag_llamaindex` v2 테이블에는 적용되지 않는다. v2 HNSW는 사용자 승인된 운영자 `HnswIndexManager`만 명시적으로 관리하며 ingestion과 API 요청은 생성·삭제·변경하지 않는다.
 

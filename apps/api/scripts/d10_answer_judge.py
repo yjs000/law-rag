@@ -61,6 +61,7 @@ def judge_execution(case: D10RunInput, execution: D10AnswerExecution) -> AnswerJ
     safe = execution.safe_result()
     response = execution.response
     actual_action = safe["actual_action"]
+    summary = getattr(response, "summary", "")
     sections = getattr(response, "sections", ())
     citations = getattr(response, "citations", ())
     citation_ids = tuple(
@@ -73,7 +74,7 @@ def judge_execution(case: D10RunInput, execution: D10AnswerExecution) -> AnswerJ
             expected_action=case.expected_action,  # validated by the sealed loader
             actual_action=actual_action if isinstance(actual_action, str) else None,
             answer_present=actual_action in {"answer", "partial_answer_with_limits"}
-            and bool(sections),
+            and (bool(sections) or (isinstance(summary, str) and bool(summary.strip()))),
             has_limit=bool(getattr(response, "limitations", ())),
             retrieved_evidence_ids=citation_ids,
             citation_evidence_ids=citation_ids,

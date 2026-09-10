@@ -189,7 +189,9 @@ async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -
     assert "허가 절차를 알려주세요." in messages[1]["content"]
     assert "특정 부지·설비·사업" in messages[1]["content"]
     assert "토지 지목·용도지역·농지·산지·설비용량·판매용·자가소비" in messages[1]["content"]
-    assert "clarification_required를 우선" in messages[1]["content"]
+    assert "설치할 수 있는지" in messages[1]["content"]
+    assert "허가·신고·절차의 조건부 목록" in messages[1]["content"]
+    assert "누락됐다는 이유만으로 clarification_required" in messages[1]["content"]
     assert "유사" not in " ".join(message["content"] for message in messages)
     assert "hint" not in " ".join(message["content"] for message in messages).lower()
 
