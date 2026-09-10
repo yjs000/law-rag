@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: ad20a552afc8409e535ce87ad6882935a52222b9dc510bf2c72a26a86e1dcfeb -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00ba42606cc7c44685c280bbcbbd0b5b4e35a3d8b0f489fafadeb7846fbc684b -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 1의 answer evaluation result·safe ledger 확장 실패 테스트부터 작성한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 4의 live application executor와 `--sealed-dir` one-case CLI main을 TDD로 연결한다.
 
 ## Todo
 

@@ -3,7 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold가 사용자 adjudication을 거쳐 `approved_gold` 상태여야 하며, 읽기 전용 평가 DB, NVIDIA embedding credential, clean code provenance가 준비되어야 한다.
-> 다음 행동: Task 1의 answer evaluation result·safe ledger 확장 실패 테스트부터 작성한다.
+> 다음 행동: Task 4의 live application executor와 `--sealed-dir` one-case CLI main을 TDD로 연결한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L59 — end-to-end 판정 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
