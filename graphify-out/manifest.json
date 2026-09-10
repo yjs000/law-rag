@@ -3850,5 +3850,17 @@
     "seen": 1789026777.118075,
     "ast_hash": "2ac9b57a18e336fe443a82fda5f8d809",
     "semantic_hash": ""
+  },
+  "apps/api/scripts/d10_answer_judge.py": {
+    "mtime": 1789027004.2604487,
+    "seen": 1789027050.554791,
+    "ast_hash": "11d1227232d388b0b3c7bc91d6549e61",
+    "semantic_hash": ""
+  },
+  "apps/api/tests/test_d10_answer_judge.py": {
+    "mtime": 1789027012.663446,
+    "seen": 1789027050.564419,
+    "ast_hash": "9811ed5ca693fd229f8d6d36f539834c",
+    "semantic_hash": ""
   }
 }
