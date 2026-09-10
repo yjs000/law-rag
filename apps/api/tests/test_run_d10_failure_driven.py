@@ -10,6 +10,7 @@ from scripts.run_d10_failure_driven import (
     apply_answer_judgment,
     evaluate_live_answer_case,
     parse_arguments,
+    run_from_arguments,
     run_next_case,
 )
 
@@ -149,3 +150,38 @@ async def test_live_answer_case_applies_judge_failure_without_answer_text() -> N
     assert result["status"] == "failure"
     assert result["error_code"] == "answer_empty"
     assert "private question" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_cli_runs_one_selected_case_and_writes_answer_ledger(tmp_path: Path) -> None:
+    args = parse_arguments(
+        [
+            "--sealed-dir",
+            str(tmp_path / "sealed"),
+            "--case-id",
+            "lay-energy-0201",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    def load_case(_: Path, case_id: str) -> D10RunInput:
+        return D10RunInput(
+            case_id,
+            "private question",
+            __import__("datetime").date(2026, 8, 5),
+            "snapshot",
+            "answer",
+        )
+
+    async def execute(_: D10RunInput) -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            action="fully_answerable", sections=(object(),), limitations=(), citations=()
+        )
+
+    record = await run_from_arguments(args, case_loader=load_case, answer_executor=execute)
+
+    assert record.case_id == "lay-energy-0201"
+    assert record.evaluation_stage == "answer"

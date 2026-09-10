@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -13,7 +16,13 @@ from scripts.d10_failure_ledger import (
     AttemptRecord,
     append_attempt,
 )
-from scripts.d10_failure_runner import AnswerExecutor, D10RunInput, run_single_answer_case
+from scripts.d10_failure_runner import (
+    AnswerExecutor,
+    D10RunInput,
+    live_application_answer_executor,
+    load_d10_run_input,
+    run_single_answer_case,
+)
 
 
 class SingleCaseExecutor(Protocol):
@@ -57,6 +66,50 @@ async def evaluate_live_answer_case(
     if execution.response is None:
         return result
     return apply_answer_judgment(result, judge_execution(case, execution))
+
+
+async def run_from_arguments(
+    arguments: argparse.Namespace,
+    *,
+    case_loader: Callable[[Path, str], D10RunInput],
+    answer_executor: AnswerExecutor,
+) -> AttemptRecord | None:
+    """Execute exactly the requested/resumed case and append only its safe result."""
+    ledger_path = arguments.output_dir / "attempts.jsonl"
+    case_ids = (arguments.case_id,) if arguments.case_id else D10_CASE_ORDER
+
+    async def _execute(case_id: str) -> dict[str, object]:
+        case = case_loader(arguments.sealed_dir, case_id)
+        return await evaluate_live_answer_case(case, answer_executor=answer_executor)
+
+    return await run_next_case(ledger_path, _execute, case_ids=case_ids)
+
+
+def _production_answer_executor() -> AnswerExecutor:
+    """Compose the existing v1 application boundary only when the CLI is executed."""
+    import app.main as main_module
+    from app.application.request_budget import RequestBudget
+
+    return live_application_answer_executor(
+        answer_question=main_module._answer_question,
+        repository=main_module.repository,
+        budget_factory=lambda: RequestBudget.start(
+            main_module.settings.question_request_timeout_seconds,
+            main_module.settings.response_reserve_seconds,
+        ),
+    )
+
+
+async def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint: emits only the final safe attempt record as JSON."""
+    arguments = parse_arguments(argv)
+    record = await run_from_arguments(
+        arguments,
+        case_loader=load_d10_run_input,
+        answer_executor=_production_answer_executor(),
+    )
+    print(json.dumps(record.to_dict() if record is not None else {"status": "no_case"}))
+    return 0
 
 
 def _existing_records(path: Path) -> list[dict[str, object]]:
@@ -118,3 +171,7 @@ async def run_next_case(
             citation_reason=CITATION_REASON,
         )
     return append_attempt(ledger_path, record)
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))
