@@ -3820,5 +3820,17 @@
     "seen": 1788516118.8845325,
     "ast_hash": "52e4bfb6b9d9b9e453aff64f64e7c48c",
     "semantic_hash": ""
+  },
+  "apps/api/scripts/d10_failure_runner.py": {
+    "mtime": 1789025735.9687982,
+    "seen": 1789025771.2897422,
+    "ast_hash": "ce27a0c788dc4f14937662924e012901",
+    "semantic_hash": ""
+  },
+  "apps/api/tests/test_d10_failure_runner.py": {
+    "mtime": 1789025735.9678047,
+    "seen": 1789025771.2989175,
+    "ast_hash": "abab1b3986dcef6d16c74749938dde95",
+    "semantic_hash": ""
   }
 }
