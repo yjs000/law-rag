@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from scripts.d10_answer_judge import AnswerJudgeResult
-from scripts.run_d10_failure_driven import apply_answer_judgment, run_next_case
+from scripts.run_d10_failure_driven import (
+    apply_answer_judgment,
+    parse_arguments,
+    run_next_case,
+)
 
 
 @pytest.mark.asyncio
@@ -87,3 +93,34 @@ async def test_answer_stage_is_preserved_in_ledger(tmp_path) -> None:
     assert record.evaluation_stage == "answer"
     assert record.citation_count == 1
     assert record.actual_action == "answer"
+
+
+def test_cli_requires_sealed_directory_and_allows_one_case_override(tmp_path: Path) -> None:
+    args = parse_arguments(
+        [
+            "--sealed-dir",
+            str(tmp_path / "sealed"),
+            "--case-id",
+            "lay-energy-0201",
+            "--output-dir",
+            str(tmp_path / "output"),
+        ]
+    )
+
+    assert args.sealed_dir == tmp_path / "sealed"
+    assert args.case_id == "lay-energy-0201"
+    assert args.output_dir == tmp_path / "output"
+
+
+def test_cli_rejects_multiple_case_ids(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        parse_arguments(
+            [
+                "--sealed-dir",
+                str(tmp_path / "sealed"),
+                "--case-id",
+                "lay-energy-0201",
+                "--case-id",
+                "lay-energy-0251",
+            ]
+        )

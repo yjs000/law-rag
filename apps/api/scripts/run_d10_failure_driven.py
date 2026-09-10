@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Protocol
 
@@ -16,6 +17,22 @@ from scripts.d10_failure_ledger import (
 
 class SingleCaseExecutor(Protocol):
     async def __call__(self, case_id: str) -> dict[str, object]: ...
+
+
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the intentionally one-case-at-a-time native D-10 command."""
+    parser = argparse.ArgumentParser(description="Run one native D-10 answer evaluation case")
+    parser.add_argument("--sealed-dir", type=Path, required=True)
+    parser.add_argument("--case-id", action="append")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--output-dir", type=Path, default=Path(".data/experiments/d-gold-10"))
+    arguments = parser.parse_args(argv)
+    if arguments.case_id is not None and len(arguments.case_id) != 1:
+        parser.error("--case-id may be supplied at most once")
+    arguments.case_id = arguments.case_id[0] if arguments.case_id else None
+    if arguments.case_id is not None and arguments.resume:
+        parser.error("--case-id and --resume are mutually exclusive")
+    return arguments
 
 
 def apply_answer_judgment(
