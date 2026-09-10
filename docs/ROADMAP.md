@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 6ba238f3282e0b5d872b9792be11fcfe21ee4f6662d2a3ad337dea0df2b9a175 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 48232e37c13d82c3a46a549eeb21d93d174a225482605d1b357bc74349acc694 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: `lay-energy-0346`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: `lay-energy-0521`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
 
 ## Todo
 
