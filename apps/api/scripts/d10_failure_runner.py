@@ -8,12 +8,13 @@ the result payload consumed by the failure ledger.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
+from app.domain.schemas import QuestionRequest
 from scripts.experiment_d_10_frozen_contract import load_frozen_contract
 from scripts.experiment_d_10_gold_review import (
     load_workflow_contract,
@@ -42,6 +43,57 @@ class DenseReader(Protocol):
     async def search(
         self, *, as_of_date: date, query_embedding: list[float], limit: int
     ) -> list[object]: ...
+
+
+class AnswerExecutor(Protocol):
+    async def __call__(self, case: D10RunInput) -> object: ...
+
+
+def application_answer_executor(
+    execute: Callable[[QuestionRequest], Awaitable[object]],
+) -> AnswerExecutor:
+    """Bind a native D-10 input to the application answer request contract."""
+
+    async def _execute(case: D10RunInput) -> object:
+        return await execute(QuestionRequest(question=case.question, as_of_date=case.as_of_date))
+
+    return _execute
+
+
+@dataclass(frozen=True, slots=True)
+class D10AnswerExecution:
+    """Private answer observation with a deliberately safe public projection."""
+
+    case_id: str
+    response: object | None
+    retrieved_evidence_count: int
+    error_code: str | None = None
+
+    def safe_result(self) -> dict[str, object]:
+        if self.response is None:
+            return {
+                "case_id": self.case_id,
+                "status": "blocked",
+                "error_code": self.error_code or "answer_unavailable",
+                "retrieved_evidence_count": 0,
+                "citation_count": 0,
+                "citation_reason": "validated_by_answer_runner",
+                "evaluation_stage": "answer",
+                "actual_action": None,
+                "judge_codes": [],
+            }
+        action = getattr(self.response, "action", None)
+        return {
+            "case_id": self.case_id,
+            "status": "pass",
+            "error_code": None,
+            "retrieved_evidence_count": self.retrieved_evidence_count,
+            "citation_count": len(getattr(self.response, "citations", ())),
+            "citation_reason": "validated_by_answer_runner",
+            "evaluation_stage": "answer",
+            "actual_action": action,
+            "judge_codes": [],
+        }
 
 
 def _contract_error() -> D10FailureRunnerError:
@@ -145,3 +197,31 @@ async def run_single_case(
         "error_code": None if count else "no_retrieved_evidence",
         "retrieved_evidence_count": count,
     }
+
+
+async def run_single_answer_case(
+    case: D10RunInput, *, answer_executor: AnswerExecutor
+) -> D10AnswerExecution:
+    """Execute the application answer boundary without serializing its private response."""
+    try:
+        response = await answer_executor(case)
+    except Exception:
+        return D10AnswerExecution(
+            case_id=case.case_id,
+            response=None,
+            retrieved_evidence_count=0,
+            error_code="answer_unavailable",
+        )
+    citations = getattr(response, "citations", ())
+    if not isinstance(citations, (list, tuple)):
+        return D10AnswerExecution(
+            case_id=case.case_id,
+            response=None,
+            retrieved_evidence_count=0,
+            error_code="answer_contract_invalid",
+        )
+    return D10AnswerExecution(
+        case_id=case.case_id,
+        response=response,
+        retrieved_evidence_count=len(citations),
+    )

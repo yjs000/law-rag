@@ -7,9 +7,11 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.d10_failure_runner import (
+    D10AnswerExecution,
     D10FailureRunnerError,
     D10RunInput,
     load_d10_run_input,
+    run_single_answer_case,
     run_single_case,
 )
 
@@ -131,3 +133,68 @@ async def test_single_case_hides_provider_exception_and_marks_blocked() -> None:
     assert result["error_code"] == "retrieval_unavailable"
     assert "private question" not in str(result)
     assert "secret provider response" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_answer_case_returns_only_safe_action_and_counts() -> None:
+    async def answer_executor(_: D10RunInput) -> object:
+        return SimpleNamespace(
+            action="answer",
+            citations=(SimpleNamespace(id="C1", quote="private statute"),),
+            summary="private answer text",
+        )
+
+    execution = await run_single_answer_case(
+        D10RunInput("lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1"),
+        answer_executor=answer_executor,
+    )
+
+    assert isinstance(execution, D10AnswerExecution)
+    assert execution.safe_result() == {
+        "case_id": "lay-energy-0201",
+        "status": "pass",
+        "error_code": None,
+        "retrieved_evidence_count": 1,
+        "citation_count": 1,
+        "citation_reason": "validated_by_answer_runner",
+        "evaluation_stage": "answer",
+        "actual_action": "answer",
+        "judge_codes": [],
+    }
+    assert "private answer text" not in str(execution.safe_result())
+    assert "private statute" not in str(execution.safe_result())
+
+
+@pytest.mark.asyncio
+async def test_answer_case_hides_executor_exception() -> None:
+    async def broken_executor(_: D10RunInput) -> object:
+        raise RuntimeError("private provider detail")
+
+    execution = await run_single_answer_case(
+        D10RunInput("lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1"),
+        answer_executor=broken_executor,
+    )
+
+    assert execution.safe_result()["status"] == "blocked"
+    assert execution.safe_result()["error_code"] == "answer_unavailable"
+    assert "private provider detail" not in str(execution.safe_result())
+
+
+@pytest.mark.asyncio
+async def test_application_answer_executor_binds_fixed_question_and_date() -> None:
+    from scripts.d10_failure_runner import application_answer_executor
+
+    received: list[object] = []
+
+    async def execute(request: object) -> object:
+        received.append(request)
+        return SimpleNamespace(action="answer", citations=())
+
+    executor = application_answer_executor(execute)
+    await executor(
+        D10RunInput("lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1")
+    )
+
+    assert len(received) == 1
+    assert received[0].question == "private question"
+    assert received[0].as_of_date == date(2026, 8, 5)
