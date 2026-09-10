@@ -25,7 +25,11 @@ D10_CASE_ORDER = (
 D10_CASE_IDS = frozenset(D10_CASE_ORDER)
 ATTEMPT_STATUSES = frozenset({"pass", "failure", "blocked"})
 CITATION_REASON = "not_generated_by_retrieval_runner"
+ANSWER_CITATION_REASON = "validated_by_answer_runner"
 _SAFE_CODE = re.compile(r"[a-z0-9_]+")
+_ANSWER_ACTIONS = frozenset(
+    {"answer", "partial_answer_with_limits", "ask_clarifying_question", "insufficient_evidence"}
+)
 
 
 class LedgerValidationError(ValueError):
@@ -39,8 +43,11 @@ class AttemptRecord:
     status: Literal["pass", "failure", "blocked"]
     error_code: str | None
     retrieved_evidence_count: int
-    citation_count: None
+    citation_count: int | None
     citation_reason: str
+    evaluation_stage: Literal["retrieval", "answer"] = "retrieval"
+    actual_action: str | None = None
+    judge_codes: tuple[str, ...] = ()
 
     _FIELD_NAMES: ClassVar[tuple[str, ...]] = (
         "attempt_number",
@@ -50,6 +57,9 @@ class AttemptRecord:
         "retrieved_evidence_count",
         "citation_count",
         "citation_reason",
+        "evaluation_stage",
+        "actual_action",
+        "judge_codes",
     )
 
     @classmethod
@@ -58,9 +68,16 @@ class AttemptRecord:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, object]) -> AttemptRecord:
-        if set(value) != set(cls._FIELD_NAMES):
+        legacy_fields = set(cls._FIELD_NAMES[:7])
+        if set(value) != legacy_fields and set(value) != set(cls._FIELD_NAMES):
             raise LedgerValidationError("attempt_fields_invalid")
-        record = cls(**{field: value[field] for field in cls._FIELD_NAMES})
+        normalized = dict(value)
+        normalized.setdefault("evaluation_stage", "retrieval")
+        normalized.setdefault("actual_action", None)
+        normalized.setdefault("judge_codes", ())
+        if isinstance(normalized["judge_codes"], list):
+            normalized["judge_codes"] = tuple(normalized["judge_codes"])
+        record = cls(**{field: normalized[field] for field in cls._FIELD_NAMES})
         record.validate()
         return record
 
@@ -89,12 +106,36 @@ class AttemptRecord:
             self.status == "failure" or (self.status == "blocked" and self.error_code is not None)
         ):
             raise LedgerValidationError("zero_evidence_requires_failure")
-        if self.citation_count is not None or self.citation_reason != CITATION_REASON:
-            raise LedgerValidationError("retrieval_citation_contract_invalid")
+        if self.evaluation_stage == "retrieval":
+            if (
+                self.citation_count is not None
+                or self.citation_reason != CITATION_REASON
+                or self.actual_action is not None
+                or self.judge_codes
+            ):
+                raise LedgerValidationError("retrieval_citation_contract_invalid")
+            return
+        if self.evaluation_stage != "answer":
+            raise LedgerValidationError("evaluation_stage_invalid")
+        if (
+            isinstance(self.citation_count, bool)
+            or not isinstance(self.citation_count, int)
+            or self.citation_count < 0
+            or self.citation_reason != ANSWER_CITATION_REASON
+        ):
+            raise LedgerValidationError("answer_citation_contract_invalid")
+        if self.actual_action is not None and self.actual_action not in _ANSWER_ACTIONS:
+            raise LedgerValidationError("actual_action_invalid")
+        if not isinstance(self.judge_codes, tuple) or any(
+            not isinstance(code, str) or not _SAFE_CODE.fullmatch(code) for code in self.judge_codes
+        ):
+            raise LedgerValidationError("judge_codes_invalid")
 
     def to_dict(self) -> dict[str, object]:
         self.validate()
-        return asdict(self)
+        value = asdict(self)
+        value["judge_codes"] = list(self.judge_codes)
+        return value
 
 
 def _coerce_attempt(value: AttemptRecord | Mapping[str, object]) -> AttemptRecord:

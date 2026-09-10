@@ -144,3 +144,54 @@ def test_attempt_record_requires_null_retrieval_only_citation(tmp_path: Path) ->
                 citation_reason="not_generated_by_retrieval_runner",
             ),
         )
+
+
+def test_answer_attempt_records_action_judgment_without_answer_text(tmp_path: Path) -> None:
+    record = append_attempt(
+        tmp_path / "attempts.jsonl",
+        AttemptRecord(
+            attempt_number=1,
+            case_id="lay-energy-0201",
+            status="pass",
+            error_code=None,
+            retrieved_evidence_count=2,
+            citation_count=2,
+            citation_reason="validated_by_answer_runner",
+            evaluation_stage="answer",
+            actual_action="answer",
+            judge_codes=(),
+        ),
+    )
+
+    assert record.to_dict() == {
+        "attempt_number": 1,
+        "case_id": "lay-energy-0201",
+        "status": "pass",
+        "error_code": None,
+        "retrieved_evidence_count": 2,
+        "citation_count": 2,
+        "citation_reason": "validated_by_answer_runner",
+        "evaluation_stage": "answer",
+        "actual_action": "answer",
+        "judge_codes": [],
+    }
+
+
+@pytest.mark.parametrize("field", ("answer", "answer_text", "citation_text", "prompt"))
+def test_answer_attempt_rejects_sensitive_or_answer_text_fields(tmp_path: Path, field: str) -> None:
+    payload = {
+        "attempt_number": 1,
+        "case_id": "lay-energy-0201",
+        "status": "failure",
+        "error_code": "answer_empty",
+        "retrieved_evidence_count": 1,
+        "citation_count": 0,
+        "citation_reason": "validated_by_answer_runner",
+        "evaluation_stage": "answer",
+        "actual_action": "answer",
+        "judge_codes": ["answer_empty"],
+        field: "must never be persisted",
+    }
+
+    with pytest.raises(LedgerValidationError):
+        append_attempt(tmp_path / "attempts.jsonl", payload)

@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789025562.5583117,
-    "seen": 1789025623.8809574,
-    "ast_hash": "c6d0dd97ecd6d81ffd0cf0002b7e19c4",
+    "mtime": 1789026473.1995902,
+    "seen": 1789026777.1164405,
+    "ast_hash": "6d009e23c417af3b46c0dd6a779b7c57",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3198,9 +3198,9 @@
     "semantic_hash": ""
   },
   "docs/design-docs/index.md": {
-    "mtime": 1788513730.9531608,
-    "seen": 1788515861.5253024,
-    "ast_hash": "422fb4fdc32f3921c826398aa240218e",
+    "mtime": 1789026245.1839905,
+    "seen": 1789026777.119353,
+    "ast_hash": "19859c2ca4f0d75c0e5a302f7d940712",
     "semantic_hash": ""
   },
   "docs/design-docs/layperson-answer-contract-v2.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789025562.5593119,
-    "seen": 1789025623.8868167,
-    "ast_hash": "e28493788adc1d8fd1a0a607c16f9ebe",
+    "mtime": 1789026464.9844563,
+    "seen": 1789026777.1222055,
+    "ast_hash": "f59334263e9a9ae3bc3b3f910123c5dc",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
@@ -3810,15 +3810,15 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_failure_ledger.py": {
-    "mtime": 1789025990.1040044,
-    "seen": 1789026029.3738332,
-    "ast_hash": "1a3845b6e5229ff29103a112ea763f69",
+    "mtime": 1789026733.4564931,
+    "seen": 1789026777.0558221,
+    "ast_hash": "07757239c8a84a019a96f4633ea82eaa",
     "semantic_hash": ""
   },
   "apps/api/tests/test_d10_failure_ledger.py": {
-    "mtime": 1789025953.7780645,
-    "seen": 1789026029.3835752,
-    "ast_hash": "8dee66134de65206d46f5b860c883102",
+    "mtime": 1789026689.4793432,
+    "seen": 1789026777.065319,
+    "ast_hash": "9ae86d996216c94554418d85dd0c9118",
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_failure_runner.py": {
@@ -3843,6 +3843,12 @@
     "mtime": 1789025816.4113042,
     "seen": 1789025868.829712,
     "ast_hash": "69be779201a3d2ef61401d0ec09818f8",
+    "semantic_hash": ""
+  },
+  "docs/design-docs/experiment-d-10-end-to-end-failure-regression.md": {
+    "mtime": 1789026244.7729905,
+    "seen": 1789026777.118075,
+    "ast_hash": "2ac9b57a18e336fe443a82fda5f8d809",
     "semantic_hash": ""
   }
 }
