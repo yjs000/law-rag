@@ -1,33 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-function Resolve-TestTempParent {
-    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_TEST_TEMP_ROOT)) {
-        return $env:CODEX_TEST_TEMP_ROOT
-    }
-
-    if ($env:CODEX_SESSION_ID -and $env:USERPROFILE) {
-        $visualizationsRoot = Join-Path $env:USERPROFILE ".codex\visualizations"
-        if (Test-Path $visualizationsRoot) {
-            $sessionDirectory = Get-ChildItem -Path $visualizationsRoot -Directory -Recurse -Filter $env:CODEX_SESSION_ID -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($sessionDirectory) {
-                return $sessionDirectory.FullName
-            }
-        }
-    }
-
-    return (Join-Path $repoRoot ".data")
-}
-
-$tempParent = Resolve-TestTempParent
-$tempRoot = Join-Path $tempParent "test-tmp-$PID"
-New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
-$corePytestTemp = Join-Path $tempRoot "pytest-core"
-$apiPytestTemp = Join-Path $tempRoot "pytest-api"
-$collectorPytestTemp = Join-Path $tempRoot "pytest-collector"
-$env:TEMP = $tempRoot
-$env:TMP = $tempRoot
-$env:PYTHONPATH = "$(Join-Path $repoRoot 'apps\api');$(Join-Path $repoRoot 'apps\collector\src');$(Join-Path $repoRoot 'packages\law-rag-core\src')"
+$pythonRunner = Join-Path $repoRoot "scripts\run_python.ps1"
 
 function Assert-LastExitCode {
     if ($LASTEXITCODE -ne 0) {
@@ -35,28 +9,25 @@ function Assert-LastExitCode {
     }
 }
 
-uv run --project packages/law-rag-core python -m pytest --basetemp $corePytestTemp packages/law-rag-core/tests
-Assert-LastExitCode
-uv run --project packages/law-rag-core ruff check packages/law-rag-core
-Assert-LastExitCode
+function Invoke-WorkspacePython {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $pythonRunner @args
+    Assert-LastExitCode
+}
+
+Invoke-WorkspacePython -m pytest -p no:cacheprovider packages/law-rag-core/tests
+Invoke-WorkspacePython -m ruff check packages/law-rag-core
 Push-Location apps/api
 try {
-    uv run --project . python -m pytest --basetemp $apiPytestTemp tests
-    Assert-LastExitCode
+    Invoke-WorkspacePython -m pytest -p no:cacheprovider tests
 }
 finally {
     Pop-Location
 }
-uv run --project apps/api ruff check apps/api/app apps/api/tests apps/api/scripts
-Assert-LastExitCode
-uv run --project apps/collector python -m pytest --basetemp $collectorPytestTemp apps/collector/tests
-Assert-LastExitCode
-uv run --project apps/collector ruff check apps/collector/src apps/collector/tests
-Assert-LastExitCode
-uv run --project apps/api python scripts/check_docs.py
-Assert-LastExitCode
-uv run --project apps/api python scripts/check_roadmap.py
-Assert-LastExitCode
+Invoke-WorkspacePython -m ruff check apps/api/app apps/api/tests apps/api/scripts
+Invoke-WorkspacePython -m pytest -p no:cacheprovider apps/collector/tests
+Invoke-WorkspacePython -m ruff check apps/collector/src apps/collector/tests
+Invoke-WorkspacePython scripts/check_docs.py
+Invoke-WorkspacePython scripts/check_roadmap.py
 pnpm.cmd lint:web
 Assert-LastExitCode
 pnpm.cmd typecheck

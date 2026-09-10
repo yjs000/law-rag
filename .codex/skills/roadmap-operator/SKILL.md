@@ -59,8 +59,8 @@ description: Use when starting, resuming, or transitioning a law-rag execution-p
 메타데이터를 변경한 뒤 다음 명령을 순서대로 실행한다.
 
 ```powershell
-uv run --project apps/api python scripts/render_roadmap.py
-uv run --project apps/api python scripts/check_roadmap.py
+.\scripts\run_python.ps1 scripts/render_roadmap.py
+.\scripts\run_python.ps1 scripts/check_roadmap.py
 ```
 
 staged 상태를 확인할 때는 `python scripts/check_roadmap.py --staged`를 사용한다. renderer만
@@ -73,3 +73,5 @@ staged 상태를 확인할 때는 `python scripts/check_roadmap.py --staged`를 
 - 계획 본문·완료 계획·전체 아키텍처를 먼저 읽는 것 — 선택한 헤더와 `참고 범위`부터 확인한다.
 - 범위 확장 선언 없이 파일을 여는 것 — path, 시작줄, 끝줄, 이유를 먼저 기록한다.
 - 전이 전후에 읽은 범위를 보고하지 않는 것 — 위의 두 줄 형식을 사용한다.
+- Windows Codex sandbox에서 기존 `.uv-cache` 또는 `.venv`의 lock 접근 오류가 난 뒤
+  `uv run`을 반복하는 것 — 저장소의 `scripts/run_python.ps1`을 사용한다.

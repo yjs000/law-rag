@@ -170,6 +170,18 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 4. 스키마 변경 시 마이그레이션 및 `docs/generated/db-schema.md` 갱신
 5. 사용자 동작 변경 시 제품 명세와 운영 문서 갱신
 
+### Windows Python 검증 실행
+
+- 이미 준비된 workspace 의존성으로 Python 테스트·lint·문서 검증을 실행할 때는
+  `scripts/run_python.ps1`을 사용한다. 전체 검증 진입점은 `scripts/verify.ps1`이다.
+- `uv run`이 `.uv-cache` 초기화, `.venv\.lock`, `access denied` 또는 trampoline 경로 정규화
+  오류로 실패하면 같은 명령을 반복하지 않는다. 이는 테스트 실패가 아닌 runner 오류로 분류하고
+  `scripts/run_python.ps1`로 전환한다.
+- pytest `tmp_path`가 새 임시 디렉터리에서 `access denied`로 실패하면 다른 temp 경로를 반복해서
+  시도하지 않는다. 전체 `scripts/verify.ps1`을 platform runtime 권한 상승으로 한 번 재실행한다.
+- 의존성 설치·동기화가 실제로 필요한 경우에만 `uv`를 사용하며, 그때는 sandbox가 쓸 수 있는 새
+  cache와 project environment를 함께 지정한다.
+
 ## GitHub 인증 확인
 
 - sandbox 안에서 실행한 `gh auth status`가 token을 `invalid`로 보고해도 곧바로 실제 인증 실패로 단정하거나 사용자에게 재로그인을 요구하지 않는다. Windows Credential Manager/keyring 접근이 sandbox에 차단된 false negative일 수 있다.
