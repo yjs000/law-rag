@@ -69,7 +69,16 @@ def test_load_rejects_sealed_case_order_mismatch(tmp_path) -> None:
 def test_load_returns_only_selected_case_and_frozen_binding(tmp_path) -> None:
     (tmp_path / "dataset.json").write_text(
         json.dumps(
-            {"cases": [{"case_id": item, "question_sha256": "question-hash"} for item in CASE_IDS]}
+            {
+                "cases": [
+                    {
+                        "case_id": item,
+                        "question_sha256": "question-hash",
+                        "expected_action": "answer",
+                    }
+                    for item in CASE_IDS
+                ]
+            }
         ),
         encoding="utf-8",
     )
@@ -84,7 +93,7 @@ def test_load_returns_only_selected_case_and_frozen_binding(tmp_path) -> None:
     )
 
     assert result == D10RunInput(
-        "lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1"
+        "lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1", "answer"
     )
 
 
@@ -163,6 +172,19 @@ async def test_answer_case_returns_only_safe_action_and_counts() -> None:
     }
     assert "private answer text" not in str(execution.safe_result())
     assert "private statute" not in str(execution.safe_result())
+
+
+@pytest.mark.asyncio
+async def test_answer_case_maps_runtime_action_to_expected_action_vocabulary() -> None:
+    async def answer_executor(_: D10RunInput) -> object:
+        return SimpleNamespace(action="fully_answerable", citations=())
+
+    execution = await run_single_answer_case(
+        D10RunInput("lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1"),
+        answer_executor=answer_executor,
+    )
+
+    assert execution.safe_result()["actual_action"] == "answer"
 
 
 @pytest.mark.asyncio

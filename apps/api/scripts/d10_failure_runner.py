@@ -33,6 +33,7 @@ class D10RunInput:
     question: str
     as_of_date: date
     corpus_snapshot_id: str
+    expected_action: str | None = None
 
 
 class QueryEmbedder(Protocol):
@@ -97,7 +98,16 @@ class D10AnswerExecution:
                 "actual_action": None,
                 "judge_codes": [],
             }
-        action = getattr(self.response, "action", None)
+        action = {
+            "answer": "answer",
+            "partial_answer_with_limits": "partial_answer_with_limits",
+            "ask_clarifying_question": "ask_clarifying_question",
+            "insufficient_evidence": "insufficient_evidence",
+            "fully_answerable": "answer",
+            "partially_answerable": "partial_answer_with_limits",
+            "clarification_required": "ask_clarifying_question",
+            "unanswerable": "insufficient_evidence",
+        }.get(getattr(self.response, "action", None))
         return {
             "case_id": self.case_id,
             "status": "pass",
@@ -172,6 +182,13 @@ def load_d10_run_input(
         or dataset_case is None
         or question.question_sha256 != frozen_case.question_sha256
         or question.question_sha256 != dataset_case.get("question_sha256")
+        or dataset_case.get("expected_action")
+        not in {
+            "answer",
+            "partial_answer_with_limits",
+            "ask_clarifying_question",
+            "insufficient_evidence",
+        }
     ):
         raise _contract_error()
     return D10RunInput(
@@ -179,6 +196,7 @@ def load_d10_run_input(
         question=question.question,
         as_of_date=date.fromisoformat(frozen.run_binding.as_of_date),
         corpus_snapshot_id=frozen.run_binding.corpus_snapshot_id,
+        expected_action=str(dataset_case["expected_action"]),
     )
 
 
