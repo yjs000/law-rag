@@ -31,7 +31,7 @@ D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경�
 
 `D10AnswerCaseRunner`는 native D-10 loader가 만든 한 문항 입력을 실제 V2 HTTP application 경계에 전달한다. 실행 순서는 `POST /v2/question-executions` prepare, `POST /v2/question-executions/{execution_id}/core`, `POST /v2/question-executions/{execution_id}/finalize`이며 core·finalize의 SSE 결과를 판정 입력으로 사용한다. 중단·정리에는 기존 `DELETE /v2/question-executions/{execution_id}`만 사용한다. 현재 제품 계약에 없는 `GET /v2/question-executions/{execution_id}`를 E-006을 위해 새로 만들지 않는다. runner의 내부 입력에는 질문·기준일·corpus binding이 있지만, public output에는 `case_id`, `status`, `error_code`, `retrieved_evidence_count`, `citation_count`, `citation_reason`, `actual_action`, `judge_codes`만 둔다.
 
-E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestBudget`도 생성하지 않는다. 따라서 V1의 routing 8초, embedding 5초, retrieval 8초, answer 40초 예산은 이 평가에 적용하지 않는다. V2 production 설정의 phase deadline `57초`와 provider budget `55초`를 고정 사용한다. 각 V2 phase는 자기 deadline 안에서 완료하거나 안전한 timeout 상태를 기록하며, V1 8초 routing 제한을 V2 prepare에 재사용하지 않는다.
+E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestBudget`도 생성하지 않는다. 따라서 V1의 routing 8초, embedding 5초, retrieval 8초, answer 40초 예산은 이 평가에 적용하지 않는다. `POST /v2/question-executions`는 전체 prepare deadline `57초`를 적용하고, 그 안의 V2 router provider 호출은 재시도 없이 한 번만 최대 `55초` 실행한다. provider가 먼저 timeout되면 안전한 `routing_unavailable` 결정을 저장하고, prepare 전체가 57초를 넘으면 `504 v2_prepare_timeout`을 반환한다.
 
 `D10AnswerJudge`는 sealed case의 `expected_action`과 public answer metadata를 비교한다. 답변 본문과 citation evidence는 runner 내부에서만 검사하고, 통과/실패 code만 외부로 내보낸다. judge는 모델에게 채점시키지 않으며 결정적 규칙만 사용한다.
 

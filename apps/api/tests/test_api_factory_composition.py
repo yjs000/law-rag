@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from law_rag_core.domain.catalog import SourceKind
 
+import app.bootstrap as bootstrap_module
 import app.main as main_module
 from app.bootstrap import V2LlamaIndexResources
 from app.domain.schemas import QuestionResponse, SearchHit
@@ -102,6 +103,28 @@ def test_factory_v2_request_uses_the_supplied_resources(
     assert response.json()[0]["document_title"] == "Factory dependency statute"
 
 
+def test_factory_composition_exposes_its_v2_question_router() -> None:
+    """Fail if a factory-created app silently falls back to the process V2 router."""
+    from app.api.dependencies import (
+        bind_app_dependencies,
+        reset_app_dependencies,
+    )
+    from app.api.dependencies import (
+        main_module as resolve_main_module,
+    )
+
+    v2_router = object()
+    factory_dependencies = replace(
+        main_module.dependencies,
+        v2_nvidia_question_router=v2_router,
+    )
+    token = bind_app_dependencies(factory_dependencies)
+    try:
+        assert resolve_main_module().v2_nvidia_question_router is v2_router
+    finally:
+        reset_app_dependencies(token)
+
+
 def test_question_route_uses_the_runtime_main_answer_seam(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,14 +172,42 @@ async def test_app_lifespan_closes_each_long_lived_nvidia_adapter_once() -> None
     embedder = Adapter()
     answerer = Adapter()
     router = Adapter()
+    v2_router = Adapter()
     app_dependencies = replace(
         main_module.dependencies,
         nvidia_embedder=embedder,
         nvidia_answerer=answerer,
         nvidia_question_router=router,
+        v2_nvidia_question_router=v2_router,
     )
 
     async with app_dependencies.lifespan(object()):
         pass
 
-    assert (embedder.close_calls, answerer.close_calls, router.close_calls) == (1, 1, 1)
+    assert (
+        embedder.close_calls,
+        answerer.close_calls,
+        router.close_calls,
+        v2_router.close_calls,
+    ) == (1, 1, 1, 1)
+
+
+def test_v2_router_uses_one_attempt_with_the_55_second_provider_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch V2 prepare using a short provider budget or retrying."""
+    captured: list[tuple[float, int]] = []
+
+    class Router:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append((float(kwargs["timeout_seconds"]), int(kwargs["max_attempts"])))
+
+    monkeypatch.setattr(bootstrap_module, "NvidiaNimQuestionRouter", Router)
+
+    bootstrap_module.build_nvidia_question_router(
+        main_module.settings,
+        timeout_seconds=main_module.settings.v2_provider_budget_seconds,
+        max_attempts=1,
+    )
+
+    assert captured == [(55, 1)]

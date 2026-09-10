@@ -24,7 +24,9 @@ from app.adapters.capacity_leases import (
     PostgresCapacityLeaseStore,
     PostgresConcurrencyLimiter,
 )
-from app.adapters.llamaindex_clarification_workflow import LlamaIndexClarificationWorkflow
+from app.adapters.llamaindex_clarification_workflow import (
+    LlamaIndexClarificationWorkflow,
+)
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
 from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
@@ -49,7 +51,10 @@ from app.adapters.structured_clarification_continuation import (
 )
 from app.adapters.supabase_auth import SupabaseAuth
 from app.application.clarification_workflow import ClarificationTurnOrchestrator
-from app.application.v1.dependencies import QueryEmbeddingCapability, V1AnswerDependencies
+from app.application.v1.dependencies import (
+    QueryEmbeddingCapability,
+    V1AnswerDependencies,
+)
 from app.application.v2.dependencies import (
     ClarificationWorkflowDependencies,
     V2ExecutionDependencies,
@@ -116,6 +121,7 @@ class AppDependencies:
     nvidia_clarification_interpreter: NvidiaNimClarificationInterpreter | None
     clarification_workflow: ClarificationTurnOrchestrator | None
     nvidia_question_router: NvidiaNimQuestionRouter | None
+    v2_nvidia_question_router: NvidiaNimQuestionRouter | None
     supabase_auth: SupabaseAuth | None
     postgres_identity: PostgresIdentityRepository | None
     collector_load_errors: tuple[str, ...]
@@ -132,6 +138,7 @@ class AppDependencies:
             self.nvidia_answerer,
             self.nvidia_clarification_interpreter,
             self.nvidia_question_router,
+            self.v2_nvidia_question_router,
         ):
             if adapter:
                 await adapter.aclose()
@@ -154,7 +161,8 @@ class V2ApplicationCallbacks:
     check_quota: Callable[[str, MockUser | None], Awaitable[None]]
     require_supported_date: Callable[[Any, LegalRepository], Awaitable[None]]
     save_authenticated: Callable[
-        [MockUser | None, QuestionRequest, QuestionResponse], Awaitable[QuestionResponse]
+        [MockUser | None, QuestionRequest, QuestionResponse],
+        Awaitable[QuestionResponse],
     ]
     clarification_cases: Any
     execution_capability: Callable[[str, str], str]
@@ -322,6 +330,15 @@ def build_app_dependencies(
         build_nvidia_clarification_interpreter(settings) if settings.ai_enabled else None
     )
     nvidia_question_router = build_nvidia_question_router(settings) if settings.ai_enabled else None
+    v2_nvidia_question_router = (
+        build_nvidia_question_router(
+            settings,
+            timeout_seconds=settings.v2_provider_budget_seconds,
+            max_attempts=1,
+        )
+        if settings.ai_enabled
+        else None
+    )
     clarification_workflow = (
         LlamaIndexClarificationWorkflow(
             ClarificationWorkflowDependencies(
@@ -357,6 +374,7 @@ def build_app_dependencies(
         nvidia_clarification_interpreter=nvidia_clarification_interpreter,
         clarification_workflow=clarification_workflow,
         nvidia_question_router=nvidia_question_router,
+        v2_nvidia_question_router=v2_nvidia_question_router,
         supabase_auth=supabase_auth,
         postgres_identity=postgres_identity,
         collector_load_errors=tuple(collector_load_errors),
@@ -399,7 +417,9 @@ def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
     )
 
 
-def build_nvidia_clarification_interpreter(settings: Settings) -> NvidiaNimClarificationInterpreter:
+def build_nvidia_clarification_interpreter(
+    settings: Settings,
+) -> NvidiaNimClarificationInterpreter:
     """Create the single configured Ultra interpreter for clarification turns."""
 
     return NvidiaNimClarificationInterpreter(
@@ -418,14 +438,24 @@ def build_structured_clarification_continuation_extractor() -> (
     return StructuredClarificationContinuationExtractor()
 
 
-def build_nvidia_question_router(settings: Settings) -> NvidiaNimQuestionRouter:
-    """Create the shared question-routing adapter from API configuration."""
+def build_nvidia_question_router(
+    settings: Settings,
+    *,
+    timeout_seconds: float | None = None,
+    max_attempts: int = 2,
+) -> NvidiaNimQuestionRouter:
+    """Create a question-routing adapter with an explicit request budget."""
 
     return NvidiaNimQuestionRouter(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
         model=settings.nvidia_route_classifier_model,
-        timeout_seconds=settings.route_classifier_timeout_seconds,
+        timeout_seconds=(
+            settings.route_classifier_timeout_seconds
+            if timeout_seconds is None
+            else timeout_seconds
+        ),
+        max_attempts=max_attempts,
     )
 
 

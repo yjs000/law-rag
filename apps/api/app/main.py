@@ -90,7 +90,7 @@ def _v2_service_dependencies():
             resolve_repository=_v2_repository,
             active_provider=_v2_active_provider,
             retrieve_evidence=_retrieve_pinned_v2_evidence,
-            route=lambda question: route_question(question, _question_router()),
+            route=lambda question: route_question(question, _v2_question_router()),
             answerer=_answerer,
             ai_available=_ai_available,
             check_quota=_check_v2_quota,
@@ -118,6 +118,7 @@ llamaindex_repository = None
 nvidia_embedder = dependencies.nvidia_embedder
 nvidia_answerer = dependencies.nvidia_answerer
 nvidia_question_router = dependencies.nvidia_question_router
+v2_nvidia_question_router = dependencies.v2_nvidia_question_router
 v2_question_execution_service = dependencies.v2_service
 clarification_workflow = dependencies.clarification_workflow
 supabase_auth = dependencies.supabase_auth
@@ -156,7 +157,11 @@ def _llamaindex_resources() -> tuple[object | None, object | None, object | None
     global llamaindex_embedder, llamaindex_repository, llamaindex_vector_store
     if any(
         resource is not None
-        for resource in (llamaindex_vector_store, llamaindex_embedder, llamaindex_repository)
+        for resource in (
+            llamaindex_vector_store,
+            llamaindex_embedder,
+            llamaindex_repository,
+        )
     ):
         return llamaindex_vector_store, llamaindex_embedder, llamaindex_repository
     try:
@@ -222,7 +227,9 @@ def _current_korea_date() -> date:
     return korea_today()
 
 
-async def _load_corpus_temporal_state(current_repository: LegalRepository) -> CorpusTemporalState:
+async def _load_corpus_temporal_state(
+    current_repository: LegalRepository,
+) -> CorpusTemporalState:
     try:
         return await current_repository.corpus_temporal_state(_current_korea_date())
     except Exception as exc:
@@ -307,6 +314,15 @@ def _question_router() -> Any:
     adapter = main_module().nvidia_question_router
     if adapter is None:
         raise RuntimeError("NVIDIA question router is unavailable")
+    return adapter
+
+
+def _v2_question_router() -> Any:
+    """Return the V2 prepare router with its phase-specific provider budget."""
+
+    adapter = main_module().v2_nvidia_question_router
+    if adapter is None:
+        raise RuntimeError("V2 NVIDIA question router is unavailable")
     return adapter
 
 

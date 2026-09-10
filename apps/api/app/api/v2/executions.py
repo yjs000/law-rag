@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from typing import Annotated, Any
 from uuid import UUID
@@ -11,9 +12,16 @@ from law_rag_core.ports.repository import LegalRepository
 
 from app.adapters.openai_answerer import CoreDraft
 from app.api.dependencies import _optional_user, main_module
-from app.application.clarification_workflow import ClarificationOwner, ClarificationTurnRequest
+from app.application.clarification_workflow import (
+    ClarificationOwner,
+    ClarificationTurnRequest,
+)
 from app.application.question_phase_coordinator import PhaseResult
-from app.application.v2.dependencies import PhaseRequest, PreparedExecution, PrepareQuestion
+from app.application.v2.dependencies import (
+    PhaseRequest,
+    PreparedExecution,
+    PrepareQuestion,
+)
 from app.application.v2.grounding import ClarificationGrounding
 from app.domain.routing import RouteDecision
 from app.domain.schemas import Citation, MockUser, QuestionRequest, QuestionResponse
@@ -27,7 +35,10 @@ router = APIRouter()
 def _not_ready_error() -> HTTPException:
     return HTTPException(
         status_code=503,
-        detail={"code": "v2_search_not_ready", "message": "v2 검색을 아직 사용할 수 없습니다."},
+        detail={
+            "code": "v2_search_not_ready",
+            "message": "v2 검색을 아직 사용할 수 없습니다.",
+        },
     )
 
 
@@ -85,24 +96,31 @@ async def prepare_question_execution(
     """Freeze active evidence before the core or finalize provider phases start."""
 
     main = main_module()
-    user = await _optional_user(request.headers.get("authorization"))
-    owner_scope = main._question_owner(request, user)
-    clarification, clarification_outcome, route_decision = await _prepare_clarification_turn(
-        main, payload, owner_scope, user
-    )
-    prepared = await main.v2_question_execution_service.prepare(
-        PrepareQuestion(
-            payload=payload,
-            owner_scope=owner_scope,
-            idempotency_key=idempotency_key,
-            user=user,
-            clarification=clarification,
-            clarification_outcome=clarification_outcome,
-            route_decision=route_decision,
-        )
-    )
+    try:
+        async with asyncio.timeout(main.settings.v2_phase_timeout_seconds):
+            user = await _optional_user(request.headers.get("authorization"))
+            owner_scope = main._question_owner(request, user)
+            (
+                clarification,
+                clarification_outcome,
+                route_decision,
+            ) = await _prepare_clarification_turn(main, payload, owner_scope, user)
+            prepared = await main.v2_question_execution_service.prepare(
+                PrepareQuestion(
+                    payload=payload,
+                    owner_scope=owner_scope,
+                    idempotency_key=idempotency_key,
+                    user=user,
+                    clarification=clarification,
+                    clarification_outcome=clarification_outcome,
+                    route_decision=route_decision,
+                )
+            )
+            response = main.v2_question_execution_service.prepared_response(prepared)
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="v2_prepare_timeout") from exc
     emit_execution_phase(str(prepared.execution.execution_id), "prepare", "prepared")
-    return main.v2_question_execution_service.prepared_response(prepared)
+    return response
 
 
 async def _prepare_clarification_turn(
@@ -121,14 +139,18 @@ async def _prepare_clarification_turn(
     route_decision: RouteDecision | None = None
     if not is_continuation:
         try:
-            route_decision = await main.route_question(payload.question, main._question_router())
+            route_decision = await main.route_question(payload.question, main._v2_question_router())
         except TimeoutError:
             route_decision = RouteDecision(
-                route="routing_unavailable", reason_code="routing_timeout", confidence=0.0
+                route="routing_unavailable",
+                reason_code="routing_timeout",
+                confidence=0.0,
             )
         except Exception:  # noqa: BLE001 - optional provider routing must not block prepare
             route_decision = RouteDecision(
-                route="routing_unavailable", reason_code="routing_provider_error", confidence=0.0
+                route="routing_unavailable",
+                reason_code="routing_provider_error",
+                confidence=0.0,
             )
         if route_decision.route != "clarification_required":
             return None, None, route_decision
@@ -200,7 +222,9 @@ async def _v2_response_from_frozen_evidence(execution: Any) -> QuestionResponse:
     )
 
 
-async def _v2_core_from_frozen_evidence(execution: Any) -> tuple[CoreDraft, list[Citation]]:
+async def _v2_core_from_frozen_evidence(
+    execution: Any,
+) -> tuple[CoreDraft, list[Citation]]:
     return await main_module().v2_question_execution_service.core_from_frozen_evidence(execution)
 
 

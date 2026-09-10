@@ -98,7 +98,8 @@ async def test_v2_phase_finishes_before_returning_serverless_stream(
             await release.wait()
             return (
                 AnswerEvent(
-                    event_type="phase_complete", payload={"next_action": "generate_detail"}
+                    event_type="phase_complete",
+                    payload={"next_action": "generate_detail"},
                 ),
             )
 
@@ -229,7 +230,7 @@ def test_v2_prepare_persists_one_routing_unavailable_decision_after_optional_rou
         main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
     )
     monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
-    monkeypatch.setattr(main_module, "_question_router", lambda: object())
+    monkeypatch.setattr(main_module, "_v2_question_router", lambda: object())
     monkeypatch.setattr(main_module, "route_question", provider_timeout)
 
     response = TestClient(main_module.app, raise_server_exceptions=False).post(
@@ -243,6 +244,61 @@ def test_v2_prepare_persists_one_routing_unavailable_decision_after_optional_rou
     assert router_calls == 1
     execution = executions._records[UUID(response.json()["execution_id"])]
     assert execution.private_payload["route"] == "routing_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_v2_prepare_uses_v2_router_seam_instead_of_v1_router(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.api.v2.executions import _prepare_clarification_turn
+
+    v2_router = object()
+
+    def fail_v1_router() -> object:
+        raise AssertionError("V1 router must not be used by V2 prepare")
+
+    async def route_question(question: str, router: object) -> SimpleNamespace:
+        assert question == "private question"
+        assert router is v2_router
+        return SimpleNamespace(route="legal_search", missing_fields=())
+
+    monkeypatch.setattr(main_module, "_question_router", fail_v1_router)
+    monkeypatch.setattr(main_module, "_v2_question_router", lambda: v2_router)
+    monkeypatch.setattr(main_module, "route_question", route_question)
+    monkeypatch.setattr(main_module, "clarification_workflow", object())
+
+    _, _, decision = await _prepare_clarification_turn(
+        main_module,
+        QuestionRequest(question="private question"),
+        "anonymous:test",
+        None,
+    )
+
+    assert decision is not None
+    assert decision.route == "legal_search"
+
+
+def test_v2_prepare_enforces_the_v2_phase_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v2.executions as executions_module
+    import app.main as main_module
+
+    async def slow_prepare(*_args: object) -> None:
+        await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(executions_module, "_prepare_clarification_turn", slow_prepare)
+    monkeypatch.setattr(main_module.settings, "v2_phase_timeout_seconds", 0.01)
+
+    response = TestClient(main_module.app, raise_server_exceptions=False).post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "prepare-deadline"},
+        json={"question": "private question", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "v2_prepare_timeout"
 
 
 def test_v2_prepare_hides_foreign_clarification_cases_as_not_found(
@@ -319,7 +375,11 @@ async def test_v2_core_persists_only_verified_summary_and_finalize_generates_det
                     )
                 ],
                 checklist=[
-                    {"label": "원문을 확인하세요.", "status": "check", "citation_ids": ["C1"]}
+                    {
+                        "label": "원문을 확인하세요.",
+                        "status": "check",
+                        "citation_ids": ["C1"],
+                    }
                 ],
                 action="fully_answerable",
             )
@@ -425,7 +485,9 @@ def test_prepare_core_finalize_replays_authoritative_phase_events(
             return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
 
     monkeypatch.setattr(
-        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+        main_module,
+        "question_execution_repository",
+        MemoryQuestionExecutionRepository(),
     )
     monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
     monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
@@ -516,7 +578,9 @@ def test_v2_phase_routes_invoke_main_compatibility_producers(
         )
 
     monkeypatch.setattr(
-        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+        main_module,
+        "question_execution_repository",
+        MemoryQuestionExecutionRepository(),
     )
     monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
     monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
@@ -564,7 +628,9 @@ def test_prepare_replay_does_not_retrieve_again_and_anonymous_phase_requires_cap
             return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
 
     monkeypatch.setattr(
-        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+        main_module,
+        "question_execution_repository",
+        MemoryQuestionExecutionRepository(),
     )
     monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
     monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
@@ -612,7 +678,9 @@ def test_provider_capacity_rejection_is_an_http_503_before_the_phase_stream(
         raise HTTPException(status_code=503, detail="system_busy")
 
     monkeypatch.setattr(
-        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+        main_module,
+        "question_execution_repository",
+        MemoryQuestionExecutionRepository(),
     )
     monkeypatch.setattr(main_module, "_admit_v2_provider_phase", busy_admission)
     monkeypatch.setattr(main_module, "_ai_available", lambda: True)

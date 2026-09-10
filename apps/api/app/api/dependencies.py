@@ -28,6 +28,7 @@ _COMPOSITION_ATTRIBUTES = {
     "repository": "repository",
     "supabase_auth": "supabase_auth",
     "v1_query_embedding_capability": "v1_query_embedding_capability",
+    "v2_nvidia_question_router": "v2_nvidia_question_router",
     "v2_question_execution_service": "v2_service",
 }
 
