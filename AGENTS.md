@@ -186,9 +186,10 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 
 ## Graphify 산출물 커밋 정책
 
-- 코드 변경이 있는 기능·버그·리팩터링 커밋은 `graphify update .`를 실행한 뒤, 변경된 `graphify-out/` 산출물을 해당 기능 커밋에 함께 포함한다. 그래프 산출물만 따로 커밋하지 않는다.
-- 갱신이 실패하면 원인을 해결하거나, 해결이 현재 범위를 벗어나면 실패 원인과 잔여 산출물을 실행 계획에 기록한다. 이전 작업이나 사용자가 이미 만든 `graphify-out/` 변경은 현재 기능 커밋에 섞지 않는다.
-- 로컬 질의 상태·AST 캐시 등 `.gitignore`에 명시된 graphify 임시 파일은 계속 커밋하지 않는다.
+- 기능 worktree와 기능 커밋에서는 `graphify update .`를 실행하거나 `graphify-out/` 산출물을 커밋하지 않는다. 여러 worktree가 같은 생성 파일을 각각 갱신해 병합 충돌을 만드는 일을 피하기 위해 Graphify 산출물은 통합 대상 브랜치가 소유한다.
+- 기능 브랜치를 통합 대상 브랜치에 모두 적용한 뒤 그 브랜치에서 `graphify update .`를 한 번 실행한다. 가능하면 `git merge --no-ff --no-commit <branch>`로 소스 병합을 준비하고, 갱신된 추적 산출물을 같은 merge commit에 포함한다. 선형 이력이나 fast-forward 때문에 별도 커밋이 필요하면 하나의 `chore(graph): refresh knowledge graph` 통합 커밋으로 묶을 수 있다.
+- 통합 시 갱신이 실패하면 원인을 해결하거나, 해결이 현재 범위를 벗어나면 실패 원인과 잔여 산출물을 실행 계획에 기록한다. 기존 사용자 변경이나 다른 작업의 `graphify-out/` 변경을 현재 통합 커밋에 섞지 않는다.
+- `.graphify_python`, `.graphify_root`, 질의 memory/reflection, vocabulary, stale marker, 학습 sidecar와 `cache/` 전체는 worktree별 로컬 상태다. `.gitignore`에 유지하고 커밋하지 않는다.
 
 ## graphify
 
@@ -201,4 +202,4 @@ Rules:
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- After integrating code into the target branch, run `graphify update .` once there to keep the graph current (AST-only, no API cost). Do not update or commit Graphify outputs from feature worktrees.
