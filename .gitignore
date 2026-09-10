@@ -9,6 +9,8 @@ __pycache__/
 .pytest_cache/
 .pytest-tmp-*/
 .pytest-temp-*/
+.tmp-pytest-*/
+.tmp-roadmap-registry-tests/
 .ruff_cache/
 .uv-cache/
 .venv/

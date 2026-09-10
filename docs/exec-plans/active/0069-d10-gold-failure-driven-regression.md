@@ -3,7 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold의 `approved_gold` 상태, `.env.local`, NVIDIA와 Supabase V2 E2E 전체 접근 승인, clean code provenance가 준비되어야 한다.
-> 다음 행동: `lay-energy-0201`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
+> 다음 행동: 원격 개발·테스트 DB의 migration `0017` 적용 승인을 받은 뒤 `clarification_cases`를 생성하고 `lay-energy-0201`을 같은 ledger에서 재시도한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L75 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
@@ -113,3 +113,4 @@
 - 2026-09-10: 사용자는 `.env.local`, NVIDIA 질문·근거·prompt 전송, Supabase corpus 읽기와 V2 실행상태 쓰기·정리, 로컬 안전 ledger, Vercel read-only 로그 조회를 포함한 E-006 외부 접근 범위 전체를 승인했다. corpus mutation·배포·push는 승인하지 않았다.
 - 2026-09-10: 기존 Task 4 구현이 V1 `_answer_question`과 V1 `RequestBudget`을 사용한 것은 E2E 목표와 맞지 않는다. V2 prepare→core→finalize endpoint와 V2 phase 57초/provider 55초 예산으로 교체한 뒤 Task 5를 재개한다.
 - 2026-09-10: `lay-energy-0111`에서 V2 router가 누락된 사업 결정사실을 `legal_search`로 분류하고, 수정 뒤에는 core가 `clarification_required`를 `unanswerable`로 덮으며, 마지막으로 ledger가 의도된 비검색 0-evidence pass를 거부하는 세 결함을 순서대로 재현했다. prompt 우선순위, non-legal core action 보존, `ask_clarifying_question`/`insufficient_evidence` 전용 zero-evidence 허용 테스트를 추가한 뒤 r6 실행이 pass했다.
+- 2026-09-10: `lay-energy-0201` attempt 2는 `blocked/answer_unavailable`였다. read-only 진단 결과 원격 DB는 Alembic `0016`이고 `clarification_cases`가 없어 `create_or_get`에서 `UndefinedTableError`가 발생한다. 명시적 `--case-id`가 기존 nonpass 뒤 재시도되지 않는 runner 결함은 실패 테스트 후 수정했으며, migration `0017` schema write 승인 뒤 같은 r6 ledger에 재시도한다.

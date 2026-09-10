@@ -225,6 +225,44 @@ async def test_cli_runs_one_selected_case_and_writes_answer_ledger(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_cli_explicit_case_retries_latest_nonpass_in_same_ledger(tmp_path: Path) -> None:
+    args = parse_arguments(
+        [
+            "--sealed-dir",
+            str(tmp_path / "sealed"),
+            "--case-id",
+            "lay-energy-0201",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    def load_case(_: Path, case_id: str) -> D10RunInput:
+        return D10RunInput(
+            case_id,
+            "private question",
+            __import__("datetime").date(2026, 8, 5),
+            "snapshot",
+            "answer",
+        )
+
+    async def unavailable(_: D10RunInput) -> object:
+        raise RuntimeError("provider unavailable")
+
+    async def available(_: D10RunInput) -> object:
+        return SimpleNamespace(
+            action="fully_answerable", sections=(object(),), limitations=(), citations=()
+        )
+
+    first = await run_from_arguments(args, case_loader=load_case, answer_executor=unavailable)
+    second = await run_from_arguments(args, case_loader=load_case, answer_executor=available)
+
+    assert first is not None and first.status == "blocked"
+    assert second is not None and second.attempt_number == 2
+    assert second.case_id == "lay-energy-0201"
+
+
+@pytest.mark.asyncio
 async def test_v2_executor_runs_prepare_core_finalize_over_http_without_v1_budget() -> None:
     app = FastAPI()
     calls: list[str] = []

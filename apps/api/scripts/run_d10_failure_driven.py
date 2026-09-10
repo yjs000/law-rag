@@ -85,7 +85,12 @@ async def run_from_arguments(
         case = case_loader(arguments.sealed_dir, case_id)
         return await evaluate_live_answer_case(case, answer_executor=answer_executor)
 
-    return await run_next_case(ledger_path, _execute, case_ids=case_ids)
+    return await run_next_case(
+        ledger_path,
+        _execute,
+        case_ids=case_ids,
+        force_selected_case=arguments.case_id is not None,
+    )
 
 
 def validate_v2_evaluation_budget(settings: object) -> None:
@@ -225,8 +230,13 @@ async def run_next_case(
     executor: SingleCaseExecutor,
     *,
     case_ids: tuple[str, ...] = D10_CASE_ORDER,
+    force_selected_case: bool = False,
 ) -> AttemptRecord | None:
-    case_id = next_case_id(ledger_path, case_ids)
+    case_id = (
+        case_ids[0]
+        if force_selected_case and len(case_ids) == 1
+        else next_case_id(ledger_path, case_ids)
+    )
     if case_id is None:
         return None
     result = await executor(case_id)

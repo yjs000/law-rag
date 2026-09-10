@@ -2035,7 +2035,7 @@
   },
   "pyproject.toml": {
     "mtime": 1787114286.1499307,
-    "seen": 1789040299.6699429,
+    "seen": 1789043807.3942964,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789042208.7524767,
-    "seen": 1789042438.5925202,
-    "ast_hash": "6ba58fdecb783e8258402fd665cc9f89",
+    "mtime": 1789044254.742478,
+    "seen": 1789044376.2980826,
+    "ast_hash": "7cda6653aec41fb48b99f93a682bcedd",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789042208.3168912,
-    "seen": 1789042438.5925696,
-    "ast_hash": "3b816595b36835f7b02e04f3272366cf",
+    "mtime": 1789044232.5111575,
+    "seen": 1789044376.3043623,
+    "ast_hash": "42e2140d29d4cb7bff83ec2584f5ba03",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
@@ -3834,21 +3834,21 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/run_d10_failure_driven.py": {
-    "mtime": 1789040205.4825163,
-    "seen": 1789040247.8358319,
-    "ast_hash": "c095dcda70ef23b2508d11bf735c8a5c",
+    "mtime": 1789044400.9390063,
+    "seen": 1789044452.9321795,
+    "ast_hash": "b2c097c08ab6c79af288c710642440de",
     "semantic_hash": ""
   },
   "apps/api/tests/test_run_d10_failure_driven.py": {
-    "mtime": 1789040122.44212,
-    "seen": 1789040247.8488157,
-    "ast_hash": "d80d11783edc801d1c39dbd0e7922179",
+    "mtime": 1789044400.9390063,
+    "seen": 1789044452.9451911,
+    "ast_hash": "add32a472f95c48d838340ad6acc990c",
     "semantic_hash": ""
   },
   "docs/design-docs/experiment-d-10-end-to-end-failure-regression.md": {
-    "mtime": 1789041698.304173,
-    "seen": 1789042438.5925355,
-    "ast_hash": "5fee5d1964835cde2cfe8e04fdace34c",
+    "mtime": 1789044467.8508506,
+    "seen": 1789044504.105808,
+    "ast_hash": "80903e1b2b00f0c6d2edabc205dd4bfa",
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_answer_judge.py": {
