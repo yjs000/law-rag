@@ -377,9 +377,11 @@ class V2QuestionExecutionService:
             or execution.private_payload.get("finalize_source_status")
             == ExecutionStatus.CORE_REPAIR_REQUIRED.value
         )
+        clarification = self._clarification_grounding(execution)
+        repair_with_grounded_detail = degraded and clarification is None
         repaired_core_payload: dict[str, object] | None = None
         force_grounding_fallback = False
-        if degraded:
+        if degraded and clarification is not None:
             core = None
             try:
                 (
@@ -412,15 +414,44 @@ class V2QuestionExecutionService:
         except Exception:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
-        clarification = self._clarification_grounding(execution)
-        if clarification is None and not response_is_grounded(
+        response_is_verified = clarification is None and response_is_grounded(
             response, CitationRegistry(execution.frozen_citations)
-        ):
+        )
+        grounded_partial_detail = (
+            clarification is None
+            and response.action == "partially_answerable"
+            and response.result_status == "results"
+            and bool(response.citations)
+            and bool(response.sections)
+            and bool(response.checklist)
+            and response_is_verified
+        )
+        if repair_with_grounded_detail:
+            core = None
+            if grounded_partial_detail:
+                repaired_core_payload = {
+                    "answerability_resolution": "grounded_detail_partial_repaired_core"
+                }
+            else:
+                response = grounding_fallback(payload)
+                degraded = True
+        elif clarification is None and not response_is_verified:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
         elif core is not None:
-            response.summary = core.summary
-            response.action = core.action
+            grounded_partial_resolves_empty_core = (
+                core.action == "unanswerable" and not core.citation_ids and grounded_partial_detail
+            )
+            if grounded_partial_resolves_empty_core:
+                repaired_core_payload = {
+                    **(repaired_core_payload or {}),
+                    "answerability_resolution": (
+                        "grounded_detail_partial_overrode_unanswerable_core"
+                    ),
+                }
+            else:
+                response.summary = core.summary
+                response.action = core.action
         if clarification is not None and not degraded:
             try:
                 response = await self._persist_clarification_outcome(

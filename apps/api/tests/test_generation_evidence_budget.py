@@ -41,7 +41,7 @@ def test_budget_keeps_one_oversized_top_provision() -> None:
     assert select_generation_hits([first], 1) == [first]
 
 
-def test_generation_context_keeps_only_highest_ranked_leaf_per_article() -> None:
+def test_generation_context_keeps_ranked_leaves_from_the_same_article() -> None:
     document_id = uuid4()
     top = _hit("직접 근거", document_id=document_id, path="제7조/항①")
     duplicate = _hit("같은 조의 다른 항", document_id=document_id, path="제7조/항②")
@@ -49,7 +49,7 @@ def test_generation_context_keeps_only_highest_ranked_leaf_per_article() -> None
 
     selected = select_generation_hits([top, duplicate, other], 10_000)
 
-    assert selected == [top, other]
+    assert selected == [top, duplicate, other]
 
 
 def test_generation_context_prefers_specific_path_over_higher_ranked_article_header() -> None:
@@ -76,6 +76,22 @@ def test_generation_context_is_limited_to_five_articles() -> None:
     selected = select_generation_hits(hits, 100_000)
 
     assert selected == hits[:5]
+
+
+def test_generation_context_keeps_multiple_paragraphs_within_five_article_limit() -> None:
+    document_id = uuid4()
+    first_paragraph = _hit("첫째 항", document_id=document_id, path="제1조/항①")
+    second_paragraph = _hit("둘째 항", document_id=document_id, path="제1조/항②")
+    other_articles = [
+        _hit(f"제{index}조", document_id=document_id, path=f"제{index}조")
+        for index in range(2, 7)
+    ]
+
+    selected = select_generation_hits(
+        [first_paragraph, second_paragraph, *other_articles], 100_000
+    )
+
+    assert selected == [first_paragraph, second_paragraph, *other_articles[:4]]
 
 
 def test_flat_body_paths_are_not_collapsed_into_one_article() -> None:

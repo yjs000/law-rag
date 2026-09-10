@@ -709,8 +709,8 @@ async def test_unbound_published_detail_is_replaced_before_terminal_sse_publicat
 
 
 @pytest.mark.asyncio
-async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallback() -> None:
-    """A failed repair must not be presented as an ordinary empty search result."""
+async def test_non_clarification_core_repair_uses_grounded_partial_detail() -> None:
+    """A failed core may recover only through a grounded partial detail witness."""
 
     class AlwaysUngroundedCoreAnswerer:
         def __init__(self) -> None:
@@ -729,7 +729,7 @@ async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallba
             self, _request: QuestionRequest, _hits: list[SearchHit]
         ) -> ClarificationDraftAnswer:
             self.detail_calls += 1
-            raise AssertionError("core repair failure must not start detail generation")
+            return _draft(claims=[])
 
     answerer = AlwaysUngroundedCoreAnswerer()
     service, executions = _service(answerer)  # type: ignore[arg-type]
@@ -772,17 +772,17 @@ async def test_core_repair_failure_completes_with_a_recoverable_grounding_fallba
     finalized = await service.run_finalize(repair_required, None)
 
     published = finalized.events[0].payload["response"]
-    assert answerer.core_calls == 2
-    assert answerer.detail_calls == 0
+    assert answerer.core_calls == 1
+    assert answerer.detail_calls == 1
     assert finalized.events[0].payload["outcome"] == "degraded"
-    assert published["result_status"] == "grounding_failed"
-    assert published["summary"] == (
-        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
-    )
-    assert published["sections"] == []
-    assert published["checklist"] == []
-    assert published["citations"] == []
-    assert published["action"] == "unanswerable"
+    assert published["result_status"] == "results"
+    assert published["sections"]
+    assert published["checklist"]
+    assert published["citations"]
+    assert published["action"] == "partially_answerable"
+    assert finalized.private_payload == {
+        "answerability_resolution": "grounded_detail_partial_repaired_core"
+    }
 
 
 @pytest.mark.asyncio

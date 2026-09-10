@@ -13,7 +13,7 @@ from app.domain.answer_events import AnswerEvent
 from app.domain.catalog import SourceKind
 from app.domain.grounding import FrozenCitation
 from app.domain.question_execution import ExecutionStatus
-from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit
+from app.domain.schemas import AnswerSection, Citation, QuestionRequest, QuestionResponse, SearchHit
 
 
 async def _allow_supported_date(*args) -> None:
@@ -466,6 +466,120 @@ async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
         }
     ]
     assert result.events[0].payload["outcome"] == "degraded"
+
+
+def _grounded_detail_response(hit: SearchHit, *, action: str = "partially_answerable"):
+    return QuestionResponse(
+        request_id=str(uuid4()),
+        mode="ai",
+        summary=hit.content,
+        scope="기준일 현재",
+        sections=[
+            AnswerSection(
+                claim=hit.content,
+                explanation=hit.content,
+                citation_ids=["C1"],
+            )
+        ],
+        checklist=[{"label": hit.content, "status": "conditional", "citation_ids": ["C1"]}],
+        citations=[
+            Citation(
+                id="C1",
+                provision_id=hit.provision_id,
+                document_title=hit.document_title,
+                version_label=hit.version_label,
+                path=hit.path,
+                quote=hit.content,
+                source_url=hit.source_url,
+                source_kind=hit.source_kind,
+            )
+        ],
+        limitations=["개별 적용 여부는 추가 확인이 필요합니다."],
+        requested_answer_mode="terra",
+        action=action,
+        route="legal_search",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v2_finalize_preserves_grounded_partial_detail_over_empty_unanswerable_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    detail = _grounded_detail_response(hit)
+
+    async def grounded_partial(_execution):
+        return detail
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", grounded_partial)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "verified_core": {
+                    "summary": "제공된 근거로 답할 수 없습니다.",
+                    "citation_ids": [],
+                    "action": "unanswerable",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["summary"] == hit.content
+    assert result.response["action"] == "partially_answerable"
+    assert result.response["citations"]
+    assert result.private_payload == {
+        "answerability_resolution": "grounded_detail_partial_overrode_unanswerable_core"
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detail_action", ["fully_answerable", "unanswerable"])
+async def test_v2_finalize_does_not_promote_other_detail_actions_over_unanswerable_core(
+    monkeypatch: pytest.MonkeyPatch,
+    detail_action: str,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    detail = _grounded_detail_response(hit, action=detail_action)
+
+    async def grounded_detail(_execution):
+        return detail
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", grounded_detail)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "verified_core": {
+                    "summary": "제공된 근거로 답할 수 없습니다.",
+                    "citation_ids": [],
+                    "action": "unanswerable",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["summary"] == "제공된 근거로 답할 수 없습니다."
+    assert result.response["action"] == "unanswerable"
+    assert result.private_payload is None
 
 
 def test_prepare_core_finalize_replays_authoritative_phase_events(

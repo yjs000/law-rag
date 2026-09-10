@@ -155,7 +155,9 @@ async def test_nvidia_nim_core_generation_uses_summary_only_contract() -> None:
         "summary",
         "citation_ids",
         "action",
+        "decision_limitations",
     }
+    assert "decision_limitations" not in core.model_dump(mode="json")
 
 
 @pytest.mark.asyncio

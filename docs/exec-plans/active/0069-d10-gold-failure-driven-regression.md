@@ -3,7 +3,7 @@
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold의 `approved_gold` 상태, `.env.local`, NVIDIA와 Supabase V2 E2E 전체 접근 승인, clean code provenance가 준비되어야 한다.
-> 다음 행동: `lay-energy-0521`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
+> 다음 행동: `lay-energy-0561`을 V2 one-case runner로 실행하고, 실패 시 같은 pass/fix loop를 반복한다.
 > 참고 범위:
 > - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L75 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
@@ -117,3 +117,4 @@
 - 2026-09-10: 사용자의 승인으로 migration `0017`을 적용하고 table·index·version을 검증했다. `lay-energy-0201`에서는 개별 가능 여부와 조건부 허가 절차를 구분하도록 router/core action prompt를 정렬하고, 비어 있지 않은 summary를 answer-present로 보도록 judge를 수정했다. 간헐적 NVIDIA router 503은 새 attempt로 재실행했으며 attempt 9가 근거·citation 각 5건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
 - 2026-09-10: `lay-energy-0251` attempts 10~12는 결정축의 실제 값이 없는데도 `partial_answer_with_limits`를 반환했다. 동일 질문의 provider `missing_fields`가 0개와 2개 사이에서 변동해 prompt-only 판정이 재현 불가능함을 확인했다. 명시적 설비 적용 표지, 또는 기준값 없는 “소규모 설비”와 `결정축에 따라 달라지는가`가 함께 나타난 미해결 비교에서만 용량·전압·사용 방식·공사 종류의 값을 검사하는 좁은 router guardrail을 추가했다. provider 자유형 누락값만으로 승격하지 않고 로컬 검증 누락값만 `legal_search` 후보보다 우선하며, 일반 taxonomy·소규모 설비 축별 기준·일반 설비 비교 질문은 검색 가능하게 유지한다. 관련 회귀 65개와 이미 통과한 일반 절차 질문의 실제 `legal_search` 비회귀를 확인했다. attempt 13의 NVIDIA 503은 새 시도로 처리했고, 최종 리뷰 수정 후 attempt 17이 `ask_clarifying_question`, judge code 없음으로 pass했다.
 - 2026-09-10: `lay-energy-0346` attempt 18은 검색 전 `routing_unavailable`로 blocked됐지만 새 V2 시도에서 회복됐다. 코드 수정 없이 attempt 19가 근거·citation 각 5건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
+- 2026-09-11: `lay-energy-0521` attempts 20~33에서 검색 상위 10건과 정답 조문 4건이 존재했지만 생성 입력 압축이 같은 조의 하위 항을 하나만 남겨 정답 조문 중첩을 2건으로 줄였고, core의 action·summary grounding도 실행마다 달랐다. 최대 5개 조·60,000자 예산은 유지하면서 선택된 조의 여러 하위 항을 순위대로 보존해 생성 근거 9건·정답 조문 중첩 4건으로 회복했다. core action 판정용 `decision_limitations`는 공개 저장에서 자동 제외한다. prompt만으로 오분류를 막을 수 없다는 리뷰 P1을 반영해, 비-clarification `CORE_REPAIR_REQUIRED`에서는 같은 core 재생성 대신 동일 동결 근거의 detail이 `partially_answerable`이고 citations·sections·checklist가 존재하며 기존 grounding 검증을 통과한 경우에만 final 응답으로 보존한다. raw hit·score·Gold/qrel·case ID·REC keyword로 partial을 강제하지 않는다. 일시적 `routing_unavailable`은 새 시도로 분리했고, attempt 34가 근거·citation 각 9건, `partial_answer_with_limits`, judge code 없음으로 pass했다.

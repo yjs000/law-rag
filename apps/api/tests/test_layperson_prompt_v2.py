@@ -1,7 +1,12 @@
 from datetime import date
 from uuid import uuid4
 
-from app.adapters.openai_answerer import build_messages, build_messages_v2
+from app.adapters.openai_answerer import (
+    CoreDraft,
+    build_core_messages,
+    build_messages,
+    build_messages_v2,
+)
 from app.domain.catalog import SourceKind
 from app.domain.schemas import QuestionRequest, SearchHit
 
@@ -96,6 +101,25 @@ def test_v2_action_prompt_keeps_conditional_legal_guidance_partial() -> None:
     assert "상충하면 이 규칙이 'partially_answerable' 일반 설명 규칙보다 우선" in text
     assert "허가·신고의 종류와 일반 구분 기준" in text
     assert "용량과 사용 방식에 따라 달라지는 자기 설비의 절차" in text
+    assert "발급·신청의 법적 대상·요건·제한" in text
+    assert "실제 미발급·미처리 사유" in text
+
+
+def test_v2_core_prompt_separates_general_criteria_from_unknown_individual_reason() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "decision_limitations에는 확인하지 못한 개별 사유" in text
+    assert "action은 'partially_answerable'" in text
+
+
+def test_v2_core_decision_limitations_are_never_persisted() -> None:
+    draft = CoreDraft(
+        summary="근거로 일반 기준을 확인할 수 있습니다.",
+        citation_ids=["C1"],
+        action="partially_answerable",
+        decision_limitations=["개별 미처리 사유"],
+    )
+    assert "decision_limitations" in CoreDraft.model_json_schema()["properties"]
+    assert "decision_limitations" not in draft.model_dump(mode="json")
 
 
 def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:

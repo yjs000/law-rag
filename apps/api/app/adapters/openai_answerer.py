@@ -43,6 +43,7 @@ class CoreDraft(BaseModel):
     action: Literal[
         "fully_answerable", "partially_answerable", "clarification_required", "unanswerable"
     ]
+    decision_limitations: list[str] = Field(default_factory=list, exclude=True)
 
 
 class ClarificationCoreDraft(CoreDraft):
@@ -59,29 +60,43 @@ def select_generation_hits(
     max_characters: int,
     max_articles: int = MAX_GENERATION_ARTICLES,
 ) -> list[SearchHit]:
-    """Keep at most one ranked leaf per article within the provider input budget."""
+    """Keep ranked leaves from at most ``max_articles`` within the input budget."""
     if max_characters <= 0:
         raise ValueError("evidence budget must be positive")
     if max_articles <= 0:
         raise ValueError("article limit must be positive")
-    preferred_by_article: dict[tuple[object, str], SearchHit] = {}
+    article_keys: list[tuple[object, str]] = []
+    deepest_path_by_article: dict[tuple[object, str], int] = {}
     for hit in hits:
         path_root = hit.path.split("/", 1)[0]
         article = hit.path if path_root == "본문" else path_root
         article_key = (hit.document_id, article)
-        current = preferred_by_article.get(article_key)
-        if current is None or hit.path.count("/") > current.path.count("/"):
-            preferred_by_article[article_key] = hit
+        if article_key not in deepest_path_by_article:
+            article_keys.append(article_key)
+        deepest_path_by_article[article_key] = max(
+            deepest_path_by_article.get(article_key, 0), hit.path.count("/")
+        )
+
+    allowed_articles = set(article_keys[:max_articles])
 
     selected: list[SearchHit] = []
     used = 0
-    for hit in preferred_by_article.values():
+    for hit in hits:
+        path_root = hit.path.split("/", 1)[0]
+        article = hit.path if path_root == "본문" else path_root
+        article_key = (hit.document_id, article)
+        if article_key not in allowed_articles:
+            continue
+        # A bare article header duplicates its ranked paragraph leaves. Preserve all
+        # leaves because different paragraphs can carry different legal facets.
+        if deepest_path_by_article[article_key] > 0 and hit.path.count("/") == 0:
+            continue
         size = len(hit.document_title) + len(hit.path) + len(hit.version_label) + len(hit.content)
         if selected and used + size > max_characters:
             continue
         selected.append(hit)
         used += size
-        if used >= max_characters or len(selected) >= max_articles:
+        if used >= max_characters:
             break
     return selected
 
@@ -213,6 +228,9 @@ def build_messages_v2(
                 "충분히 답했으면 'fully_answerable', 일부만 답했거나 조건에 따라 갈리면 "
                 "'partially_answerable'을 쓴다. 특히 제공된 근거로 허가·신고·의무·절차와 "
                 "그 분기 기준을 조건부로 설명할 수 있으면 'partially_answerable'이다. "
+                "발급·신청의 법적 대상·요건·제한을 설명할 수 있지만 실제 미발급·미처리 "
+                "사유를 확정할 수 없는 경우도 'partially_answerable'이다. 확인하지 못한 "
+                "개별 사유와 세부 운영자료는 limitations에 둔다. "
                 "질문자의 개별 사실(설비용량·계약 조건 등)이 없어서 현재 근거로 실질적인 "
                 "답을 전혀 제공할 수 없을 때만 'clarification_required'를 쓴다. 개별 결론을 "
                 "확정할 수 없다는 이유만으로 'clarification_required'를 선택하지 않는다. "
@@ -297,7 +315,11 @@ def build_core_messages(
             system + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action"
             "과 grounded_claims만 출력한다. sections, checklist, scope, limitations은 생성하거나 "
             "암시하지 않는다. citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 "
-            "C번호만 넣는다."
+            "C번호만 넣는다. decision_limitations는 action 판정에 필요한 미확정 사실만 적는 "
+            "내부 필드이며 공개되지 않는다. 일반 법적 기준은 근거로 설명할 수 있지만 질문자의 "
+            "실제 사유까지는 확정할 수 없는 경우, summary에는 확인되는 일반 기준을 쓰고 "
+            "decision_limitations에는 확인하지 못한 개별 사유를 적으며 action은 "
+            "'partially_answerable'로 쓴다."
         ),
     }
     return messages
