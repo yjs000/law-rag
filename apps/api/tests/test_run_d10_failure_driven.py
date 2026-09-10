@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from scripts.d10_answer_judge import AnswerJudgeResult
+from scripts.d10_failure_runner import D10RunInput
 from scripts.run_d10_failure_driven import (
     apply_answer_judgment,
+    evaluate_live_answer_case,
     parse_arguments,
     run_next_case,
 )
@@ -124,3 +126,26 @@ def test_cli_rejects_multiple_case_ids(tmp_path: Path) -> None:
                 "lay-energy-0251",
             ]
         )
+
+
+@pytest.mark.asyncio
+async def test_live_answer_case_applies_judge_failure_without_answer_text() -> None:
+    async def execute(_: D10RunInput) -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(action="fully_answerable", sections=(), limitations=(), citations=())
+
+    result = await evaluate_live_answer_case(
+        D10RunInput(
+            "lay-energy-0201",
+            "private question",
+            __import__("datetime").date(2026, 8, 5),
+            "snapshot-1",
+            "answer",
+        ),
+        answer_executor=execute,
+    )
+
+    assert result["status"] == "failure"
+    assert result["error_code"] == "answer_empty"
+    assert "private question" not in str(result)

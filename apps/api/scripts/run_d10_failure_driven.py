@@ -6,13 +6,14 @@ import argparse
 from pathlib import Path
 from typing import Protocol
 
-from scripts.d10_answer_judge import AnswerJudgeResult
+from scripts.d10_answer_judge import AnswerJudgeResult, judge_execution
 from scripts.d10_failure_ledger import (
     CITATION_REASON,
     D10_CASE_ORDER,
     AttemptRecord,
     append_attempt,
 )
+from scripts.d10_failure_runner import AnswerExecutor, D10RunInput, run_single_answer_case
 
 
 class SingleCaseExecutor(Protocol):
@@ -45,6 +46,17 @@ def apply_answer_judgment(
         result["status"] = "failure"
         result["error_code"] = judgment.codes[0]
     return result
+
+
+async def evaluate_live_answer_case(
+    case: D10RunInput, *, answer_executor: AnswerExecutor
+) -> dict[str, object]:
+    """Run and judge one private answer execution before it reaches the ledger."""
+    execution = await run_single_answer_case(case, answer_executor=answer_executor)
+    result = execution.safe_result()
+    if execution.response is None:
+        return result
+    return apply_answer_judgment(result, judge_execution(case, execution))
 
 
 def _existing_records(path: Path) -> list[dict[str, object]]:
