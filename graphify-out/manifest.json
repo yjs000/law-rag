@@ -3810,9 +3810,9 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_failure_ledger.py": {
-    "mtime": 1788516052.2560828,
-    "seen": 1788516118.8754954,
-    "ast_hash": "f8e292db7bba809c7f7ef0f5b32f32a8",
+    "mtime": 1789025816.4123042,
+    "seen": 1789025868.8126426,
+    "ast_hash": "a6e5ff7008ab3cab5e1d8d3b2e7a10c1",
     "semantic_hash": ""
   },
   "apps/api/tests/test_d10_failure_ledger.py": {
@@ -3831,6 +3831,18 @@
     "mtime": 1789025735.9678047,
     "seen": 1789025771.2989175,
     "ast_hash": "abab1b3986dcef6d16c74749938dde95",
+    "semantic_hash": ""
+  },
+  "apps/api/scripts/run_d10_failure_driven.py": {
+    "mtime": 1789025823.656716,
+    "seen": 1789025868.8172786,
+    "ast_hash": "b0160fc0fdca5e113af6e10a59c7fde0",
+    "semantic_hash": ""
+  },
+  "apps/api/tests/test_run_d10_failure_driven.py": {
+    "mtime": 1789025816.4113042,
+    "seen": 1789025868.829712,
+    "ast_hash": "69be779201a3d2ef61401d0ec09818f8",
     "semantic_hash": ""
   }
 }

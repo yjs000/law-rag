@@ -10,20 +10,19 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar, Literal
 
-D10_CASE_IDS = frozenset(
-    {
-        "lay-energy-0111",
-        "lay-energy-0201",
-        "lay-energy-0251",
-        "lay-energy-0346",
-        "lay-energy-0521",
-        "lay-energy-0561",
-        "lay-energy-0601",
-        "lay-energy-0605",
-        "lay-energy-0836",
-        "lay-energy-0943",
-    }
+D10_CASE_ORDER = (
+    "lay-energy-0111",
+    "lay-energy-0201",
+    "lay-energy-0251",
+    "lay-energy-0346",
+    "lay-energy-0521",
+    "lay-energy-0561",
+    "lay-energy-0601",
+    "lay-energy-0605",
+    "lay-energy-0836",
+    "lay-energy-0943",
 )
+D10_CASE_IDS = frozenset(D10_CASE_ORDER)
 ATTEMPT_STATUSES = frozenset({"pass", "failure", "blocked"})
 CITATION_REASON = "not_generated_by_retrieval_runner"
 _SAFE_CODE = re.compile(r"[a-z0-9_]+")
@@ -76,9 +75,8 @@ class AttemptRecord:
             raise LedgerValidationError("case_id_not_in_d10")
         if self.status not in ATTEMPT_STATUSES:
             raise LedgerValidationError("attempt_status_invalid")
-        if (
-            self.error_code is not None
-            and (not isinstance(self.error_code, str) or not _SAFE_CODE.fullmatch(self.error_code))
+        if self.error_code is not None and (
+            not isinstance(self.error_code, str) or not _SAFE_CODE.fullmatch(self.error_code)
         ):
             raise LedgerValidationError("error_code_invalid")
         if (
