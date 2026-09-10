@@ -63,7 +63,7 @@ async def evaluate_live_answer_case(
     """Run and judge one private answer execution before it reaches the ledger."""
     execution = await run_single_answer_case(case, answer_executor=answer_executor)
     result = execution.safe_result()
-    if execution.response is None:
+    if result["status"] == "blocked":
         return result
     return apply_answer_judgment(result, judge_execution(case, execution))
 

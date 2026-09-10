@@ -86,11 +86,16 @@ class D10AnswerExecution:
     error_code: str | None = None
 
     def safe_result(self) -> dict[str, object]:
-        if self.response is None:
+        if self.response is None or getattr(self.response, "route", None) == "routing_unavailable":
             return {
                 "case_id": self.case_id,
                 "status": "blocked",
-                "error_code": self.error_code or "answer_unavailable",
+                "error_code": self.error_code
+                or (
+                    "routing_unavailable"
+                    if self.response is not None
+                    else "answer_unavailable"
+                ),
                 "retrieved_evidence_count": 0,
                 "citation_count": 0,
                 "citation_reason": "validated_by_answer_runner",

@@ -153,6 +153,35 @@ async def test_live_answer_case_applies_judge_failure_without_answer_text() -> N
 
 
 @pytest.mark.asyncio
+async def test_live_answer_case_records_routing_provider_failure_as_blocked() -> None:
+    async def execute(_: D10RunInput) -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            action="unanswerable",
+            route="routing_unavailable",
+            sections=(),
+            limitations=(),
+            citations=(),
+        )
+
+    result = await evaluate_live_answer_case(
+        D10RunInput(
+            "lay-energy-0201",
+            "private question",
+            __import__("datetime").date(2026, 8, 5),
+            "snapshot-1",
+            "ask_clarifying_question",
+        ),
+        answer_executor=execute,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["error_code"] == "routing_unavailable"
+    assert result["actual_action"] is None
+
+
+@pytest.mark.asyncio
 async def test_cli_runs_one_selected_case_and_writes_answer_ledger(tmp_path: Path) -> None:
     args = parse_arguments(
         [

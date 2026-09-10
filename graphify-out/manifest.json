@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789027484.3160295,
-    "seen": 1789027575.625848,
-    "ast_hash": "e9d21fcbba0055f88d6d4904a4c37ac2",
+    "mtime": 1789028226.65212,
+    "seen": 1789029918.3627758,
+    "ast_hash": "c94e285c2cc97d2602dfd7ceb45e2b1b",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789027473.122078,
-    "seen": 1789027575.6317983,
-    "ast_hash": "2a8700efd899126c7e1eabc2a737a906",
+    "mtime": 1789028218.6448286,
+    "seen": 1789029918.3690393,
+    "ast_hash": "4dd11ea1437f47ed6258a83b54d173db",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
@@ -3822,9 +3822,9 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_failure_runner.py": {
-    "mtime": 1789027644.2134488,
-    "seen": 1789027710.4149923,
-    "ast_hash": "bdce8f49e20c70e7c636aa0c1dcdfa09",
+    "mtime": 1789029703.712415,
+    "seen": 1789029918.3009112,
+    "ast_hash": "b2d73786597037f8e1256c9f54012add",
     "semantic_hash": ""
   },
   "apps/api/tests/test_d10_failure_runner.py": {
@@ -3834,15 +3834,15 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/run_d10_failure_driven.py": {
-    "mtime": 1789028033.9673693,
-    "seen": 1789028197.3890438,
-    "ast_hash": "f28288e5174e440ec313e7b99962c054",
+    "mtime": 1789029704.1081617,
+    "seen": 1789029918.3054981,
+    "ast_hash": "570700a237e883e1ca4871900f714616",
     "semantic_hash": ""
   },
   "apps/api/tests/test_run_d10_failure_driven.py": {
-    "mtime": 1789027996.7973094,
-    "seen": 1789028197.4016824,
-    "ast_hash": "756c856c800dd304b6126b3b8a2d055e",
+    "mtime": 1789029678.6491392,
+    "seen": 1789029918.318754,
+    "ast_hash": "fe763f88fbf16a12b66855006851a3a0",
     "semantic_hash": ""
   },
   "docs/design-docs/experiment-d-10-end-to-end-failure-regression.md": {
