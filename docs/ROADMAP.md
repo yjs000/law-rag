@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: e6ef36805218aebd7735e82adb21aa87df72bbf9f1ae6bbe7f8518e0f8e6caeb -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: ad20a552afc8409e535ce87ad6882935a52222b9dc510bf2c72a26a86e1dcfeb -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: 1,000-case partial runner 변경을 되돌리고, native D-10 sealed contract loader의 실패 테스트부터 구현한다.
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: Task 1의 answer evaluation result·safe ledger 확장 실패 테스트부터 작성한다.
 
 ## Todo
 
