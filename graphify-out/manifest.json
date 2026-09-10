@@ -3852,15 +3852,15 @@
     "semantic_hash": ""
   },
   "apps/api/scripts/d10_answer_judge.py": {
-    "mtime": 1789027004.2604487,
-    "seen": 1789027050.554791,
-    "ast_hash": "11d1227232d388b0b3c7bc91d6549e61",
+    "mtime": 1789027767.7517657,
+    "seen": 1789027819.6413472,
+    "ast_hash": "72fa9aa77e809024766967d59cac1942",
     "semantic_hash": ""
   },
   "apps/api/tests/test_d10_answer_judge.py": {
-    "mtime": 1789027012.663446,
-    "seen": 1789027050.564419,
-    "ast_hash": "9811ed5ca693fd229f8d6d36f539834c",
+    "mtime": 1789027768.1417875,
+    "seen": 1789027819.6530502,
+    "ast_hash": "6002ff4391e34097331c812dc18c1bb0",
     "semantic_hash": ""
   }
 }

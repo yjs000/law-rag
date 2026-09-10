@@ -1,4 +1,8 @@
-from scripts.d10_answer_judge import AnswerJudgeInput, judge_answer
+from datetime import date
+from types import SimpleNamespace
+
+from scripts.d10_answer_judge import AnswerJudgeInput, judge_answer, judge_execution
+from scripts.d10_failure_runner import D10AnswerExecution, D10RunInput
 
 
 def test_answer_requires_retrieved_evidence_and_bound_citations() -> None:
@@ -59,6 +63,27 @@ def test_insufficient_evidence_passes_without_substantive_answer() -> None:
             citation_evidence_ids=(),
         )
     )
+
+    assert result.passed is True
+    assert result.codes == ()
+
+
+def test_execution_judge_uses_private_response_only_for_structural_metadata() -> None:
+    execution = D10AnswerExecution(
+        case_id="lay-energy-0201",
+        response=SimpleNamespace(
+            action="fully_answerable",
+            sections=(SimpleNamespace(claim="private answer"),),
+            limitations=(),
+            citations=(SimpleNamespace(provision_id="p1", quote="private statute"),),
+        ),
+        retrieved_evidence_count=1,
+    )
+    case = D10RunInput(
+        "lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1", "answer"
+    )
+
+    result = judge_execution(case, execution)
 
     assert result.passed is True
     assert result.codes == ()

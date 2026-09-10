@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from scripts.d10_failure_runner import D10AnswerExecution, D10RunInput
+
 ExpectedAction = Literal[
     "answer",
     "partial_answer_with_limits",
@@ -50,3 +52,30 @@ def judge_answer(value: AnswerJudgeInput) -> AnswerJudgeResult:
     if value.expected_action == "partial_answer_with_limits" and not value.has_limit:
         codes.append("partial_limit_missing")
     return AnswerJudgeResult(passed=not codes, codes=tuple(codes))
+
+
+def judge_execution(case: D10RunInput, execution: D10AnswerExecution) -> AnswerJudgeResult:
+    """Extract only structural metadata from a private response for deterministic judgment."""
+    if execution.response is None or case.expected_action is None:
+        return AnswerJudgeResult(False, ("answer_unavailable",))
+    safe = execution.safe_result()
+    response = execution.response
+    actual_action = safe["actual_action"]
+    sections = getattr(response, "sections", ())
+    citations = getattr(response, "citations", ())
+    citation_ids = tuple(
+        str(citation.provision_id)
+        for citation in citations
+        if getattr(citation, "provision_id", None) is not None
+    )
+    return judge_answer(
+        AnswerJudgeInput(
+            expected_action=case.expected_action,  # validated by the sealed loader
+            actual_action=actual_action if isinstance(actual_action, str) else None,
+            answer_present=actual_action in {"answer", "partial_answer_with_limits"}
+            and bool(sections),
+            has_limit=bool(getattr(response, "limitations", ())),
+            retrieved_evidence_ids=citation_ids,
+            citation_evidence_ids=citation_ids,
+        )
+    )
