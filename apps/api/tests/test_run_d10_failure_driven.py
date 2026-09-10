@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.run_d10_failure_driven import run_next_case
+from scripts.d10_answer_judge import AnswerJudgeResult
+from scripts.run_d10_failure_driven import apply_answer_judgment, run_next_case
 
 
 @pytest.mark.asyncio
@@ -42,3 +43,24 @@ async def test_failure_stops_before_next_case(tmp_path) -> None:
         )
         is None
     )
+
+
+def test_answer_judgment_turns_safe_answer_result_into_failure_record() -> None:
+    result = apply_answer_judgment(
+        {
+            "case_id": "lay-energy-0201",
+            "status": "pass",
+            "error_code": None,
+            "retrieved_evidence_count": 1,
+            "citation_count": 1,
+            "citation_reason": "validated_by_answer_runner",
+            "evaluation_stage": "answer",
+            "actual_action": "answer",
+            "judge_codes": [],
+        },
+        AnswerJudgeResult(False, ("citation_not_in_retrieval_evidence",)),
+    )
+
+    assert result["status"] == "failure"
+    assert result["error_code"] == "citation_not_in_retrieval_evidence"
+    assert result["judge_codes"] == ["citation_not_in_retrieval_evidence"]

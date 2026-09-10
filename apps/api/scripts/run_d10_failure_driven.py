@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from scripts.d10_answer_judge import AnswerJudgeResult
 from scripts.d10_failure_ledger import (
     CITATION_REASON,
     D10_CASE_ORDER,
@@ -15,6 +16,18 @@ from scripts.d10_failure_ledger import (
 
 class SingleCaseExecutor(Protocol):
     async def __call__(self, case_id: str) -> dict[str, object]: ...
+
+
+def apply_answer_judgment(
+    safe_result: dict[str, object], judgment: AnswerJudgeResult
+) -> dict[str, object]:
+    """Make a deterministic judge failure terminal without exposing private answer text."""
+    result = dict(safe_result)
+    result["judge_codes"] = list(judgment.codes)
+    if not judgment.passed:
+        result["status"] = "failure"
+        result["error_code"] = judgment.codes[0]
+    return result
 
 
 def _existing_records(path: Path) -> list[dict[str, object]]:
