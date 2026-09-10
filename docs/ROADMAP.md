@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 8e6b27f412964a808afcad2934c05504b6bb669df84b1172b6929c7024f8c377 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 096c6d10e3bd587acacdf9adde776dcc2667987da8b4023d4dfda7edeaf5aa89 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: 승인된 `https://integrate.api.nvidia.com/v1` 경계에서 `lay-energy-0111`을 재실행하고, pass일 때만 다음 고정 case로 진행한다.
 
 ## Todo
 
@@ -27,6 +26,7 @@
 
 ## Blocked
 
+- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 재개 조건: D-10 embedding과 DB credential의 `aws-1-ap-northeast-2.pooler.supabase.com` 전송을 승인받고 `lay-energy-0111`을 재실행한다.
 
 ## Done
 
