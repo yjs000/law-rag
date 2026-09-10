@@ -198,3 +198,29 @@ async def test_application_answer_executor_binds_fixed_question_and_date() -> No
     assert len(received) == 1
     assert received[0].question == "private question"
     assert received[0].as_of_date == date(2026, 8, 5)
+
+
+@pytest.mark.asyncio
+async def test_live_executor_uses_application_answer_boundary_without_http_request() -> None:
+    from scripts.d10_failure_runner import live_application_answer_executor
+
+    received: list[object] = []
+    repository = object()
+
+    async def answer_question(payload, user, request, budget, current_repository):
+        received.extend((payload, user, request, budget, current_repository))
+        return SimpleNamespace(action="fully_answerable", citations=())
+
+    executor = live_application_answer_executor(
+        answer_question=answer_question,
+        repository=repository,
+        budget_factory=lambda: "budget",
+    )
+    result = await executor(
+        D10RunInput("lay-energy-0201", "private question", date(2026, 8, 5), "snapshot-1")
+    )
+
+    assert result.action == "fully_answerable"
+    assert received[0].question == "private question"
+    assert received[0].as_of_date == date(2026, 8, 5)
+    assert received[1:] == [None, None, "budget", repository]

@@ -60,6 +60,21 @@ def application_answer_executor(
     return _execute
 
 
+def live_application_answer_executor(
+    *,
+    answer_question: Callable[[QuestionRequest, object, object, object, object], Awaitable[object]],
+    repository: object,
+    budget_factory: Callable[[], object],
+) -> AnswerExecutor:
+    """Call the v1 application use case directly, without HTTP ownership concerns."""
+
+    async def _execute(case: D10RunInput) -> object:
+        request = QuestionRequest(question=case.question, as_of_date=case.as_of_date)
+        return await answer_question(request, None, None, budget_factory(), repository)
+
+    return _execute
+
+
 @dataclass(frozen=True, slots=True)
 class D10AnswerExecution:
     """Private answer observation with a deliberately safe public projection."""
