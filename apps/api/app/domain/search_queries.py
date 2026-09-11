@@ -142,6 +142,10 @@ _ALIASES = {
     "인허가": ("인가", "허가"),
 }
 
+_VECTOR_QUERY_PHRASE_ALIASES = {
+    "전기 판매": "전력거래",
+}
+
 _DOMAIN_ANCHOR_TERMS = frozenset(
     {
         "기준",
@@ -164,6 +168,14 @@ def normalize_text(value: str) -> str:
 
 def compact_text(value: str) -> str:
     return re.sub(r"[^0-9a-z가-힣]", "", normalize_text(value))
+
+
+def normalize_vector_search_query(query: str) -> str:
+    """Translate stable lay terms to the vocabulary used by the legal corpus."""
+    normalized = query
+    for lay_phrase, legal_phrase in _VECTOR_QUERY_PHRASE_ALIASES.items():
+        normalized = normalized.replace(lay_phrase, legal_phrase)
+    return normalized
 
 
 def prepare_search_query(query: str) -> PreparedSearchQuery:
@@ -225,9 +237,7 @@ def _minimum_match_query(expressions: list[str]) -> str:
     return " OR ".join(f"({left} {right})" for left, right in combinations(expressions, 2))
 
 
-def _anchored_query(
-    terms: list[str], expressions: list[str], anchor_term: str | None
-) -> str:
+def _anchored_query(terms: list[str], expressions: list[str], anchor_term: str | None) -> str:
     if anchor_term is None:
         return ""
     if len(expressions) <= 2:

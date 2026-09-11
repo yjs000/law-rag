@@ -39,6 +39,36 @@ def _v2_hit() -> SearchHit:
     )
 
 
+@pytest.mark.asyncio
+async def test_v2_retrieval_normalizes_lay_sales_term_before_vector_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.v2.executions as executions_module
+
+    captured: dict[str, object] = {}
+
+    async def search_index(index, query, as_of_date, limit):
+        captured.update({"index": index, "query": query, "as_of_date": as_of_date, "limit": limit})
+        return []
+
+    fake_main = SimpleNamespace(llamaindex_search_index=search_index)
+    monkeypatch.setattr(executions_module, "main_module", lambda: fake_main)
+    repository = SimpleNamespace(last_sync=lambda: asyncio.sleep(0, result=None))
+    payload = QuestionRequest(question="전기 판매 정산금을 확인하고 싶습니다")
+
+    hits, _corpus_as_of = await executions_module._retrieve_pinned_v2_evidence(
+        payload, SimpleNamespace(index="frozen-index"), repository
+    )
+
+    assert hits == []
+    assert captured == {
+        "index": "frozen-index",
+        "query": "전력거래 정산금을 확인하고 싶습니다",
+        "as_of_date": payload.as_of_date,
+        "limit": 10,
+    }
+
+
 def test_v2_prepare_requires_an_idempotency_key() -> None:
     import app.main as main_module
 

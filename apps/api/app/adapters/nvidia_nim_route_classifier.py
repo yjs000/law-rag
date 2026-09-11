@@ -82,6 +82,15 @@ def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
     return tuple(missing)
 
 
+def _asks_which_records_to_check(question: str) -> bool:
+    asks_for_kind = re.search(r"(?:어떤|무슨).{0,12}(?:자료|서류|기록|내역)", question)
+    comparison_purpose = any(marker in question for marker in ("대조", "확인", "준비", "제출"))
+    supplied_document = re.search(
+        r"(?:이|첨부(?:한|된)?|올린|보낸)\s*(?:계약서|정산서|서류|자료)", question
+    )
+    return bool(asks_for_kind) and comparison_purpose and not supplied_document
+
+
 class _RouteJudgmentSchema(BaseModel):
     route: ProviderQuestionRoute
     confidence: float
@@ -186,7 +195,10 @@ class NvidiaNimQuestionRouter:
         )
         guarded_missing_fields = _missing_named_decision_fields(question)
         route: ProviderQuestionRoute = parsed.route
-        if route == "legal_search":
+        if route == "external_document_required" and _asks_which_records_to_check(question):
+            route = "legal_search"
+            missing_fields = ()
+        elif route == "legal_search":
             missing_fields = guarded_missing_fields
             if missing_fields:
                 route = "clarification_required"

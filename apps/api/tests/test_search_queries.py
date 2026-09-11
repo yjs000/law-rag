@@ -1,6 +1,18 @@
 import pytest
 
-from app.domain.search_queries import prepare_search_query
+from app.domain.search_queries import normalize_vector_search_query, prepare_search_query
+
+
+def test_vector_search_query_uses_legal_term_for_electricity_sales() -> None:
+    assert (
+        normalize_vector_search_query("전기 판매 정산금과 발전량을 확인하고 싶습니다")
+        == "전력거래 정산금과 발전량을 확인하고 싶습니다"
+    )
+
+
+def test_vector_search_query_keeps_unrelated_question_unchanged() -> None:
+    question = "발전사업 허가 요건을 알려주세요"
+    assert normalize_vector_search_query(question) == question
 
 
 def test_natural_question_removes_question_language_but_keeps_legal_terms() -> None:
@@ -15,9 +27,7 @@ def test_ai_is_not_required_to_relax_a_natural_keyword_query() -> None:
 
     assert prepared.terms == ("에너지", "사업", "허가")
     assert prepared.strict_query == "에너지 사업 허가"
-    assert prepared.minimum_match_query == (
-        "(에너지 사업) OR (에너지 허가) OR (사업 허가)"
-    )
+    assert prepared.minimum_match_query == ("(에너지 사업) OR (에너지 허가) OR (사업 허가)")
     assert prepared.anchored_query == "에너지 (사업 OR 허가)"
 
 

@@ -38,6 +38,36 @@ def test_grounding_accepts_a_directly_supported_norm() -> None:
     assert _registry().verify(GroundedSentence("허가를 받아야 합니다.", ("C1",)))
 
 
+def test_grounding_accepts_equivalent_korean_obligation_ending() -> None:
+    registry = CitationRegistry(
+        (FrozenCitation(id="C1", quote="사업자는 정산 자료를 제출하여야 한다."),)
+    )
+
+    assert registry.verify(GroundedSentence("사업자는 정산 자료를 제출해야 합니다.", ("C1",)))
+
+
+def test_grounding_distinguishes_verification_steps_from_legal_obligations() -> None:
+    registry = CitationRegistry(
+        (FrozenCitation(id="C1", quote="정산금은 전력거래량을 기준으로 산정한다."),)
+    )
+
+    assert not registry.verify(
+        GroundedSentence("정산 자료를 대조해야 합니다.", ("C1",))
+    )
+    assert not registry.verify(
+        GroundedSentence("정산 자료를 확인해야 합니다.", ("C1",))
+    )
+    assert not registry.verify(
+        GroundedSentence("정산 자료를 신고해야 합니다.", ("C1",))
+    )
+    assert not registry.verify(
+        GroundedSentence("사업자는 안전기준을 확인해야 합니다.", ("C1",))
+    )
+    assert not registry.verify(
+        GroundedSentence("사업자는 보존 기록을 확인해야 합니다.", ("C1",))
+    )
+
+
 def test_grounding_accepts_article_numbers_from_frozen_source_metadata() -> None:
     hit = SearchHit(
         provision_id=uuid4(),

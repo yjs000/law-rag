@@ -57,6 +57,12 @@ def test_v2_system_prompt_limits_one_condition_per_sentence() -> None:
 def test_v2_system_prompt_requires_actionable_checklist_labels() -> None:
     assert "동사형" in _v2_system_text()
 
+def test_v2_system_prompt_separates_evidence_review_from_legal_obligations() -> None:
+    text = _v2_system_text()
+    assert "확인하세요" in text
+    assert "대조하세요" in text
+    assert "확인해야 합니다" in text
+
 
 def test_v2_system_prompt_caps_limitations_and_splits_confirmed_vs_unconfirmed() -> None:
     text = _v2_system_text()

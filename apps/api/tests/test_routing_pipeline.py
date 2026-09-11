@@ -206,6 +206,8 @@ async def test_nvidia_router_uses_one_question_prompt_without_embedding_hint() -
     assert "1. missing_fields를 먼저 추출" in messages[1]["content"]
     assert "숫자·단위가 없으면 '설비용량'" in messages[1]["content"]
     assert "판매용·자가소비용 선택이 없으면 '전기 사용 방식'" in messages[1]["content"]
+    assert "일반적인 자료 종류를 묻는 질문은" in messages[1]["content"]
+    assert "특정 계약서·정산서의 실제 내용을 읽어야" in messages[1]["content"]
     assert "유사" not in " ".join(message["content"] for message in messages)
     assert "hint" not in " ".join(message["content"] for message in messages).lower()
 
@@ -334,6 +336,80 @@ async def test_nvidia_router_keeps_general_permit_taxonomy_searchable(question: 
 
     assert judgment.route == "legal_search"
     assert judgment.missing_fields == ()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_router_searches_for_general_record_comparison_guidance() -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "external_document_required",
+                                "confidence": 0.9,
+                                "reason": "정산 자료 대조가 필요합니다.",
+                                "missing_fields": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route("정산금이 적을 때 발전량과 공제액을 어떤 자료와 대조해야 하나요?")
+
+    assert judgment.route == "legal_search"
+    assert judgment.missing_fields == ()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_router_keeps_supplied_document_analysis_external() -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "external_document_required",
+                                "confidence": 0.9,
+                                "reason": "첨부 계약서 확인이 필요합니다.",
+                                "missing_fields": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route(
+        "첨부한 계약서의 공제액이 맞는지 확인하려면 어떤 자료와 대조해야 하나요?"
+    )
+    assert judgment.route == "external_document_required"
 
 
 def _payload_json(**overrides: object) -> dict[str, object]:

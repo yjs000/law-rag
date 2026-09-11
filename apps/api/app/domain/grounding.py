@@ -62,7 +62,6 @@ class CitationRegistry:
 _NUMBERS = re.compile(r"\d+(?:[.,]\d+)?")
 _STRONG_TERMS = ("반드시", "하여야", "해야", "의무", "금지", "허용", "모든", "항상", "예외 없이")
 
-
 def _has_supported_numbers(text: str, source_text: str) -> bool:
     normalized_text = unicodedata.normalize("NFKC", text)
     normalized_source = unicodedata.normalize("NFKC", source_text)
@@ -70,4 +69,6 @@ def _has_supported_numbers(text: str, source_text: str) -> bool:
 
 
 def _has_supported_strength(text: str, source_text: str) -> bool:
-    return all(term not in text or term in source_text for term in _STRONG_TERMS)
+    normalized_text = text.replace("하여야", "해야")
+    normalized_source = source_text.replace("하여야", "해야")
+    return all(term not in normalized_text or term in normalized_source for term in _STRONG_TERMS)

@@ -73,6 +73,9 @@ ROUTE_DEFINITIONS = """\
 - external_document_required: 계약서·정산서 등 사용자가 보유한 문서 대조가 필요한 질문.
 
 판정 우선순위:
+- 어떤 자료·서류·기록·내역을 확인하거나 대조해야 하는지 일반적인 자료 종류를 묻는 질문은
+  legal_search다. 사용자가 첨부하거나 보유한 특정 계약서·정산서의 실제 내용을 읽어야 답할 수
+  있을 때만 external_document_required다.
 - route 판단과 별개로 missing_fields를 먼저 추출한다. 질문자가 결과를 가르는 결정축을 직접
   언급했지만 구체적인 값을 주지 않은 축은 모두 missing_fields에 넣는다. 일반적인 허가·신고
   종류나 구분 기준만 묻고 결정축을 직접 지목하지 않았다면 missing_fields는 비운다.

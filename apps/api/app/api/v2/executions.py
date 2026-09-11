@@ -25,6 +25,7 @@ from app.application.v2.dependencies import (
 from app.application.v2.grounding import ClarificationGrounding
 from app.domain.routing import RouteDecision
 from app.domain.schemas import Citation, MockUser, QuestionRequest, QuestionResponse
+from app.domain.search_queries import normalize_vector_search_query
 from app.observability import emit_execution_phase
 from app.ports.clarification_case import ClarificationCaseNotFound
 from app.ports.question_execution import ExecutionNotFound
@@ -82,7 +83,10 @@ async def _retrieve_pinned_v2_evidence(
 
     main = main_module()
     hits = await main.llamaindex_search_index(
-        active.index, payload.question, payload.as_of_date, 10
+        active.index,
+        normalize_vector_search_query(payload.question),
+        payload.as_of_date,
+        10,
     )
     return hits, await repository.last_sync()
 
