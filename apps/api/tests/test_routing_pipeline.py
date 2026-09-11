@@ -287,6 +287,73 @@ async def test_nvidia_router_deterministically_finds_named_axes_without_values()
     assert judgment.route == "clarification_required"
     assert judgment.missing_fields == ("설비용량", "전기 사용 방식")
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("question", "expected_route", "expected_missing"),
+    [
+        (
+            "제가 가진 땅에 태양광 설치가 가능한지 확인하고 싶습니다.",
+            "clarification_required",
+            ("토지 지목", "용도지역"),
+        ),
+        (
+            "가족 땅에 태양광 설치가 가능한지 확인하고 싶습니다.",
+            "clarification_required",
+            ("토지 지목", "용도지역"),
+        ),
+        (
+            "제가 가진 땅에 태양광 설치가 가능한지 궁금합니다. "
+            "지목은 전이고 용도지역은 계획관리지역입니다.",
+            "legal_search",
+            (),
+        ),
+        (
+            "제가 가진 땅에 태양광 설치가 가능한지 궁금합니다. "
+            "농지나 산지이고 용도지역은 계획관리지역 또는 생산관리지역입니다.",
+            "clarification_required",
+            ("토지 지목", "용도지역"),
+        ),
+    ],
+)
+async def test_nvidia_router_scopes_land_facts_to_specific_site_feasibility(
+    question: str,
+    expected_route: str,
+    expected_missing: tuple[str, ...],
+) -> None:
+    router = NvidiaNimQuestionRouter(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/test-router",
+        timeout_seconds=10,
+    )
+
+    async def create(**_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "route": "legal_search",
+                                "confidence": 0.95,
+                                "reason": "일반 설명이 가능합니다.",
+                                "missing_fields": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    router.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await router.route(question)
+
+    assert judgment.route == expected_route
+    assert judgment.missing_fields == expected_missing
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -296,6 +363,8 @@ async def test_nvidia_router_deterministically_finds_named_axes_without_values()
         "용량별 허가·신고 기준을 알려주세요.",
         "소규모 설비의 용량별 허가·신고 기준을 알려주세요.",
         "태양광 설비는 용량에 따라 허가나 신고가 어떻게 달라지나요?",
+        "태양광을 설치할 수 있는 토지의 일반 조건은 무엇인가요?",
+        "태양광을 땅에 설치할 수 있는 일반 조건은 무엇인가요?",
         "전기 사용 방식별 절차를 알려주세요.",
         "공사 종류별 신고 기준을 알려주세요.",
         "제 설비는 용량 3000kW, 전압 저압, 전기 사용 방식은 자가소비용이고 "

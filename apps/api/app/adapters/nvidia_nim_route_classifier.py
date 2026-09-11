@@ -28,6 +28,22 @@ _VOLTAGE_VALUE = re.compile(
     r"(?:\d+(?:[.,]\d+)?)\s*(?:V|kV|볼트|킬로볼트)|저압|고압|특고압",
     re.IGNORECASE,
 )
+_SPECIFIC_SITE = re.compile(
+    r"(?:내|제|우리|본인|가족|부모님|부모|친척|가진|소유한|보유한|임대한|빌린|매입한|구입한)\s*"
+    r"(?:땅|부지)에"
+)
+_LAND_CATEGORY_VALUE = re.compile(
+    r"(?:농지|산지|임야|대지|잡종지|과수원|목장용지|"
+    r"지목(?:은|이|:)?\s*(?:전|답))"
+)
+_LAND_USE_ZONE_VALUE = re.compile(
+    r"(?:계획관리지역|생산관리지역|보전관리지역|주거지역|상업지역|공업지역|"
+    r"녹지지역|농림지역|자연환경보전지역)"
+)
+
+def _has_single_value(pattern: re.Pattern[str], question: str) -> bool:
+    return len(set(pattern.findall(question))) == 1
+
 
 
 def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
@@ -39,6 +55,16 @@ def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
     questions remain searchable.
     """
 
+    asks_specific_site_feasibility = (
+        _SPECIFIC_SITE.search(question) is not None
+        and any(marker in question for marker in ("태양광", "풍력", "발전", "설비"))
+        and "설치" in question
+        and any(marker in question for marker in ("가능", "허용", "설치할 수"))
+        and not any(
+            marker in question
+            for marker in ("어떤 땅에", "어느 땅에", "어떤 부지에", "어느 부지에")
+        )
+    )
     asks_specific_path = any(
         marker in question
         for marker in (
@@ -58,7 +84,7 @@ def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
         "소규모 설비" in question
         and "따라" in question
         and ("달라" in question or "나뉘" in question)
-    )
+    ) or asks_specific_site_feasibility
     if not asks_specific_path:
         return ()
 
@@ -79,8 +105,13 @@ def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
     has_change_work = "변경공사" in question or "변경 공사" in question
     if mentions_construction and has_new_installation == has_change_work:
         missing.append("공사 종류")
-    return tuple(missing)
 
+    if asks_specific_site_feasibility:
+        if not _has_single_value(_LAND_CATEGORY_VALUE, question):
+            missing.append("토지 지목")
+        if not _has_single_value(_LAND_USE_ZONE_VALUE, question):
+            missing.append("용도지역")
+    return tuple(missing)
 
 def _asks_which_records_to_check(question: str) -> bool:
     asks_for_kind = re.search(r"(?:어떤|무슨).{0,12}(?:자료|서류|기록|내역)", question)

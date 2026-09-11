@@ -66,9 +66,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/adapters/nvidia_nim_route_classifier.py": {
-    "mtime": 1789087821.4330988,
-    "seen": 1789095656.8344488,
-    "ast_hash": "0bd93b069108433a2cfdc3d3eb86b917",
+    "mtime": 1789097500.821324,
+    "seen": 1789097693.0029325,
+    "ast_hash": "bc93298e2a02913877427e6891322118",
     "semantic_hash": ""
   },
   "apps/api/app/adapters/openai_answerer.py": {
@@ -972,9 +972,9 @@
     "semantic_hash": "85730617c45c34aa9f1e6d22dcd96297"
   },
   "apps/api/tests/test_routing_pipeline.py": {
-    "mtime": 1789087796.880434,
-    "seen": 1789095656.869014,
-    "ast_hash": "549eb90fc7c4c50e3bee00d036308a49",
+    "mtime": 1789097480.9604888,
+    "seen": 1789097693.037508,
+    "ast_hash": "e7df4dab2dc950463645f185ad33325f",
     "semantic_hash": ""
   },
   "apps/api/tests/test_runtime_path_contract.py": {
@@ -2035,7 +2035,7 @@
   },
   "pyproject.toml": {
     "mtime": 1787114286.1499307,
-    "seen": 1789095699.336433,
+    "seen": 1789096395.091847,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789096312.132761,
-    "seen": 1789096365.3120768,
-    "ast_hash": "4a282bc09d1f6f03956b37b9bc162802",
+    "mtime": 1789097615.390215,
+    "seen": 1789097693.079725,
+    "ast_hash": "5d7618528baa99d91b08094d14784dc6",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789096308.6846857,
-    "seen": 1789096365.3183684,
-    "ast_hash": "b023a4bfb72eb6a3ce069f846c19dd70",
+    "mtime": 1789097609.462631,
+    "seen": 1789097693.0860813,
+    "ast_hash": "3424de27f24038b0d0f5fce6c02956e1",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
