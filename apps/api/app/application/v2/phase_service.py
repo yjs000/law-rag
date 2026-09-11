@@ -439,10 +439,10 @@ class V2QuestionExecutionService:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
         elif core is not None:
-            grounded_partial_resolves_empty_core = (
-                core.action == "unanswerable" and not core.citation_ids and grounded_partial_detail
+            grounded_partial_resolves_unanswerable_core = (
+                core.action == "unanswerable" and grounded_partial_detail
             )
-            if grounded_partial_resolves_empty_core:
+            if grounded_partial_resolves_unanswerable_core:
                 repaired_core_payload = {
                     **(repaired_core_payload or {}),
                     "answerability_resolution": (

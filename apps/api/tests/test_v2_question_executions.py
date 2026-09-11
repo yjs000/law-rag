@@ -532,8 +532,10 @@ def _grounded_detail_response(hit: SearchHit, *, action: str = "partially_answer
 
 
 @pytest.mark.asyncio
-async def test_v2_finalize_preserves_grounded_partial_detail_over_empty_unanswerable_core(
+@pytest.mark.parametrize("core_citation_ids", [[], ["C1"]])
+async def test_v2_finalize_preserves_grounded_partial_detail_over_unanswerable_core(
     monkeypatch: pytest.MonkeyPatch,
+    core_citation_ids: list[str],
 ) -> None:
     import app.main as main_module
 
@@ -552,7 +554,7 @@ async def test_v2_finalize_preserves_grounded_partial_detail_over_empty_unanswer
                 "hits": [hit.model_dump(mode="json")],
                 "verified_core": {
                     "summary": "제공된 근거로 답할 수 없습니다.",
-                    "citation_ids": [],
+                    "citation_ids": core_citation_ids,
                     "action": "unanswerable",
                 },
                 "verified_core_citations": [],

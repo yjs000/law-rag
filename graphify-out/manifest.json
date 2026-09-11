@@ -2035,7 +2035,7 @@
   },
   "pyproject.toml": {
     "mtime": 1787114286.1499307,
-    "seen": 1789052986.6146812,
+    "seen": 1789095699.336433,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789095596.1453376,
-    "seen": 1789095656.9114814,
-    "ast_hash": "de00dd2dc43deda15beba1c75719c5b2",
+    "mtime": 1789096312.132761,
+    "seen": 1789096365.3120768,
+    "ast_hash": "4a282bc09d1f6f03956b37b9bc162802",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -3060,9 +3060,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_v2_question_executions.py": {
-    "mtime": 1789053618.5878007,
-    "seen": 1789095656.87092,
-    "ast_hash": "16df55c0270352440b84126e1a1f1e7a",
+    "mtime": 1789096096.6882997,
+    "seen": 1789096365.268836,
+    "ast_hash": "edf59d9ae229c0f0283d8170aa934a71",
     "semantic_hash": ""
   },
   "apps/law-rag-llamaindex/src/law_rag_llamaindex/active_index.py": {
@@ -3354,9 +3354,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/application/v2/phase_service.py": {
-    "mtime": 1789052525.3899899,
-    "seen": 1789052829.0231128,
-    "ast_hash": "79b42906f0476a90626e4242855f1714",
+    "mtime": 1789096117.5535493,
+    "seen": 1789096365.2365954,
+    "ast_hash": "14c27e05b7b05e6a2e8e94657d132e0c",
     "semantic_hash": ""
   },
   "apps/api/app/bootstrap.py": {
@@ -3786,9 +3786,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/active/0069-d10-gold-failure-driven-regression.md": {
-    "mtime": 1789095591.090488,
-    "seen": 1789095656.9174178,
-    "ast_hash": "5e0c467ff3e179f794b54d7e4a06185e",
+    "mtime": 1789096308.6846857,
+    "seen": 1789096365.3183684,
+    "ast_hash": "b023a4bfb72eb6a3ce069f846c19dd70",
     "semantic_hash": ""
   },
   "docs/exec-plans/completed/0065-conversational-clarification-workflow.md": {
