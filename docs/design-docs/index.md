@@ -15,6 +15,7 @@
 | [실험 D-10 M2 동결과 M3 calibration](experiment-d-10-m3-calibration.md) | M2 완료·M3 전 | 사용자 확정 10문항 계약, 무호출 preflight와 소표본 M3 방법 |
 | [실험 D-10 전수 qrel과 사용자 adjudication](experiment-d-10-gold-adjudication.md) | draft 완료·사용자 검토 대기 | 10문항×3,066 전수 판정, qrel·reference 제안과 사용자 seal gate |
 | [실험 D-10 end-to-end 실패-회귀 평가](experiment-d-10-end-to-end-failure-regression.md) | 승인 전 초안 | 고정 10문항의 routing·retrieval·answer·citation·guardrail 순차 회귀 |
+| [실험 P 질문 API 부하·용량·회복 성능](experiment-p-load-capacity.md) | 승인 전 초안 | 통제 provider와 live NVIDIA를 분리한 동시 사용자·처리량·회복 실험 |
 | [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
 | [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
 | [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 보류·필요 시 재검사 | D-10 밖 일반화가 필요할 때만 여는 qrels·reference·adjudication 계약 |
