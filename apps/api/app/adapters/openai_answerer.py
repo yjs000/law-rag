@@ -44,6 +44,7 @@ class CoreDraft(BaseModel):
         "fully_answerable", "partially_answerable", "clarification_required", "unanswerable"
     ]
     decision_limitations: list[str] = Field(default_factory=list, exclude=True)
+    missing_information: list[str] = Field(default_factory=list)
 
 
 class ClarificationCoreDraft(CoreDraft):
@@ -108,6 +109,8 @@ def validate_core_draft(draft: CoreDraft, hits: list[SearchHit]) -> bool:
         return False
     if not set(draft.citation_ids).issubset(allowed):
         return False
+    if draft.action == "clarification_required":
+        return bool(draft.missing_information)
     return bool(draft.citation_ids) or draft.action == "unanswerable"
 
 
@@ -315,13 +318,15 @@ def build_core_messages(
         "role": "system",
         "content": (
             system + " 이번 core 단계에서는 summary, summary를 뒷받침하는 citation_ids, action"
-            "과 grounded_claims만 출력한다. sections, checklist, scope, limitations은 생성하거나 "
+            "과 missing_information, grounded_claims만 출력한다. sections, checklist, scope, "
+            "limitations은 생성하거나 "
             "암시하지 않는다. citation_ids에는 summary의 각 실질 주장을 직접 뒷받침하는 제공된 "
             "C번호만 넣는다. decision_limitations는 action 판정에 필요한 미확정 사실만 적는 "
             "내부 필드이며 공개되지 않는다. 일반 법적 기준은 근거로 설명할 수 있지만 질문자의 "
             "실제 사유까지는 확정할 수 없는 경우, summary에는 확인되는 일반 기준을 쓰고 "
             "decision_limitations에는 확인하지 못한 개별 사유를 적으며 action은 "
-            "'partially_answerable'로 쓴다."
+            "'partially_answerable'로 쓴다. clarification_required이면 필요한 사실을 "
+            "missing_information에 구체적으로 적는다."
         ),
     }
     return messages
@@ -552,6 +557,7 @@ def _text_matches_evidence(text: str, evidence: str, *, require_topic_overlap: b
     문제다.
     """
     text = _strip_epistemic_hedges(text)
+    text = re.sub(r"\[C\d+\]", "", text)
     terms = [term for term in _terms(text) if term not in _GENERIC_TERMS]
     evidence_terms = set(_terms(evidence))
     evidence_flat = "".join(re.findall(r"[가-힣a-z0-9]+", evidence.casefold()))
@@ -580,6 +586,7 @@ def _text_matches_evidence(text: str, evidence: str, *, require_topic_overlap: b
 
 def _contains_normative_assertion(text: str) -> bool:
     text = _strip_epistemic_hedges(text)
+    text = re.sub(r"\[C\d+\]", "", text)
     text_flat = "".join(re.findall(r"[가-힣a-z0-9]+", text.casefold()))
     return (
         any(term in text_flat for term in ("과태료", "벌금", "징역"))

@@ -276,6 +276,149 @@ def test_v2_prepare_persists_one_routing_unavailable_decision_after_optional_rou
     assert execution.private_payload["route"] == "routing_unavailable"
 
 
+@pytest.mark.parametrize(
+    ("snapshot_id", "generation_id"),
+    (("wrong-snapshot", None), ("snapshot-1", uuid4())),
+)
+def test_v2_prepare_rejects_evaluation_corpus_or_generation_mismatch_before_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+    snapshot_id: str,
+    generation_id,
+) -> None:
+    import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
+
+    active_generation_id = uuid4()
+    retrieval_called = False
+
+    class Workflow:
+        async def run_turn(self, _request, _owner):
+            return SimpleNamespace(case=None, next_status=None)
+
+    class Repository:
+        async def corpus_temporal_state(self, _today):
+            return SimpleNamespace(ready=True, corpus_snapshot_id="snapshot-1")
+
+    class Provider:
+        async def active(self):
+            return SimpleNamespace(
+                generation=SimpleNamespace(id=active_generation_id), index=object()
+            )
+
+    async def fake_repository():
+        return Repository()
+
+    async def fixed_route(*_args):
+        return SimpleNamespace(route="legal_search", missing_fields=())
+
+    async def fail_retrieval(*_args):
+        nonlocal retrieval_called
+        retrieval_called = True
+        return [], None
+
+    monkeypatch.setattr(
+        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+    )
+    monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
+    monkeypatch.setattr(
+        main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
+    )
+    monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+    monkeypatch.setattr(main_module, "route_question", fixed_route)
+    monkeypatch.setattr(main_module, "_retrieve_pinned_v2_evidence", fail_retrieval)
+
+    response = TestClient(main_module.app, raise_server_exceptions=False).post(
+        "/v2/question-executions",
+        headers={
+            "Idempotency-Key": "evaluation-binding-mismatch",
+            "X-Evaluation-Corpus-Snapshot": snapshot_id,
+            "X-Evaluation-Generation-Id": str(generation_id or active_generation_id),
+        },
+        json={"question": "전기사업 허가가 필요한가요?", "answer_mode": "terra"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "evaluation_corpus_binding_mismatch"
+    assert retrieval_called is False
+
+def test_v2_prepare_replay_revalidates_evaluation_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
+
+    active_generation_id = uuid4()
+    retrieval_calls = 0
+
+    class Workflow:
+        async def run_turn(self, _request, _owner):
+            return SimpleNamespace(case=None, next_status=None)
+
+    class Repository:
+        async def corpus_temporal_state(self, _today):
+            return SimpleNamespace(ready=True, corpus_snapshot_id="snapshot-1")
+
+    class Provider:
+        async def active(self):
+            return SimpleNamespace(
+                generation=SimpleNamespace(id=active_generation_id), index=object()
+            )
+
+    async def fake_repository():
+        return Repository()
+
+    async def fixed_route(*_args):
+        return SimpleNamespace(route="legal_search", missing_fields=())
+
+    async def fake_retrieval(*_args):
+        nonlocal retrieval_calls
+        retrieval_calls += 1
+        return [], None
+
+    monkeypatch.setattr(
+        main_module, "question_execution_repository", MemoryQuestionExecutionRepository()
+    )
+    monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
+    monkeypatch.setattr(
+        main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
+    )
+    monkeypatch.setattr(main_module, "clarification_workflow", Workflow())
+    monkeypatch.setattr(main_module, "route_question", fixed_route)
+    monkeypatch.setattr(main_module, "_retrieve_pinned_v2_evidence", fake_retrieval)
+    client = TestClient(main_module.app, raise_server_exceptions=False)
+    payload = {"question": "전기사업 허가가 필요한가요?", "answer_mode": "terra"}
+    headers = {
+        "Idempotency-Key": "evaluation-binding-replay",
+        "X-Evaluation-Corpus-Snapshot": "snapshot-1",
+        "X-Evaluation-Generation-Id": str(active_generation_id),
+    }
+
+    first = client.post("/v2/question-executions", headers=headers, json=payload)
+    retrieval_calls_after_first = retrieval_calls
+    replay = client.post(
+        "/v2/question-executions",
+        headers={**headers, "X-Evaluation-Generation-Id": str(uuid4())},
+        json=payload,
+    )
+    unbound_replay = client.post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "evaluation-binding-replay"},
+        json=payload,
+    )
+
+    assert first.status_code == 200
+    assert first.json()["evaluation_retrieved_evidence_ids"] == []
+    assert replay.status_code == 409
+    assert replay.json()["detail"]["code"] == "evaluation_corpus_binding_mismatch"
+    assert unbound_replay.status_code == 409
+    assert unbound_replay.json()["detail"]["code"] == (
+        "evaluation_corpus_binding_mismatch"
+    )
+    assert retrieval_calls == retrieval_calls_after_first
+
+
 @pytest.mark.asyncio
 async def test_v2_prepare_uses_v2_router_seam_instead_of_v1_router(
     monkeypatch: pytest.MonkeyPatch,
@@ -495,7 +638,54 @@ async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
             "citation_ids": ["C1"],
         }
     ]
+    assert [citation["id"] for citation in result.response["citations"]] == ["C1"]
     assert result.events[0].payload["outcome"] == "degraded"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("core_action", ["fully_answerable", "partially_answerable"])
+async def test_v2_finalize_does_not_reapply_uncited_core_after_grounding_fallback(
+    monkeypatch: pytest.MonkeyPatch, core_action: str
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+
+    async def ungrounded_detail(_execution):
+        return _grounded_detail_response(hit, action=core_action).model_copy(
+            update={"citations": [], "sections": [], "checklist": []}
+        )
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", ungrounded_detail)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "route": "legal_search",
+                "verified_core": {
+                    "summary": hit.content,
+                    "citation_ids": ["C1"],
+                    "action": core_action,
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["action"] == "unanswerable"
+    assert result.response["result_status"] == "grounding_failed"
+    assert result.response["summary"] == (
+        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
+    )
+    assert result.response["sections"] == []
+    assert result.response["checklist"] == []
+    assert result.response["citations"] == []
 
 
 def _grounded_detail_response(hit: SearchHit, *, action: str = "partially_answerable"):
@@ -532,8 +722,48 @@ def _grounded_detail_response(hit: SearchHit, *, action: str = "partially_answer
 
 
 @pytest.mark.asyncio
+async def test_v2_finalize_normalizes_partial_limitations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    detail = _grounded_detail_response(hit)
+
+    async def grounded_partial(_execution):
+        return detail
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", grounded_partial)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "route": "legal_search",
+                "verified_core": {
+                    "summary": hit.content,
+                    "citation_ids": ["C1"],
+                    "action": "partially_answerable",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["limitations"] == [
+        "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다.",
+        "이 서비스는 법률 자문을 대체하지 않습니다.",
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("core_citation_ids", [[], ["C1"]])
-async def test_v2_finalize_preserves_grounded_partial_detail_over_unanswerable_core(
+async def test_v2_finalize_preserves_unanswerable_core_over_grounded_partial_detail(
     monkeypatch: pytest.MonkeyPatch,
     core_citation_ids: list[str],
 ) -> None:
@@ -566,13 +796,194 @@ async def test_v2_finalize_preserves_grounded_partial_detail_over_unanswerable_c
     )
 
     assert result.response is not None
-    assert result.response["summary"] == hit.content
-    assert result.response["action"] == "partially_answerable"
-    assert result.response["citations"]
-    assert result.private_payload == {
-        "answerability_resolution": "grounded_detail_partial_overrode_unanswerable_core"
-    }
+    assert result.response["summary"] == (
+        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
+    )
+    assert result.response["action"] == "unanswerable"
+    assert result.response["sections"] == []
+    assert result.response["checklist"] == []
+    assert result.response["citations"] == []
+    assert result.private_payload is None
 
+
+@pytest.mark.asyncio
+async def test_v2_finalize_preserves_routing_unavailable_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.application.answering import route_guidance_fallback
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    routed_response = route_guidance_fallback(request, "routing_unavailable")
+
+    async def routing_unavailable(_execution):
+        return routed_response
+
+    monkeypatch.setattr(
+        main_module, "_v2_response_from_frozen_evidence", routing_unavailable
+    )
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [],
+                "route": "routing_unavailable",
+                "verified_core": {
+                    "summary": routed_response.summary,
+                    "citation_ids": [],
+                    "action": "unanswerable",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["route"] == "routing_unavailable"
+    assert result.response["action"] == "unanswerable"
+    assert result.response["citations"] == []
+
+
+@pytest.mark.asyncio
+async def test_v2_finalize_preserves_safe_clarification_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.application.answering import route_guidance_fallback
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    routed_response = route_guidance_fallback(
+        request,
+        "clarification_required",
+        missing_fields=("설비용량", "전기사업법이 적용됩니다"),
+    )
+
+    async def clarification_route(_execution):
+        return routed_response
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", clarification_route)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [],
+                "route": "clarification_required",
+                "missing_fields": ["설비용량", "전기사업법이 적용됩니다"],
+                "verified_core": {
+                    "summary": routed_response.summary,
+                    "citation_ids": [],
+                    "action": "clarification_required",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["route"] == "clarification_required"
+    assert result.response["summary"].endswith("추가 정보:\n- 설비용량: [ ]")
+    assert "전기사업법이 적용됩니다" not in result.response["summary"]
+
+
+@pytest.mark.asyncio
+async def test_v2_finalize_clears_detail_surfaces_for_clarification_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    detail = _grounded_detail_response(hit)
+
+    async def grounded_partial(_execution):
+        return detail
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", grounded_partial)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "verified_core": {
+                    "summary": (
+                        "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n"
+                        "다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 "
+                        "한 번에 보내주세요.\n"
+                        "추가 정보만 따로 보내지 마세요.\n\n"
+                        "질문: 전기사업 허가가 필요한가요?\n추가 정보:\n- 설비용량: [ ]"
+                    ),
+                    "citation_ids": [],
+                    "action": "clarification_required",
+                    "missing_information": ["설비용량", "전기사업법이 적용됩니다"],
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["action"] == "clarification_required"
+    assert result.response["summary"].endswith("추가 정보:\n- 설비용량: [ ]")
+    assert "전기사업법이 적용됩니다" not in result.response["summary"]
+    assert result.response["sections"] == []
+    assert result.response["checklist"] == []
+    assert result.response["citations"] == []
+
+@pytest.mark.asyncio
+async def test_v2_finalize_rejects_semantically_unrelated_partial_detail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    hit = _v2_hit()
+    detail = _grounded_detail_response(hit)
+    unrelated = "환경부 승인을 받으면 사업할 수 있습니다."
+    detail.summary = unrelated
+    detail.sections[0].claim = unrelated
+    detail.sections[0].explanation = unrelated
+    detail.checklist[0].label = "관할 기관에 신청서를 내면 됩니다."
+
+    async def unrelated_partial(_execution):
+        return detail
+
+    monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", unrelated_partial)
+    result = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={
+                "request": request.model_dump(mode="json"),
+                "hits": [hit.model_dump(mode="json")],
+                "verified_core": {
+                    "summary": "제공된 근거로 답할 수 없습니다.",
+                    "citation_ids": ["C1"],
+                    "action": "unanswerable",
+                },
+                "verified_core_citations": [],
+            },
+            frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    assert result.response is not None
+    assert result.response["summary"] == (
+        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
+    )
+    assert result.response["action"] == "unanswerable"
+    assert result.response["sections"] == []
+    assert result.response["checklist"] == []
+    assert result.response["citations"] == []
+    assert result.private_payload is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("detail_action", ["fully_answerable", "unanswerable"])
@@ -609,8 +1020,13 @@ async def test_v2_finalize_does_not_promote_other_detail_actions_over_unanswerab
     )
 
     assert result.response is not None
-    assert result.response["summary"] == "제공된 근거로 답할 수 없습니다."
+    assert result.response["summary"] == (
+        "검증된 법률 주장을 만들지 못했습니다. 인용된 공식 원문을 직접 확인해 주세요."
+    )
     assert result.response["action"] == "unanswerable"
+    assert result.response["sections"] == []
+    assert result.response["checklist"] == []
+    assert result.response["citations"] == []
     assert result.private_payload is None
 
 

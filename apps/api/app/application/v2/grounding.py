@@ -153,7 +153,9 @@ def response_is_grounded(response: QuestionResponse, registry: CitationRegistry)
     """Require every published legal claim to be supported by its citation IDs."""
 
     if not response.citations:
-        return not response.sections and not response.checklist
+        return response.action in {"unanswerable", "clarification_required"} and not (
+            response.sections or response.checklist
+        )
     all_citations = tuple(citation.id for citation in response.citations)
     if not text_is_grounded(response.summary, all_citations, registry):
         return False

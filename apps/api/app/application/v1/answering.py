@@ -11,6 +11,7 @@ from law_rag_core.ports.repository import LegalRepository
 from app.application.answering import (
     post_generation_clarification_answer,
     route_guidance_fallback,
+    safe_answer_limitations,
     search_only_answer,
 )
 from app.application.request_budget import RequestBudget, StageTimeoutError
@@ -423,7 +424,7 @@ async def answer_question(
         sections=draft.sections,
         checklist=draft.checklist,
         citations=citations,
-        limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
+        limitations=safe_answer_limitations(draft.action),
         corpus_as_of=corpus_as_of,
         requested_answer_mode=payload.answer_mode,
         action=draft.action,

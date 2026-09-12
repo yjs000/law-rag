@@ -8,6 +8,7 @@ import pytest
 
 from scripts.d10_failure_runner import (
     D10AnswerExecution,
+    D10AnswerObservation,
     D10FailureRunnerError,
     D10RunInput,
     load_d10_run_input,
@@ -147,10 +148,13 @@ async def test_single_case_hides_provider_exception_and_marks_blocked() -> None:
 @pytest.mark.asyncio
 async def test_answer_case_returns_only_safe_action_and_counts() -> None:
     async def answer_executor(_: D10RunInput) -> object:
-        return SimpleNamespace(
-            action="answer",
-            citations=(SimpleNamespace(id="C1", quote="private statute"),),
-            summary="private answer text",
+        return D10AnswerObservation(
+            response=SimpleNamespace(
+                action="answer",
+                citations=(SimpleNamespace(id="C1", quote="private statute"),),
+                summary="private answer text",
+            ),
+            retrieved_evidence_ids=("p1",),
         )
 
     execution = await run_single_answer_case(

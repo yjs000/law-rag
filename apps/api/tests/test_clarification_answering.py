@@ -231,7 +231,7 @@ async def test_initial_clarification_route_preserves_clarification_action_in_cor
                 route="clarification_required",
                 reason_code="router_judgment",
                 confidence=0.9,
-                missing_fields=("설비용량",),
+                missing_fields=("설비용량", "전기사업법이 적용됩니다"),
             ),
         )
     )
@@ -241,8 +241,44 @@ async def test_initial_clarification_route_preserves_clarification_action_in_cor
     assert core.target is ExecutionStatus.CORE_ANSWERED
     assert core.private_payload is not None
     assert core.private_payload["verified_core"]["action"] == "clarification_required"
+    summary = core.private_payload["verified_core"]["summary"]
+    assert summary.endswith("추가 정보:\n- 설비용량: [ ]")
+    assert "전기사업법이 적용됩니다" not in summary
     assert answerer.core_calls == 0
 
+
+@pytest.mark.asyncio
+async def test_generated_clarification_core_with_retrieval_is_preserved() -> None:
+    class ClarificationCoreAnswerer:
+        async def answer_core(
+            self, _request: QuestionRequest, _hits: list[SearchHit]
+        ) -> CoreDraft:
+            return CoreDraft(
+                summary="전기사업법이 적용됩니다.",
+                citation_ids=[],
+                action="clarification_required",
+                missing_information=["설비용량", "전기사업법이 적용됩니다"],
+            )
+
+    service, _executions = _service(ClarificationCoreAnswerer())  # type: ignore[arg-type]
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="특정 설비에 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="generated-clarification-with-evidence",
+            user=None,
+        )
+    )
+
+    core = await service.run_core(prepared.execution)
+
+    assert core.target is ExecutionStatus.CORE_ANSWERED
+    assert core.private_payload is not None
+    assert core.private_payload["verified_core"]["action"] == "clarification_required"
+    assert core.private_payload["verified_core"]["citation_ids"] == []
+    summary = core.private_payload["verified_core"]["summary"]
+    assert summary.endswith("추가 정보:\n- 설비용량: [ ]")
+    assert "전기사업법이 적용됩니다" not in summary
 
 async def _case_record(cases: MemoryClarificationCaseRepository, context: ClarificationGrounding):
     return await cases.create_or_get(
@@ -709,8 +745,8 @@ async def test_unbound_published_detail_is_replaced_before_terminal_sse_publicat
 
 
 @pytest.mark.asyncio
-async def test_non_clarification_core_repair_uses_grounded_partial_detail() -> None:
-    """A failed core may recover only through a grounded partial detail witness."""
+async def test_non_clarification_core_repair_uses_safe_fallback() -> None:
+    """A failed core cannot be promoted by an independently generated detail."""
 
     class AlwaysUngroundedCoreAnswerer:
         def __init__(self) -> None:
@@ -773,16 +809,14 @@ async def test_non_clarification_core_repair_uses_grounded_partial_detail() -> N
 
     published = finalized.events[0].payload["response"]
     assert answerer.core_calls == 1
-    assert answerer.detail_calls == 1
+    assert answerer.detail_calls == 0
     assert finalized.events[0].payload["outcome"] == "degraded"
-    assert published["result_status"] == "results"
-    assert published["sections"]
-    assert published["checklist"]
-    assert published["citations"]
-    assert published["action"] == "partially_answerable"
-    assert finalized.private_payload == {
-        "answerability_resolution": "grounded_detail_partial_repaired_core"
-    }
+    assert published["result_status"] == "grounding_failed"
+    assert published["sections"] == []
+    assert published["checklist"] == []
+    assert published["citations"] == []
+    assert published["action"] == "unanswerable"
+    assert finalized.private_payload is None
 
 
 @pytest.mark.asyncio
@@ -815,11 +849,19 @@ async def test_successful_core_repair_persists_clarification_transition() -> Non
                     )
                 ]
             )
+            if self.core_calls == 1:
+                return ClarificationCoreDraft(
+                    summary="A verified repair claim.",
+                    citation_ids=["C1"],
+                    action="partially_answerable",
+                    grounded_claims=claims,
+                )
             return ClarificationCoreDraft(
-                summary="A verified repair claim.",
-                citation_ids=["C1"],
-                action="partially_answerable",
-                grounded_claims=claims,
+                summary="전기사업법이 적용됩니다.",
+                citation_ids=[],
+                action="clarification_required",
+                missing_information=["설비용량", "전기사업법이 적용됩니다"],
+                grounded_claims=[],
             )
 
         async def answer(
@@ -885,3 +927,5 @@ async def test_successful_core_repair_persists_clarification_transition() -> Non
     assert persisted.status is ClarificationCaseStatus.WAITING_FOR_USER
     assert finalized.events[0].payload["outcome"] == "normal"
     assert published["clarification"]["status"] == "waiting_for_user"
+    assert published["summary"].endswith("추가 정보:\n- 설비용량: [ ]")
+    assert "전기사업법이 적용됩니다" not in published["summary"]

@@ -6,10 +6,13 @@ from pathlib import Path
 import pytest
 
 from scripts.d10_failure_ledger import (
+    D10_CASE_ORDER,
     AttemptRecord,
     LedgerValidationError,
     append_attempt,
     summarize_attempts,
+    validate_final_summary,
+    write_final_summary,
 )
 
 
@@ -218,3 +221,76 @@ def test_answer_attempt_rejects_sensitive_or_answer_text_fields(tmp_path: Path, 
 
     with pytest.raises(LedgerValidationError):
         append_attempt(tmp_path / "attempts.jsonl", payload)
+
+def test_final_summary_is_rebuilt_and_validated_from_all_latest_passes(
+    tmp_path: Path,
+) -> None:
+    ledger_path = tmp_path / "attempts.jsonl"
+    for number, case_id in enumerate(D10_CASE_ORDER, 1):
+        append_attempt(ledger_path, _record(number, case_id=case_id))
+    regression = tmp_path / "apps/api/tests/test_regression.py"
+    regression.parent.mkdir(parents=True)
+    regression.write_text("", encoding="utf-8")
+    defects = {"independent_citation_binding": ("apps/api/tests/test_regression.py",)}
+
+    written = write_final_summary(
+        ledger_path, tmp_path / "summary.json", defects, repository_root=tmp_path
+    )
+
+    assert written["latest_case_statuses"] == {
+        case_id: "pass" for case_id in D10_CASE_ORDER
+    }
+    assert written["resolved_defects"] == [
+        {
+            "code": "independent_citation_binding",
+            "regression_tests": ["apps/api/tests/test_regression.py"],
+        }
+    ]
+    assert validate_final_summary(
+        ledger_path, tmp_path / "summary.json", defects, repository_root=tmp_path
+    ) == written
+
+
+def test_final_summary_rejects_incomplete_cases_and_missing_paths(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "attempts.jsonl"
+    append_attempt(ledger_path, _record(1, case_id=D10_CASE_ORDER[0]))
+
+    with pytest.raises(LedgerValidationError, match="final_summary_cases_incomplete"):
+        write_final_summary(
+            ledger_path,
+            tmp_path / "summary.json",
+            {"defect": ("apps/api/tests/missing.py",)},
+            repository_root=tmp_path,
+        )
+
+    for number, case_id in enumerate(D10_CASE_ORDER[1:], 2):
+        append_attempt(ledger_path, _record(number, case_id=case_id))
+    with pytest.raises(LedgerValidationError, match="final_summary_regression_missing"):
+        write_final_summary(
+            ledger_path,
+            tmp_path / "summary.json",
+            {"defect": ("apps/api/tests/missing.py",)},
+            repository_root=tmp_path,
+        )
+
+def test_final_summary_rejects_case_order_regression(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "attempts.jsonl"
+    append_attempt(
+        ledger_path,
+        _record(1, case_id=D10_CASE_ORDER[0], status="failure", error_code="timeout"),
+    )
+    append_attempt(ledger_path, _record(2, case_id=D10_CASE_ORDER[1]))
+    append_attempt(ledger_path, _record(3, case_id=D10_CASE_ORDER[0]))
+    for number, case_id in enumerate(D10_CASE_ORDER[2:], 4):
+        append_attempt(ledger_path, _record(number, case_id=case_id))
+    regression = tmp_path / "apps/api/tests/test_regression.py"
+    regression.parent.mkdir(parents=True)
+    regression.write_text("", encoding="utf-8")
+
+    with pytest.raises(LedgerValidationError, match="final_summary_case_order_invalid"):
+        write_final_summary(
+            ledger_path,
+            tmp_path / "summary.json",
+            {"defect": ("apps/api/tests/test_regression.py",)},
+            repository_root=tmp_path,
+        )

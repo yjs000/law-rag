@@ -1,11 +1,15 @@
 from datetime import date
 from uuid import uuid4
 
+import pytest
+
+from app.application.answering import post_generation_clarification_answer
 from app.application.v2.evidence import freeze_citations
+from app.application.v2.grounding import grounding_fallback, response_is_grounded
 from app.domain.answer_events import AnswerEvent, EventProtocolError
 from app.domain.catalog import SourceKind
 from app.domain.grounding import CitationRegistry, FrozenCitation, GroundedSentence
-from app.domain.schemas import SearchHit
+from app.domain.schemas import QuestionRequest, SearchHit
 
 
 def _registry() -> CitationRegistry:
@@ -24,6 +28,33 @@ def test_grounding_rejects_absent_or_unknown_citations() -> None:
 
     assert not registry.verify(GroundedSentence("허가가 필요합니다.", ()))
     assert not registry.verify(GroundedSentence("허가가 필요합니다.", ("C99",)))
+
+
+@pytest.mark.parametrize("action", ["fully_answerable", "partially_answerable"])
+def test_response_grounding_rejects_substantive_summary_without_citations(
+    action: str,
+) -> None:
+    response = grounding_fallback(QuestionRequest(question="합성 질문")).model_copy(
+        update={
+            "summary": "전기사업을 하려는 자는 허가를 받아야 합니다.",
+            "action": action,
+            "citations": [],
+            "sections": [],
+            "checklist": [],
+        }
+    )
+
+    assert not response_is_grounded(response, _registry())
+
+
+def test_response_grounding_preserves_safe_zero_citation_nonanswers() -> None:
+    request = QuestionRequest(question="합성 질문")
+
+    assert response_is_grounded(grounding_fallback(request), _registry())
+    assert response_is_grounded(
+        post_generation_clarification_answer(request, ["토지 지목"], mode="ai"),
+        _registry(),
+    )
 
 
 def test_grounding_rejects_unsupported_number_norm_and_overclaim() -> None:

@@ -5,7 +5,10 @@ from __future__ import annotations
 import time
 from typing import Any, Literal
 
-from app.application.answering import clarification_resubmission_summary
+from app.application.answering import (
+    clarification_resubmission_summary,
+    safe_answer_limitations,
+)
 from app.application.request_budget import RequestBudget, StageTimeoutError
 from app.application.v1.dependencies import V1AnswerDependencies
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
@@ -105,7 +108,7 @@ async def generate_blocked_answer(
         sections=[],
         checklist=[],
         citations=[],
-        limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
+        limitations=safe_answer_limitations(draft.action),
         requested_answer_mode=payload.answer_mode,
         action=draft.action,
         route=route_decision.route,

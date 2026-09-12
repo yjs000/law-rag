@@ -23,6 +23,7 @@ from app.application.v2.dependencies import (
     PrepareQuestion,
 )
 from app.application.v2.grounding import ClarificationGrounding
+from app.application.v2.phase_service import EvaluationCorpusBindingError
 from app.domain.routing import RouteDecision
 from app.domain.schemas import Citation, MockUser, QuestionRequest, QuestionResponse
 from app.domain.search_queries import normalize_vector_search_query
@@ -91,11 +92,31 @@ async def _retrieve_pinned_v2_evidence(
     return hits, await repository.last_sync()
 
 
+def _evaluation_retrieved_evidence_ids(execution: object) -> list[str]:
+    private_payload = getattr(execution, "private_payload", {})
+    hits = private_payload.get("hits") if isinstance(private_payload, dict) else None
+    if not isinstance(hits, list):
+        raise EvaluationCorpusBindingError("evaluation retrieval observation unavailable")
+    identifiers = [
+        str(hit["provision_id"])
+        for hit in hits
+        if isinstance(hit, dict) and hit.get("provision_id") is not None
+    ]
+    if len(identifiers) != len(hits):
+        raise EvaluationCorpusBindingError("evaluation retrieval observation invalid")
+    return identifiers
+
 @router.post("/v2/question-executions")
 async def prepare_question_execution(
     payload: QuestionRequest,
     request: Request,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
+    evaluation_snapshot: Annotated[
+        str | None, Header(alias="X-Evaluation-Corpus-Snapshot")
+    ] = None,
+    evaluation_generation: Annotated[
+        UUID | None, Header(alias="X-Evaluation-Generation-Id")
+    ] = None,
 ) -> dict[str, object]:
     """Freeze active evidence before the core or finalize provider phases start."""
 
@@ -118,11 +139,27 @@ async def prepare_question_execution(
                     clarification=clarification,
                     clarification_outcome=clarification_outcome,
                     route_decision=route_decision,
+                    required_corpus_snapshot_id=evaluation_snapshot,
+                    required_generation_id=evaluation_generation,
                 )
             )
             response = main.v2_question_execution_service.prepared_response(prepared)
+            if evaluation_snapshot is not None and evaluation_generation is not None:
+                response["evaluation_retrieved_evidence_ids"] = (
+                    _evaluation_retrieved_evidence_ids(prepared.execution)
+                )
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="v2_prepare_timeout") from exc
+    except EvaluationCorpusBindingError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "evaluation_corpus_binding_mismatch",
+                "message": (
+                    "평가 corpus binding이 현재 검색 generation과 일치하지 않습니다."
+                ),
+            },
+        ) from exc
     emit_execution_phase(str(prepared.execution.execution_id), "prepare", "prepared")
     return response
 

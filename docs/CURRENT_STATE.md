@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 [E-006 D-10 Gold 순차 실패-회귀 평가](exec-plans/active/0069-d10-gold-failure-driven-regression.md)다. 사용자는 `.env.local`, NVIDIA 전송, Supabase corpus 읽기와 V2 실행상태 쓰기·정리, 로컬 안전 ledger, Vercel read-only 로그 조회를 포함한 외부 접근 범위 전체를 승인했다. V1 answer executor를 V2 prepare→core→finalize와 V2 phase 57초/provider 55초 예산으로 교체한 뒤 `lay-energy-0111`부터 재개한다. 로드맵은 세션 시작용 얇은 색인이며 모든 실행계획을 읽으라는 뜻이 아니다.
+현재 `Picked Up` milestone은 없다. [E-006 D-10 Gold batch defect 평가·봉인](exec-plans/completed/0069-d10-gold-failure-driven-regression.md)은 결정적 P1 두 건을 RED-first로 수정하고 독립 review와 전체 검증을 통과했다. 고정 코드의 최종 원장은 10개 case를 모두 기록했으며, latest outcome은 pass 7과 provider 변동 blocked 3이다. 열린 결정적 P0/P1은 없어 `코드 검증 통과 + provider 변동 blocked`로 종결했고 NVIDIA 안정성과 stochastic action 품질은 별도 후속 범위다. 로드맵은 세션 시작용 얇은 색인이므로 선택된 계획의 선언 범위만 읽는다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.

@@ -313,6 +313,12 @@ async def test_nvidia_router_deterministically_finds_named_axes_without_values()
             "clarification_required",
             ("토지 지목", "용도지역"),
         ),
+        (
+            "제가 가진 땅에 태양광 설치가 가능한지 궁금합니다. "
+            "지목은 전 또는 답이고 용도지역은 계획관리지역입니다.",
+            "clarification_required",
+            ("토지 지목",),
+        ),
     ],
 )
 async def test_nvidia_router_scopes_land_facts_to_specific_site_feasibility(

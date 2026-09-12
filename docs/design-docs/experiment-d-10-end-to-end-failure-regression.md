@@ -6,7 +6,7 @@
 
 ## 목표와 범위
 
-D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경로의 routing, retrieval, answer, citation, guardrail을 한 문항씩 검증한다. 각 문항은 통과할 때만 다음 문항으로 진행한다. 이는 1,000-case Gold 평가나 held-out 품질 주장이 아니다.
+D-10의 고정 10문항을 calibration 평가셋으로 사용해 실제 RAG 경로의 routing, retrieval, answer, citation, guardrail을 검증한다. 고정 revision의 단일 진단 패스에서는 실패해도 다음 문항을 계속 진단하고, 발견한 결정적 P0/P1을 동결해 batch로 수정한다. 이는 1,000-case Gold 평가나 held-out 품질 주장이 아니다.
 
 ## 고정 입력과 신뢰 경계
 
@@ -43,7 +43,7 @@ E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestB
 
 `D10AnswerJudge`는 sealed case의 `expected_action`과 public answer metadata를 비교한다. 답변 본문과 citation evidence는 runner 내부에서만 검사하고, 통과/실패 code만 외부로 내보낸다. judge는 모델에게 채점시키지 않으며 결정적 규칙만 사용한다.
 
-`run_d10_failure_driven`은 한 번에 한 문항만 실행한다. `pass`면 다음 고정 case를 선택하고, `failure` 또는 `blocked`면 멈춘다. 실패의 코드 결함은 회귀 테스트를 먼저 추가한 뒤 최소 수정과 동일 문항 재실행으로 해결한다.
+`run_d10_failure_driven`의 단일 case 실행 경계와 safe ledger는 유지한다. 운영 orchestration은 진단 원장에서는 한 case의 `failure` 또는 `blocked` 뒤에도 다음 고정 case를 실행하고, provider timeout·503·`routing_unavailable`만 같은 case에 최초 시도 포함 최대 3회 허용한다. 결정적 P0/P1 목록을 동결한 뒤 각 결함의 RED를 개별 확인하고 전체를 batch로 수정한다.
 
 ## expected_action 판정 계약
 
@@ -73,7 +73,7 @@ E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestB
 
 ## 검증과 완료 조건
 
-각 action별 정상·금지·경계 unit test, native loader의 contract mismatch test, orchestrator의 stop/resume test를 유지한다. 외부 조건이 준비된 경우 실제 D-10을 한 문항씩 실행한다. 10개 모두 pass인 경우에만 native D-10 전체 재검증 및 안전 summary를 만든다.
+각 action별 정상·금지·경계 unit test, native loader의 contract mismatch test와 safe ledger 검증을 유지한다. 고정 revision의 전체 진단 패스에서 확인된 결정적 P0/P1만 동결해 수정하고, 관련 회귀·독립 review·전체 verify를 batch 끝에서 각각 한 번 수행한다. 그 뒤 implementation code를 변경하지 않은 채 final 원장 하나를 만든다. 10개 모두 pass이면 정상 봉인하며, case별 최대 3회가 모두 provider timeout·503·`routing_unavailable` 같은 외부 차단이면 safe `blocked` 증거와 함께 `코드 검증 통과 + 외부 의존성 blocked`로도 완료할 수 있다. 새로운 결정적 P0/P1만 final 원장을 폐기하고 새 진단 패스로 돌아가는 사유다.
 
 ## 결정 기록
 
@@ -92,3 +92,4 @@ E-006은 V1 내부 함수 `_answer_question`을 호출하지 않고 V1 `RequestB
 - 2026-09-10: 결정 사실 누락 우선순위는 prompt-only 분류로 구현하지 않는다. 동일 질문에서도 NVIDIA의 `missing_fields`가 변동했기 때문이다. 내·제·해당 설비 같은 명시적 적용 표지, 또는 기준값 없는 “소규모 설비”와 `결정축에 따라 달라지는가`가 함께 나타난 미해결 적용 비교에서만 용량·전압·사용 방식·공사 종류의 실제 값을 검사하는 좁은 deterministic 온톨로지 guardrail을 적용한다. provider 자유형 `missing_fields`만으로 route를 승격하지 않으며, 로컬에서 검증한 누락 사실이 있을 때만 `legal_search` 후보를 `clarification_required`로 바꾼다. 일반 허가·신고 taxonomy, 소규모 설비의 축별 기준, 일반 “설비는 용량에 따라 어떻게 달라지는가” 비교 질문은 검색 가능 상태를 유지한다. 관련 회귀 65개 뒤 `lay-energy-0251` attempt 17이 이 계약으로 `ask_clarifying_question` pass했다.
 - 2026-09-10: `lay-energy-0346`은 코드 변경 없이 통과했다. 첫 시도의 `routing_unavailable`은 새 E-006 시도로 재실행했고, attempt 19가 근거·citation 각 5건과 `partial_answer_with_limits`로 pass했다.
 - 2026-09-11: `lay-energy-0521`은 검색 실패가 아니라 생성 근거 압축과 core/detail 판정 조정 결함이었다. 검색 상위 10건에는 정답 조문 4건이 있었지만 “조당 한 leaf” 정책이 하나의 조에 나뉜 발급 대상·신청·제외 항을 분리해 생성 입력의 정답 중첩을 2건으로 낮췄다. 최대 5개 조와 60,000자 budget은 유지하고 선택된 조 안의 ranked leaf를 모두 보존하며 bare 조 header만 하위 항이 있을 때 제거한다. V2 core의 action 판정용 `decision_limitations`는 provider schema에만 두고 model dump·DB·SSE에서는 제외한다. prompt-only 수정은 강제력이 없다는 리뷰를 반영해, 비-clarification core grounding 실패는 같은 core를 다시 생성하지 않는다. 동일 frozen evidence로 만든 detail이 `partially_answerable`이고 citations·sections·checklist가 존재하며 기존 구조·grounding 검증을 모두 통과할 때만 authoritative final response로 보존한다. 다른 action·빈 구조·grounding 실패는 기존 안전 fallback을 유지하고 clarification의 structural claim repair도 바꾸지 않는다. 변경 후 선택 근거 9건·정답 중첩 4건으로 회복됐고 attempt 34가 citation 9건과 `partial_answer_with_limits`로 pass했다. production 판정에는 case ID·Gold qrel·REC keyword·미검증 cosine threshold를 넣지 않았다.
+- 2026-09-11: E-006 완료 조건을 batch defect workflow로 제한했다. 고정 revision의 단일 D-10 진단 패스에서 재현된 결정적 P0/P1만 동결해 결함별 RED 후 일괄 수정하고, 관련 회귀·독립 review·전체 verify는 batch 경계에서 각각 한 번 수행한다. provider timeout·503·`routing_unavailable`은 case당 최초 시도 포함 최대 3회 뒤 safe `blocked`로 코드 완료와 분리하므로, 10개 모두 pass가 E-006 완료의 필수조건은 아니다. final 원장은 code/review 고정 뒤 하나만 만들며 새로운 결정적 P0/P1만 폐기·재진단 사유로 삼는다. 동결 뒤의 비차단 hardening과 NVIDIA 운영 안정성은 별도 후속 계획으로 분리한다.

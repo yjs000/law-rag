@@ -1,15 +1,15 @@
 > 작업 ID: `E-006`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: D-10 Gold의 `approved_gold` 상태, `.env.local`, NVIDIA와 Supabase V2 E2E 전체 접근 승인, clean code provenance가 준비되어야 한다.
-> 다음 행동: `e006-v2-20260911-final-01` 원장에서 `lay-energy-0201`부터 남은 D-10을 고정 순서로 전체 재검증하고, 실패 시 해당 case의 pass/fix loop로 돌아간다.
+> 다음 행동: none
 > 참고 범위:
-> - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L75 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
+> - `docs/design-docs/experiment-d-10-end-to-end-failure-regression.md` L1-L76 — V2 end-to-end 실행·승인·예산 계약과 완료 조건
 > - `apps/api/scripts/d10_failure_runner.py` L1-L147 — native D-10 sealed input·retrieval 안전 경계
 > - `apps/api/scripts/run_d10_failure_driven.py` L1-L175 — 한 문항씩 진행하는 failure-driven orchestrator와 CLI
 
-# D-10 Gold 순차 실패-회귀 평가 기록
+# D-10 Gold batch defect 평가·봉인 기록
 
 ## 고정 계약
 
@@ -20,6 +20,9 @@
 - 모든 기록은 `.data/experiments/d-gold-10/<run-id>/`에만 쓴다. 질문·원문·prompt·예외 문자열·credential은 허용 필드가 아니다.
 - E-006은 V2 prepare→core→finalize endpoint를 사용하고 V2 phase 57초/provider 55초 예산을 적용한다. V1 `_answer_question`, `RequestBudget`, routing 8초 예산을 사용하지 않는다.
 - `.env.local`, NVIDIA 질문·근거·prompt 전송, Supabase corpus 읽기와 `question_executions`·events·issues 쓰기/정리, 로컬 안전 ledger, Vercel read-only 로그 조회는 승인됐다. corpus mutation·배포·push는 금지한다.
+- E-006A는 평가기·safe ledger·결정적 judge·V2 실행 계약 구현으로 보며 사실상 완료했다. 남은 E-006B 범위는 현재 정의된 계약과 고정 D-10 10개를 고정 revision에서 진단하고, 그 한 번의 진단 패스에서 확인된 결정적 P0/P1만 일괄 수정·검증·봉인하는 것이다.
+- provider timeout, HTTP 503, `routing_unavailable`과 동일한 외부 가용성 실패는 코드 결함이 아니다. 케이스별 외부 재시도는 최초 시도를 포함해 최대 3회로 제한하며, 모두 외부 차단이면 safe ledger의 `blocked` 증거로 종결한다.
+- 진단 패스에서 동결한 결함 외에 뒤늦게 발견된 비차단 경계 사례와 추가 hardening은 현재 E-006에 편입하지 않고 E-007 후속 계획으로 기록한다. NVIDIA 안정성·timeout은 별도 Operations 계획으로 분리한다.
 
 ## Task 0 — sealed·외부 실행 gate를 먼저 판정한다
 
@@ -75,28 +78,45 @@
 
 **완료 증거:** 실행 가능한 한-case CLI, pass/failure/blocked stop-resume 회귀 테스트.
 
-## Task 5 — 실제 문항은 한 건씩 실행하고, 코드 결함만 TDD로 고친다
+## Task 5 — 1단계: 고정 revision 결함 탐색과 목록 동결
 
-**변경 파일:** 실행 중 발견한 최소 production file과 해당 regression test; 원인 확정 전에는 추가하지 않는다.
+**상태:** 완료 — 두 진단 패스에서 10개 case를 각각 모두 확인하고 결정적 P1 두 건을 근본 원인별로 동결했다.
 
-각 case에 대해 다음 loop를 반복한다.
+**변경 파일:** 없음. 진단 중에는 production code와 test를 수정하지 않고 별도의 diagnostic ledger와 안전한 결함 목록만 생성한다.
 
-1. `run_d10_failure_driven.py --sealed-dir <sealed-dir> --case-id <현재-case>`를 실행하고 ledger attempt를 확인한다.
-2. `failure`이면 routing, retrieval, temporal/corpus binding, grounding/citation, answer policy, guardrail, 문법/논리로 원인을 분류한다.
-3. 코드 결함이면 현재 case를 재현하는 실패 regression test를 먼저 작성하고, 최소 수정 → focused test → 같은 case 재실행 순서로 통과시킨다.
-4. 외부 gate이면 `blocked` attempt와 재개 조건만 남기고 중단한다.
-5. case가 `pass`인 경우에만 다음 고정 case로 진행한다.
+1. 시작 revision, working-tree diff identity, sealed D-10 hash, corpus/date binding을 기록하고 코드 기준을 고정한다.
+2. 고정된 D-10 10개를 순서대로 한 번 모두 진단한다. 한 case의 `failure` 또는 `blocked`가 다음 case 진단을 막지 않게 하며, 이 진단 원장은 final 원장으로 취급하지 않는다.
+3. provider timeout, HTTP 503, `routing_unavailable` 등 외부 실패는 같은 case만 재시도한다. 최초 시도를 포함해 case당 최대 3회이며, 세 번 모두 외부 실패이면 `blocked`로 기록하고 다음 case로 진행한다.
+4. 각 비통과 결과를 외부 provider 변동과 결정적 코드 결함으로 분리한다. 결정적 결함은 고정 입력에서 재현 가능한 계약 위반만 인정하고, 중복 증상은 근본 원인별로 묶는다.
+5. 이 단일 진단 패스에서 확인한 결정적 P0/P1만 E-006 결함 목록에 포함하고 목록을 동결한다. P2 이하, 비차단 경계 사례, 진단 종료 뒤 발견한 hardening은 E-007 후보로, NVIDIA 가용성·timeout은 별도 Operations 후보로 기록한다.
 
-**완료 증거:** 각 case의 최종 ledger 상태와, failure마다 regression test·수정 commit·재실행 attempt 연결.
+**완료 증거:** 동일 코드 identity에서 10개 모두 진단됨, case별 최대 3회 준수, 외부 blocked와 결정적 결함의 분리, 중복 제거된 P0/P1 결함 목록과 동결 시각.
 
-## Task 6 — 전체 요약과 최종 회귀를 봉인한다
+## Task 6 — 2단계: 동결 결함의 일괄 TDD 수정과 단일 검증 묶음
 
-1. 10개가 모두 `pass`일 때만 native D-10 runner로 10개를 순서대로 재검증한다. 1,000-case full runner는 실행하지 않는다.
-2. `summary.json`에 총 attempts, case별 attempts, pass/failure/blocked 수, failure code histogram, 해결한 코드 결함과 회귀 테스트 경로를 쓴다.
-3. ledger와 summary의 attempt 수·case 상태·금지 필드 부재를 검증한다.
-4. 관련 pytest와 `graphify update .`를 실행하고 생성 graph 산출물을 코드 변경 커밋에 포함한다.
+**상태:** 완료 — 동결 P1 두 건의 RED·수정, 관련 회귀, 독립 review fix-loop, 전체 verify를 완료했다.
 
-**완료 증거:** 10개 pass, full runner 성공, summary/ledger 검증 성공, 관련 regression suite 성공.
+**변경 파일:** 동결된 결함 목록에 연결된 최소 production file과 regression test만 허용한다.
+
+1. 동결 목록의 각 결함마다 가장 작은 RED 회귀 테스트를 먼저 작성하고 개별 실패를 확인한다. 개별 RED 확인은 생략하지 않는다.
+2. 모든 RED가 준비된 뒤 동결 결함 전체를 한 묶음으로 수정한다. 결함 하나를 고칠 때마다 전체 검증이나 새 final 원장을 시작하지 않는다.
+3. 동결 결함에 연결된 관련 회귀 묶음을 한 번 실행한다. 수정 과정의 작은 focused test는 허용하지만 관련 회귀 묶음의 공식 실행은 이 단계 끝에서 한 번으로 집계한다.
+4. 전체 변경에 대한 독립 whole-branch review를 한 번 수행한다. 리뷰가 찾은 동결 결함의 미해결 P0/P1은 같은 batch에서 RED로 보완하고 affected focused test만 재확인한다. 새 비차단 경계 사례는 E-007 후보로 넘긴다.
+5. `scripts/verify.ps1` 전체 검증을 batch 끝에서 한 번 실행한다. 실패하면 Task 6은 완료되지 않으며 final 원장을 시작하지 않는다. 원인을 동결 결함의 미해결 회귀 또는 후속 범위로 분류한 뒤 수정 batch 경계를 새로 확정한다.
+
+**완료 증거:** 결함별 RED 증거, 동결 결함 전체 수정, 관련 회귀 묶음 성공 1회, 독립 review 1회, 최신 전체 verify 성공 1회.
+
+## Task 7 — 3단계: 변경 없는 코드의 단일 최종 봉인
+
+**상태:** 완료 — 고정 identity `bb9f3fdaa611a2a05615af0be21c3130e2cb3aa6` + `8c9bf955b3ff6b54ee304ed8689317b84ef85bca`로 10개 case를 단일 원장에 기록하고 `코드 검증 통과 + provider 변동 blocked`로 봉인했다.
+
+1. Task 6의 review와 전체 verify가 통과한 implementation revision/diff identity를 고정한다. 이후 final 원장 생성 중에는 implementation code를 변경하지 않는다.
+2. 새 final 원장 하나만 시작해 D-10 10개를 고정 순서로 실행한다. provider 외부 실패는 같은 case에만 최초 시도 포함 최대 3회 적용하고, 모두 실패하면 안전한 `blocked`로 기록한다.
+3. final 실행에서 새로운 결정적 P0/P1 코드 결함이 확인되면 해당 원장을 폐기하고 Task 5의 새 진단 패스로 돌아간다. 외부 provider 차단은 원장 폐기나 코드 수정 사유가 아니다.
+4. `summary.json`에 시도 수, case별 최종 상태, pass/failure/blocked 수, 외부 차단 code histogram, 동결 결함과 회귀 테스트 경로를 기록하고 ledger와 집계·금지 필드 부재를 검증한다.
+5. 완료 판정은 `코드 검증 통과 + final 원장 안전성 검증 + 결정적 P0/P1 없음`이다. 10개 전부 pass이면 그대로 봉인하고, 일부 case가 3회 모두 외부 차단이어도 나머지 조건이 충족되면 `코드 검증 통과 + 외부 의존성 blocked`로 E-006을 종결할 수 있다.
+
+**완료 증거:** 고정 implementation identity, 새 final 원장 정확히 1개, case별 3회 상한, 안전 summary/ledger 검증, 전부 pass 또는 명시적 외부 의존성 blocked 종결 판정.
 
 ## 결정 기록
 
@@ -123,4 +143,15 @@
 - 2026-09-11: `lay-energy-0605`는 코드 수정 없이 attempt 46에서 검색·citation 0건, `insufficient_evidence`, judge code 없음으로 pass했다.
 - 2026-09-11: `lay-energy-0836`은 코드 수정 없이 attempt 47에서 검색·citation 0건, `insufficient_evidence`, judge code 없음으로 pass했다.
 - 2026-09-11: `lay-energy-0943`은 코드 수정 없이 attempt 48에서 검색·citation 0건, `insufficient_evidence`, judge code 없음으로 pass했다. calibration 원장의 10개 case 최신 상태가 모두 pass임을 검증했으며 Task 6은 기존 48회 원장을 보존하고 새 `e006-v2-20260911-final-01` 원장에서 고정 순서 전체 재검증한다.
+- 2026-09-11: 새 전체 재검증 원장 `e006-v2-20260911-final-01`은 고정된 10개 case를 순서대로 완료했다. 총 22회 중 pass 10, failure 6, 외부 blocked 6이며 각 case의 최신 상태가 모두 pass다. `lay-energy-0561`의 안전하지 않은 사후 문구 정규화 제안은 독립 리뷰에서 법적 의무 약화 가능성이 확인되어 폐기했고, 기존 엄격 grounding을 유지한 attempt 16이 통과했다. 원장·`summary.json`의 연속 번호, 허용 필드, 집계 일치, 금지 필드 부재와 회귀 테스트 경로를 검증했다.
+- 2026-09-11: 최종 whole-branch review에서 sealed snapshot이 V2 active index에 실제 결속되지 않고, answer judge가 응답 citation을 retrieval/citation 양쪽에 재사용하며 action만으로 leak 부재를 추정하고, 의미 지지 검증 없이 grounded partial detail이 실패 core를 덮을 수 있다는 P1 세 건을 확인했다. `final-01`은 진단 원장으로 보존하되 최종 완료 증거에서 제외하고, 수정 후 새 원장으로 전체 재검증한다.
 - 2026-09-11: Task 6 전체 재검증의 `lay-energy-0111` attempt 1은 provider가 구체적인 소유 땅의 태양광 설치 가능성 질문을 `legal_search`로 분류해 `clarification_answer_leak`로 실패했다. 보호 질문을 노출하지 않는 특징 진단으로 토지 지목·용도지역 누락을 확인하고, 소유·지시된 특정 땅/부지의 설치 가능성에서만 두 축을 결정적으로 추출하도록 보강했다. 일반 토지 조건, 단일 값 제공, 복수 대안, 가족·친척 소유 경계를 포함한 라우팅 회귀 27개와 독립 리뷰를 통과했으며, 전체 재검증 attempt 2가 `ask_clarifying_question`, 0 evidence/citation, judge code 없음으로 pass했다.
+- 2026-09-11: Task 6 `lay-energy-0201` attempts 3~4는 route와 동결 근거 8건이 정상이나 provider detail 생성·grounding이 제한시간 내 안정되지 않아 `insufficient_evidence`였고, attempt 5는 `routing_unavailable` blocked였다. 코드 변경 없이 외부 변동 시도를 분리했으며 attempt 6이 근거·citation 각 8건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
+- 2026-09-11: Task 6 `lay-energy-0251`은 attempt 7에서 0 evidence/citation, `ask_clarifying_question`, judge code 없음으로 pass했다.
+- 2026-09-11: Task 6 `lay-energy-0346` attempt 8은 동결 근거 5건 뒤 core grounding fallback으로 실패했고 attempt 9는 `routing_unavailable` blocked였다. 코드 변경 없이 외부 변동을 분리했으며 attempt 10이 근거·citation 각 5건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
+- 2026-09-11: Task 6 `lay-energy-0521`은 attempt 11에서 근거·citation 각 9건, `partial_answer_with_limits`, judge code 없음으로 pass했다.
+- 2026-09-11: 사용자는 E-006의 남은 운영을 batch defect workflow로 제한했다. 현재 고정 revision에서 D-10 10개를 코드 수정 없이 모두 진단하고, 그 패스에서 재현된 결정적 P0/P1만 근본 원인별로 중복 제거해 동결한다. 동결 뒤 결함별 RED는 유지하되 수정은 일괄 수행하고, 관련 회귀·독립 review·전체 verify는 batch 경계에서 각각 한 번만 수행한다. provider timeout·503·`routing_unavailable`은 case당 최초 시도 포함 최대 3회 뒤 safe `blocked`로 코드 완료와 분리한다. 기존 및 진행 중 재검증 원장은 역사적 diagnostic evidence로만 보존하고, review와 code identity가 고정된 뒤 final 원장 하나만 새로 시작한다. 동결 뒤 발견한 비차단 hardening은 E-007, NVIDIA 안정성·timeout은 별도 Operations 계획 후보로 넘긴다.
+- 2026-09-11: Task 5 진단 `e006-v2-20260911-diagnostic-batch-01`은 동일 HEAD `bb9f3fdaa611a2a05615af0be21c3130e2cb3aa6`와 implementation diff hash `0a955ed278b32f23abad0d9b042c5126a09f1655`에서 D-10 10개를 모두 실행했다. 총 14 attempts는 pass 6, failure 4, 외부 blocked 4였고 case당 3회 상한 위반은 없다. `routing_unavailable`/`answer_unavailable`과 stochastic action mismatch는 provider 변동으로 분리했다. `response_is_grounded`가 substantive summary와 citation 0건을 허용하는 합성 재현을 확인해 `E006-P1-001 citationless_summary_is_accepted_as_grounded` 한 건만 결정적 P1로 동결했다.
+- 2026-09-12: 첫 final 원장에서 `lay-energy-0521`이 citation 0건의 substantive action으로 안전 judge에 거부됐다. 원장을 `e006-v2-20260912-invalid-citation-regression-01`로 무효 보존하고, 고정 diff `0a747c5f2fa3755dc776e7a9252bd37dc4f7c3b9`의 두 번째 전체 진단 `e006-v2-20260912-diagnostic-batch-02`를 코드 수정 없이 수행했다. 10개 case·17 attempts에서 latest pass 9, 외부 blocked 1이었고 상한 위반은 없었다.
+- 2026-09-12: 검증 실패한 detail을 안전 fallback으로 바꾼 뒤 citation 없는 저장 core의 summary/action을 다시 적용하는 경로를 합성 RED로 재현해 `E006-P1-002 grounding_fallback_is_overwritten_by_uncited_verified_core`로 동결했다. substantive action에 citation이 없을 때만 core를 폐기하도록 최소 수정했고, fully/partially 양쪽과 citation-backed degraded 보존을 회귀로 고정했다. 독립 리뷰의 노출면 assertion 지적을 반영한 뒤 focused 14 tests와 Ruff, 전체 `scripts/verify.ps1`이 core 27, API 902(+2 skip), collector 97(+5 skip), web 107와 production build까지 통과했다.
+- 2026-09-12: 최종 implementation identity는 HEAD `bb9f3fdaa611a2a05615af0be21c3130e2cb3aa6`, diff hash `8c9bf955b3ff6b54ee304ed8689317b84ef85bca`다. `e006-v2-20260912-final-batch-02`의 단일 ledger는 10개 case·19 attempts이며 pass 7, failure 3, blocked 9다. latest outcome은 pass 7, provider action 변동 blocked 1, provider grounding 변동 blocked 1, provider availability blocked 1이고 case별 시도는 모두 3회 이하다. 확률적 action/citation 결과는 judge가 안전 거부했으며 열린 결정적 P0/P1은 없다. `summary.json`의 집계·허용 필드·금지 키 부재·왕복 일치를 검증하고 임시 staging ledger를 삭제해 최종 원장 하나만 남겼다. E-006은 `코드 검증 통과 + provider 변동 blocked`로 종결하며 NVIDIA 안정성과 stochastic action 품질은 별도 운영·E-007 후보로 분리한다.

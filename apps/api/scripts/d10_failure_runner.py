@@ -77,13 +77,25 @@ def live_application_answer_executor(
 
 
 @dataclass(frozen=True, slots=True)
+class D10AnswerObservation:
+    """Private V2 answer plus independently observed frozen retrieval identities."""
+
+    response: object
+    retrieved_evidence_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class D10AnswerExecution:
     """Private answer observation with a deliberately safe public projection."""
 
     case_id: str
     response: object | None
-    retrieved_evidence_count: int
+    retrieved_evidence_ids: tuple[str, ...]
     error_code: str | None = None
+
+    @property
+    def retrieved_evidence_count(self) -> int:
+        return len(self.retrieved_evidence_ids)
 
     def safe_result(self) -> dict[str, object]:
         if self.response is None or getattr(self.response, "route", None) == "routing_unavailable":
@@ -242,24 +254,28 @@ async def run_single_answer_case(
 ) -> D10AnswerExecution:
     """Execute the application answer boundary without serializing its private response."""
     try:
-        response = await answer_executor(case)
+        result = await answer_executor(case)
     except Exception:
         return D10AnswerExecution(
             case_id=case.case_id,
             response=None,
-            retrieved_evidence_count=0,
+            retrieved_evidence_ids=(),
             error_code="answer_unavailable",
         )
+    observation = result if isinstance(result, D10AnswerObservation) else None
+    response = observation.response if observation is not None else result
     citations = getattr(response, "citations", ())
     if not isinstance(citations, (list, tuple)):
         return D10AnswerExecution(
             case_id=case.case_id,
             response=None,
-            retrieved_evidence_count=0,
+            retrieved_evidence_ids=(),
             error_code="answer_contract_invalid",
         )
     return D10AnswerExecution(
         case_id=case.case_id,
         response=response,
-        retrieved_evidence_count=len(citations),
+        retrieved_evidence_ids=(
+            observation.retrieved_evidence_ids if observation is not None else ()
+        ),
     )

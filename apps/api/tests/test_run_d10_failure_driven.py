@@ -10,17 +10,26 @@ from fastapi import FastAPI, Header
 from fastapi.responses import StreamingResponse
 
 from scripts.d10_answer_judge import AnswerJudgeResult
-from scripts.d10_failure_runner import D10RunInput
+from scripts.d10_failure_ledger import D10_CASE_ORDER
+from scripts.d10_failure_runner import D10AnswerObservation, D10RunInput
 from scripts.run_d10_failure_driven import (
+    E006_RESOLVED_DEFECTS,
     apply_answer_judgment,
     evaluate_live_answer_case,
     parse_arguments,
+    reconcile_final_summary,
     run_from_arguments,
     run_next_case,
     safe_answer_executor_factory,
     v2_application_answer_executor,
     validate_v2_evaluation_budget,
 )
+
+
+def test_final_summary_defects_include_frozen_citationless_grounding_regression() -> None:
+    assert E006_RESOLVED_DEFECTS["citationless_summary_is_accepted_as_grounded"] == (
+        "apps/api/tests/test_v2_grounding_events.py",
+    )
 
 
 @pytest.mark.asyncio
@@ -60,6 +69,34 @@ async def test_failure_stops_before_next_case(tmp_path) -> None:
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_forced_case_rejects_regression_before_executor_runs(tmp_path) -> None:
+    ledger_path = tmp_path / "attempts.jsonl"
+    ledger_path.write_text(
+        "".join(
+            json.dumps({"case_id": case_id, "status": "pass"}) + "\n"
+            for case_id in D10_CASE_ORDER[:2]
+        ),
+        encoding="utf-8",
+    )
+    called = False
+
+    async def execute(_: str) -> dict[str, object]:
+        nonlocal called
+        called = True
+        return {"status": "pass", "error_code": None, "retrieved_evidence_count": 1}
+
+    with pytest.raises(ValueError, match="selected_case_order_invalid"):
+        await run_next_case(
+            ledger_path,
+            execute,
+            case_ids=(D10_CASE_ORDER[0],),
+            force_selected_case=True,
+        )
+
+    assert called is False
 
 
 def test_answer_judgment_turns_safe_answer_result_into_failure_record() -> None:
@@ -270,9 +307,14 @@ async def test_v2_executor_runs_prepare_core_finalize_over_http_without_v1_budge
 
     @app.post("/v2/question-executions")
     async def prepare(
-        payload: dict[str, object], idempotency_key: str = Header()
-    ) -> dict[str, str]:
+        payload: dict[str, object],
+        idempotency_key: str = Header(),
+        x_evaluation_corpus_snapshot: str = Header(),
+        x_evaluation_generation_id: str = Header(),
+    ) -> dict[str, object]:
         calls.append("prepare")
+        assert x_evaluation_corpus_snapshot == "snapshot"
+        assert x_evaluation_generation_id == str(execution_id)
         assert payload == {
             "question": "private question",
             "as_of_date": "2026-08-05",
@@ -283,6 +325,9 @@ async def test_v2_executor_runs_prepare_core_finalize_over_http_without_v1_budge
             "execution_id": str(execution_id),
             "execution_capability": "opaque-capability",
             "next_action": "generate_core",
+            "evaluation_retrieved_evidence_ids": [
+                "00000000-0000-0000-0000-000000000001"
+            ],
         }
 
     @app.post("/v2/question-executions/{requested_execution_id}/core")
@@ -333,7 +378,13 @@ async def test_v2_executor_runs_prepare_core_finalize_over_http_without_v1_budge
             media_type="text/event-stream",
         )
 
-    response = await v2_application_answer_executor(app=app)(
+    async def prepare_binding(_case: D10RunInput) -> str:
+        return str(execution_id)
+
+    observation = await v2_application_answer_executor(
+        app=app,
+        prepare_binding=prepare_binding,
+    )(
         D10RunInput(
             "lay-energy-0201",
             "private question",
@@ -344,8 +395,11 @@ async def test_v2_executor_runs_prepare_core_finalize_over_http_without_v1_budge
     )
 
     assert calls == ["prepare", "core", "finalize"]
-    assert response.action == "fully_answerable"
-    assert str(response.citations[0].provision_id) == "00000000-0000-0000-0000-000000000001"
+    assert isinstance(observation, D10AnswerObservation)
+    assert observation.response.action == "fully_answerable"
+    assert observation.retrieved_evidence_ids == (
+        "00000000-0000-0000-0000-000000000001",
+    )
 
 
 def test_v2_evaluation_budget_rejects_non_contract_values_without_reading_v1_budget() -> None:
@@ -420,12 +474,15 @@ async def test_v2_core_failure_cancels_and_writes_only_safe_ledger(
     execution_id = UUID("00000000-0000-0000-0000-000000000456")
 
     @app.post("/v2/question-executions")
-    async def prepare() -> dict[str, str]:
+    async def prepare() -> dict[str, object]:
         calls.append("prepare")
         return {
             "execution_id": str(execution_id),
             "execution_capability": "secret-capability",
             "next_action": "generate_core",
+            "evaluation_retrieved_evidence_ids": [
+                "00000000-0000-0000-0000-000000000001"
+            ],
         }
 
     @app.post("/v2/question-executions/{requested_execution_id}/core")
@@ -465,10 +522,16 @@ async def test_v2_core_failure_cancels_and_writes_only_safe_ledger(
             "answer",
         )
 
+    async def prepare_binding(_case: D10RunInput) -> str:
+        return str(execution_id)
+
     record = await run_from_arguments(
         args,
         case_loader=load_case,
-        answer_executor=v2_application_answer_executor(app=app),
+        answer_executor=v2_application_answer_executor(
+            app=app,
+            prepare_binding=prepare_binding,
+        ),
     )
 
     assert record is not None
@@ -480,3 +543,45 @@ async def test_v2_core_failure_cancels_and_writes_only_safe_ledger(
     assert "secret provider payload" not in ledger
     assert "secret-capability" not in ledger
     assert "secret cleanup failure" not in ledger
+
+def test_reconcile_final_summary_invalidates_failure_and_recovers_missing_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ledger_path = tmp_path / "attempts.jsonl"
+    summary_path = tmp_path / "summary.json"
+    pass_rows = [
+        {"case_id": case_id, "status": "pass"}
+        for case_id in D10_CASE_ORDER
+    ]
+    ledger_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in pass_rows), encoding="utf-8"
+    )
+    calls: list[str] = []
+
+    def write_summary(*_args, **_kwargs):
+        calls.append("write")
+        summary_path.write_text("{}", encoding="utf-8")
+
+    def validate_summary(*_args, **_kwargs):
+        calls.append("validate")
+
+    import scripts.run_d10_failure_driven as runner_module
+
+    monkeypatch.setattr(runner_module, "write_final_summary", write_summary)
+    monkeypatch.setattr(runner_module, "validate_final_summary", validate_summary)
+
+    assert reconcile_final_summary(
+        ledger_path, summary_path, {}, repository_root=tmp_path
+    ) is True
+    assert calls == ["write", "validate"]
+    ledger_path.write_text(
+        ledger_path.read_text(encoding="utf-8")
+        + json.dumps({"case_id": pass_rows[0]["case_id"], "status": "failure"})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert reconcile_final_summary(
+        ledger_path, summary_path, {}, repository_root=tmp_path
+    ) is False
+    assert not summary_path.exists()

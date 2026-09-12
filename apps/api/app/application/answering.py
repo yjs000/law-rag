@@ -137,6 +137,59 @@ _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE = (
 )
 
 
+def is_deterministic_nonanswer_route_guidance(route: str | None, summary: str) -> bool:
+    expected = {
+        "realtime_required": _REALTIME_BLOCKED_MESSAGE,
+        "external_document_required": _EXTERNAL_DOCUMENT_BLOCKED_MESSAGE,
+    }.get(route)
+    return expected is not None and summary == expected
+
+_SAFE_CLARIFICATION_FIELD_ALIASES = {
+    "설비용량": "설비용량",
+    "발전설비용량": "설비용량",
+    "발전 설비 용량": "설비용량",
+    "용량": "설비용량",
+    "정격용량": "설비용량",
+    "정격 용량": "설비용량",
+    "전압": "전압",
+    "전기 사용 방식": "전기 사용 방식",
+    "전기사용방식": "전기 사용 방식",
+    "사용 방식": "전기 사용 방식",
+    "판매용·자가소비용 여부": "전기 사용 방식",
+    "판매용/자가소비용 여부": "전기 사용 방식",
+    "공사 종류": "공사 종류",
+    "공사종류": "공사 종류",
+    "토지 지목": "토지 지목",
+    "지목": "토지 지목",
+    "용도지역": "용도지역",
+}
+_GENERIC_LEGAL_DISCLAIMER = "이 서비스는 법률 자문을 대체하지 않습니다."
+_PARTIAL_ANSWER_LIMITATION = "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다."
+
+
+def safe_answer_limitations(action: str | None) -> list[str]:
+    """Return fixed non-substantive public limitations; never publish model prose."""
+    return (
+        [_PARTIAL_ANSWER_LIMITATION, _GENERIC_LEGAL_DISCLAIMER]
+        if action == "partially_answerable"
+        else [_GENERIC_LEGAL_DISCLAIMER]
+    )
+
+
+def safe_clarification_missing_fields(
+    missing_fields: tuple[str, ...] | list[str],
+) -> tuple[str, ...]:
+    """Reduce untrusted router/model fields to fixed, non-substantive fact labels."""
+    return tuple(
+        dict.fromkeys(
+            canonical
+            for value in missing_fields
+            if isinstance(value, str)
+            if (canonical := _SAFE_CLARIFICATION_FIELD_ALIASES.get(value.strip()))
+        )
+    )
+
+
 def clarification_resubmission_summary(
     question: str, missing_fields: tuple[str, ...] | list[str]
 ) -> str:
@@ -144,7 +197,8 @@ def clarification_resubmission_summary(
     post_generation_clarification_answer(생성 후 발견된 부족)가 같은 문구를 쓴다 - 사용자가
     보는 안내가 어느 단계에서 왔든 일관되게 한다.
     """
-    fields_block = "\n".join(f"- {field}: [ ]" for field in missing_fields) or "- [ ]"
+    safe_fields = safe_clarification_missing_fields(missing_fields)
+    fields_block = "\n".join(f"- {field}: [ ]" for field in safe_fields) or "- [ ]"
     return (
         "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n"
         "다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 한 번에 보내주세요.\n"

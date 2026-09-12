@@ -45,7 +45,6 @@ def _hit() -> SearchHit:
         source_url="https://www.law.go.kr/법령/전기사업법/제1조",
     )
 
-
 def test_nvidia_answerer_uses_a_fresh_client_in_each_event_loop() -> None:
     payload = json.dumps(
         {
@@ -156,6 +155,7 @@ async def test_nvidia_nim_core_generation_uses_summary_only_contract() -> None:
         "citation_ids",
         "action",
         "decision_limitations",
+        "missing_information",
     }
     assert "decision_limitations" not in core.model_dump(mode="json")
 

@@ -104,6 +104,8 @@ class PrepareQuestion:
     clarification: ClarificationGrounding | None = None
     clarification_outcome: ClarificationOutcome | None = None
     route_decision: RouteDecision | None = None
+    required_corpus_snapshot_id: str | None = None
+    required_generation_id: UUID | None = None
 
 
 @dataclass(frozen=True)

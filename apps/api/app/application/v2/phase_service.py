@@ -11,7 +11,12 @@ from datetime import timedelta
 from typing import Any, Literal
 from uuid import UUID
 
-from app.application.answering import route_guidance_fallback, search_only_answer
+from app.application.answering import (
+    post_generation_clarification_answer,
+    route_guidance_fallback,
+    safe_answer_limitations,
+    search_only_answer,
+)
 from app.application.question_phase_coordinator import PhaseResult, QuestionPhaseCoordinator
 from app.application.v2.dependencies import (
     PhaseRequest,
@@ -60,6 +65,10 @@ class PhaseRun:
     owns_task: bool
 
 
+class EvaluationCorpusBindingError(RuntimeError):
+    """The evaluation request does not match the corpus generation pinned by prepare."""
+
+
 class V2QuestionExecutionService:
     """Run the authoritative v2 prepare → core → finalize state machine.
 
@@ -81,6 +90,7 @@ class V2QuestionExecutionService:
             request.owner_scope, request.idempotency_key
         )
         if existing is not None:
+            await self._require_existing_evaluation_binding(request, existing, dependencies)
             return PreparedExecution(
                 execution=existing,
                 execution_capability=self._anonymous_capability(request, dependencies),
@@ -98,6 +108,7 @@ class V2QuestionExecutionService:
             request.route_decision,
         )
         active = await dependencies.active_provider().active()
+        await self._require_evaluation_binding(request, repository, active, dependencies)
         hits, corpus_as_of = await self._retrieve_if_legal(
             dependencies, request.payload, active, repository, route
         )
@@ -117,6 +128,10 @@ class V2QuestionExecutionService:
             "route": route,
             "missing_fields": list(missing_fields),
         }
+        if request.required_corpus_snapshot_id is not None:
+            private_payload["evaluation_corpus_snapshot_id"] = (
+                request.required_corpus_snapshot_id
+            )
         if request.clarification is not None:
             private_payload["clarification_grounding"] = request.clarification.to_payload()
         if request.clarification_outcome is not None:
@@ -135,6 +150,54 @@ class V2QuestionExecutionService:
         )
         return PreparedExecution(execution=execution, execution_capability=execution_capability)
 
+    async def _require_evaluation_binding(
+        self,
+        request: PrepareQuestion,
+        repository: Any,
+        active: Any,
+        dependencies: V2ExecutionDependencies,
+    ) -> None:
+        snapshot_id = request.required_corpus_snapshot_id
+        generation_id = request.required_generation_id
+        if snapshot_id is None and generation_id is None:
+            return
+        if snapshot_id is None or generation_id is None:
+            raise EvaluationCorpusBindingError("incomplete evaluation corpus binding")
+        state = await repository.corpus_temporal_state(dependencies.now().date())
+        if (
+            not state.ready
+            or state.corpus_snapshot_id != snapshot_id
+            or active.generation.id != generation_id
+        ):
+            raise EvaluationCorpusBindingError("evaluation corpus binding mismatch")
+    async def _require_existing_evaluation_binding(
+        self,
+        request: PrepareQuestion,
+        existing: QuestionExecutionRecord,
+        dependencies: V2ExecutionDependencies,
+    ) -> None:
+        snapshot_id = request.required_corpus_snapshot_id
+        generation_id = request.required_generation_id
+        stored_snapshot_id = existing.private_payload.get("evaluation_corpus_snapshot_id")
+        request_is_bound = snapshot_id is not None or generation_id is not None
+        existing_is_bound = isinstance(stored_snapshot_id, str)
+        if not request_is_bound and not existing_is_bound:
+            return
+        if (
+            snapshot_id is None
+            or generation_id is None
+            or not existing_is_bound
+            or stored_snapshot_id != snapshot_id
+        ):
+            raise EvaluationCorpusBindingError("evaluation corpus binding mismatch")
+        repository = await dependencies.resolve_repository()
+        state = await repository.corpus_temporal_state(dependencies.now().date())
+        if (
+            not state.ready
+            or state.corpus_snapshot_id != snapshot_id
+            or existing.generation_id != generation_id
+        ):
+            raise EvaluationCorpusBindingError("evaluation corpus binding mismatch")
     async def stream_core(self, request: PhaseRequest) -> tuple[AnswerEvent, ...]:
         """Run or replay the core phase without allowing duplicate provider work."""
 
@@ -195,9 +258,11 @@ class V2QuestionExecutionService:
             return route_guidance_fallback(
                 payload,
                 str(route),
-                missing_fields=tuple(item for item in missing_fields if isinstance(item, str))
-                if isinstance(missing_fields, list)
-                else (),
+                missing_fields=(
+                    tuple(item for item in missing_fields if isinstance(item, str))
+                    if isinstance(missing_fields, list)
+                    else ()
+                ),
             )
         if payload.answer_mode != "terra" or not dependencies.ai_available():
             return fallback
@@ -212,6 +277,12 @@ class V2QuestionExecutionService:
             )
         if not dependencies.validate_response(draft, generation_hits):
             raise ValueError("generated answer did not satisfy the citation contract")
+        if draft.action == "clarification_required":
+            return post_generation_clarification_answer(
+                payload, draft.missing_information, mode="ai"
+            )
+        if draft.action == "unanswerable":
+            return grounding_fallback(payload)
         if clarification is not None and not claims_are_grounded(
             draft.grounded_claims,
             clarification,
@@ -229,7 +300,7 @@ class V2QuestionExecutionService:
             sections=draft.sections,
             checklist=draft.checklist,
             citations=citations_for_hits(generation_hits),
-            limitations=[*draft.limitations, "이 서비스는 법률 자문을 대체하지 않습니다."],
+            limitations=safe_answer_limitations(draft.action),
             corpus_as_of=corpus_as_of,
             requested_answer_mode=payload.answer_mode,
             action=draft.action,
@@ -259,9 +330,11 @@ class V2QuestionExecutionService:
             fallback = route_guidance_fallback(
                 payload,
                 str(route),
-                missing_fields=tuple(item for item in missing_fields if isinstance(item, str))
-                if isinstance(missing_fields, list)
-                else (),
+                missing_fields=(
+                    tuple(item for item in missing_fields if isinstance(item, str))
+                    if isinstance(missing_fields, list)
+                    else ()
+                ),
             )
             return (
                 dependencies.make_core_draft(
@@ -295,6 +368,22 @@ class V2QuestionExecutionService:
             )
         if not dependencies.validate_core(draft, generation_hits):
             raise ValueError("generated core did not satisfy the citation contract")
+        if draft.action == "clarification_required":
+            safe = post_generation_clarification_answer(
+                payload, draft.missing_information, mode="ai"
+            )
+            return (
+                draft.model_copy(update={"summary": safe.summary, "citation_ids": []}),
+                [],
+                True,
+            )
+        if draft.action == "unanswerable":
+            safe = grounding_fallback(payload)
+            return (
+                dependencies.make_core_draft(safe.summary, [], "unanswerable"),
+                [],
+                True,
+            )
         return draft, citations_for_hits(generation_hits), False
 
     async def run_core(self, execution: QuestionExecutionRecord) -> PhaseResult:
@@ -304,12 +393,12 @@ class V2QuestionExecutionService:
             execution
         )
         clarification = self._clarification_grounding(execution)
-        if clarification is None:
-            core_is_valid = core_is_grounded(core, CitationRegistry(execution.frozen_citations))
-        elif used_safe_fallback:
-            # This deterministic search-only output is not an LLM claim surface.
-            # In particular, the legacy CoreDraft has no structured claims to read.
+        if used_safe_fallback:
             core_is_valid = True
+        elif clarification is None:
+            core_is_valid = core_is_grounded(
+                core, CitationRegistry(execution.frozen_citations)
+            )
         else:
             core_is_valid = claims_are_grounded(
                 core.grounded_claims,
@@ -332,7 +421,9 @@ class V2QuestionExecutionService:
             )
         # Claims are validated before this point and must not alter the legacy
         # persisted-core contract or become a second public response surface.
-        core_data = core.model_dump(mode="json", exclude={"grounded_claims"})
+        core_data = core.model_dump(
+            mode="json", exclude={"grounded_claims"}, exclude_defaults=True
+        )
         return PhaseResult(
             target=ExecutionStatus.CORE_ANSWERED,
             events=(
@@ -380,7 +471,7 @@ class V2QuestionExecutionService:
         clarification = self._clarification_grounding(execution)
         repair_with_grounded_detail = degraded and clarification is None
         repaired_core_payload: dict[str, object] | None = None
-        force_grounding_fallback = False
+        force_grounding_fallback = repair_with_grounded_detail
         if degraded and clarification is not None:
             core = None
             try:
@@ -392,7 +483,9 @@ class V2QuestionExecutionService:
                 if self._core_is_publishable(candidate, execution, used_safe_fallback):
                     core = candidate
                     degraded = False
-                    core_data = core.model_dump(mode="json", exclude={"grounded_claims"})
+                    core_data = core.model_dump(
+                        mode="json", exclude={"grounded_claims"}, exclude_defaults=True
+                    )
                     repaired_core_payload = {
                         "verified_core": core_data,
                         "verified_core_citations": [
@@ -414,41 +507,43 @@ class V2QuestionExecutionService:
         except Exception:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
+        citation_registry = CitationRegistry(execution.frozen_citations)
         response_is_verified = clarification is None and response_is_grounded(
-            response, CitationRegistry(execution.frozen_citations)
-        )
-        grounded_partial_detail = (
-            clarification is None
-            and response.action == "partially_answerable"
-            and response.result_status == "results"
-            and bool(response.citations)
-            and bool(response.sections)
-            and bool(response.checklist)
-            and response_is_verified
+            response, citation_registry
         )
         if repair_with_grounded_detail:
             core = None
-            if grounded_partial_detail:
-                repaired_core_payload = {
-                    "answerability_resolution": "grounded_detail_partial_repaired_core"
-                }
-            else:
-                response = grounding_fallback(payload)
-                degraded = True
+            response = grounding_fallback(payload)
+            degraded = True
         elif clarification is None and not response_is_verified:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
+            if (
+                response.action in {"fully_answerable", "partially_answerable"}
+                and not response.citations
+            ):
+                core = None
+                response = grounding_fallback(payload)
         elif core is not None:
-            grounded_partial_resolves_unanswerable_core = (
-                core.action == "unanswerable" and grounded_partial_detail
-            )
-            if grounded_partial_resolves_unanswerable_core:
-                repaired_core_payload = {
-                    **(repaired_core_payload or {}),
-                    "answerability_resolution": (
-                        "grounded_detail_partial_overrode_unanswerable_core"
-                    ),
-                }
+            if core.action == "clarification_required":
+                route = execution.private_payload.get("route", "legal_search")
+                if route == "legal_search":
+                    effective_core = private_payload.get("verified_core")
+                    missing_information = (
+                        effective_core.get("missing_information", [])
+                        if isinstance(effective_core, dict)
+                        else []
+                    )
+                    response = post_generation_clarification_answer(
+                        payload,
+                        [value for value in missing_information if isinstance(value, str)],
+                        mode="ai",
+                    )
+            elif core.action == "unanswerable":
+                route = execution.private_payload.get("route", "legal_search")
+                if route == "legal_search":
+                    response = grounding_fallback(payload)
+                    degraded = True
             else:
                 response.summary = core.summary
                 response.action = core.action
@@ -462,6 +557,8 @@ class V2QuestionExecutionService:
             except Exception:
                 response = core_degraded_response(payload, core, private_payload)
                 degraded = True
+        if response.action in {"fully_answerable", "partially_answerable"}:
+            response.limitations = safe_answer_limitations(response.action)
         response = await dependencies.save_authenticated(user, payload, response)
         response_data = response.model_dump(mode="json")
         return PhaseResult(
@@ -760,4 +857,8 @@ class V2QuestionExecutionService:
         return response
 
 
-__all__ = ["V2QuestionExecutionService", "grounding_fallback"]
+__all__ = [
+    "EvaluationCorpusBindingError",
+    "V2QuestionExecutionService",
+    "grounding_fallback",
+]

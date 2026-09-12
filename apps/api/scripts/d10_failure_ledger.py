@@ -216,3 +216,87 @@ def summarize_attempts(path: Path) -> dict[str, object]:
         "status_counts": {status: status_counts[status] for status in sorted(ATTEMPT_STATUSES)},
         "failure_code_histogram": dict(sorted(failure_codes.items())),
     }
+
+def _final_summary_payload(
+    ledger_path: Path,
+    resolved_defects: Mapping[str, tuple[str, ...]],
+    *,
+    repository_root: Path,
+) -> dict[str, object]:
+    attempts = _load_attempts(ledger_path)
+    case_positions = [D10_CASE_ORDER.index(attempt.case_id) for attempt in attempts]
+    if any(
+        current < previous
+        for previous, current in zip(case_positions, case_positions[1:], strict=False)
+    ):
+        raise LedgerValidationError("final_summary_case_order_invalid")
+    latest = {attempt.case_id: attempt.status for attempt in attempts}
+    if set(latest) != D10_CASE_IDS or any(
+        latest[case_id] != "pass" for case_id in D10_CASE_ORDER
+    ):
+        raise LedgerValidationError("final_summary_cases_incomplete")
+    normalized_defects: list[dict[str, object]] = []
+    root = repository_root.resolve()
+    for code, paths in resolved_defects.items():
+        if not _SAFE_CODE.fullmatch(code) or not paths:
+            raise LedgerValidationError("final_summary_defect_invalid")
+        normalized_paths: list[str] = []
+        for raw_path in paths:
+            relative = Path(raw_path)
+            if relative.is_absolute() or ".." in relative.parts:
+                raise LedgerValidationError("final_summary_regression_invalid")
+            candidate = (root / relative).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                raise LedgerValidationError("final_summary_regression_invalid") from None
+            if not candidate.is_file():
+                raise LedgerValidationError("final_summary_regression_missing")
+            normalized_paths.append(relative.as_posix())
+        normalized_defects.append({"code": code, "regression_tests": normalized_paths})
+    return {
+        **summarize_attempts(ledger_path),
+        "latest_case_statuses": {case_id: latest[case_id] for case_id in D10_CASE_ORDER},
+        "resolved_defects": normalized_defects,
+    }
+
+
+def write_final_summary(
+    ledger_path: Path,
+    summary_path: Path,
+    resolved_defects: Mapping[str, tuple[str, ...]],
+    *,
+    repository_root: Path,
+) -> dict[str, object]:
+    """Write only a reproducible, public-safe summary for a complete D-10 ledger."""
+
+    payload = _final_summary_payload(
+        ledger_path, resolved_defects, repository_root=repository_root
+    )
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(payload, ensure_ascii=False, allow_nan=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return payload
+
+
+def validate_final_summary(
+    ledger_path: Path,
+    summary_path: Path,
+    resolved_defects: Mapping[str, tuple[str, ...]],
+    *,
+    repository_root: Path,
+) -> dict[str, object]:
+    """Rebuild the expected payload and reject any missing, stale, or extra field."""
+
+    expected = _final_summary_payload(
+        ledger_path, resolved_defects, repository_root=repository_root
+    )
+    try:
+        actual = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raise LedgerValidationError("final_summary_unreadable") from None
+    if actual != expected:
+        raise LedgerValidationError("final_summary_mismatch")
+    return expected

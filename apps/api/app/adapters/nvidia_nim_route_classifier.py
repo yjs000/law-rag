@@ -36,6 +36,9 @@ _LAND_CATEGORY_VALUE = re.compile(
     r"(?:농지|산지|임야|대지|잡종지|과수원|목장용지|"
     r"지목(?:은|이|:)?\s*(?:전|답))"
 )
+_MULTIPLE_LAND_CATEGORY_VALUES = re.compile(
+    r"(?:전|답)\s*(?:또는|이나|나|/)\s*(?:전|답)"
+)
 _LAND_USE_ZONE_VALUE = re.compile(
     r"(?:계획관리지역|생산관리지역|보전관리지역|주거지역|상업지역|공업지역|"
     r"녹지지역|농림지역|자연환경보전지역)"
@@ -107,7 +110,9 @@ def _missing_named_decision_fields(question: str) -> tuple[str, ...]:
         missing.append("공사 종류")
 
     if asks_specific_site_feasibility:
-        if not _has_single_value(_LAND_CATEGORY_VALUE, question):
+        if _MULTIPLE_LAND_CATEGORY_VALUES.search(question) or not _has_single_value(
+            _LAND_CATEGORY_VALUE, question
+        ):
             missing.append("토지 지목")
         if not _has_single_value(_LAND_USE_ZONE_VALUE, question):
             missing.append("용도지역")

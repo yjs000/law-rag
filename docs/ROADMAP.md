@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 68d1d18da76163aaa860ea9ac2dc28c0206b4c0793e68a144b431e08c277afae -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: c8f9638154585358e7426f2ea1160e74f7adad5720a57d2132c03269102c091e -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [E-006 · Experiment — D-10 Gold 순차 실패-회귀 평가 기록](exec-plans/active/0069-d10-gold-failure-driven-regression.md) — 다음 행동: `e006-v2-20260911-final-01` 원장에서 `lay-energy-0201`부터 남은 D-10을 고정 순서로 전체 재검증하고, 실패 시 해당 case의 pass/fix loop로 돌아간다.
 
 ## Todo
 
@@ -35,4 +34,5 @@
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 - [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
+- [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [완료 계획 색인](exec-plans/completed/README.md)
