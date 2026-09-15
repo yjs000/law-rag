@@ -7,7 +7,7 @@
 > 참고 범위:
 > - `docs/design-docs/v2-question-response-presentation-contract.md` L1-L151 — 승인된 표시·오류 소유권 계약
 > - `apps/api/app/application/v2/phase_service.py` L310-L451 — Core 생성과 공개 summary event
-> - `apps/web/app/page.tsx` L76-L706 — Core 임시 응답, 답변 표시, 질문 실행 실패 알림
+> - `apps/web/app/page.tsx` L596-L850 — Core 이벤트 처리, AnswerView 호출, 질문 실행 실패 알림과 입력 UI
 
 # V2 Question Response Passthrough Implementation Plan
 
