@@ -30,6 +30,7 @@ from app.domain.search_queries import normalize_vector_search_query
 from app.observability import emit_execution_phase
 from app.ports.clarification_case import ClarificationCaseNotFound
 from app.ports.question_execution import ExecutionNotFound
+from app.provider_observability import provider_attempt_scope
 
 router = APIRouter()
 
@@ -125,24 +126,25 @@ async def prepare_question_execution(
         async with asyncio.timeout(main.settings.v2_phase_timeout_seconds):
             user = await _optional_user(request.headers.get("authorization"))
             owner_scope = main._question_owner(request, user)
-            (
-                clarification,
-                clarification_outcome,
-                route_decision,
-            ) = await _prepare_clarification_turn(main, payload, owner_scope, user)
-            prepared = await main.v2_question_execution_service.prepare(
-                PrepareQuestion(
-                    payload=payload,
-                    owner_scope=owner_scope,
-                    idempotency_key=idempotency_key,
-                    user=user,
-                    clarification=clarification,
-                    clarification_outcome=clarification_outcome,
-                    route_decision=route_decision,
-                    required_corpus_snapshot_id=evaluation_snapshot,
-                    required_generation_id=evaluation_generation,
+            with provider_attempt_scope(payload.client_request_id):
+                (
+                    clarification,
+                    clarification_outcome,
+                    route_decision,
+                ) = await _prepare_clarification_turn(main, payload, owner_scope, user)
+                prepared = await main.v2_question_execution_service.prepare(
+                    PrepareQuestion(
+                        payload=payload,
+                        owner_scope=owner_scope,
+                        idempotency_key=idempotency_key,
+                        user=user,
+                        clarification=clarification,
+                        clarification_outcome=clarification_outcome,
+                        route_decision=route_decision,
+                        required_corpus_snapshot_id=evaluation_snapshot,
+                        required_generation_id=evaluation_generation,
+                    )
                 )
-            )
             response = main.v2_question_execution_service.prepared_response(prepared)
             if evaluation_snapshot is not None and evaluation_generation is not None:
                 response["evaluation_retrieved_evidence_ids"] = (

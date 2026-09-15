@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from app.domain.answer_events import AnswerEvent
 from app.domain.question_execution import ExecutionStatus
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
+from app.provider_observability import provider_attempt_scope
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,15 @@ class PhaseResult:
 
 
 PhaseProducer = Callable[[QuestionExecutionRecord], Awaitable[PhaseResult]]
+
+
+def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
+    request_payload = execution.private_payload.get("request")
+    if isinstance(request_payload, Mapping):
+        client_request_id = request_payload.get("client_request_id")
+        if isinstance(client_request_id, str) and client_request_id:
+            return client_request_id
+    return execution.execution_id
 
 
 class QuestionPhaseCoordinator:
@@ -108,7 +118,8 @@ class QuestionPhaseCoordinator:
                 execution_id, owner_scope, phase=phase, capability_hash=capability_hash
             )
         try:
-            result = await producer(claim.execution)
+            with provider_attempt_scope(_provider_correlation_source(claim.execution)):
+                result = await producer(claim.execution)
         except Exception:  # never expose provider text or traceback through SSE
             result = (
                 PhaseResult(
