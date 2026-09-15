@@ -22,6 +22,8 @@ export type QuestionResponse = {
   fallback_reason?: "ai_disabled" | "quota_exhausted" | "billing_or_quota_error" | "embedding_error" | "generation_error" | "grounding_failed" | "no_evidence" | null;
   result_status?: "results" | "no_results" | "grounding_failed";
   no_results_reason?: string | null;
+  action?: "fully_answerable" | "partially_answerable" | "clarification_required" | "unanswerable" | null;
+  route?: "legal_search" | "clarification_required" | "realtime_required" | "external_document_required" | "routing_unavailable" | null;
   summary: string;
   scope: string;
   sections: { claim: string; explanation: string; citation_ids: string[] }[];

@@ -175,13 +175,35 @@ describe("typed HTTP status on ApiError (0045)", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(askQuestion(history.request)).rejects.toMatchObject({
+    const error = await askQuestion(history.request).catch((cause) => cause);
+
+    expect(error).toMatchObject({
       name: "ApiError",
       status: 503,
       code: "provider_unavailable",
       message: "AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.",
     });
+    expect(Object.keys(error).sort()).toEqual(["code", "name", "publicMessage", "status"]);
+    expect(JSON.stringify(error)).not.toContain("provider secret");
+    expect(JSON.stringify(error)).not.toContain("provider_status");
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/v2/question-executions"))).toHaveLength(1);
+  });
+
+  it.each([
+    [{ message: "백엔드 메시지" }, "백엔드 메시지"],
+    [{ detail: { message: "상세 메시지" } }, "상세 메시지"],
+    [{ detail: "문자열 상세" }, "문자열 상세"],
+    [{ detail: { code: "invalid_phase" } }, "invalid_phase"],
+    [{ code: "invalid_request" }, "invalid_request"],
+    [{ detail: {} }, null],
+  ])("preserves the HTTP backend display value", async (payload, publicMessage) => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(payload, { status: 422 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      publicMessage,
+      code: null,
+    });
   });
 
   it("classifies a V2 system_busy response without exposing a retryable generic 503", async () => {
@@ -191,9 +213,21 @@ describe("typed HTTP status on ApiError (0045)", () => {
     await expect(askQuestion(history.request)).rejects.toMatchObject({
       name: "ApiError",
       status: 503,
+      publicMessage: "system_busy",
       code: "system_busy",
     });
   });
+
+  it("classifies a V2 reason_code system_busy response for the busy notice", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ reason_code: "system_busy" }, { status: 503 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      publicMessage: "system_busy",
+      code: "system_busy",
+    });
+  });
+
   it("preserves a 503 retrieval-timeout status alongside its fixed message", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({
@@ -220,3 +254,48 @@ describe("typed HTTP status on ApiError (0045)", () => {
     });
   });
 });
+
+describe("terminal SSE errors at the askQuestion boundary (0071)", () => {
+  it.each([
+    ['event: error\ndata: {"message":"상세 생성을 완료하지 못했습니다."}\n\n', "상세 생성을 완료하지 못했습니다."],
+    ['event: error\ndata: {"reason_code":"phase_not_ready"}\n\n', "phase_not_ready"],
+  ])("preserves the backend terminal display value as an ApiError", async (frame, publicMessage) => {
+    stubTerminalSse(frame);
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      publicMessage,
+    });
+  });
+
+  it("keeps a cancelled event without a backend display value private", async () => {
+    stubTerminalSse("event: cancelled\ndata: {}\n\n");
+
+    const error = await askQuestion(history.request).catch((cause) => cause);
+    expect(error).toMatchObject({ name: "ApiError", publicMessage: null });
+    expect(error instanceof Error ? error.message : "").not.toContain("SSE cancelled");
+  });
+
+  it("preserves the system_busy code from a terminal SSE reason", async () => {
+    stubTerminalSse('event: error\ndata: {"reason_code":"system_busy"}\n\n');
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      publicMessage: "system_busy",
+      code: "system_busy",
+    });
+  });
+});
+
+function stubTerminalSse(frame: string) {
+  auth.getSession.mockResolvedValue({ data: { session: null } });
+  const fetchMock = vi.fn(async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/v2/question-executions")) {
+      return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+    }
+    return new Response(frame);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}

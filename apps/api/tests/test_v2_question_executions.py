@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -1087,6 +1088,61 @@ def test_prepare_core_finalize_replays_authoritative_phase_events(
     assert core_replay.text == core.text
     assert "event: complete" in finalized.text
     assert finalize_replay.text == finalized.text
+    summary_frame = next(
+        frame for frame in core.text.split("\n\n") if frame.startswith("event: summary\n")
+    )
+    summary_payload = json.loads(summary_frame.removeprefix("event: summary\ndata: "))
+    complete_frame = next(
+        frame
+        for frame in finalized.text.split("\n\n")
+        if frame.startswith("event: complete\n")
+    )
+    final_response = json.loads(
+        complete_frame.removeprefix("event: complete\ndata: ")
+    )["response"]
+    assert set(summary_payload) == {"summary", "citations", "scope", "limitations"}
+    assert summary_payload["summary"] == final_response["summary"]
+    assert summary_payload["citations"] == final_response["citations"]
+    assert summary_payload["scope"] == final_response["scope"]
+    assert summary_payload["limitations"] == final_response["limitations"]
+
+
+@pytest.mark.asyncio
+async def test_v2_core_finalize_preserves_deterministic_terra_fallback_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    request = QuestionRequest(question="전기사업 허가가 필요한가요?", answer_mode="terra")
+    execution = SimpleNamespace(
+        private_payload={
+            "request": request.model_dump(mode="json"),
+            "hits": [],
+            "route": "legal_search",
+        },
+        frozen_citations=(),
+        status=main_module.ExecutionStatus.CORE_ANSWERED,
+    )
+    monkeypatch.setattr(main_module, "_ai_available", lambda: False)
+
+    core = await main_module._run_v2_core(execution)
+    assert core.private_payload is not None
+    finalized = await main_module._run_v2_finalize(
+        SimpleNamespace(
+            private_payload={**execution.private_payload, **core.private_payload},
+            frozen_citations=execution.frozen_citations,
+            status=main_module.ExecutionStatus.CORE_ANSWERED,
+        ),
+        None,
+    )
+
+    summary_payload = core.events[0].payload
+    final_response = finalized.events[0].payload["response"]
+    assert set(summary_payload) == {"summary", "citations", "scope", "limitations"}
+    assert summary_payload["summary"] == final_response["summary"]
+    assert summary_payload["citations"] == final_response["citations"]
+    assert summary_payload["scope"] == final_response["scope"]
+    assert summary_payload["limitations"] == final_response["limitations"]
 
 
 def test_v2_phase_routes_invoke_main_compatibility_producers(

@@ -1,4 +1,5 @@
 import type { QuestionInput, QuestionResponse } from "./contracts";
+import { backendDisplayMessage } from "./backend-display-message";
 
 export type V2NextAction = "generate_core" | "generate_detail" | "repair_core" | "complete";
 
@@ -24,6 +25,17 @@ export type V2ExecutionDependencies = {
 export class V2ExecutionHttpError extends Error {
   constructor(readonly status: number, readonly detail: unknown) {
     super(`HTTP ${status}`);
+  }
+}
+
+export class V2ExecutionEventError extends Error {
+  constructor(
+    readonly publicMessage: string | null,
+    readonly eventType: "error" | "cancelled",
+    readonly reasonCode: string | null = null,
+  ) {
+    super(publicMessage ?? `SSE ${eventType}`);
+    this.name = "V2ExecutionEventError";
   }
 }
 
@@ -92,10 +104,14 @@ async function followExecution(
         if (reasonCode === "provider_unavailable") {
           throw new V2ExecutionPhaseError(reasonCode);
         }
-        throw new Error("답변 실행을 완료하지 못했습니다.");
+        throw new V2ExecutionEventError(
+          backendDisplayMessage(event.data),
+          "error",
+          typeof reasonCode === "string" ? reasonCode : null,
+        );
       }
       if (event.event === "cancelled") {
-        throw new Error("답변 실행을 완료하지 못했습니다.");
+        throw new V2ExecutionEventError(backendDisplayMessage(event.data), "cancelled");
       }
       if (event.event === "phase_complete") {
         const candidate = event.data.next_action;

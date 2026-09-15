@@ -28,9 +28,9 @@ import {
   isTerraAvailabilityFailure,
   resolveResponseAnswerMode,
 } from "../lib/answer-mode";
-import { getEmptyResultMessage } from "../lib/empty-result";
 import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
 import { dialogKeyAction, focusInitial, restoreFocus } from "../lib/dialog-focus";
+import { liveCoreResponse } from "../lib/live-core-response";
 import {
   appendPendingTurn,
   applyLiveCoreSummary,
@@ -46,7 +46,6 @@ import {
 import {
   citationDocumentKind,
   DOCUMENT_KIND_LABELS,
-  filterCitations,
   type DocumentKind,
 } from "../lib/source-filter";
 import type {
@@ -56,12 +55,11 @@ import type {
 } from "../lib/contracts";
 import {
   ACCOUNT_SETTINGS_TITLE,
-  answerModeBadgeLabel,
 } from "../lib/provider-neutral-copy";
 import { SUGGESTED_QUESTIONS } from "../lib/suggested-questions";
 import { createClient } from "../lib/supabase/client";
+import { AnswerView } from "./answer-view";
 import { SafeText } from "./safe-text";
-import { CitationCard } from "./citation-card";
 
 type AuthDocument = "privacy" | "terms";
 type AuthView = "login" | "signup";
@@ -72,36 +70,6 @@ const MODEL_LABELS: Record<AnswerPreference, string> = {
   terra: "AI답변",
   search_only: "기본검색",
 };
-
-function liveCoreResponse(
-  requestId: string,
-  summary: string,
-  citations: QuestionResponse["citations"],
-): QuestionResponse {
-  return {
-    request_id: requestId,
-    mode: "ai",
-    summary,
-    scope: "근거 검증을 마쳤습니다. 상세 설명을 생성 중입니다.",
-    sections: [],
-    checklist: [],
-    citations,
-    limitations: ["상세 답변은 같은 근거를 바탕으로 이어서 생성됩니다."],
-  };
-}
-
-function coreCitations(value: unknown): QuestionResponse["citations"] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((citation): citation is QuestionResponse["citations"][number] => (
-    typeof citation === "object" && citation !== null
-    && typeof (citation as { id?: unknown }).id === "string"
-    && typeof (citation as { document_title?: unknown }).document_title === "string"
-    && typeof (citation as { version_label?: unknown }).version_label === "string"
-    && typeof (citation as { path?: unknown }).path === "string"
-    && typeof (citation as { quote?: unknown }).quote === "string"
-    && typeof (citation as { source_url?: unknown }).source_url === "string"
-  ));
-}
 
 export function oauthRedirectMessage(search: string): string | null {
   const status = new URLSearchParams(search).get("auth");
@@ -326,46 +294,6 @@ function AccountDialog({ onClose, onDelete, onLogout, user }: {
       <div className="account-actions"><button onClick={onLogout}>로그아웃</button><button className="danger" onClick={onDelete}>계정 삭제</button></div>
     </Dialog>
   );
-}
-
-function AnswerView({
-  asOf,
-  documentKinds,
-  exportFormat,
-  exporting,
-  messageId,
-  onCitation,
-  onExport,
-  onExportFormat,
-  onRefine,
-  question,
-  response,
-  selectedCitationId,
-}: {
-  asOf: string;
-  documentKinds: Set<DocumentKind>;
-  exportFormat: ExportFormat;
-  exporting: boolean;
-  messageId: string;
-  onCitation: (messageId: string, response: QuestionResponse, id: string) => void;
-  onExport: (response: QuestionResponse, question: string, asOf: string) => void;
-  onExportFormat: (format: ExportFormat) => void;
-  onRefine: () => void;
-  question: string;
-  response: QuestionResponse;
-  selectedCitationId: string | null;
-}) {
-  const emptyResult = getEmptyResultMessage(response, question);
-  const citations = filterCitations(response.citations, documentKinds);
-  return <>
-    <div className="answer-meta"><span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{answerModeBadgeLabel(response.mode)}</span><span>기준일 {asOf}</span></div>
-    {emptyResult && <section aria-live="polite" className="empty-result" role="status"><h2>{emptyResult.title}</h2><p><strong>원인</strong> <SafeText>{emptyResult.reason}</SafeText></p><p><strong>다시 검색하려면</strong> <SafeText>{emptyResult.guidance}</SafeText></p><button onClick={onRefine}>질문 구체화하기</button></section>}
-    {!emptyResult && <p className="summary"><SafeText>{response.summary}</SafeText></p>}
-    {response.sections.map((section, index) => <section className="claim" key={`${section.claim}-${index}`}><h2><SafeText>{section.claim}</SafeText></h2><p><SafeText>{section.explanation}</SafeText></p><div className="citation-links">{section.citation_ids.map((id) => <button className={selectedCitationId === `${messageId}:${id}` ? "selected" : ""} key={id} onClick={() => onCitation(messageId, response, id)}>{id} 원문</button>)}</div></section>)}
-    {response.checklist.length > 0 && <section className="checklist"><div className="section-title-row"><h2>확인 체크리스트</h2><div className="export-controls"><select aria-label="내보내기 형식" value={exportFormat} onChange={(event) => onExportFormat(event.target.value as ExportFormat)}><option value="md">Markdown</option><option value="csv">CSV</option><option value="pdf">PDF</option></select><button disabled={exporting} onClick={() => onExport(response, question, asOf)}>{exporting ? "생성 중" : "내보내기"}</button></div></div>{response.checklist.map((item, index) => <div className="check-item" key={`${item.label}-${index}`}><span aria-hidden="true">□</span><p><SafeText>{item.label}</SafeText>{item.citation_ids.map((id) => <button className="inline-cite" key={id} onClick={() => onCitation(messageId, response, id)}>{id}</button>)}</p></div>)}</section>}
-    {citations.length > 0 && <section className="sources"><h2>원문 근거 <span>{citations.length}건</span></h2>{citations.map((citation) => <CitationCard citation={citation} htmlId={`citation-${messageId}-${citation.id}`} key={citation.id} open={selectedCitationId === `${messageId}:${citation.id}`} />)}</section>}
-    <section className="limitations"><h2>범위와 한계</h2>{response.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}</section>
-  </>;
 }
 
 export default function Home() {
@@ -667,9 +595,8 @@ export default function Home() {
           : { clarification_capability: clarificationCapability }),
       }, controller.signal, (event) => {
         if (activeRequest.current?.id !== requestId || event.event !== "summary") return;
-        const summary = event.data.summary;
-        if (typeof summary !== "string" || !summary.trim()) return;
-        const core = liveCoreResponse(requestId, summary, coreCitations(event.data.citations));
+        const core = liveCoreResponse(requestId, event.data);
+        if (!core) return;
         setResult(core);
         setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
       });
@@ -701,9 +628,15 @@ export default function Home() {
       } else {
         const message = cause instanceof ApiError && cause.code === "system_busy"
           ? "시스템이 바쁩니다. 잠시 후 다시 실행해 주세요."
-          : cause instanceof Error ? cause.message : "연결 오류";
-        setActiveChat((current) => failPendingTurn(current, requestId, message));
-        setError(message);
+          : cause instanceof ApiError
+            ? cause.publicMessage
+            : null;
+        if (message) {
+          setActiveChat((current) => failPendingTurn(current, requestId, message));
+          setError(message);
+        } else {
+          setActiveChat((current) => stopPendingTurn(current, requestId));
+        }
       }
     } finally {
       if (activeRequest.current?.id === requestId) {
@@ -834,14 +767,6 @@ export default function Home() {
 
   const terraUnavailable = terraUnavailableFromResponse;
 
-  function refineQuestion() {
-    setShowAnonymousNudge(false);
-    requestAnimationFrame(() => {
-      composer.current?.focus();
-      composer.current?.setSelectionRange(0, composer.current.value.length);
-    });
-  }
-
   return (
     <main className="app-shell">
       {sidebarOpen && <button aria-label="사이드바 닫기" className="sidebar-scrim" onClick={() => setSidebarOpen(false)} />}
@@ -904,7 +829,7 @@ export default function Home() {
                     {message.status === "pending" && <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div>}
                     {message.status === "stopped" && <p className="stopped-response">응답 대기를 중지했습니다.</p>}
                     {message.status === "error" && <p className="stopped-response">{message.error}</p>}
-                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <><AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} onRefine={refineQuestion} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />{message.response.clarification && <aside aria-label="추가 정보 질문" className="clarification-prompts"><p>정확한 안내를 위해 다음 정보를 알려주세요.</p>{message.response.clarification.question_format.map((fact) => <p key={fact.id}><strong>{fact.label}</strong> — {fact.why_needed}</p>)}<button onClick={() => setQuestion("현재 정보로 답변해 주세요.")} type="button">현재 정보로 답변 요청</button></aside>}</>}
+                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <><AnswerView asOf={previous.asOf} documentKinds={documentKinds} exportFormat={exportFormat} exporting={exporting} messageId={message.id} onCitation={jumpToCitation} onExport={(value, prompt, date) => void exportChecklist(value, prompt, date)} onExportFormat={setExportFormat} pendingDetail={message.status === "streaming"} question={previous.text} response={message.response} selectedCitationId={selectedCitationId} />{message.response.clarification && <aside aria-label="추가 정보 질문" className="clarification-prompts"><p>정확한 안내를 위해 다음 정보를 알려주세요.</p>{message.response.clarification.question_format.map((fact) => <p key={fact.id}><strong>{fact.label}</strong> — {fact.why_needed}</p>)}<button onClick={() => setQuestion("현재 정보로 답변해 주세요.")} type="button">현재 정보로 답변 요청</button></aside>}</>}
                   </div></article>;
                 })}
                 {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}

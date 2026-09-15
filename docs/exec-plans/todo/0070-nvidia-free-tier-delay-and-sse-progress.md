@@ -5,8 +5,8 @@
 > 선행 조건: 없음
 > 다음 행동: NVIDIA 무료 티어 안내와 SSE 상세 생성 진행 표시의 프런트엔드 회귀 테스트부터 작성한다.
 > 참고 범위:
-> - `apps/web/app/page.tsx` L668-L675 — SSE 핵심 답변을 streaming 메시지로 반영하는 현재 흐름
-> - `apps/web/app/page.tsx` L884-L925 — 메인 환영 화면, 답변 상태, 질문 입력 영역 렌더링
+> - `apps/web/app/page.tsx` L596-L603 — SSE 핵심 답변을 streaming 메시지로 반영하는 현재 흐름
+> - `apps/web/app/page.tsx` L812-L850 — 메인 환영 화면, 답변 상태, 오류 배너 및 질문 입력 영역 렌더링
 > - `apps/web/lib/chat-state.ts` L270-L285 — 핵심 답변 수신 뒤 streaming 상태를 만드는 상태 전이
 
 # NVIDIA 무료 티어 지연 안내 및 SSE 상세 생성 진행 표시 Implementation Plan
