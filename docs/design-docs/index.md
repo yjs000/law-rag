@@ -36,6 +36,7 @@
 | [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 대체됨 | 역사적 tier1/tier2·`search_only` 설계 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
 | [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 대체됨 | 구현된 Phase 1의 역사 기록; 현재 개편 계약은 아래 후속 설계 |
 | [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 | generation 색인, engine 주입, Router·QueryEngine·ResponseSynthesizer와 문장별 grounding SSE |
+| [V2 질문 응답 표시 계약](v2-question-response-presentation-contract.md) | 승인 | 백엔드 소유 답변·오류 문구의 Core/Finalize 점진 표시와 Web 치환 금지 |
 | [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
 | [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 승인 | LangGraph StateGraph·Postgres 체크포인터 대화 영속화·스레드/run API, F-005 호환 run/evidence/grounding 경계와 M1~M5 구현 순서 |
