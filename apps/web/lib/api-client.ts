@@ -9,6 +9,7 @@ import type {
 import { createClient } from "./supabase/client";
 import {
   runV2Execution,
+  V2ExecutionEventError,
   V2ExecutionHttpError,
   type V2ExecutionEvent,
 } from "./v2-execution";
@@ -125,6 +126,10 @@ export async function askQuestion(
       onEvent,
     }, signal);
   } catch (error) {
+    if (error instanceof V2ExecutionEventError) {
+      const code: ApiErrorCode = error.publicMessage === "system_busy" ? "system_busy" : null;
+      throw new ApiError(error.publicMessage, 500, code);
+    }
     if (error instanceof V2ExecutionHttpError) {
       const raw = error.detail as { detail?: unknown; code?: unknown; reason_code?: unknown } | null;
       const detail = raw?.detail;

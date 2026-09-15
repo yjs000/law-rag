@@ -124,7 +124,46 @@ describe("runV2Execution", () => {
     const cancellation = calls.find(({ url, init }) => url.endsWith("/exec-1") && init?.method === "DELETE");
     expect(new Headers(cancellation?.init?.headers).get("X-Execution-Capability")).toBe("capability-1");
   });
+
+  it.each([
+    ['event: error\ndata: {"message":"상세 생성을 완료하지 못했습니다."}\n\n', "상세 생성을 완료하지 못했습니다."],
+    ['event: error\ndata: {"reason_code":"phase_not_ready"}\n\n', "phase_not_ready"],
+  ])("preserves a terminal SSE display value", async (frame, expected) => {
+    await expect(runWithCoreFrame(frame)).rejects.toMatchObject({
+      publicMessage: expected,
+      eventType: "error",
+    });
+  });
+
+  it("keeps a cancelled SSE event without a display value as null", async () => {
+    await expect(runWithCoreFrame("event: cancelled\ndata: {}\n\n")).rejects.toMatchObject({
+      publicMessage: null,
+      eventType: "cancelled",
+    });
+  });
+
+  it("preserves a cancelled SSE display value", async () => {
+    await expect(runWithCoreFrame('event: cancelled\ndata: {"message":"실행이 취소되었습니다."}\n\n')).rejects.toMatchObject({
+      publicMessage: "실행이 취소되었습니다.",
+      eventType: "cancelled",
+    });
+  });
 });
+
+async function runWithCoreFrame(frame: string) {
+  const fetch = async (url: string) => url.endsWith("/v2/question-executions")
+    ? Response.json({ execution_id: "exec-1", next_action: "generate_core" })
+    : new Response(frame);
+  return runV2Execution(
+    { question: "질문", as_of_date: "2026-09-15", project_stage: "planning" },
+    {
+      fetch: fetch as typeof globalThis.fetch,
+      apiUrl: "http://api",
+      headers: {},
+      idempotencyKey: () => "key",
+    },
+  );
+}
 
 function streamed(chunks: string[]): Response {
   const encoder = new TextEncoder();

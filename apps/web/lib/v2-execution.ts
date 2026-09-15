@@ -1,4 +1,5 @@
 import type { QuestionInput, QuestionResponse } from "./contracts";
+import { backendDisplayMessage } from "./backend-display-message";
 
 export type V2NextAction = "generate_core" | "generate_detail" | "repair_core" | "complete";
 
@@ -24,6 +25,16 @@ export type V2ExecutionDependencies = {
 export class V2ExecutionHttpError extends Error {
   constructor(readonly status: number, readonly detail: unknown) {
     super(`HTTP ${status}`);
+  }
+}
+
+export class V2ExecutionEventError extends Error {
+  constructor(
+    readonly publicMessage: string | null,
+    readonly eventType: "error" | "cancelled",
+  ) {
+    super(publicMessage ?? `SSE ${eventType}`);
+    this.name = "V2ExecutionEventError";
   }
 }
 
@@ -81,7 +92,7 @@ async function followExecution(
         return event.data.response;
       }
       if (event.event === "error" || event.event === "cancelled") {
-        throw new Error("답변 실행을 완료하지 못했습니다.");
+        throw new V2ExecutionEventError(backendDisplayMessage(event.data), event.event);
       }
       if (event.event === "phase_complete") {
         const candidate = event.data.next_action;
