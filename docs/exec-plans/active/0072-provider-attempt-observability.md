@@ -100,13 +100,13 @@ class ProviderAttemptsExhausted(RuntimeError):
 - Modify: `docs/exec-plans/todo/0072-provider-attempt-observability.md` header only
 - Generate: `docs/ROADMAP.md`
 
-- [ ] `git status --short --branch`로 사용자 변경과 `graphify-out/` dirty 파일을 기록한다.
-- [ ] `B-005`가 별도 worktree/branch에서 진행 중인지 확인하고, 현재 worktree가 `codex/b006-provider-attempt-observability`인지 검증한다.
-- [ ] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005와 겹치는 파일은 최종 통합 재검증 대상으로 기록한다.
-- [ ] 이 branch에서만 0071 header 상태를 `Todo`로 두고, 0072 계획 파일을 `docs/exec-plans/active/`로 이동해 header 상태를 `Picked Up`으로 바꾼다. 저장소 전체 Picked Up은 한 개로 유지한다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/render_roadmap.py`를 실행한다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/check_roadmap.py`가 성공하는지 확인한다.
-- [ ] 계획의 병렬 worktree 계약 정정과 활성화를 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
+- [x] `git status --short --branch`로 사용자 변경과 `graphify-out/` dirty 파일을 기록한다.
+- [x] `B-005`가 별도 worktree/branch에서 진행 중인지 확인하고, 현재 worktree가 `codex/b006-provider-attempt-observability`인지 검증한다.
+- [x] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005와 겹치는 파일은 최종 통합 재검증 대상으로 기록한다.
+- [x] 이 branch에서만 0071 header 상태를 `Todo`로 두고, 0072 계획 파일을 `docs/exec-plans/active/`로 이동해 header 상태를 `Picked Up`으로 바꾼다. 저장소 전체 Picked Up은 한 개로 유지한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/render_roadmap.py`를 실행한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/check_roadmap.py`가 성공하는지 확인한다.
+- [x] 계획의 병렬 worktree 계약 정정과 활성화를 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
 
 ### Task 1: 개인정보 없는 공통 provider attempt 계약
 
