@@ -203,7 +203,7 @@ def test_failure_classifier_uses_type_and_status_only(error, expected):
 - Modify: `apps/api/app/adapters/nvidia_nim_answerer.py` L70-L174
 - Create: `apps/api/tests/test_nvidia_nim_attempt_observability.py`
 
-- [ ] `503 → timeout → success`, `503 × 3 terminal`, `402`, `429`, schema validation, cancellation을 가짜 client로 재현한다. 첫 시나리오의 핵심 assertion은 아래와 같다.
+- [x] `503 → timeout → success`, `503 × 3 terminal`, `402`, `429`, schema validation, cancellation을 가짜 client로 재현한다. 첫 시나리오의 핵심 assertion은 아래와 같다.
 
 ```python
 @pytest.mark.asyncio
@@ -233,16 +233,16 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
     assert request.question not in caplog.text
 ```
 
-- [ ] terminal 503 test는 정확히 3개의 failed event와 마지막 `retry_scheduled=False`를 확인하고 `ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)`를 기대한다.
-- [ ] 402/429 parametrized test는 각각 event 1개, `provider_http`, 원래 status, `retry_scheduled=False`와 client call 1회를 확인한다.
-- [ ] invalid content와 Pydantic schema failure도 기존 횟수만큼 로그되지만 `ProviderAttemptsExhausted`로 바뀌지 않고 기존 validation exception 계열로 끝나는지 확인한다.
-- [ ] cancellation은 failed/cancelled event 하나를 남기고 `asyncio.CancelledError`를 그대로 다시 올리며 재시도하지 않는지 확인한다.
-- [ ] `answer()`는 `answer_detail`, `answer_core()`는 `answer_core`, clarification argument가 있으면 두 경로 모두 `clarification`, `answer_blocked_route()`는 `answer_detail`을 사용하도록 operation을 `_generate`에 명시적으로 전달한다.
-- [ ] `_generate`는 각 attempt 직전 `attempt_started`, 호출 전체 `deadline`을 단조 시계로 잡고, 결과/예외 직후 `elapsed_ms`, clamp된 `remaining_ms`, 실제 다음 시도 여부를 계산한 뒤 즉시 emit한다.
-- [ ] 기존 `_MIN_RETRY_SECONDS`, `_NON_RETRYABLE_STATUS_CODES`, `max_attempts`, 전체 deadline을 그대로 사용한다. 로그를 위해 retry 결정을 앞당기거나 새 sleep/backoff를 넣지 않는다.
-- [ ] availability kind의 마지막 실패만 sanitized `ProviderAttemptsExhausted`로 감싸고 exception chaining을 공개 로그에 유출하지 않도록 `from None`으로 올린다. validation/unknown은 원래 exception type을 유지한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_nim_attempt_observability.py apps/api/tests/test_nvidia_nim_answerer.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: log every NVIDIA answer attempt`로 커밋한다.
+- [x] terminal 503 test는 정확히 3개의 failed event와 마지막 `retry_scheduled=False`를 확인하고 `ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)`를 기대한다.
+- [x] 402/429 parametrized test는 각각 event 1개, `provider_http`, 원래 status, `retry_scheduled=False`와 client call 1회를 확인한다.
+- [x] invalid content와 Pydantic schema failure도 기존 횟수만큼 로그되지만 `ProviderAttemptsExhausted`로 바뀌지 않고 기존 validation exception 계열로 끝나는지 확인한다.
+- [x] cancellation은 failed/cancelled event 하나를 남기고 `asyncio.CancelledError`를 그대로 다시 올리며 재시도하지 않는지 확인한다.
+- [x] `answer()`는 `answer_detail`, `answer_core()`는 `answer_core`, clarification argument가 있으면 두 경로 모두 `clarification`, `answer_blocked_route()`는 `answer_detail`을 사용하도록 operation을 `_generate`에 명시적으로 전달한다.
+- [x] `_generate`는 각 attempt 직전 `attempt_started`, 호출 전체 `deadline`을 단조 시계로 잡고, 결과/예외 직후 `elapsed_ms`, clamp된 `remaining_ms`, 실제 다음 시도 여부를 계산한 뒤 즉시 emit한다.
+- [x] 기존 `_MIN_RETRY_SECONDS`, `_NON_RETRYABLE_STATUS_CODES`, `max_attempts`, 전체 deadline을 그대로 사용한다. 로그를 위해 retry 결정을 앞당기거나 새 sleep/backoff를 넣지 않는다.
+- [x] availability kind의 마지막 실패만 sanitized `ProviderAttemptsExhausted`로 감싸고 exception chaining을 공개 로그에 유출하지 않도록 `from None`으로 올린다. validation/unknown은 원래 exception type을 유지한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_nim_attempt_observability.py apps/api/tests/test_nvidia_nim_answerer.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: log every NVIDIA answer attempt`로 커밋한다.
 
 ### Task 3: route, query embedding, clarification의 단일 관측 계약 적용
 
