@@ -163,6 +163,23 @@ describe("structured API error details (0039)", () => {
 });
 
 describe("typed HTTP status on ApiError (0045)", () => {
+  it.each([
+    [{ message: "백엔드 메시지" }, "백엔드 메시지"],
+    [{ detail: { message: "상세 메시지" } }, "상세 메시지"],
+    [{ detail: "문자열 상세" }, "문자열 상세"],
+    [{ detail: { code: "invalid_phase" } }, "invalid_phase"],
+    [{ code: "invalid_request" }, "invalid_request"],
+    [{ detail: {} }, null],
+  ])("preserves the HTTP backend display value", async (payload, publicMessage) => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(payload, { status: 422 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      publicMessage,
+      code: null,
+    });
+  });
+
   it("classifies a V2 system_busy response without exposing a retryable generic 503", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ detail: "system_busy" }, { status: 503 })));
@@ -170,6 +187,7 @@ describe("typed HTTP status on ApiError (0045)", () => {
     await expect(askQuestion(history.request)).rejects.toMatchObject({
       name: "ApiError",
       status: 503,
+      publicMessage: "system_busy",
       code: "system_busy",
     });
   });
