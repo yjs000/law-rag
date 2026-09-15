@@ -522,7 +522,12 @@ class V2QuestionExecutionService:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
         citation_registry = CitationRegistry(execution.frozen_citations)
-        response_is_verified = payload.answer_mode != "terra" or (
+        fallback = search_only_answer(payload, _hits, _corpus_as_of)
+        is_deterministic_search_fallback = (
+            response.model_dump(mode="json", exclude={"request_id"})
+            == fallback.model_dump(mode="json", exclude={"request_id"})
+        )
+        response_is_verified = is_deterministic_search_fallback or (
             clarification is None and response_is_grounded(response, citation_registry)
         )
         if repair_with_grounded_detail:
@@ -538,7 +543,11 @@ class V2QuestionExecutionService:
             ):
                 core = None
                 response = grounding_fallback(payload)
-        elif core is not None and payload.answer_mode == "terra":
+        elif (
+            core is not None
+            and payload.answer_mode == "terra"
+            and not is_deterministic_search_fallback
+        ):
             if core.action == "clarification_required":
                 route = execution.private_payload.get("route", "legal_search")
                 if route == "legal_search":
