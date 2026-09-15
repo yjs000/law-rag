@@ -1,9 +1,9 @@
 > 작업 ID: `B-005`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: [승인된 V2 질문 응답 표시 계약](../../design-docs/v2-question-response-presentation-contract.md)
-> 다음 행동: Task 1의 Core SSE 표시 필드 회귀 테스트를 RED로 만든다.
+> 다음 행동: 완료되어 잔여 작업이 없습니다.
 > 참고 범위:
 > - `docs/design-docs/v2-question-response-presentation-contract.md` L1-L151 — 승인된 표시·오류 소유권 계약
 > - `apps/api/app/application/v2/phase_service.py` L310-L451 — Core 생성과 공개 summary event
@@ -71,7 +71,7 @@
 - Produces: Core `summary` event payload `{ summary: str, citations: list[dict], scope: str, limitations: list[str] }`.
 - Preserves: public `core_from_frozen_evidence(execution) -> tuple[Any, list[Any]]` compatibility seam.
 
-- [ ] **Step 1: Write the failing Core SSE contract test**
+- [x] **Step 1: Write the failing Core SSE contract test**
 
 Add assertions that decode the `summary` and `complete` frames instead of only searching their event names:
 
@@ -93,13 +93,13 @@ assert summary_payload["scope"] == final_response["scope"]
 assert summary_payload["limitations"] == final_response["limitations"]
 ```
 
-- [ ] **Step 2: Run the focused API test and verify RED**
+- [x] **Step 2: Run the focused API test and verify RED**
 
 Run: `./scripts/run_python.ps1 -m pytest apps/api/tests/test_v2_question_executions.py -k "core and replay" -q`
 
 Expected: FAIL because the summary event lacks `scope` and `limitations`.
 
-- [ ] **Step 3: Preserve presentation fields in the private Core result**
+- [x] **Step 3: Preserve presentation fields in the private Core result**
 
 Extend `_core_result_from_frozen_evidence` internally to return scope and limitations alongside the draft and citations. Every deterministic branch uses its already-created `QuestionResponse`; the generated branch uses the already-created search fallback scope plus safe backend limitations:
 
@@ -111,7 +111,7 @@ return draft, citations_for_hits(generation_hits), fallback.scope, safe_answer_l
 
 Keep `core_from_frozen_evidence()` returning only `(core, citations)` by discarding the extra private values there.
 
-- [ ] **Step 4: Publish all four Core display fields**
+- [x] **Step 4: Publish all four Core display fields**
 
 ```python
 payload={
@@ -124,7 +124,7 @@ payload={
 
 Do not add response text logging or change the stored `verified_core` contract.
 
-- [ ] **Step 5: Run focused API tests and commit**
+- [x] **Step 5: Run focused API tests and commit**
 
 Run: `./scripts/run_python.ps1 -m pytest apps/api/tests/test_v2_question_executions.py apps/api/tests/test_clarification_answering.py -q`
 
@@ -150,7 +150,7 @@ git commit -m "fix(api): publish core presentation fields"
 - Produces: `ApiError.publicMessage: string | null`; `ApiError.code: string | null`.
 - Consumes: raw `V2ExecutionHttpError.detail` response body only in `askQuestion()`.
 
-- [ ] **Step 1: Write table-driven extraction tests**
+- [x] **Step 1: Write table-driven extraction tests**
 
 ```typescript
 it.each([
@@ -165,13 +165,13 @@ it.each([
 });
 ```
 
-- [ ] **Step 2: Run helper tests and verify RED**
+- [x] **Step 2: Run helper tests and verify RED**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/backend-display-message.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the exact precedence without fallback copy**
+- [x] **Step 3: Implement the exact precedence without fallback copy**
 
 ```typescript
 export function backendDisplayMessage(payload: unknown): string | null {
@@ -193,7 +193,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 Do not trim, translate, prefix, or append punctuation to the selected string.
 
-- [ ] **Step 4: Make `ApiError` separate internal diagnostics from user display**
+- [x] **Step 4: Make `ApiError` separate internal diagnostics from user display**
 
 ```typescript
 export class ApiError extends Error {
@@ -210,13 +210,13 @@ export class ApiError extends Error {
 
 In `askQuestion()`, call `backendDisplayMessage(error.detail)` and derive `system_busy` only from the raw public code/detail. Leave the generic `request<T>()` used by out-of-scope account/history screens unchanged.
 
-- [ ] **Step 5: Add HTTP message/detail/code-only assertions and run GREEN**
+- [x] **Step 5: Add HTTP message/detail/code-only assertions and run GREEN**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/backend-display-message.test.ts lib/api-client-flow.test.ts`
 
 Expected: PASS; a payload with no display value yields `publicMessage: null` and never “요청을 처리하지 못했습니다.” in the V2 question path.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add apps/web/lib/backend-display-message.ts apps/web/lib/backend-display-message.test.ts apps/web/lib/api-client.ts apps/web/lib/api-client-flow.test.ts
@@ -237,7 +237,7 @@ git commit -m "fix(web): preserve v2 http error messages"
 - Produces: `V2ExecutionEventError.publicMessage: string | null`, `eventType: "error" | "cancelled"`.
 - Produces through `askQuestion()`: `ApiError` with the same public message or code.
 
-- [ ] **Step 1: Write failing SSE error tests**
+- [x] **Step 1: Write failing SSE error tests**
 
 ```typescript
 it.each([
@@ -266,13 +266,13 @@ async function runWithCoreFrame(frame: string) {
 Also assert `event: cancelled` with `{}` produces `publicMessage: null`.
 Add `event: cancelled` with `{"message":"실행이 취소되었습니다."}` and assert that exact message is preserved.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/v2-execution.test.ts`
 
 Expected: FAIL because the current code throws “답변 실행을 완료하지 못했습니다.”.
 
-- [ ] **Step 3: Add a typed terminal event error**
+- [x] **Step 3: Add a typed terminal event error**
 
 ```typescript
 export class V2ExecutionEventError extends Error {
@@ -288,13 +288,13 @@ export class V2ExecutionEventError extends Error {
 
 Replace the generic terminal throw with this error and the Task 2 extractor. Convert it to `ApiError` inside `askQuestion()` without altering `publicMessage`.
 
-- [ ] **Step 4: Run V2 execution and API client tests**
+- [x] **Step 4: Run V2 execution and API client tests**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/v2-execution.test.ts lib/api-client-flow.test.ts`
 
 Expected: PASS for message, reason code, cancelled-without-copy, reconnect, abort, and busy cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add apps/web/lib/v2-execution.ts apps/web/lib/v2-execution.test.ts apps/web/lib/api-client.ts
@@ -316,7 +316,7 @@ git commit -m "fix(web): preserve v2 sse terminal messages"
 - Preserves: exact backend `summary`, `scope`, `limitations`, validated citations; structural defaults are only `sections: []`, `checklist: []`, missing `scope: ""`, and missing `limitations: []` for old events.
 - Adds Web contract fields: backend-matching optional `action` and `route` literal unions.
 
-- [ ] **Step 1: Write failing Core parser tests**
+- [x] **Step 1: Write failing Core parser tests**
 
 ```typescript
 expect(liveCoreResponse("request-1", {
@@ -336,13 +336,13 @@ expect(liveCoreResponse("request-1", {
 
 Add cases for an old event missing scope/limitations, invalid citations, and blank/missing summary. Assert no Korean fallback sentence is introduced.
 
-- [ ] **Step 2: Run parser tests and verify RED**
+- [x] **Step 2: Run parser tests and verify RED**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/live-core-response.test.ts`
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement strict structural parsing**
+- [x] **Step 3: Implement strict structural parsing**
 
 Move `coreCitations()` and `liveCoreResponse()` out of `page.tsx`. Preserve strings byte-for-byte; use empty structural values only for backward compatibility:
 
@@ -383,7 +383,7 @@ function coreCitations(value: unknown): QuestionResponse["citations"] {
 }
 ```
 
-- [ ] **Step 4: Connect the parser to the summary event**
+- [x] **Step 4: Connect the parser to the summary event**
 
 ```typescript
 if (activeRequest.current?.id !== requestId || event.event !== "summary") return;
@@ -393,7 +393,7 @@ setResult(core);
 setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
 ```
 
-- [ ] **Step 5: Run parser, chat-state, and page tests; commit**
+- [x] **Step 5: Run parser, chat-state, and page tests; commit**
 
 Run: `pnpm.cmd --dir apps/web vitest run lib/live-core-response.test.ts lib/chat-state.test.ts app/page.test.tsx`
 
@@ -420,7 +420,7 @@ git commit -m "refactor(web): isolate v2 core response parsing"
 - Produces: `AnswerView` with `pendingDetail: boolean`; no `getEmptyResultMessage()` dependency.
 - Alert policy: `system_busy` retains Web copy; other `ApiError` values display `publicMessage`; absent backend display values create no alert text.
 
-- [ ] **Step 1: Write failing render tests for no-results passthrough and order**
+- [x] **Step 1: Write failing render tests for no-results passthrough and order**
 
 ```typescript
 const citation = {
@@ -473,13 +473,13 @@ expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("detail-progress")
 
 Add a finalized response case proving `sections` and `checklist` follow the backend-owned header fields and the ellipsis disappears.
 
-- [ ] **Step 2: Run render tests and verify RED**
+- [x] **Step 2: Run render tests and verify RED**
 
 Run: `pnpm.cmd --dir apps/web vitest run app/answer-view.test.tsx`
 
 Expected: FAIL because `AnswerView` is still private to `page.tsx` and performs empty-result substitution.
 
-- [ ] **Step 3: Extract and reorder `AnswerView`**
+- [x] **Step 3: Extract and reorder `AnswerView`**
 
 Render exactly this semantic order, omitting empty scope/limitations sections rather than inventing content:
 
@@ -551,7 +551,7 @@ Render exactly this semantic order, omitting empty scope/limitations sections ra
 
 Delete the empty-result import, component branch, helper, and its obsolete tests. Keep citation filtering and `SafeText` unchanged.
 
-- [ ] **Step 4: Apply the question-path alert policy**
+- [x] **Step 4: Apply the question-path alert policy**
 
 ```typescript
 const message = cause instanceof ApiError && cause.code === "system_busy"
@@ -569,7 +569,7 @@ if (message) {
 
 Do not display `Error.message`, “연결 오류”, or a generic Korean fallback for transport/protocol failures.
 
-- [ ] **Step 5: Run the complete Web suite and build**
+- [x] **Step 5: Run the complete Web suite and build**
 
 Run: `pnpm.cmd --dir apps/web test`
 
@@ -581,7 +581,7 @@ Run: `pnpm.cmd --dir apps/web build`
 
 Expected: all commands exit 0; busy and mode-transition tests retain their existing copy.
 
-- [ ] **Step 6: Audit forbidden frontend copy and commit**
+- [x] **Step 6: Audit forbidden frontend copy and commit**
 
 Run: `rg -n "기준일에 유효한 MVP 법령 범위|요청을 처리하지 못했습니다|답변 실행을 완료하지 못했습니다|연결 오류|getEmptyResultMessage" apps/web/app/page.tsx apps/web/app/answer-view.tsx apps/web/lib`
 
@@ -605,7 +605,7 @@ git commit -m "fix(web): render backend question responses unchanged"
 - Consumes: Tasks 1-5 committed results.
 - Produces: latest full verification evidence and a `Done` plan moved to `docs/exec-plans/completed/`.
 
-- [ ] **Step 1: Run focused cross-stack regression**
+- [x] **Step 1: Run focused cross-stack regression**
 
 Run: `./scripts/run_python.ps1 -m pytest apps/api/tests/test_v2_question_executions.py apps/api/tests/test_clarification_answering.py -q`
 
@@ -613,19 +613,19 @@ Run: `pnpm.cmd --dir apps/web vitest run lib/backend-display-message.test.ts lib
 
 Expected: all focused tests PASS.
 
-- [ ] **Step 2: Run repository verification**
+- [x] **Step 2: Run repository verification**
 
 Run: `./scripts/verify.ps1`
 
 Expected: format, lint, type, unit, integration, and documentation checks exit 0. If `tmp_path` fails with access denied, rerun this command once with platform runtime escalation as required by `AGENTS.md`.
 
-- [ ] **Step 3: Review the complete branch diff**
+- [x] **Step 3: Review the complete branch diff**
 
 Run: `git diff origin/main...HEAD -- apps/api apps/web docs/design-docs docs/exec-plans docs/CURRENT_STATE.md docs/ROADMAP.md`
 
 Confirm no secrets, response bodies, unrelated Graphify output, timeout changes, auth/history/account/export behavior, or new frontend legal/error copy entered the branch.
 
-- [ ] **Step 4: Record completion and transition the authoritative plan**
+- [x] **Step 4: Record completion and transition the authoritative plan**
 
 Append a short result section containing the exact test commands and outcomes, set header state to `Done`, set next action to “완료되어 잔여 작업이 없습니다.”, move the file to `docs/exec-plans/completed/0071-v2-question-response-passthrough.md`, and update `docs/CURRENT_STATE.md` to point to the completed work.
 
@@ -638,9 +638,22 @@ Run in order:
 
 Expected: roadmap renderer and checker PASS with no `Picked Up` item remaining.
 
-- [ ] **Step 5: Commit closure metadata**
+- [x] **Step 5: Commit closure metadata**
 
 ```powershell
 git add docs/exec-plans/completed/0071-v2-question-response-passthrough.md docs/CURRENT_STATE.md docs/ROADMAP.md
 git commit -m "docs: complete v2 response passthrough plan"
 ```
+
+## 실행 증빙 — 2026-09-15 KST
+
+- 집중 API `./scripts/run_python.ps1 -m pytest apps/api/tests/test_v2_question_executions.py apps/api/tests/test_clarification_answering.py -q`: 51 passed, 기존 Starlette/httpx·pytest cache 경고 2개.
+- 집중 Web `pnpm.cmd --dir apps/web vitest run lib/backend-display-message.test.ts lib/v2-execution.test.ts lib/api-client-flow.test.ts lib/live-core-response.test.ts app/answer-view.test.tsx app/page.test.tsx`: junction purge로 non-TTY 중단. 기존 바이너리로 같은 테스트를 실행해 6 files, 43 passed.
+- 저장소 `./scripts/verify.ps1`: sandbox `tmp_path` WinError 5 뒤 platform runtime에서 core 27 passed, API 902 passed/3 skipped, collector 97 passed/5 skipped, Ruff·docs·roadmap check 통과. pnpm 단계에서 junction purge로 종료 코드 1이어서 직접 `apps/web` 바이너리 검증으로 대체했다.
+- Web 전체 `vitest.cmd run`: 23 files, 127 passed; `eslint.cmd .`, `tsc.cmd --noEmit`, `next.cmd build`: 모두 통과(기존 multiple-lockfile 경고).
+- 범위 감사 `git diff origin/main...HEAD -- apps/api apps/web docs/design-docs docs/exec-plans docs/CURRENT_STATE.md docs/ROADMAP.md`: 기대한 B-005 변경과 선행 문서 메타데이터만 확인했고 비밀·응답 본문·Graphify·timeout·auth/history/account/export 변경 및 신규 법률/오류 문구는 없었다.
+- `./scripts/run_python.ps1 scripts/render_roadmap.py` 후 `./scripts/run_python.ps1 scripts/check_roadmap.py`: 통과, Picked Up 없음.
+
+## 잔여 작업
+
+- 없음. F-009 Todo는 별도 계획으로 남아 있다.
