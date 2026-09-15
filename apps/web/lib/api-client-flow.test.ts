@@ -191,6 +191,17 @@ describe("typed HTTP status on ApiError (0045)", () => {
       code: "system_busy",
     });
   });
+
+  it("classifies a V2 reason_code system_busy response for the busy notice", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ reason_code: "system_busy" }, { status: 503 })));
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      publicMessage: "system_busy",
+      code: "system_busy",
+    });
+  });
+
   it("preserves a 503 retrieval-timeout status alongside its fixed message", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({

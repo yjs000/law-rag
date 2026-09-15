@@ -126,10 +126,11 @@ export async function askQuestion(
     }, signal);
   } catch (error) {
     if (error instanceof V2ExecutionHttpError) {
-      const raw = error.detail as { detail?: unknown; code?: unknown } | null;
+      const raw = error.detail as { detail?: unknown; code?: unknown; reason_code?: unknown } | null;
       const detail = raw?.detail;
       const code: ApiErrorCode = error.detail === "system_busy"
         || raw?.code === "system_busy"
+        || raw?.reason_code === "system_busy"
         || detail === "system_busy"
         || (detail as { code?: unknown } | null)?.code === "system_busy"
         ? "system_busy"
