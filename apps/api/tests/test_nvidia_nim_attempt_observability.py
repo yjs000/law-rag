@@ -321,3 +321,30 @@ async def test_retry_flag_matches_next_attempt_when_threshold_is_crossed(
         (1, False)
     ]
     assert "secret response" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_attempt_log_latency_cannot_extend_the_original_retry_deadline(monkeypatch):
+    answerer, client = scripted_answerer(
+        [provider_http_error(503, "secret response")], max_attempts=2, timeout_seconds=4
+    )
+    clock = {"now": 100.0}
+    events: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        answerer_module,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock["now"]),
+    )
+
+    def emit_after_logging_delay(**event: object) -> None:
+        events.append(event)
+        clock["now"] += 1.1
+
+    monkeypatch.setattr(answerer_module, "emit_provider_attempt", emit_after_logging_delay)
+
+    with pytest.raises(ProviderAttemptsExhausted):
+        await answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
+
+    assert client.calls == 1
+    assert [(event["attempt"], event["retry_scheduled"]) for event in events] == [(1, True)]

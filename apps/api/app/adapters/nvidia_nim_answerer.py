@@ -135,15 +135,9 @@ class NvidiaNimAnswerer:
         last_error: Exception
         last_failure_kind: ProviderFailureKind | None = None
         last_upstream_status: int | None = None
-        next_attempt_started: float | None = None
         for attempt_index in range(self.max_attempts):
             attempt = attempt_index + 1
-            attempt_started = (
-                next_attempt_started
-                if next_attempt_started is not None
-                else time.monotonic()
-            )
-            next_attempt_started = None
+            attempt_started = time.monotonic()
             remaining = deadline - attempt_started
             if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
                 break
@@ -175,11 +169,9 @@ class NvidiaNimAnswerer:
                     and remaining_after >= _MIN_RETRY_SECONDS
                 )
                 if retry_scheduled:
-                    candidate_started = time.monotonic()
-                    if deadline - candidate_started >= _MIN_RETRY_SECONDS:
-                        next_attempt_started = candidate_started
-                    else:
-                        retry_scheduled = False
+                    retry_scheduled = (
+                        deadline - time.monotonic() >= _MIN_RETRY_SECONDS
+                    )
                 emit_provider_attempt(
                     operation=operation,
                     attempt=attempt,
