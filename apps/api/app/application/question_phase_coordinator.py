@@ -94,7 +94,7 @@ class QuestionPhaseCoordinator:
         if current.status is ExecutionStatus.CANCELLED:
             return (AnswerEvent.cancelled(),)
         if current.status is ExecutionStatus.FAILED:
-            return await self._repository.events_for(
+            return await self._failed_phase_events(
                 execution_id, owner_scope, phase=phase, capability_hash=capability_hash
             )
         if self._is_timed_out_running(current):
@@ -181,6 +181,24 @@ class QuestionPhaseCoordinator:
                 self._finalize,
             )
         raise ValueError("unknown execution phase")
+
+    async def _failed_phase_events(
+        self,
+        execution_id,
+        owner_scope: str,
+        *,
+        phase: str,
+        capability_hash: str | None,
+    ) -> tuple[AnswerEvent, ...]:
+        events = await self._repository.events_for(
+            execution_id, owner_scope, phase=phase, capability_hash=capability_hash
+        )
+        if events:
+            return events
+        other_phase = "finalize" if phase == "core" else "core"
+        return await self._repository.events_for(
+            execution_id, owner_scope, phase=other_phase, capability_hash=capability_hash
+        )
 
     def _is_timed_out_running(self, record: QuestionExecutionRecord) -> bool:
         return record.status in {

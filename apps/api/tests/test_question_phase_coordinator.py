@@ -172,10 +172,13 @@ async def test_finalize_provider_exhaustion_persists_a_safe_terminal_replay() ->
     replay = await coordinator.run(
         execution.execution_id, "user:1", phase="finalize", capability_hash=None
     )
+    cross_phase_replay = await coordinator.run(
+        execution.execution_id, "user:1", phase="core", capability_hash=None
+    )
     current = await repository.get_owned(execution.execution_id, "user:1")
 
     assert current.status is ExecutionStatus.FAILED
-    assert events == replay == (AnswerEvent.error("provider_unavailable"),)
+    assert events == replay == cross_phase_replay == (AnswerEvent.error("provider_unavailable"),)
     assert core_calls == 1
     assert finalize_calls == 1
 

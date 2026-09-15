@@ -1221,9 +1221,12 @@ def test_v2_core_provider_exhaustion_replays_without_another_provider_call(
 
     failed = client.post(f"/v2/question-executions/{execution_id}/core", headers=headers)
     replay = client.post(f"/v2/question-executions/{execution_id}/core", headers=headers)
+    cross_phase_replay = client.post(
+        f"/v2/question-executions/{execution_id}/finalize", headers=headers
+    )
 
-    assert failed.status_code == replay.status_code == 200
-    assert failed.text == replay.text
+    assert failed.status_code == replay.status_code == cross_phase_replay.status_code == 200
+    assert failed.text == replay.text == cross_phase_replay.text
     assert 'event: error\ndata: {"reason_code": "provider_unavailable"}' in failed.text
     assert "503" not in failed.text
     assert "provider_http" not in failed.text
