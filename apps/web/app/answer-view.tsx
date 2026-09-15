@@ -33,10 +33,6 @@ export function AnswerView({
 }) {
   const citations = filterCitations(response.citations, documentKinds);
   return <>
-      <div className="answer-meta">
-        <span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{answerModeBadgeLabel(response.mode)}</span>
-        <span>기준일 {asOf}</span>
-      </div>
       <p className="summary"><SafeText>{response.summary}</SafeText></p>
       {citations.length > 0 && (
         <section className="sources">
@@ -96,5 +92,9 @@ export function AnswerView({
           ))}
         </section>
       )}
+      <div className="answer-meta">
+        <span className={response.mode === "ai" ? "mode-badge" : "mode-badge search"}>{answerModeBadgeLabel(response.mode)}</span>
+        <span>기준일 {asOf}</span>
+      </div>
     </>;
 }

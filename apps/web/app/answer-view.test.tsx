@@ -52,9 +52,11 @@ describe("AnswerView", () => {
 
     expect(html).toContain("정확한 절차를 확인하려면 추가 정보가 필요합니다.");
     expect(html).not.toContain("기준일에 유효한 MVP 법령 범위");
+    expect(html.startsWith('<p class="summary">')).toBe(true);
     expect(html.indexOf("summary")).toBeLessThan(html.indexOf("sources"));
     expect(html.indexOf("sources")).toBeLessThan(html.indexOf("limitations"));
     expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("detail-progress"));
+    expect(html.indexOf("summary")).toBeLessThan(html.indexOf("answer-meta"));
   });
 
   it("renders finalized sections and checklist after core fields without progress ellipsis", () => {
@@ -78,6 +80,8 @@ describe("AnswerView", () => {
     expect(html).not.toContain('class="detail-progress"');
     expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("백엔드 주장"));
     expect(html.indexOf("백엔드 주장")).toBeLessThan(html.indexOf("확인 체크리스트"));
+    expect(html.indexOf("백엔드 요약")).toBeLessThan(html.indexOf("answer-meta"));
+    expect(html.indexOf("확인 체크리스트")).toBeLessThan(html.indexOf("answer-meta"));
   });
 
   it("keeps selected citations and SafeText escaping", () => {
