@@ -321,9 +321,9 @@ def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
 - Modify: `apps/api/tests/test_question_phase_coordinator.py` L1-L102
 - Modify only if B-005 tests require contract coverage: `apps/api/tests/test_v2_question_executions.py` relevant provider-failure section
 
-- [ ] core producer가 `ProviderAttemptsExhausted(provider_http, 503)`를 올리는 test를 추가하고 status `FAILED`, event `AnswerEvent.error("provider_unavailable")`, finalize/repair 미호출을 검증한다.
-- [ ] finalize producer가 같은 typed error를 올려도 `FAILED`와 같은 safe reason code로 끝나는지 검증한다.
-- [ ] 일반 `ValueError`를 올리는 core producer는 기존 `CORE_REPAIR_REQUIRED`와 `next_action=repair_core`를 유지하는 회귀 test를 추가한다.
+- [x] core producer가 `ProviderAttemptsExhausted(provider_http, 503)`를 올리는 test를 추가하고 status `FAILED`, event `AnswerEvent.error("provider_unavailable")`, finalize/repair 미호출을 검증한다.
+- [x] finalize producer가 같은 typed error를 올려도 `FAILED`와 같은 safe reason code로 끝나는지 검증한다.
+- [x] 일반 `ValueError`를 올리는 core producer는 기존 `CORE_REPAIR_REQUIRED`와 `next_action=repair_core`를 유지하는 회귀 test를 추가한다.
 
 ```python
 try:
@@ -338,11 +338,11 @@ except Exception:
     result = _safe_phase_failure(phase)
 ```
 
-- [ ] generic catch-all을 작은 `_safe_phase_failure(phase)` helper로 추출해 기존 core repair/finalize failure 동작을 그대로 보존한다.
-- [ ] typed error의 `upstream_status`나 failure kind는 SSE payload에 넣지 않는다. 상세는 앞선 `law_rag.provider_attempt` 로그에서만 확인한다.
-- [ ] V2 end-to-end repository test에서 provider 소진 execution을 다시 core/finalize 호출해도 새 provider call이 생기지 않고 persisted terminal event가 replay되는지 확인한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `fix: separate provider exhaustion from grounding repair`로 커밋한다.
+- [x] generic catch-all을 작은 `_safe_phase_failure(phase)` helper로 추출해 기존 core repair/finalize failure 동작을 그대로 보존한다.
+- [x] typed error의 `upstream_status`나 failure kind는 SSE payload에 넣지 않는다. 상세는 앞선 `law_rag.provider_attempt` 로그에서만 확인한다.
+- [x] V2 end-to-end repository test에서 provider 소진 execution을 다시 core/finalize 호출해도 새 provider call이 생기지 않고 persisted terminal event가 replay되는지 확인한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
+- [x] Ruff와 `git diff --check` 후 `fix: separate provider exhaustion from grounding repair`로 커밋한다.
 
 ### Task 6: Web에 안전한 provider 불가 안내 전달
 
