@@ -115,7 +115,7 @@ class ProviderAttemptsExhausted(RuntimeError):
 - Create: `apps/api/app/provider_observability.py`
 - Create: `apps/api/tests/test_provider_observability.py`
 
-- [ ] 아래 test matrix를 `test_provider_observability.py`에 작성한다.
+- [x] 아래 test matrix를 `test_provider_observability.py`에 작성한다.
 
 ```python
 import asyncio
@@ -187,15 +187,15 @@ def test_failure_classifier_uses_type_and_status_only(error, expected):
     assert classify_provider_failure(error) == expected
 ```
 
-- [ ] 고정 UUID의 SHA-256 앞 16자리가 test fixture의 `7d8d49c21f606642`와 일치하는지 독립 계산으로 확인한다.
-- [ ] `ProviderAttemptEvent`가 `extra="forbid"`, 1-based attempt, `attempt <= max_attempts`, non-negative timing, 성공 시 `failure_kind/upstream_status=None`과 `retry_scheduled=False`를 검증하도록 한다.
-- [ ] `provider_attempt_scope(source=None)`는 이미 열린 scope가 있으면 그대로 재사용하고, 없으면 호출 단위 UUID를 생성해 hash만 ContextVar에 저장하도록 한다. token reset으로 동시 async task와 중첩 scope를 격리한다.
-- [ ] 분류 순서를 `cancelled → timeout → integer status → connection type → Pydantic ValidationError → invalid response → unknown`으로 고정한다. 예외 문자열은 읽지 않는다.
-- [ ] `emit_provider_attempt`은 `ProviderAttemptEvent` 검증 뒤 `json.dumps(event.model_dump(mode="json"), sort_keys=True)` 한 줄만 `law_rag.provider_attempt` INFO logger에 출력한다.
-- [ ] RED 확인: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_observability.py -q`가 import 실패로 끝나는지 확인한다.
-- [ ] 두 새 모듈을 최소 구현하고 같은 명령이 PASS인지 확인한다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m ruff check apps/api/app/domain/provider_attempts.py apps/api/app/provider_observability.py apps/api/tests/test_provider_observability.py`를 실행한다.
-- [ ] `git diff --check`와 scoped diff를 검토하고 `feat: add safe provider attempt event contract`로 커밋한다.
+- [x] 고정 UUID의 SHA-256 앞 16자리가 test fixture의 `7d8d49c21f606642`와 일치하는지 독립 계산으로 확인한다.
+- [x] `ProviderAttemptEvent`가 `extra="forbid"`, 1-based attempt, `attempt <= max_attempts`, non-negative timing, 성공 시 `failure_kind/upstream_status=None`과 `retry_scheduled=False`를 검증하도록 한다.
+- [x] `provider_attempt_scope(source=None)`는 이미 열린 scope가 있으면 그대로 재사용하고, 없으면 호출 단위 UUID를 생성해 hash만 ContextVar에 저장하도록 한다. token reset으로 동시 async task와 중첩 scope를 격리한다.
+- [x] 분류 순서를 `cancelled → timeout → integer status → connection type → Pydantic ValidationError → invalid response → unknown`으로 고정한다. 예외 문자열은 읽지 않는다.
+- [x] `emit_provider_attempt`은 `ProviderAttemptEvent` 검증 뒤 `json.dumps(event.model_dump(mode="json"), sort_keys=True)` 한 줄만 `law_rag.provider_attempt` INFO logger에 출력한다.
+- [x] RED 확인: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_observability.py -q`가 import 실패로 끝나는지 확인한다.
+- [x] 두 새 모듈을 최소 구현하고 같은 명령이 PASS인지 확인한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m ruff check apps/api/app/domain/provider_attempts.py apps/api/app/provider_observability.py apps/api/tests/test_provider_observability.py`를 실행한다.
+- [x] `git diff --check`와 scoped diff를 검토하고 `feat: add safe provider attempt event contract`로 커밋한다.
 
 ### Task 2: answer core/detail의 모든 제한 재시도 기록
 
