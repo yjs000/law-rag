@@ -24,7 +24,6 @@ from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import QuestionRoute
 from app.domain.schemas import QuestionRequest, SearchHit
 from app.provider_observability import (
-    ProviderFailureKind,
     ProviderOperation,
     classify_provider_failure,
     emit_provider_attempt,
@@ -132,19 +131,19 @@ class NvidiaNimAnswerer:
         operation: ProviderOperation,
     ) -> StructuredAnswer:
         deadline = time.monotonic() + self.timeout_seconds
-        last_error: Exception
-        last_failure_kind: ProviderFailureKind | None = None
-        last_upstream_status: int | None = None
-        for attempt_index in range(self.max_attempts):
-            attempt = attempt_index + 1
-            attempt_started = time.monotonic()
-            remaining = deadline - attempt_started
-            if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
-                break
+        attempt = 1
+        task, attempt_started = await self._start_attempt(
+            messages,
+            schema,
+            deadline=deadline,
+            attempt_index=0,
+        )
+        if task is None or attempt_started is None:
+            raise RuntimeError("initial provider attempt did not start")
+
+        while True:
             try:
-                attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
-                async with asyncio.timeout(max(remaining, 0)):
-                    result = await self._attempt(messages, schema, attempt_timeout=attempt_timeout)
+                result = await task
             except asyncio.CancelledError:
                 finished_at = time.monotonic()
                 emit_provider_attempt(
@@ -163,15 +162,23 @@ class NvidiaNimAnswerer:
                 finished_at = time.monotonic()
                 failure_kind, upstream_status = classify_provider_failure(exc)
                 remaining_after = deadline - finished_at
-                retry_scheduled = (
+                retry_candidate = (
                     attempt < self.max_attempts
                     and getattr(exc, "status_code", None) not in _NON_RETRYABLE_STATUS_CODES
                     and remaining_after >= _MIN_RETRY_SECONDS
                 )
-                if retry_scheduled:
-                    retry_scheduled = (
-                        deadline - time.monotonic() >= _MIN_RETRY_SECONDS
+                next_task: asyncio.Task[StructuredAnswer | None] | None = None
+                next_attempt_started: float | None = None
+                if retry_candidate:
+                    # A synchronous sink can consume the remaining budget. Start the
+                    # successor before announcing it so the event stays truthful.
+                    next_task, next_attempt_started = await self._start_attempt(
+                        messages,
+                        schema,
+                        deadline=deadline,
+                        attempt_index=attempt,
                     )
+                retry_scheduled = next_task is not None
                 emit_provider_attempt(
                     operation=operation,
                     attempt=attempt,
@@ -183,10 +190,11 @@ class NvidiaNimAnswerer:
                     remaining_ms=max(int(remaining_after * 1000), 0),
                     retry_scheduled=retry_scheduled,
                 )
-                last_error = exc
-                last_failure_kind = failure_kind
-                last_upstream_status = upstream_status
-                if retry_scheduled:
+                if next_task is not None:
+                    assert next_attempt_started is not None
+                    task = next_task
+                    attempt_started = next_attempt_started
+                    attempt += 1
                     continue
                 if failure_kind in {"provider_http", "timeout", "connection"}:
                     raise ProviderAttemptsExhausted(
@@ -209,12 +217,58 @@ class NvidiaNimAnswerer:
                 )
                 return result
 
-        if last_failure_kind in {"provider_http", "timeout", "connection"}:
-            raise ProviderAttemptsExhausted(
-                failure_kind=last_failure_kind,
-                upstream_status=last_upstream_status,
-            ) from None
-        raise last_error
+    async def _start_attempt(
+        self,
+        messages: list[dict[str, str]],
+        schema: type[StructuredAnswer],
+        *,
+        deadline: float,
+        attempt_index: int,
+    ) -> tuple[asyncio.Task[StructuredAnswer | None] | None, float | None]:
+        started = asyncio.get_running_loop().create_future()
+        task = asyncio.create_task(
+            self._attempt_before_deadline(
+                messages,
+                schema,
+                deadline=deadline,
+                attempt_index=attempt_index,
+                started=started,
+            )
+        )
+        try:
+            attempt_started = await started
+        except BaseException:
+            task.cancel()
+            raise
+        if attempt_started is None:
+            assert await task is None
+            return None, None
+        return task, attempt_started
+
+    async def _attempt_before_deadline(
+        self,
+        messages: list[dict[str, str]],
+        schema: type[StructuredAnswer],
+        *,
+        deadline: float,
+        attempt_index: int,
+        started: asyncio.Future[float | None],
+    ) -> StructuredAnswer | None:
+        attempt_started = time.monotonic()
+        remaining = deadline - attempt_started
+        if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
+            started.set_result(None)
+            return None
+
+        started.set_result(attempt_started)
+        attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
+        timeout_at = asyncio.get_running_loop().time() + max(remaining, 0)
+        async with asyncio.timeout_at(timeout_at):
+            return await self._attempt(
+                messages,
+                schema,
+                attempt_timeout=attempt_timeout,
+            )
 
     async def _attempt(
         self,

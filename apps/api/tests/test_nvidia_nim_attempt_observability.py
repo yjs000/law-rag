@@ -324,12 +324,20 @@ async def test_retry_flag_matches_next_attempt_when_threshold_is_crossed(
 
 
 @pytest.mark.asyncio
-async def test_attempt_log_latency_cannot_extend_the_original_retry_deadline(monkeypatch):
+async def test_retry_event_is_truthful_when_emission_crosses_original_deadline(
+    monkeypatch,
+):
     answerer, client = scripted_answerer(
-        [provider_http_error(503, "secret response")], max_attempts=2, timeout_seconds=4
+        [
+            provider_http_error(503, "secret response"),
+            core_response(summary="retry completed before logging"),
+        ],
+        max_attempts=2,
+        timeout_seconds=4,
     )
     clock = {"now": 100.0}
     events: list[dict[str, object]] = []
+    provider_starts: list[float] = []
 
     monkeypatch.setattr(
         answerer_module,
@@ -337,14 +345,27 @@ async def test_attempt_log_latency_cannot_extend_the_original_retry_deadline(mon
         SimpleNamespace(monotonic=lambda: clock["now"]),
     )
 
+    original_create = client.create
+
+    async def record_provider_start(**kwargs: object) -> object:
+        provider_starts.append(clock["now"])
+        return await original_create(**kwargs)
+
+    monkeypatch.setattr(client, "create", record_provider_start)
+
     def emit_after_logging_delay(**event: object) -> None:
         events.append(event)
-        clock["now"] += 1.1
+        clock["now"] += 4.1
 
     monkeypatch.setattr(answerer_module, "emit_provider_attempt", emit_after_logging_delay)
 
-    with pytest.raises(ProviderAttemptsExhausted):
-        await answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
+    result = await answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
 
-    assert client.calls == 1
-    assert [(event["attempt"], event["retry_scheduled"]) for event in events] == [(1, True)]
+    assert result.summary == "retry completed before logging"
+    assert client.calls == 2
+    assert provider_starts == [100.0, 100.0]
+    assert provider_starts[1] < 104.0
+    assert [(event["attempt"], event["retry_scheduled"]) for event in events] == [
+        (1, True),
+        (2, False),
+    ]
