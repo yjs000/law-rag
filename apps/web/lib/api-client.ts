@@ -10,6 +10,7 @@ import { createClient } from "./supabase/client";
 import {
   runV2Execution,
   V2ExecutionHttpError,
+  V2ExecutionPhaseError,
   type V2ExecutionEvent,
 } from "./v2-execution";
 
@@ -18,7 +19,7 @@ const CONSENT_KEY = "law-rag-pending-consent";
 export const TERMS_VERSION = "beta-2026-07-15";
 export const PRIVACY_VERSION = "beta-2026-07-15";
 
-export type ApiErrorCode = "system_busy" | null;
+export type ApiErrorCode = "provider_unavailable" | "system_busy" | null;
 
 export class ApiError extends Error {
   constructor(
@@ -124,6 +125,13 @@ export async function askQuestion(
       onEvent,
     }, signal);
   } catch (error) {
+    if (error instanceof V2ExecutionPhaseError && error.reasonCode === "provider_unavailable") {
+      throw new ApiError(
+        "AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.",
+        503,
+        "provider_unavailable",
+      );
+    }
     if (error instanceof V2ExecutionHttpError) {
       const detail = (error.detail as { detail?: unknown } | null)?.detail;
       const message = typeof detail === "string"

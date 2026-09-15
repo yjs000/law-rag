@@ -27,6 +27,13 @@ export class V2ExecutionHttpError extends Error {
   }
 }
 
+export class V2ExecutionPhaseError extends Error {
+  constructor(readonly reasonCode: string) {
+    super("답변 실행을 완료하지 못했습니다.");
+    this.name = "V2ExecutionPhaseError";
+  }
+}
+
 const KNOWN_ACTIONS = new Set<V2NextAction>([
   "generate_core",
   "generate_detail",
@@ -80,7 +87,14 @@ async function followExecution(
         }
         return event.data.response;
       }
-      if (event.event === "error" || event.event === "cancelled") {
+      if (event.event === "error") {
+        const reasonCode = event.data.reason_code;
+        if (reasonCode === "provider_unavailable") {
+          throw new V2ExecutionPhaseError(reasonCode);
+        }
+        throw new Error("답변 실행을 완료하지 못했습니다.");
+      }
+      if (event.event === "cancelled") {
         throw new Error("답변 실행을 완료하지 못했습니다.");
       }
       if (event.event === "phase_complete") {

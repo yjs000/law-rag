@@ -163,6 +163,27 @@ describe("structured API error details (0039)", () => {
 });
 
 describe("typed HTTP status on ApiError (0045)", () => {
+  it("maps a provider_unavailable SSE reason to the safe fixed ApiError without preparing again", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/v2/question-executions")) {
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      return new Response(
+        'event: error\ndata: {"reason_code":"provider_unavailable","provider_status":503,"exception":"provider secret"}\n\n',
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askQuestion(history.request)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      code: "provider_unavailable",
+      message: "AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.",
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/v2/question-executions"))).toHaveLength(1);
+  });
+
   it("classifies a V2 system_busy response without exposing a retryable generic 503", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ detail: "system_busy" }, { status: 503 })));
