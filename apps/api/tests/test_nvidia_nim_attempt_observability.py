@@ -293,3 +293,31 @@ async def test_attempt_timing_is_monotonic_and_remaining_is_clamped(monkeypatch,
     assert event["elapsed_ms"] == 2000
     assert event["remaining_ms"] == 0
     assert event["retry_scheduled"] is False
+
+
+@pytest.mark.asyncio
+async def test_retry_flag_matches_next_attempt_when_threshold_is_crossed(
+    monkeypatch, caplog
+):
+    answerer, client = scripted_answerer(
+        [provider_http_error(503, "secret response")],
+        max_attempts=2,
+        timeout_seconds=3,
+    )
+    clock = iter([100.0, 100.0, 100.0, 100.001])
+    monkeypatch.setattr(
+        answerer_module,
+        "time",
+        SimpleNamespace(monotonic=lambda: next(clock)),
+    )
+
+    with caplog.at_level(logging.INFO, logger="law_rag.provider_attempt"):
+        with pytest.raises(ProviderAttemptsExhausted):
+            await answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
+
+    events = [json.loads(record.message) for record in caplog.records]
+    assert client.calls == 1
+    assert [(event["attempt"], event["retry_scheduled"]) for event in events] == [
+        (1, False)
+    ]
+    assert "secret response" not in caplog.text
