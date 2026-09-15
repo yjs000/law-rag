@@ -563,11 +563,11 @@ if (message) {
   setActiveChat((current) => failPendingTurn(current, requestId, message));
   setError(message);
 } else {
-  setActiveChat((current) => stopPendingTurn(current, requestId));
+  setActiveChat((current) => settleInterruptedPendingTurn(current, requestId));
 }
 ```
 
-Do not display `Error.message`, “연결 오류”, or a generic Korean fallback for transport/protocol failures.
+Do not display `Error.message`, “연결 오류”, or a generic Korean fallback for transport/protocol failures. Preserve an already received Core response as complete; if no Core response exists, remove only the empty assistant placeholder. Explicit user cancellation remains `stopped`.
 
 - [x] **Step 5: Run the complete Web suite and build**
 
@@ -653,6 +653,8 @@ git commit -m "docs: complete v2 response passthrough plan"
 - Web 전체 `vitest.cmd run`: 23 files, 127 passed; `eslint.cmd .`, `tsc.cmd --noEmit`, `next.cmd build`: 모두 통과(기존 multiple-lockfile 경고).
 - 범위 감사 `git diff origin/main...HEAD -- apps/api apps/web docs/design-docs docs/exec-plans docs/CURRENT_STATE.md docs/ROADMAP.md`: 기대한 B-005 변경과 선행 문서 메타데이터만 확인했고 비밀·응답 본문·Graphify·timeout·auth/history/account/export 변경 및 신규 법률/오류 문구는 없었다.
 - `./scripts/run_python.ps1 scripts/render_roadmap.py` 후 `./scripts/run_python.ps1 scripts/check_roadmap.py`: 통과, Picked Up 없음.
+- 최종 브랜치 리뷰 수정 `a5cda1b`: 비공개 전송·프로토콜 실패가 이미 받은 Core 응답을 숨기지 않도록 보존하고, Core 전 실패는 빈 assistant placeholder만 제거하도록 변경했다. 집중 Web 17 passed, 전체 Web 23 files/129 passed, lint·typecheck·build 통과.
+- 최종 수정 재검토: `bfca249..a5cda1b` 범위에서 load-bearing 지적 없음. 명시적 취소·busy·백엔드 공개 오류 동작도 유지됨을 확인했다.
 
 ## 잔여 작업
 
