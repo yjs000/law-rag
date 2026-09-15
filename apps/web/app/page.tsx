@@ -31,6 +31,7 @@ import {
 import { getEmptyResultMessage } from "../lib/empty-result";
 import { SEARCH_ONLY_ENABLED } from "../lib/feature-flags";
 import { dialogKeyAction, focusInitial, restoreFocus } from "../lib/dialog-focus";
+import { liveCoreResponse } from "../lib/live-core-response";
 import {
   appendPendingTurn,
   applyLiveCoreSummary,
@@ -72,36 +73,6 @@ const MODEL_LABELS: Record<AnswerPreference, string> = {
   terra: "AI답변",
   search_only: "기본검색",
 };
-
-function liveCoreResponse(
-  requestId: string,
-  summary: string,
-  citations: QuestionResponse["citations"],
-): QuestionResponse {
-  return {
-    request_id: requestId,
-    mode: "ai",
-    summary,
-    scope: "근거 검증을 마쳤습니다. 상세 설명을 생성 중입니다.",
-    sections: [],
-    checklist: [],
-    citations,
-    limitations: ["상세 답변은 같은 근거를 바탕으로 이어서 생성됩니다."],
-  };
-}
-
-function coreCitations(value: unknown): QuestionResponse["citations"] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((citation): citation is QuestionResponse["citations"][number] => (
-    typeof citation === "object" && citation !== null
-    && typeof (citation as { id?: unknown }).id === "string"
-    && typeof (citation as { document_title?: unknown }).document_title === "string"
-    && typeof (citation as { version_label?: unknown }).version_label === "string"
-    && typeof (citation as { path?: unknown }).path === "string"
-    && typeof (citation as { quote?: unknown }).quote === "string"
-    && typeof (citation as { source_url?: unknown }).source_url === "string"
-  ));
-}
 
 export function oauthRedirectMessage(search: string): string | null {
   const status = new URLSearchParams(search).get("auth");
@@ -667,9 +638,8 @@ export default function Home() {
           : { clarification_capability: clarificationCapability }),
       }, controller.signal, (event) => {
         if (activeRequest.current?.id !== requestId || event.event !== "summary") return;
-        const summary = event.data.summary;
-        if (typeof summary !== "string" || !summary.trim()) return;
-        const core = liveCoreResponse(requestId, summary, coreCitations(event.data.citations));
+        const core = liveCoreResponse(requestId, event.data);
+        if (!core) return;
         setResult(core);
         setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
       });
