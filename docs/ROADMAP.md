@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 980b91b67e8e826382bd25eba8842c17489b58101818f01e470c85f5c32f4917 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: e101ee24676aaf417c52784e36d31aa44074c0ac8de5b8098dfa46480a3524b7 -->
 
 # 프로젝트 로드맵
 
@@ -22,7 +22,7 @@
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격 구현 계획](exec-plans/active/0055-v3-langgraph-agent-foundation.md) — 다음 행동: 다음 미시작 태스크의 착수 범위를 명시한다.
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
-- [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: v2 temporal adapter 경계를 확정한다.
+- [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 SSE 상세 생성 진행 표시 Implementation Plan](exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: NVIDIA 무료 티어 안내와 SSE 상세 생성 진행 표시의 프런트엔드 회귀 테스트부터 작성한다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/todo/0072-provider-attempt-observability.md) — 다음 행동: B-005 완료 뒤 Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
