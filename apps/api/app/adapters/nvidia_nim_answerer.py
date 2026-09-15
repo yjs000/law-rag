@@ -24,6 +24,7 @@ from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import QuestionRoute
 from app.domain.schemas import QuestionRequest, SearchHit
 from app.provider_observability import (
+    ProviderFailureKind,
     ProviderOperation,
     classify_provider_failure,
     emit_provider_attempt,
@@ -131,21 +132,48 @@ class NvidiaNimAnswerer:
         operation: ProviderOperation,
     ) -> StructuredAnswer:
         deadline = time.monotonic() + self.timeout_seconds
-        attempt = 1
-        task, attempt_started = await self._start_attempt(
-            messages,
-            schema,
-            deadline=deadline,
-            attempt_index=0,
-        )
-        if task is None or attempt_started is None:
-            raise RuntimeError("initial provider attempt did not start")
+        last_error: Exception | None = None
+        last_failure_kind: ProviderFailureKind | None = None
+        last_upstream_status: int | None = None
+        pending_failure: tuple[int, ProviderFailureKind, int | None, int, int] | None = None
 
-        while True:
+        def emit_pending_failure(*, retry_scheduled: bool) -> None:
+            nonlocal pending_failure
+            if pending_failure is None:
+                return
+            attempt, failure_kind, upstream_status, elapsed_ms, remaining_ms = pending_failure
+            emit_provider_attempt(
+                operation=operation,
+                attempt=attempt,
+                max_attempts=self.max_attempts,
+                outcome="failed",
+                failure_kind=failure_kind,
+                upstream_status=upstream_status,
+                elapsed_ms=elapsed_ms,
+                remaining_ms=remaining_ms,
+                retry_scheduled=retry_scheduled,
+            )
+            pending_failure = None
+
+        for attempt_index in range(self.max_attempts):
+            attempt = attempt_index + 1
+            attempt_started = time.monotonic()
+            remaining = deadline - attempt_started
+            if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
+                emit_pending_failure(retry_scheduled=False)
+                break
             try:
-                result = await task
+                attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
+                timeout_at = asyncio.get_running_loop().time() + max(remaining, 0)
+                async with asyncio.timeout_at(timeout_at):
+                    result = await self._attempt(
+                        messages,
+                        schema,
+                        attempt_timeout=attempt_timeout,
+                    )
             except asyncio.CancelledError:
                 finished_at = time.monotonic()
+                emit_pending_failure(retry_scheduled=True)
                 emit_provider_attempt(
                     operation=operation,
                     attempt=attempt,
@@ -167,18 +195,21 @@ class NvidiaNimAnswerer:
                     and getattr(exc, "status_code", None) not in _NON_RETRYABLE_STATUS_CODES
                     and remaining_after >= _MIN_RETRY_SECONDS
                 )
-                next_task: asyncio.Task[StructuredAnswer | None] | None = None
-                next_attempt_started: float | None = None
+                elapsed_ms = max(int((finished_at - attempt_started) * 1000), 0)
+                remaining_ms = max(int(remaining_after * 1000), 0)
+                emit_pending_failure(retry_scheduled=True)
                 if retry_candidate:
-                    # A synchronous sink can consume the remaining budget. Start the
-                    # successor before announcing it so the event stays truthful.
-                    next_task, next_attempt_started = await self._start_attempt(
-                        messages,
-                        schema,
-                        deadline=deadline,
-                        attempt_index=attempt,
+                    pending_failure = (
+                        attempt,
+                        failure_kind,
+                        upstream_status,
+                        elapsed_ms,
+                        remaining_ms,
                     )
-                retry_scheduled = next_task is not None
+                    last_error = exc
+                    last_failure_kind = failure_kind
+                    last_upstream_status = upstream_status
+                    continue
                 emit_provider_attempt(
                     operation=operation,
                     attempt=attempt,
@@ -186,16 +217,10 @@ class NvidiaNimAnswerer:
                     outcome="failed",
                     failure_kind=failure_kind,
                     upstream_status=upstream_status,
-                    elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
-                    remaining_ms=max(int(remaining_after * 1000), 0),
-                    retry_scheduled=retry_scheduled,
+                    elapsed_ms=elapsed_ms,
+                    remaining_ms=remaining_ms,
+                    retry_scheduled=False,
                 )
-                if next_task is not None:
-                    assert next_attempt_started is not None
-                    task = next_task
-                    attempt_started = next_attempt_started
-                    attempt += 1
-                    continue
                 if failure_kind in {"provider_http", "timeout", "connection"}:
                     raise ProviderAttemptsExhausted(
                         failure_kind=failure_kind,
@@ -204,6 +229,7 @@ class NvidiaNimAnswerer:
                 raise
             else:
                 finished_at = time.monotonic()
+                emit_pending_failure(retry_scheduled=True)
                 emit_provider_attempt(
                     operation=operation,
                     attempt=attempt,
@@ -217,58 +243,14 @@ class NvidiaNimAnswerer:
                 )
                 return result
 
-    async def _start_attempt(
-        self,
-        messages: list[dict[str, str]],
-        schema: type[StructuredAnswer],
-        *,
-        deadline: float,
-        attempt_index: int,
-    ) -> tuple[asyncio.Task[StructuredAnswer | None] | None, float | None]:
-        started = asyncio.get_running_loop().create_future()
-        task = asyncio.create_task(
-            self._attempt_before_deadline(
-                messages,
-                schema,
-                deadline=deadline,
-                attempt_index=attempt_index,
-                started=started,
-            )
-        )
-        try:
-            attempt_started = await started
-        except BaseException:
-            task.cancel()
-            raise
-        if attempt_started is None:
-            assert await task is None
-            return None, None
-        return task, attempt_started
-
-    async def _attempt_before_deadline(
-        self,
-        messages: list[dict[str, str]],
-        schema: type[StructuredAnswer],
-        *,
-        deadline: float,
-        attempt_index: int,
-        started: asyncio.Future[float | None],
-    ) -> StructuredAnswer | None:
-        attempt_started = time.monotonic()
-        remaining = deadline - attempt_started
-        if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
-            started.set_result(None)
-            return None
-
-        started.set_result(attempt_started)
-        attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
-        timeout_at = asyncio.get_running_loop().time() + max(remaining, 0)
-        async with asyncio.timeout_at(timeout_at):
-            return await self._attempt(
-                messages,
-                schema,
-                attempt_timeout=attempt_timeout,
-            )
+        emit_pending_failure(retry_scheduled=False)
+        assert last_error is not None
+        if last_failure_kind in {"provider_http", "timeout", "connection"}:
+            raise ProviderAttemptsExhausted(
+                failure_kind=last_failure_kind,
+                upstream_status=last_upstream_status,
+            ) from None
+        raise last_error
 
     async def _attempt(
         self,

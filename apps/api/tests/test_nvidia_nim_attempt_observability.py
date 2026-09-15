@@ -369,3 +369,86 @@ async def test_retry_event_is_truthful_when_emission_crosses_original_deadline(
         (1, True),
         (2, False),
     ]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_started_successor_emits_both_attempt_events(monkeypatch):
+    answerer, client = scripted_answerer([], max_attempts=2)
+    events: list[dict[str, object]] = []
+    never = asyncio.Event()
+    answer_task: asyncio.Task[object] | None = None
+
+    async def cancel_during_second_provider_call(**kwargs: object) -> object:
+        del kwargs
+        client.calls += 1
+        if client.calls == 1:
+            raise provider_http_error(503, "secret first failure")
+        assert answer_task is not None
+        answer_task.cancel()
+        await never.wait()
+        raise AssertionError("cancelled successor unexpectedly completed")
+
+    monkeypatch.setattr(client, "create", cancel_during_second_provider_call)
+    monkeypatch.setattr(
+        answerer_module,
+        "emit_provider_attempt",
+        lambda **event: events.append(event),
+    )
+
+    answer_task = asyncio.create_task(
+        answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await answer_task
+
+    assert client.calls == 2
+    assert [
+        (event["attempt"], event["failure_kind"], event["retry_scheduled"])
+        for event in events
+    ] == [
+        (1, "provider_http", True),
+        (2, "cancelled", False),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_successor_timing_excludes_pending_predecessor_log_delay(monkeypatch):
+    answerer, client = scripted_answerer([], max_attempts=2, timeout_seconds=20)
+    clock = {"now": 100.0}
+    events: list[dict[str, object]] = []
+
+    async def advance_each_provider_call(**kwargs: object) -> object:
+        del kwargs
+        client.calls += 1
+        clock["now"] += 1.0
+        if client.calls == 1:
+            raise provider_http_error(503, "secret first failure")
+        return core_response(summary="timed successor")
+
+    monkeypatch.setattr(client, "create", advance_each_provider_call)
+    monkeypatch.setattr(
+        answerer_module,
+        "time",
+        SimpleNamespace(monotonic=lambda: clock["now"]),
+    )
+
+    def delay_only_predecessor_event(**event: object) -> None:
+        events.append(event)
+        if event["attempt"] == 1:
+            clock["now"] += 10.0
+
+    monkeypatch.setattr(
+        answerer_module,
+        "emit_provider_attempt",
+        delay_only_predecessor_event,
+    )
+
+    result = await answerer.answer_core(QuestionRequest(question="질문"), [_hit()])
+
+    assert result.summary == "timed successor"
+    assert [(event["attempt"], event["retry_scheduled"]) for event in events] == [
+        (1, True),
+        (2, False),
+    ]
+    assert events[1]["elapsed_ms"] == 1000
+    assert events[1]["remaining_ms"] == 18000
