@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 058653a16e351de85ff6a4e80fb181299ebe08baac479bdee7133ae8a7489de2 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 38045aae907c430c2691d6793d07c2ee21d87f86d8a4c16e63c63db31bedf01d -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/active/0071-v2-question-response-passthrough.md) — 다음 행동: Task 1의 Core SSE 표시 필드 회귀 테스트를 RED로 만든다.
 
 ## Todo
 

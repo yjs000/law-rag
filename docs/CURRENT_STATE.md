@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 없다. [E-006 D-10 Gold batch defect 평가·봉인](exec-plans/completed/0069-d10-gold-failure-driven-regression.md)은 결정적 P1 두 건을 RED-first로 수정하고 독립 review와 전체 검증을 통과했다. 고정 코드의 최종 원장은 10개 case를 모두 기록했으며, latest outcome은 pass 7과 provider 변동 blocked 3이다. 열린 결정적 P0/P1은 없어 `코드 검증 통과 + provider 변동 blocked`로 종결했고 NVIDIA 안정성과 stochastic action 품질은 별도 후속 범위다. 로드맵은 세션 시작용 얇은 색인이므로 선택된 계획의 선언 범위만 읽는다.
+현재 `Picked Up` milestone은 [B-005 V2 질문 응답 passthrough](exec-plans/active/0071-v2-question-response-passthrough.md)다. 질문 실행 화면이 `no_results` 등 메타데이터를 자체 문구로 치환하지 않고 Core·Finalize·HTTP·SSE의 백엔드 공개 값을 그대로 조합해 표시하도록 5개 작은 구현 태스크와 1개 종합 검증 태스크로 진행한다. 로드맵은 세션 시작용 얇은 색인이므로 선택된 계획의 선언 범위만 읽는다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
