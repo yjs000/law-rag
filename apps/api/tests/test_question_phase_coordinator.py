@@ -183,6 +183,63 @@ async def test_finalize_provider_exhaustion_persists_a_safe_terminal_replay() ->
     assert finalize_calls == 1
 
 
+async def test_finalize_provider_exhaustion_replays_terminal_failure_over_nonempty_core_events(
+) -> None:
+    """A terminal finalize failure must win over an earlier successful core replay."""
+
+    started_at = datetime(2026, 9, 15, tzinfo=UTC)
+    repository = MemoryQuestionExecutionRepository(now=lambda: started_at)
+    execution = await repository.prepare_or_get(
+        owner_scope="user:1",
+        prepare_idempotency_key="finalize-provider-exhausted-with-core-events",
+        generation_id=uuid4(),
+        expires_at=started_at + timedelta(minutes=10),
+    )
+    core_event = AnswerEvent(event_type="summary", payload={"summary": "확인된 요약"})
+    core_calls = 0
+    finalize_calls = 0
+
+    async def core(record):
+        nonlocal core_calls
+        core_calls += 1
+        return PhaseResult(
+            target=ExecutionStatus.CORE_ANSWERED,
+            events=(
+                core_event,
+                AnswerEvent(
+                    event_type="phase_complete",
+                    payload={
+                        "status": ExecutionStatus.CORE_ANSWERED.value,
+                        "next_action": "generate_detail",
+                    },
+                ),
+            ),
+        )
+
+    async def finalize(record):
+        nonlocal finalize_calls
+        finalize_calls += 1
+        raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)
+
+    coordinator = QuestionPhaseCoordinator(repository, core=core, finalize=finalize)
+    core_events = await coordinator.run(
+        execution.execution_id, "user:1", phase="core", capability_hash=None
+    )
+    terminal_events = await coordinator.run(
+        execution.execution_id, "user:1", phase="finalize", capability_hash=None
+    )
+    core_replay = await coordinator.run(
+        execution.execution_id, "user:1", phase="core", capability_hash=None
+    )
+    current = await repository.get_owned(execution.execution_id, "user:1")
+
+    assert core_events[0] == core_event
+    assert current.status is ExecutionStatus.FAILED
+    assert terminal_events == core_replay == (AnswerEvent.error("provider_unavailable"),)
+    assert core_calls == 1
+    assert finalize_calls == 1
+
+
 async def test_core_value_error_still_requires_grounding_repair() -> None:
     started_at = datetime(2026, 9, 15, tzinfo=UTC)
     repository = MemoryQuestionExecutionRepository(now=lambda: started_at)

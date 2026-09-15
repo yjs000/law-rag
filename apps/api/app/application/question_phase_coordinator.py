@@ -193,12 +193,15 @@ class QuestionPhaseCoordinator:
         events = await self._repository.events_for(
             execution_id, owner_scope, phase=phase, capability_hash=capability_hash
         )
-        if events:
+        if any(event.terminal for event in events):
             return events
         other_phase = "finalize" if phase == "core" else "core"
-        return await self._repository.events_for(
+        other_events = await self._repository.events_for(
             execution_id, owner_scope, phase=other_phase, capability_hash=capability_hash
         )
+        if any(event.terminal for event in other_events):
+            return other_events
+        return events or other_events
 
     def _is_timed_out_running(self, record: QuestionExecutionRecord) -> bool:
         return record.status in {
