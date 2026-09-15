@@ -293,9 +293,9 @@ def test_nvidia_operation_success_emits_one_closed_event(caplog, invoke, operati
 - Modify: `apps/api/app/application/question_phase_coordinator.py` L48-L145
 - Create: `apps/api/tests/test_provider_correlation_boundaries.py`
 
-- [ ] V1 `_handle_question`의 route→embedding→answer callback 전체가 `payload.client_request_id` scope 안에서 실행되는 test를 작성한다.
-- [ ] V2 prepare의 route→clarification→retrieval 호출이 같은 `payload.client_request_id` hash를 공유하는 test를 작성한다.
-- [ ] coordinator producer test는 execution private payload의 `request.client_request_id`를 우선하고, 없거나 invalid하면 `execution_id`를 fallback source로 쓰는지 확인한다.
+- [x] V1 `_handle_question`의 route→embedding→answer callback 전체가 `payload.client_request_id` scope 안에서 실행되는 test를 작성한다.
+- [x] V2 prepare의 route→clarification→retrieval 호출이 같은 `payload.client_request_id` hash를 공유하는 test를 작성한다.
+- [x] coordinator producer test는 execution private payload의 `request.client_request_id`를 우선하고, 없거나 invalid하면 `execution_id`를 fallback source로 쓰는지 확인한다.
 
 ```python
 def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
@@ -307,12 +307,12 @@ def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
     return execution.execution_id
 ```
 
-- [ ] V1은 기존 timeout/cancellation/task registry try/finally 안에서 `_answer_question` 호출만 scope로 감싼다. request timing의 의미는 바꾸지 않는다.
-- [ ] V2 prepare는 `asyncio.timeout` 안의 `_prepare_clarification_turn`과 service `prepare`를 같은 scope로 감싼다. 인증 조회는 NVIDIA 경계가 아니므로 scope 밖이어도 된다.
-- [ ] coordinator는 claim 성공 뒤 producer 호출만 scope로 감싼다. repository read/write와 replay는 provider log를 만들지 않는다.
-- [ ] 두 concurrent async request에 서로 다른 UUID를 넣어 correlation이 섞이지 않는 회귀 test를 포함한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_correlation_boundaries.py apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: bind provider logs to request correlation`로 커밋한다.
+- [x] V1은 기존 timeout/cancellation/task registry try/finally 안에서 `_answer_question` 호출만 scope로 감싼다. request timing의 의미는 바꾸지 않는다.
+- [x] V2 prepare는 `asyncio.timeout` 안의 `_prepare_clarification_turn`과 service `prepare`를 같은 scope로 감싼다. 인증 조회는 NVIDIA 경계가 아니므로 scope 밖이어도 된다.
+- [x] coordinator는 claim 성공 뒤 producer 호출만 scope로 감싼다. repository read/write와 replay는 provider log를 만들지 않는다.
+- [x] 두 concurrent async request에 서로 다른 UUID를 넣어 correlation이 섞이지 않는 회귀 test를 포함한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_correlation_boundaries.py apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: bind provider logs to request correlation`로 커밋한다.
 
 ### Task 5: provider 소진과 core grounding repair 분리
 
