@@ -14,6 +14,7 @@ import {
   failPendingTurn,
   firstQuestionTitle,
   selectConversationContext,
+  settleInterruptedPendingTurn,
   stopPendingTurn,
   type ChatMessage,
   type ChatSession,
@@ -202,13 +203,37 @@ describe("pending assistant transitions", () => {
 
   it("marks matching pending requests as stopped or failed and ignores stale updates", () => {
     const pending = appendPendingTurn(createChatSession("chat-1"), pendingInput(1)).session;
-    const stopped = stopPendingTurn(pending, "request-1");
+    const streaming = applyLiveCoreSummary(pending, "request-1", response);
+    const stopped = stopPendingTurn(streaming, "request-1");
     const failed = failPendingTurn(pending, "request-1", "연결 오류");
 
     expect(stopped.messages[1]).toMatchObject({ status: "stopped" });
     expect(failed.messages[1]).toMatchObject({ status: "error", error: "연결 오류" });
     expect(failPendingTurn(stopped, "request-1", "늦은 오류")).toBe(stopped);
     expect(stopPendingTurn(pending, "stale-request")).toBe(pending);
+  });
+
+  it("settles an interrupted streaming turn with its received Core response", () => {
+    const pending = appendPendingTurn(createChatSession("chat-1"), pendingInput(1)).session;
+    const streaming = applyLiveCoreSummary(pending, "request-1", response);
+
+    const settled = settleInterruptedPendingTurn(streaming, "request-1");
+
+    expect(settled.messages[1]).toMatchObject({ status: "complete", response });
+    expect((settled.messages[1] as Extract<ChatMessage, { role: "assistant" }>).response).toBe(response);
+  });
+
+  it("removes an interrupted pending assistant turn before a Core response", () => {
+    const first = appendPendingTurn(createChatSession("chat-1"), pendingInput(1)).session;
+    const withSecondQuestion = appendPendingTurn(first, pendingInput(2)).session;
+
+    const settled = settleInterruptedPendingTurn(withSecondQuestion, "request-1");
+
+    expect(settled.messages).toEqual([
+      expect.objectContaining({ id: "user-1", role: "user", text: "첫 질문 1 입니다" }),
+      expect.objectContaining({ id: "user-2", role: "user", text: "첫 질문 2 입니다" }),
+      expect.objectContaining({ id: "assistant-2", role: "assistant", requestId: "request-2", status: "pending" }),
+    ]);
   });
 });
 

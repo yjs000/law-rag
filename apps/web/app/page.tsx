@@ -39,6 +39,7 @@ import {
   conversationAnswerText,
   createChatSession,
   failPendingTurn,
+  settleInterruptedPendingTurn,
   stopPendingTurn,
   selectConversationContext,
   type ChatSession,
@@ -635,7 +636,7 @@ export default function Home() {
           setActiveChat((current) => failPendingTurn(current, requestId, message));
           setError(message);
         } else {
-          setActiveChat((current) => stopPendingTurn(current, requestId));
+          setActiveChat((current) => settleInterruptedPendingTurn(current, requestId));
         }
       }
     } finally {
