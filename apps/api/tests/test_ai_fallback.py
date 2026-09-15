@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.domain.catalog import SourceKind
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.schemas import SearchHit
 from app.domain.search_queries import SearchTrace
 
@@ -118,7 +119,15 @@ def test_all_generation_failures_fall_back_without_another_model(
     assert FailingAnswerer.models == ["nvidia/nemotron-3-ultra-550b-a55b"]
 
 
-@pytest.mark.parametrize("error", [BillingFailure("billing"), QuotaFailure("quota")])
+@pytest.mark.parametrize(
+    "error",
+    [
+        BillingFailure("billing"),
+        QuotaFailure("quota"),
+        ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=402),
+        ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=429),
+    ],
+)
 def test_billing_or_quota_failure_disables_terra_for_later_requests(monkeypatch, error) -> None:
     hit = SearchHit(
         provision_id=uuid4(),

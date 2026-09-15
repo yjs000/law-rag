@@ -12,6 +12,7 @@ from app.application.answering import (
 from app.application.request_budget import RequestBudget, StageTimeoutError
 from app.application.v1.dependencies import V1AnswerDependencies
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
+from app.domain.provider_attempts import provider_upstream_status
 from app.domain.routing import RouteDecision
 from app.domain.schemas import QuestionRequest, QuestionResponse
 from app.observability import emit_question_stage_timing
@@ -55,7 +56,7 @@ async def generate_blocked_answer(
         stage["status"] = "timed_out"
         return blocked_fallback
     except Exception as exc:
-        status_code = getattr(exc, "status_code", None)
+        status_code = provider_upstream_status(exc)
         if status_code in {402, 429}:
             dependencies.mark_ai_quota_exhausted()
         stage["status"] = "billing_or_quota_error" if status_code in {402, 429} else "failed"

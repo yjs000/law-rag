@@ -25,6 +25,7 @@ from app.application.v1.retrieval import (
 from app.domain.answer_actions import derive_answer_action
 from app.domain.errors import CorpusSearchUnavailableError
 from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
+from app.domain.provider_attempts import provider_upstream_status
 from app.domain.routing import RouteDecision
 from app.domain.schemas import (
     AiFallbackReason,
@@ -346,7 +347,7 @@ async def answer_question(
         return await dependencies.save_response(user, payload, fallback, diagnostics)
     except Exception as exc:
         generation_outcome = "failed"
-        status_code = getattr(exc, "status_code", None)
+        status_code = provider_upstream_status(exc)
         if status_code in {402, 429}:
             dependencies.mark_ai_quota_exhausted()
             fallback.fallback_reason = AiFallbackReason.BILLING_OR_QUOTA_ERROR

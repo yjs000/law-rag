@@ -593,6 +593,13 @@ class _UnavailableAnswerer:
         return _unavailable_draft()
 
 
+class _QuotaExhaustedUnavailableAnswerer:
+    async def answer_blocked_route(
+        self, payload: QuestionRequest, route: str, reason: str | None
+    ) -> DraftAnswer:
+        raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=429)
+
+
 class _FailingRouter:
     async def route(self, question: str) -> RouteJudgment:
         raise RuntimeError("provider body must not escape")
@@ -662,6 +669,20 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
     assert corpus_calls == []
     assert "provider body must not escape" not in response.text
     assert not main_module.settings.search_only_enabled
+
+
+def test_blocked_route_provider_exhaustion_marks_v1_quota(monkeypatch) -> None:
+    _configure_ai(monkeypatch)
+    monkeypatch.setattr(main_module, "_question_router", lambda: _FailingRouter())
+    monkeypatch.setattr(
+        main_module, "_answerer", lambda: _QuotaExhaustedUnavailableAnswerer()
+    )
+
+    response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
+
+    assert response.status_code == 200
+    assert response.json()["route"] == "routing_unavailable"
+    assert main_module.ai_quota_exhausted is True
 
 
 def test_router_timeout_returns_safe_no_search_ai_response(monkeypatch) -> None:
