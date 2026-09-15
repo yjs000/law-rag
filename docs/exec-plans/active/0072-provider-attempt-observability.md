@@ -253,7 +253,7 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
 - Create: `apps/api/tests/test_nvidia_provider_operation_observability.py`
 - Modify: `apps/api/tests/test_routing_pipeline.py` L70-L147
 
-- [ ] 세 adapter별 성공 1건과 실패 1건을 가짜 client로 실행하고 operation과 event 개수를 검증한다.
+- [x] 세 adapter별 성공 1건과 실패 1건을 가짜 client로 실행하고 operation과 event 개수를 검증한다.
 
 ```python
 @pytest.mark.parametrize(
@@ -276,14 +276,14 @@ def test_nvidia_operation_success_emits_one_closed_event(caplog, invoke, operati
     assert event["retry_scheduled"] is False
 ```
 
-- [ ] route의 기존 `law_rag.route_provider` test를 공통 logger와 full event assertion으로 바꾼다. 두 번 실패하면 failed event 2개가 남고 마지막 availability failure가 typed exhaustion인지 확인한다.
-- [ ] route는 기존 최대 2회와 402/429 non-retry 동작을 유지한다. 호출 전체의 관측용 deadline만 계산하되 기존 provider 호출 timeout이나 retry 횟수를 줄이지 않는다.
-- [ ] embedder/clarification은 max_attempts=1로 성공 또는 실패 event 하나를 기록한다. provider HTTP/timeout/connection은 typed exhaustion으로 감싸도 상위 fallback이 유지되어야 하고, 응답 검증 실패는 원래 validation error를 유지한다.
-- [ ] 세 public adapter method 각각을 `provider_attempt_scope()`로 감싸되 이미 application scope가 있으면 그 correlation을 재사용한다. 직접 script/test에서 호출하면 호출별 임시 correlation 하나를 만든다.
-- [ ] embedder는 테스트 주입을 위해 `client_factory: Callable[[], Any] | None = None`만 추가하고 production 기본값과 `max_retries=0`을 유지한다. 별도 재시도 설정은 추가하지 않는다.
-- [ ] clarification도 같은 client seam을 추가하되 호출 횟수는 1을 유지한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_provider_operation_observability.py apps/api/tests/test_routing_pipeline.py apps/api/tests/test_nvidia_nim_embedder.py apps/api/tests/test_nvidia_nim_clarification.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: trace all NVIDIA provider operations`로 커밋한다.
+- [x] route의 기존 `law_rag.route_provider` test를 공통 logger와 full event assertion으로 바꾼다. 두 번 실패하면 failed event 2개가 남고 마지막 availability failure가 typed exhaustion인지 확인한다.
+- [x] route는 기존 최대 2회와 402/429 non-retry 동작을 유지한다. 호출 전체의 관측용 deadline만 계산하되 기존 provider 호출 timeout이나 retry 횟수를 줄이지 않는다.
+- [x] embedder/clarification은 max_attempts=1로 성공 또는 실패 event 하나를 기록한다. provider HTTP/timeout/connection은 typed exhaustion으로 감싸도 상위 fallback이 유지되어야 하고, 응답 검증 실패는 원래 validation error를 유지한다.
+- [x] 세 public adapter method 각각을 `provider_attempt_scope()`로 감싸되 이미 application scope가 있으면 그 correlation을 재사용한다. 직접 script/test에서 호출하면 호출별 임시 correlation 하나를 만든다.
+- [x] embedder는 테스트 주입을 위해 `client_factory: Callable[[], Any] | None = None`만 추가하고 production 기본값과 `max_retries=0`을 유지한다. 별도 재시도 설정은 추가하지 않는다.
+- [x] clarification도 같은 client seam을 추가하되 호출 횟수는 1을 유지한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_provider_operation_observability.py apps/api/tests/test_routing_pipeline.py apps/api/tests/test_nvidia_nim_embedder.py apps/api/tests/test_nvidia_nim_clarification.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: trace all NVIDIA provider operations`로 커밋한다.
 
 ### Task 4: V1/V2 request correlation을 모든 production NVIDIA 호출에 연결
 
