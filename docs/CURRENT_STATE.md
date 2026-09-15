@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 [B-005 V2 질문 응답 passthrough](exec-plans/active/0071-v2-question-response-passthrough.md)다. 질문 실행 화면이 `no_results` 등 메타데이터를 자체 문구로 치환하지 않고 Core·Finalize·HTTP·SSE의 백엔드 공개 값을 그대로 조합해 표시하도록 5개 작은 구현 태스크와 1개 종합 검증 태스크로 진행한다. 로드맵은 세션 시작용 얇은 색인이므로 선택된 계획의 선언 범위만 읽는다.
+현재 이 worktree의 `Picked Up` milestone은 [B-006 NVIDIA provider attempt 관측](exec-plans/active/0072-provider-attempt-observability.md)이다. B-005와 별도 worktree에서 병렬 구현하고, 모든 NVIDIA 호출의 시도별 안전 로그와 provider 소진 terminal 분류를 추가한 뒤 B-005 통합 결과 위에서 최종 재검증한다. 로드맵은 세션 시작용 얇은 색인이므로 선택된 계획의 선언 범위만 읽는다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.

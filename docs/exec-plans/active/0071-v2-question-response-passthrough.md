@@ -1,5 +1,5 @@
 > 작업 ID: `B-005`
-> 상태: `Picked Up`
+> 상태: `Todo`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: [승인된 V2 질문 응답 표시 계약](../../design-docs/v2-question-response-presentation-contract.md)

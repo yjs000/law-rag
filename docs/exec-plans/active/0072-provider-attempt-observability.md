@@ -1,9 +1,9 @@
 > 작업 ID: `B-006`
-> 상태: `Todo`
+> 상태: `Picked Up`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
-> 선행 조건: `B-005` 완료 및 [승인된 provider 시도별 관측 설계](../../design-docs/provider-attempt-observability.md)
-> 다음 행동: B-005 완료 뒤 Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
+> 선행 조건: [승인된 provider 시도별 관측 설계](../../design-docs/provider-attempt-observability.md); `B-005`와 별도 worktree에서 병렬 구현하고 통합 뒤 최종 재검증
+> 다음 행동: Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
 > 참고 범위:
 > - `docs/design-docs/provider-attempt-observability.md` L1-L174 — 승인된 로그·실패 분류·개인정보 계약
 > - `apps/api/app/adapters/nvidia_nim_answerer.py` L26-L174 — 대표 NVIDIA 제한 재시도와 전체 deadline
@@ -23,7 +23,7 @@
 
 ## Global Constraints
 
-- 구현 착수 전에 `B-005`가 완료됐는지 확인한다. 완료 전에는 이 계획을 `Picked Up`으로 전환하거나 겹치는 Web 파일을 수정하지 않는다.
+- `B-005`와 별도 worktree·branch에서 병렬 구현한다. 겹치는 Web 파일은 이 브랜치에서 독립 검증하고, B-005 통합 뒤 rebase/merge conflict를 해결해 전체 검증을 다시 실행한다.
 - DB table, migration, `question_execution_issues`, 외부 telemetry backend를 추가하지 않는다.
 - NVIDIA 호출 횟수, adapter timeout, V2 phase timeout, Web reconnect/retry 예산을 변경하지 않는다.
 - 질문·prompt·검색 hit·법률 원문·citation quote·provider body·예외 메시지·traceback·API key·인증정보·사용자 식별자를 로그 모델이나 logger 인수로 받지 않는다.
@@ -91,7 +91,7 @@ class ProviderAttemptsExhausted(RuntimeError):
 - `classify_provider_failure(error: BaseException) -> tuple[ProviderFailureKind, int | None]`
 - `emit_provider_attempt(*, operation, attempt, max_attempts, outcome, failure_kind, upstream_status, elapsed_ms, remaining_ms, retry_scheduled) -> None`
 
-### Task 0: 선행 작업 완료 확인과 계획 활성화
+### Task 0: 병렬 worktree 확인과 계획 활성화
 
 **Files:**
 - Read: `docs/CURRENT_STATE.md` L1-L28
@@ -101,12 +101,12 @@ class ProviderAttemptsExhausted(RuntimeError):
 - Generate: `docs/ROADMAP.md`
 
 - [ ] `git status --short --branch`로 사용자 변경과 `graphify-out/` dirty 파일을 기록한다.
-- [ ] `B-005`가 `Done`이고 0071 계획에 미완료 checkbox가 없는지 확인한다. 아니면 구현을 시작하지 않고 이 계획을 `Todo`로 유지한다.
-- [ ] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005가 바꾼 영역이 있으면 이 계획의 범위만 새 줄 번호로 갱신한다.
-- [ ] 계획 파일을 `docs/exec-plans/active/`로 이동하고 header 상태를 `Picked Up`, 다음 행동을 `Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.`로 바꾼다.
+- [ ] `B-005`가 별도 worktree/branch에서 진행 중인지 확인하고, 현재 worktree가 `codex/b006-provider-attempt-observability`인지 검증한다.
+- [ ] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005와 겹치는 파일은 최종 통합 재검증 대상으로 기록한다.
+- [ ] 이 branch에서만 0071 header 상태를 `Todo`로 두고, 0072 계획 파일을 `docs/exec-plans/active/`로 이동해 header 상태를 `Picked Up`으로 바꾼다. 저장소 전체 Picked Up은 한 개로 유지한다.
 - [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/render_roadmap.py`를 실행한다.
 - [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/check_roadmap.py`가 성공하는지 확인한다.
-- [ ] 계획 활성화만 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
+- [ ] 계획의 병렬 worktree 계약 정정과 활성화를 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
 
 ### Task 1: 개인정보 없는 공통 provider attempt 계약
 
