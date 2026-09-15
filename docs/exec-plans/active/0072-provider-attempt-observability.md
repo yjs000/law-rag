@@ -352,7 +352,7 @@ except Exception:
 - Modify: `apps/web/lib/v2-execution.test.ts` L1-L127
 - Modify: `apps/web/lib/api-client-flow.test.ts` L133-L201
 
-- [ ] SSE `error` event의 `reason_code`를 보존하는 typed transport error test를 먼저 추가한다.
+- [x] SSE `error` event의 `reason_code`를 보존하는 typed transport error test를 먼저 추가한다.
 
 ```typescript
 it("preserves the safe SSE provider_unavailable reason without reconnecting", async () => {
@@ -372,8 +372,8 @@ it("preserves the safe SSE provider_unavailable reason without reconnecting", as
 });
 ```
 
-- [ ] `V2ExecutionPhaseError`는 `reasonCode: string`만 공개하고 raw SSE object를 message에 stringify하지 않는다. `cancelled`는 기존 generic cancellation/abort 의미를 유지한다.
-- [ ] `ApiErrorCode`에 `provider_unavailable`을 추가하고 `askQuestion`이 typed phase error를 아래 고정 문구로 바꾸는 test를 추가한다.
+- [x] `V2ExecutionPhaseError`는 `reasonCode: string`만 공개하고 raw SSE object를 message에 stringify하지 않는다. `cancelled`는 기존 generic cancellation/abort 의미를 유지한다.
+- [x] `ApiErrorCode`에 `provider_unavailable`을 추가하고 `askQuestion`이 typed phase error를 아래 고정 문구로 바꾸는 test를 추가한다.
 
 ```typescript
 await expect(askQuestion(history.request)).rejects.toMatchObject({
@@ -384,11 +384,11 @@ await expect(askQuestion(history.request)).rejects.toMatchObject({
 });
 ```
 
-- [ ] 이 변환에서 `askQuestion` 또는 `runV2Execution`이 새 POST prepare를 자동 호출하지 않는지 fetch call count로 확인한다.
-- [ ] 알 수 없는 reason code는 B-005가 확정한 backend-display-message/error passthrough 계약을 유지한다. `provider_unavailable` 외 provider 세부 status, attempt, exception text는 사용자에게 표시하지 않는다.
-- [ ] RED/PASS: `pnpm.cmd --filter @law-rag/web test -- v2-execution.test.ts api-client-flow.test.ts`.
-- [ ] `pnpm.cmd lint:web`, `pnpm.cmd typecheck`, `pnpm.cmd test:web`를 실행한다.
-- [ ] `git diff --check` 후 `fix: show safe provider unavailable message`로 커밋한다.
+- [x] 이 변환에서 `askQuestion` 또는 `runV2Execution`이 새 POST prepare를 자동 호출하지 않는지 fetch call count로 확인한다.
+- [x] 알 수 없는 reason code는 B-005가 확정한 backend-display-message/error passthrough 계약을 유지한다. `provider_unavailable` 외 provider 세부 status, attempt, exception text는 사용자에게 표시하지 않는다.
+- [x] RED/PASS: `pnpm.cmd --filter @law-rag/web test -- v2-execution.test.ts api-client-flow.test.ts`.
+- [x] `pnpm.cmd lint:web`, `pnpm.cmd typecheck`, `pnpm.cmd test:web`를 실행한다.
+- [x] `git diff --check` 후 `fix: show safe provider unavailable message`로 커밋한다.
 
 ### Task 7: 운영 판독 문서와 전체 검증
 
