@@ -1,9 +1,9 @@
 > 작업 ID: `B-006`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: [승인된 provider 시도별 관측 설계](../../design-docs/provider-attempt-observability.md); `B-005`와 별도 worktree에서 병렬 구현하고 통합 뒤 최종 재검증
-> 다음 행동: Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
+> 다음 행동: none
 > 참고 범위:
 > - `docs/design-docs/provider-attempt-observability.md` L1-L174 — 승인된 로그·실패 분류·개인정보 계약
 > - `apps/api/app/adapters/nvidia_nim_answerer.py` L26-L174 — 대표 NVIDIA 제한 재시도와 전체 deadline
@@ -398,10 +398,10 @@ await expect(askQuestion(history.request)).rejects.toMatchObject({
 - Modify: `docs/exec-plans/active/0072-provider-attempt-observability.md`
 - Generate: `docs/ROADMAP.md`
 
-- [ ] `docs/RELIABILITY.md`에 모든 NVIDIA attempt의 성공/실패 로그, DB 미영속, provider exhaustion terminal semantics를 기록한다.
-- [ ] runbook에 `law_rag.provider_attempt` 필터 후 correlation 기준 정렬 절차와 판독 예시를 추가한다: attempt 1 `provider_http/503/retry=true`, attempt 2 `timeout/retry=true`, attempt 3 `succeeded/retry=false`이면 “NVIDIA 503 뒤 두 번째 timeout, 세 번째 성공”이다.
-- [ ] 로그에 원문·예외 메시지가 없으며 Vercel 보존기간이 지나면 복구할 수 없다는 제한을 적는다.
-- [ ] focused API suite를 다시 실행한다.
+- [x] `docs/RELIABILITY.md`에 모든 NVIDIA attempt의 성공/실패 로그, DB 미영속, provider exhaustion terminal semantics를 기록한다.
+- [x] runbook에 `law_rag.provider_attempt` 필터 후 correlation 기준 정렬 절차와 판독 예시를 추가한다: attempt 1 `provider_http/503/retry=true`, attempt 2 `timeout/retry=true`, attempt 3 `succeeded/retry=false`이면 “NVIDIA 503 뒤 두 번째 timeout, 세 번째 성공”이다.
+- [x] 로그에 원문·예외 메시지가 없으며 Vercel 보존기간이 지나면 복구할 수 없다는 제한을 적는다.
+- [x] focused API suite를 다시 실행한다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider `
@@ -413,27 +413,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m py
   apps/api/tests/test_v2_question_executions.py -q
 ```
 
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1` 전체 검증을 실행한다. runner 권한 오류가 나면 저장소의 Windows Python 검증 정책대로 같은 명령을 platform runtime 권한 상승으로 한 번만 재실행한다.
-- [ ] 독립 whole-branch review를 실행하고 개인정보 유출, 누락된 NVIDIA operation, retry semantics 변화, provider/grounding 오분류를 우선 확인한다.
-- [ ] review 지적을 test-first로 수정하고 focused suite와 `scripts/verify.ps1`을 최신 상태로 다시 통과시킨다.
-- [ ] `rg -n "question|prompt|exception|traceback|authorization|api.key" apps/api/app/provider_observability.py apps/api/app/adapters/nvidia_nim_*.py` 결과를 사람이 검토해 금지 데이터가 logger payload로 전달되지 않는지 확인한다.
-- [ ] `git diff --check`, `git status --short`, 전체 diff를 검토하고 `.env`, credential, 개인 사건자료, `graphify-out/`이 stage되지 않았는지 확인한다.
-- [ ] 문서 변경을 `docs: document provider attempt log operations`로 커밋한다.
-- [ ] 계획의 각 task에 결과 commit과 검증 증거를 기록하고 미완료 checkbox가 0개인지 확인한다.
-- [ ] header를 `상태: Done`, `다음 행동: none`으로 바꾸고 `docs/exec-plans/completed/`로 이동한다.
-- [ ] roadmap renderer와 checker를 실행하고 lifecycle 변경만 `docs: complete provider attempt observability plan`으로 커밋한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1` 전체 검증을 실행한다. runner 권한 오류가 나면 저장소의 Windows Python 검증 정책대로 같은 명령을 platform runtime 권한 상승으로 한 번만 재실행한다.
+- [x] 독립 whole-branch review를 실행하고 개인정보 유출, 누락된 NVIDIA operation, retry semantics 변화, provider/grounding 오분류를 우선 확인한다.
+- [x] review 지적을 test-first로 수정하고 focused suite와 `scripts/verify.ps1`을 최신 상태로 다시 통과시킨다.
+- [x] `rg -n "question|prompt|exception|traceback|authorization|api.key" apps/api/app/provider_observability.py apps/api/app/adapters/nvidia_nim_*.py` 결과를 사람이 검토해 금지 데이터가 logger payload로 전달되지 않는지 확인한다.
+- [x] `git diff --check`, `git status --short`, 전체 diff를 검토하고 `.env`, credential, 개인 사건자료, `graphify-out/`이 stage되지 않았는지 확인한다.
+- [x] 문서 변경을 `docs: document provider attempt log operations`로 커밋한다.
+- [x] 계획의 각 task에 결과 commit과 검증 증거를 기록하고 미완료 checkbox가 0개인지 확인한다.
+- [x] header를 `상태: Done`, `다음 행동: none`으로 바꾸고 `docs/exec-plans/completed/`로 이동한다.
+- [x] roadmap renderer와 checker를 실행하고 lifecycle 변경만 `docs: complete provider attempt observability plan`으로 커밋한다.
 
 ## Completion Evidence
 
-완료 시 아래를 실제 결과로 채운다.
-
-- Focused API tests: 미실행
-- Focused Web tests: 미실행
-- Full `scripts/verify.ps1`: 미실행
-- Whole-branch review: 미실행
-- Provider operation coverage: 미확인
-- Privacy payload audit: 미실행
-- Commits: 미생성
+- Focused API tests: 90 passed
+- Focused Web tests: 전체 Web suite 23 files, 131 passed
+- Full `scripts/verify.ps1`: core 27 passed; API 963 passed, 3 skipped; collector 97 passed, 5 skipped; Web 131 passed; Ruff, docs, roadmap, lint, typecheck, build 통과
+- Whole-branch review: 최초 Important 2건(INFO logger level, 직접 answerer correlation scope)을 `e92c3ad`에서 TDD로 수정했고 재리뷰 Critical/Important 0, merge ready 판정
+- Provider operation coverage: `route`, `query_embedding`, `answer_core`, `answer_detail`, `clarification` 성공·실패 경계 확인
+- Privacy payload audit: 닫힌 event schema와 logger 인수에 질문·prompt·원문·예외 메시지·traceback·인증정보가 전달되지 않음을 확인
+- Commits: `6cadb8a`, `1e52887`, `82466be`, `ececb51`, `43451e8`, `f1200c7`, `85a974f`, `e92c3ad`
 
 ## Out of Scope Follow-ups
 

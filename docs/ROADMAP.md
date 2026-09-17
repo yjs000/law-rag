@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: eec05655d4cc4d188c833553ced48a675a0e3ca3334ee8b75c7d3fcdac0d9594 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: a39fc48444378e7ef2a9980db6077858dbe3502b474c36a589abf50a2219f447 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/active/0072-provider-attempt-observability.md) — 다음 행동: Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
 
 ## Todo
 
@@ -38,4 +37,5 @@
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
+- [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [완료 계획 색인](exec-plans/completed/README.md)
