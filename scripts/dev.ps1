@@ -16,7 +16,7 @@ if ($Service) {
     try {
         & cmd.exe /d /s /c $ServiceCommandLine 2>&1 | ForEach-Object {
             $line = $_.ToString()
-            Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8
+            Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8 -ErrorAction Stop
             Write-Output "[$Label] $line"
         }
         $serviceExitCode = $LASTEXITCODE
@@ -99,19 +99,24 @@ function Get-ServiceExitCode {
     return [int](Get-Content -LiteralPath $ServiceStatusPath -Raw)
 }
 
-$processes = @(
-    Start-LoggedService -ServiceLabel "api" -ServiceLogPath $apiLog -ServiceStatusPath $apiStatus `
-        -CommandLine "uv run --project apps/api uvicorn app.main:app --app-dir apps/api --reload --port 8000"
-    Start-LoggedService -ServiceLabel "frontend" -ServiceLogPath $frontendLog `
-        -ServiceStatusPath $frontendStatus `
-        -CommandLine "pnpm run dev:web"
-)
+$processes = [Collections.Generic.List[Diagnostics.Process]]::new()
 $statusPaths = @($apiStatus, $frontendStatus)
 
-Write-Host "API and frontend started. Logs: $logDirectory"
-Write-Host "Press Ctrl+C to stop both processes."
-
 try {
+    $processes.Add((
+        Start-LoggedService -ServiceLabel "api" -ServiceLogPath $apiLog `
+            -ServiceStatusPath $apiStatus `
+            -CommandLine "uv run --project apps/api uvicorn app.main:app --app-dir apps/api --reload --port 8000"
+    ))
+    $processes.Add((
+        Start-LoggedService -ServiceLabel "frontend" -ServiceLogPath $frontendLog `
+            -ServiceStatusPath $frontendStatus `
+            -CommandLine "pnpm run dev:web"
+    ))
+
+    Write-Host "API and frontend started. Logs: $logDirectory"
+    Write-Host "Press Ctrl+C to stop both processes."
+
     while (@($processes | Where-Object { -not $_.HasExited }).Count -eq $processes.Count) {
         Start-Sleep -Milliseconds 100
     }

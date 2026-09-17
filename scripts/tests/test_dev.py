@@ -17,21 +17,27 @@ def _write_fake_command(
     stderr: str,
     exit_code: int = 0,
     delay_seconds: int = 0,
+    completion_path: Path | None = None,
 ) -> None:
     delay = (
         f'powershell -NoProfile -Command "Start-Sleep -Seconds {delay_seconds}"\r\n'
         if delay_seconds
         else ""
     )
+    completion = f'echo completed> "{completion_path}"\r\n' if completion_path else ""
     path.write_text(
-        f"@echo off\r\n{delay}echo {stdout}\r\necho {stderr} 1>&2\r\n"
+        f"@echo off\r\n{delay}{completion}echo {stdout}\r\necho {stderr} 1>&2\r\n"
         f"exit /b {exit_code}\r\n",
         encoding="utf-8",
     )
 
 
 def _run_dev(
-    tmp_path: Path, *, api_exit_code: int = 0, frontend_delay_seconds: int = 0
+    tmp_path: Path,
+    *,
+    api_exit_code: int = 0,
+    frontend_delay_seconds: int = 0,
+    frontend_completion_path: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     test_root = tmp_path / "repo"
     scripts_dir = test_root / "scripts"
@@ -47,6 +53,7 @@ def _run_dev(
         "frontend stdout",
         "frontend stderr",
         delay_seconds=frontend_delay_seconds,
+        completion_path=frontend_completion_path,
     )
 
     env = os.environ.copy()
@@ -98,9 +105,17 @@ def test_dev_runner_fails_when_a_service_exits_unsuccessfully(tmp_path: Path) ->
 
 
 def test_dev_runner_stops_the_peer_promptly_after_a_service_failure(tmp_path: Path) -> None:
+    frontend_completed = tmp_path / "frontend-completed"
     started_at = time.monotonic()
 
-    result, _ = _run_dev(tmp_path, api_exit_code=7, frontend_delay_seconds=3)
+    result, _ = _run_dev(
+        tmp_path,
+        api_exit_code=7,
+        frontend_delay_seconds=3,
+        frontend_completion_path=frontend_completed,
+    )
 
     assert result.returncode != 0
     assert time.monotonic() - started_at < 2
+    time.sleep(3)
+    assert not frontend_completed.exists()
