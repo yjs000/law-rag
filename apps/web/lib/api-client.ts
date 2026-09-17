@@ -9,24 +9,26 @@ import type {
 import { createClient } from "./supabase/client";
 import {
   runV2Execution,
+  V2ExecutionEventError,
   V2ExecutionHttpError,
   type V2ExecutionEvent,
 } from "./v2-execution";
+import { backendDisplayMessage } from "./backend-display-message";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CONSENT_KEY = "law-rag-pending-consent";
 export const TERMS_VERSION = "beta-2026-07-15";
 export const PRIVACY_VERSION = "beta-2026-07-15";
 
-export type ApiErrorCode = "system_busy" | null;
+export type ApiErrorCode = string | null;
 
 export class ApiError extends Error {
   constructor(
-    message: string,
+    readonly publicMessage: string | null,
     readonly status: number,
     readonly code: ApiErrorCode = null,
   ) {
-    super(message);
+    super(publicMessage ?? `HTTP ${status}`);
     this.name = "ApiError";
   }
 }
@@ -124,15 +126,21 @@ export async function askQuestion(
       onEvent,
     }, signal);
   } catch (error) {
+    if (error instanceof V2ExecutionEventError) {
+      const code: ApiErrorCode = error.publicMessage === "system_busy" ? "system_busy" : null;
+      throw new ApiError(error.publicMessage, 500, code);
+    }
     if (error instanceof V2ExecutionHttpError) {
-      const detail = (error.detail as { detail?: unknown } | null)?.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : typeof (detail as { message?: unknown } | null)?.message === "string"
-          ? (detail as { message: string }).message
-          : "요청을 처리하지 못했습니다.";
-      const code: ApiErrorCode = detail === "system_busy" ? "system_busy" : null;
-      throw new ApiError(message, error.status, code);
+      const raw = error.detail as { detail?: unknown; code?: unknown; reason_code?: unknown } | null;
+      const detail = raw?.detail;
+      const code: ApiErrorCode = error.detail === "system_busy"
+        || raw?.code === "system_busy"
+        || raw?.reason_code === "system_busy"
+        || detail === "system_busy"
+        || (detail as { code?: unknown } | null)?.code === "system_busy"
+        ? "system_busy"
+        : null;
+      throw new ApiError(backendDisplayMessage(error.detail), error.status, code);
     }
     throw error;
   }

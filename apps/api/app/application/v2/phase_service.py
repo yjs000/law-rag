@@ -312,15 +312,15 @@ class V2QuestionExecutionService:
     ) -> tuple[Any, list[Any]]:
         """Generate the compact core result from the exact evidence frozen at prepare."""
 
-        core, citations, _used_safe_fallback = await self._core_result_from_frozen_evidence(
-            execution
+        core, citations, _scope, _limitations, _used_safe_fallback = (
+            await self._core_result_from_frozen_evidence(execution)
         )
         return core, citations
 
     async def _core_result_from_frozen_evidence(
         self, execution: QuestionExecutionRecord
-    ) -> tuple[Any, list[Any], bool]:
-        """Return the core and whether it is the deterministic non-AI fallback."""
+    ) -> tuple[Any, list[Any], str, list[str], bool]:
+        """Return core presentation fields and whether it is a safe fallback."""
 
         dependencies = self._dependencies()
         payload, hits, corpus_as_of = execution_request_and_hits(execution)
@@ -343,6 +343,8 @@ class V2QuestionExecutionService:
                     fallback.action or "unanswerable",
                 ),
                 [],
+                fallback.scope,
+                fallback.limitations,
                 True,
             )
 
@@ -355,6 +357,8 @@ class V2QuestionExecutionService:
                     fallback.action or "unanswerable",
                 ),
                 fallback.citations,
+                fallback.scope,
+                fallback.limitations,
                 True,
             )
 
@@ -375,6 +379,8 @@ class V2QuestionExecutionService:
             return (
                 draft.model_copy(update={"summary": safe.summary, "citation_ids": []}),
                 [],
+                safe.scope,
+                safe.limitations,
                 True,
             )
         if draft.action == "unanswerable":
@@ -382,15 +388,19 @@ class V2QuestionExecutionService:
             return (
                 dependencies.make_core_draft(safe.summary, [], "unanswerable"),
                 [],
+                safe.scope,
+                safe.limitations,
                 True,
             )
-        return draft, citations_for_hits(generation_hits), False
+        return draft, citations_for_hits(generation_hits), fallback.scope, safe_answer_limitations(
+            draft.action
+        ), False
 
     async def run_core(self, execution: QuestionExecutionRecord) -> PhaseResult:
         """Validate a core draft before persisting the only publishable core event."""
 
-        core, citations, used_safe_fallback = await self._core_result_from_frozen_evidence(
-            execution
+        core, citations, scope, limitations, used_safe_fallback = (
+            await self._core_result_from_frozen_evidence(execution)
         )
         clarification = self._clarification_grounding(execution)
         if used_safe_fallback:
@@ -432,6 +442,8 @@ class V2QuestionExecutionService:
                     payload={
                         "summary": core.summary,
                         "citations": [citation.model_dump(mode="json") for citation in citations],
+                        "scope": scope,
+                        "limitations": limitations,
                     },
                 ),
                 AnswerEvent(
@@ -478,6 +490,8 @@ class V2QuestionExecutionService:
                 (
                     candidate,
                     citations,
+                    _scope,
+                    _limitations,
                     used_safe_fallback,
                 ) = await self._core_result_from_frozen_evidence(execution)
                 if self._core_is_publishable(candidate, execution, used_safe_fallback):
@@ -508,8 +522,13 @@ class V2QuestionExecutionService:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
         citation_registry = CitationRegistry(execution.frozen_citations)
-        response_is_verified = clarification is None and response_is_grounded(
-            response, citation_registry
+        fallback = search_only_answer(payload, _hits, _corpus_as_of)
+        is_deterministic_search_fallback = (
+            response.model_dump(mode="json", exclude={"request_id"})
+            == fallback.model_dump(mode="json", exclude={"request_id"})
+        )
+        response_is_verified = is_deterministic_search_fallback or (
+            clarification is None and response_is_grounded(response, citation_registry)
         )
         if repair_with_grounded_detail:
             core = None
@@ -524,7 +543,11 @@ class V2QuestionExecutionService:
             ):
                 core = None
                 response = grounding_fallback(payload)
-        elif core is not None:
+        elif (
+            core is not None
+            and payload.answer_mode == "terra"
+            and not is_deterministic_search_fallback
+        ):
             if core.action == "clarification_required":
                 route = execution.private_payload.get("route", "legal_search")
                 if route == "legal_search":

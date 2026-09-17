@@ -288,6 +288,27 @@ export function stopPendingTurn(session: ChatSession, requestId: string): ChatSe
   }));
 }
 
+export function settleInterruptedPendingTurn(session: ChatSession, requestId: string): ChatSession {
+  const index = session.messages.findIndex(
+    (message) =>
+      message.role === "assistant"
+      && message.requestId === requestId
+      && (message.status === "pending" || message.status === "streaming"),
+  );
+  if (index < 0) return session;
+  const message = session.messages[index] as AssistantChatMessage;
+  if (message.response) {
+    return updateActiveAssistant(session, requestId, (active) => ({
+      ...active,
+      status: "complete",
+    }));
+  }
+  return {
+    ...session,
+    messages: session.messages.filter((_, messageIndex) => messageIndex !== index),
+  };
+}
+
 export function failPendingTurn(
   session: ChatSession,
   requestId: string,
