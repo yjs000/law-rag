@@ -112,6 +112,10 @@ hook만 대상으로 한다. 사용자 명령이 앞뒤에 있는 복합 hook은
 
 Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합 뒤에만 실행한다. 기능 worktree에서는
 `graphify update/query/path/explain`을 실행하지 않고, 필요 시 추적된 JSON을 직접 읽는다.
+통합 branch에서 소스 통합 직후 실행하는 정확한 명령 `graphify update .`와 필요한 Windows 권한 상승은
+지속 승인 범위다. 에이전트는 다시 묻지 않고 실행하되, 기능 worktree·`graphify label`·외부 LLM/API·
+예상 밖 파일 변경은 이 승인에 포함하지 않는다. 플랫폼 runtime gate가 표시되면 저장소 문서로 우회하지
+않고 해당 gate를 그대로 따른다.
 
 ## 권한 계약
 
@@ -121,7 +125,7 @@ Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합
 | 정책 작성 | `AGENTS.md`, `docs/PLANS.md`, 이 문서 | 문서 생성·수정 | 없음 | repository 문서 변경 | 운영 계약 고정 | Approved — 2026-09-17 사용자 요청 | 저장소 검증과 diff 확인 |
 | 읽기 전용 Graphify | `graphify-out/graph.json` | 직접 읽기 | 코드·문서 graph metadata | 없음 | 구조 질의 | Approved — 2026-09-17 사용자 요청 범위 | CLI 자동 갱신 금지 |
 | Graphify 자동 hook 비활성화 | common Git hooks directory | marker hook 백업·비활성화 | repository content metadata | local hook 이름 변경 | 읽기·commit 부작용 제거 | Approved — 2026-09-17 사용자 요청 | marker와 backup 충돌 검사 |
-| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | 생성 파일 갱신 | repository content | 추적 산출물 변경 | 통합 후 graph 일치 | Not required — 현재 작업 | 통합 task에서 별도 실행 |
+| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | `graphify update .` 및 필요한 Windows 권한 상승 | repository content | 추적 산출물 변경 | 통합 후 graph 일치 | Approved — 2026-09-17 사용자 지속 승인 | 소스 통합 직후 1회, 기능 worktree·label·외부 LLM 제외, platform gate 유지 |
 | worktree 제거·prune | 승인된 정확한 local path | 등록 해제·디렉터리 제거 | local files | 파괴적, 복구 비용 있음 | 불필요 worktree 정리 | Approved — 2026-09-17 사용자 요청 | clean·merged·inactive 후보만 |
 | branch 삭제 | 승인된 정확한 local branch | ref 삭제 | commit history | 미병합 시 손실 가능 | 종료 branch 정리 | Not required — 현재 정책 작업 | worktree 제거와 별도 승인 |
 | 외부 네트워크·서비스 | 없음 | 없음 | 없음 | 없음 | 정책 작성에 불필요 | Not required — 2026-09-17 | 사용하지 않음 |
@@ -134,3 +138,6 @@ Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합
   채택했다.
 - 2026-09-17: clean·병합·비활성 후보 하나의 제거 중 Windows 긴 경로로 Git 등록만 해제되는 사례를
   확인했다. `core.longpaths=true`와 엄격히 검증된 orphan 정리 예외를 추가했다.
+- 2026-09-17: 사용자가 통합 branch의 `graphify update .`와 필요한 권한 상승을 항상 승인하도록
+  저장소에 기록해 달라고 요청했다. 정확한 update 명령만 지속 승인하고 기능 worktree, label, 외부
+  LLM/API 및 예상 밖 변경은 제외했다.

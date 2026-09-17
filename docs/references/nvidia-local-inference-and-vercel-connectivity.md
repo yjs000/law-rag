@@ -49,6 +49,38 @@ Ultra의 일반 호출과 production routing 호출이 같은 시간대에 hoste
 `NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b`로 별도 유지한다. 모델 교체 시 역할별 설정을
 각각 수정하지 않는다.
 
+### 2026-09-17 로컬 실호출 비교 권한 계약
+
+| Boundary | Destination or resource | Operation | Data/credential involved | Mutation/retention | Purpose | Status and date | Runtime gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 로컬 설정 | `apps/api/.env.local` | 폐기된 두 generation 설정을 단일 `NVIDIA_GENERATION_MODEL`로 교체 | 기존 secret은 읽거나 출력하지 않음 | gitignored 로컬 파일 수정 | 동일 모델 주입 검증 | Approved — 2026-09-17 사용자 요청 | 모델 관련 비밀 아닌 줄만 변경, 커밋 금지 |
+| NVIDIA 직접 호출 | `https://integrate.api.nvidia.com/v1/chat/completions` | Nemotron 3.5 POST, 60초 이내 | 기존 `NVIDIA_API_KEY`, 일반 테스트 질문 | NVIDIA 측 요청 로그 가능, 원문 응답 미보존 | 공식 endpoint 기준선 확인 | Approved — 2026-09-17 사용자 요청 | 키·원문 응답 출력 금지, 상태·지연·안전 요약만 기록 |
+| 프로젝트 API 호출 | `http://127.0.0.1`의 `/v1/questions` | 같은 일반 질문 POST | 로컬 설정, NVIDIA key, 원격 검색용 기존 자격 증명 가능 | 익명 호출, provider·DB 측 운영 로그 가능 | 실제 route/answer 경로 비교 | Approved — 2026-09-17 사용자 요청 | 개인정보 금지, 원격 데이터 쓰기·배포 금지 |
+| Git release state | `origin/main` | 정책·문서 커밋과 push | repository content, secret 없음 | 원격 Git 이력 추가 | 지속 승인과 검증 결과 공유 | Approved — 2026-09-17 사용자 요청 | `.env.local` 제외와 diff 검증 후 push |
+| 배포 환경 | Vercel project/env | 배포 또는 환경변수 변경 | 해당 없음 | 없음 | 이번 로컬 비교 범위 밖 | Not required — 2026-09-17 | 실행 금지 |
+
+결정 기록: 사용자는 `.env.local`의 비밀이 아닌 generation model 설정 변경, 동일한 일반 질문을 이용한
+NVIDIA 직접 호출과 로컬 프로젝트 API 호출 비교, 정책·문서의 commit과 `origin/main` push를 승인했다.
+비밀값·개인 사건자료·원문 provider 응답은 출력하거나 저장하지 않는다.
+
+### 2026-09-17 실호출 비교 결과
+
+개인정보가 없는 동일 질문으로 비교했으며 provider 응답 원문은 보존하지 않았다.
+
+| 경로 | 설정 | 결과 | 지연 | 판정 |
+| --- | --- | --- | --- | --- |
+| NVIDIA 공식 OpenAI 호환 endpoint | 3.5 Lightning, 단순 chat completion, 128 tokens | HTTP 200, 요청·응답 model 일치, content 존재 | 5.286초 | endpoint와 key 정상 |
+| 로컬 `/v1/questions` | 프로젝트 기본 route timeout 8초 | HTTP 200 안전 응답, `routing_unavailable` | 13.067초, 재시도 17.922초 | end-to-end 실패 |
+| 프로젝트 router adapter | 진단용 route timeout 20초 | provider HTTP 200, `legal_search`, confidence 0.95 | 6.186초 | 모델·구조화 라우팅 호환 |
+| 로컬 `/v1/questions` | 진단용 route timeout 20초 | HTTP 503 | 47.517초 | end-to-end 실패 |
+
+기본 라우터의 안전 로그는 두 시도 모두 `failure_kind=timeout`, `upstream_status=null`을 기록했다. 따라서
+처음 두 로컬 실패는 모델 ID나 endpoint 404가 아니라 8초 route budget 초과다. 20초 router 단독 호출은
+성공했으므로 3.5가 프로젝트의 라우팅 schema와 호환된다는 점도 확인했다. 마지막 503은 관측된 총 지연과
+현재 request/answer budget을 함께 보면 이후 generation 단계의 시간 예산 소진으로 추정되지만, 응답 원문을
+기록하지 않았으므로 확정 원인으로 쓰지 않는다. 결론적으로 직접 호출은 성공했지만 현재 프로젝트 기본
+시간 예산에서는 전체 API가 안정적으로 성공하지 않는다.
+
 ## “NVIDIA가 최근 무료 배포했다”는 주장 확인
 
 서로 다른 세 가지 사실이 섞이기 쉽다.

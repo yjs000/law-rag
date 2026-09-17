@@ -173,3 +173,8 @@ Graphify skill은 implicit invocation을 금지한다. 사용자가 `/graphify` 
 필요하면 추적된 `graphify-out/graph.json`을 직접 읽는다. 갱신과 산출물 commit은 소스 통합 뒤 통합
 대상 branch가 한 번만 소유하며, 자세한 실행·hook·rollback 절차는
 [`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)를 따른다.
+
+예외적으로 통합 대상 branch에서 소스 통합을 마친 뒤 실행하는 정확한 명령 `graphify update .`와 그
+Windows 권한 상승은 사용자가 2026-09-17 지속 승인했다. 에이전트는 이 범위에 대해 별도 승인을 다시
+묻지 않고 실행한다. 이 승인은 기능 worktree 실행, `graphify label`, 외부 LLM/API 사용, 예상 밖 파일
+변경의 수용에는 적용되지 않으며 플랫폼이 강제하는 runtime approval을 우회하지 않는다.
