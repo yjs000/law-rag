@@ -2094,9 +2094,9 @@
     "semantic_hash": "0de0e27ba1ecf229a5e174d9189a172c"
   },
   "AGENTS.md": {
-    "mtime": 1789042486.2892501,
-    "seen": 1789042843.0725172,
-    "ast_hash": "57c626c09885a846e642e564ef2a4639",
+    "mtime": 1789615807.2020311,
+    "seen": 1789615853.99877,
+    "ast_hash": "be6a38243bcff6b97640bc5ce322b4dd",
     "semantic_hash": ""
   },
   "ARCHITECTURE.md": {
@@ -2154,9 +2154,9 @@
     "semantic_hash": "6ccc95ad9ac7359788e76d4f75286745"
   },
   "docs/PLANS.md": {
-    "mtime": 1788438294.6369395,
-    "seen": 1789039836.0041778,
-    "ast_hash": "848e6164b35a3a43d4c4f3f0cf997632",
+    "mtime": 1789615779.8414786,
+    "seen": 1789615853.998784,
+    "ast_hash": "5b35c5baaa95237c6f3f0d9cabbdf7f9",
     "semantic_hash": ""
   },
   "docs/PRODUCT_SENSE.md": {
@@ -3975,6 +3975,12 @@
     "mtime": 1789614495.3339896,
     "seen": 1789615485.7744741,
     "ast_hash": "ae5ef148b444d61906a3da8bfb909183",
+    "semantic_hash": ""
+  },
+  "docs/references/worktree-policy.md": {
+    "mtime": 1789615807.5889673,
+    "seen": 1789615853.998996,
+    "ast_hash": "e4384bbbe2d808ec64c9afaeb35a744e",
     "semantic_hash": ""
   }
 }
