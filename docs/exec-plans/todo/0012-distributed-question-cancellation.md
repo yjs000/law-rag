@@ -2,124 +2,80 @@
 > 상태: `Todo`
 > 유형: `Feature`
 > 보조 라벨: `Reliability`
-> 선행 조건: 설계 문서와 provider-side 취소 가정을 NVIDIA hosted NIM 기준으로 현행화하고 explicit cancel ID 제공 여부를 재확인해야 한다.
-> 다음 행동: NVIDIA hosted NIM의 explicit cancel ID 제공 여부를 확인하고 설계 가정을 현행화한다.
+> 선행 조건: 없음
+> 다음 행동: 현재 V1·V2 실행 취소 경로와 테스트를 대조해 지원 범위와 목표 충족 여부를 판정한다.
 > 참고 범위:
-> - `docs/design-docs/distributed-question-cancellation.md` L19-L30 — 영속 취소 상태와 종결 상태 전이 계약
-> - `docs/design-docs/distributed-question-cancellation.md` L65-L70 — provider 취소 한계와 관측 조건
+> - `apps/api/app/application/distributed_question_cancellation.py` L109-L209 — 취소 상태 전이와 실행 태스크 중단 경계
+> - `apps/api/app/api/v2/executions.py` L230-L251 — V2 실행 취소 API와 소유권 경계
+> - `apps/web/lib/v2-execution.ts` L76-L189 — 브라우저 중단·취소 요청·취소 이벤트 처리
 
-# 분산 질문 취소 실행 계획
+# 실행 취소 범위·완료조건 감사 계획
 
-상태: `todo로 환원 (2026-08-18)` — active에서 구현 대부분(coordinator 포트·memory adapter·
-polling watcher 목업 테스트)까지 진행했으나, [설계 문서](../../design-docs/distributed-question-cancellation.md)와
-아래 "미결정·차단 요소"가 여전히 현재 생성 provider(NVIDIA hosted NIM, [0013](../completed/0013-nvidia-hosted-nim-integration.md))가
-아닌 옛 Qwen/Ollama adapter 기준으로 남아 있어 설계가 현행화되지 않은 상태다. **재승격 전
-선행 작업**: 설계 문서와 이 계획의 provider-side 취소 가정을 NVIDIA hosted NIM 기준으로
-현행화한다(실제로 provider가 explicit cancel ID를 제공하는지 재확인 포함). 그 전에는 이
-계획을 active로 다시 옮기지 않는다. DB migration·RLS·watcher 등 나머지 구현 TODO는
-아래에 그대로 보존한다.
+## 목적
 
-## 목적과 사용자 결과
+이미 구현된 실행 취소 흐름을 새로 설계하거나 재구현하지 않는다. V1·V2 API, 실행 상태 관리,
+실행 중 태스크, Web 요청·표시 및 관련 테스트를 따라가며 실제 취소 범위를 한 장의 판정표로 정리한다.
+그 결과가 아래 목표를 충족하는지 확인하고, 부족한 부분만 별도 후속 작업으로 분리한다.
 
-sticky routing 없이 어느 Vercel API 인스턴스에 취소 요청이 도착해도 중지 신호가 접수되고, 실제 질문 인스턴스의 검색·모델 태스크가 이를 감지해 종료된다. 정상 scale-out은 404가 되지 않는다.
+## 확인할 목표
 
-상세 설계는 [분산 질문 취소 설계](../../design-docs/distributed-question-cancellation.md)를 따른다.
+1. 사용자가 취소한 실행은 가능한 가장 이른 안전한 경계에서 추가 검색·생성 작업을 시작하지 않는다.
+2. 이미 진행 중인 취소 가능한 태스크에는 중단 신호가 전달되고 watcher·stream 등 보조 작업이 정리된다.
+3. 실행 소유권이 다른 요청을 취소하거나 존재 여부를 노출하지 않는다.
+4. 등록 전, 실행 중, 이미 완료됨, 이미 취소됨, 저장소 오류 등 상태별 응답이 멱등적이고 거짓 완료를 만들지 않는다.
+5. 브라우저 연결 중단과 서버 실행 취소의 관계, V1과 V2의 차이가 사용자 동작과 테스트에 명시되어 있다.
 
-## 사용자 병목과 선행 결정
+## 범위
 
-구현·목업 테스트는 사용자 입력 없이 진행할 수 있다. 실제 Production 검증 전에만 다음이 필요하다.
+- V1 질문 취소, 분산 취소 coordinator, V2 execution 취소, Web 취소 호출의 연결 관계 확인
+- 상태 저장소와 process-local 태스크 중단이 각각 담당하는 범위 확인
+- 정상·실패·경계 사례 테스트가 위 목표를 실제로 검증하는지 확인
+- 목표별 판정을 `충족`, `부분 충족`, `미충족`, `해당 없음`으로 기록
+- `부분 충족` 또는 `미충족` 항목은 재현 근거와 최소 후속 작업으로 분리
 
-1. Supabase migration 적용 권한과 실행 창
-2. 취소 상태 보존 기간 선택. 기본 가정은 24시간 후 삭제
-3. Supabase 부하 측정 권한. 기본 watcher 간격은 2초이며 운영 p95에 따라 1~5초에서 조정
-4. 실제 Qwen/Ollama adapter가 provider-side 취소 API를 제공하는지 확정
+## 비범위
 
-비밀값 제공이나 Production migration 승인 전에는 로컬/목업 구현까지만 완료하고 운영 DB를 변경하지 않는다.
+- 취소 동작의 제품 코드 변경
+- 새로운 저장소·분산 시스템·상태 모델 도입
+- 운영 DB migration, 배포 또는 원격 환경 변경
+- 확인되지 않은 개선안을 이 작업 안에서 구현
 
-## 범위와 비범위
+## 실행 단계
 
-범위:
+### 1. 현재 취소 경로 지도 작성
 
-- 실행 상태 migration/RLS/TTL 계약
-- PostgreSQL 및 memory coordinator adapter
-- process-local registry와 coordinator를 결합한 watcher
-- 멱등 취소 API 상태 계약
-- Web의 `중지 요청됨`/`확인 중`/`완료됨` 상태
-- 정상·등록 경합·다른 인스턴스·DB 장애·소유자 격리 테스트
+- 결과: 진입점부터 상태 전이, 태스크 중단, 사용자 표시까지 이어지는 V1·V2 경로와 각 경계의 책임을 정리한다.
+- 대상: 헤더의 참고 범위와 그 경로가 직접 호출하는 취소 관련 코드·테스트
+- 절차: 코드와 테스트에서 실제 호출 관계를 추적하고, 구현되지 않은 설계 문구는 현재 동작으로 간주하지 않는다.
+- 완료 증거: 각 경로에 진입점, 소유권 검사, 상태 저장, 중단 대상, 종결 상태, 사용자 표시가 연결되어 있다.
 
-비범위:
+### 2. 목표와 테스트 대조
 
-- sticky routing
-- Redis 도입
-- 질문·답변 본문을 취소 테이블에 저장
-- upstream provider가 제공하지 않는 계산 환불 보장
+- 결과: 위 다섯 목표마다 구현 위치와 검증 테스트를 연결한 판정표를 만든다.
+- 대상: API와 Web의 취소 관련 단위·통합 테스트
+- 절차: 기존 테스트를 실행하고, 테스트가 통과해도 목표를 직접 검증하지 않으면 근거 없음으로 표시한다.
+- 완료 증거: 모든 목표에 판정, 코드 근거, 테스트 근거, 남은 위험이 기록되어 있다.
 
-## Agent별 실행 TODO
+### 3. 완료 여부 판정과 후속 작업 분리
 
-### Agent DB/coordinator
-
-- [ ] `question_executions` migration, RLS, TTL index 추가
-- [x] coordinator 포트와 memory adapter 구현
-- [x] 조건부 상태 전이·등록 전 tombstone 목업 테스트
-- [ ] PostgreSQL coordinator adapter 구현
-- [ ] DB schema 생성 문서 갱신
-
-### Agent API/runtime
-
-- [ ] 질문 등록→watcher→종결 상태 흐름 구현
-- [ ] 로컬 취소와 DB 신호 취소를 결합
-- [ ] `202 cancel_requested/pending_registration`, `200 already_finished/cancelled`, `404 not_owned`, `503 unavailable` 계약 구현
-- [ ] 검색 및 모델 await 취소 전파, watcher 정리 테스트
-
-### Agent Web/UX
-
-- [ ] 브라우저 abort와 독립적인 취소 요청 유지
-- [ ] 접수와 최종 취소를 구분해 표시
-- [ ] 503 재시도와 늦은 완료 결과 정책 구현
-- [ ] 새 질문·로그아웃 시 상태 정리 테스트
-
-### Agent 운영 검증
-
-- [ ] 서로 다른 두 API 프로세스로 질문과 취소를 보내는 통합 테스트
-- [ ] Production Preview에서 scale-out/재시작 경합 확인
-- [ ] cancel 감지 p50/p95 및 DB read/s 기록
-- [ ] orphan/TTL 정리 작업 검증
-
-## 완료 조건
-
-1. 다른 프로세스에서 보낸 취소가 404 없이 접수되고 원래 프로세스의 blocking search/model mock을 취소한다.
-2. 질문 등록 전 취소도 검색을 시작하지 않는다.
-3. 다른 사용자 요청은 취소하거나 존재를 확인할 수 없다.
-4. DB 장애 시 UI가 완료를 거짓 표시하지 않고 503과 재시도를 제공한다.
-5. API 단위·통합 테스트, Web 테스트, lint/type/build가 통과한다.
-6. migration과 `docs/generated/db-schema.md`, 운영 런북, learning 문서가 함께 갱신된다.
+- 결과: 현재 구현이 목표를 충족하는 범위를 확정하고 실제 차이만 작은 후속 작업으로 만든다.
+- 대상: 이 계획의 결과 기록과 필요한 경우 새 실행계획 헤더
+- 절차: 추측성 확장은 제외하고 재현 가능한 차이만 기록한다. 제품 코드 수정은 후속 작업으로 넘긴다.
+- 완료 증거: F-002를 완료할 수 있는 판정 또는 구체적인 후속 작업 ID와 선행 관계가 남아 있다.
 
 ## 검증 명령
 
 ```powershell
 Set-Location apps/api
-uv run pytest tests/test_question_cancellation.py tests/test_distributed_question_cancellation.py
-uv run ruff check app tests
+uv run pytest tests/test_question_cancellation.py tests/test_distributed_question_cancellation.py tests/test_question_execution_repository.py
 
 Set-Location ../web
-pnpm test
-pnpm lint
-pnpm typecheck
-pnpm build
+pnpm test -- lib/v2-execution.test.ts lib/generation-retry.test.ts
 ```
 
-## 롤백
+## 완료 조건
 
-분산 coordinator feature flag를 끄면 기존 process-local 취소로 되돌린다. 새 테이블은 롤백 직후 삭제하지 않고 TTL이 지난 뒤 별도 migration으로 제거해 진행 중 상태와 관측 증거를 보존한다.
-
-## 진행 기록
-
-- 2026-07-18: 현재 process-local registry와 Vercel/Supabase 배치를 조사했다.
-- 2026-07-18: sticky routing 배제, 영속 상태+polling watcher, 404 대체 상태 계약을 확정했다.
-- 2026-07-18: Production migration 없이 coordinator 포트·memory adapter·polling watcher를 구현하고 등록 전 tombstone, 별도 handler 취소, owner 격리, 종결 상태의 목업 테스트를 추가했다.
-- 2026-07-19: 24시간 idle은 조회 0회임을 확인하고 active watcher 기본 간격을 2초로 완화했다. 사용자는 migration 적용 전 재승인을 요청하는 절차에 동의했다.
-
-## 미결정·차단 요소
-
-- 실제 Production migration은 사용자 승인 및 Supabase 접근이 필요하다.
-- provider-side 계산 취소는 Qwen/Ollama adapter와 배포 방식을 확정한 뒤 검증한다.
+1. 현재 구현이 취소하는 대상과 취소하지 못하는 대상이 V1·V2·Web별로 구분되어 있다.
+2. 다섯 목표 모두 구현·테스트 근거가 있는 판정을 받는다.
+3. 부족한 동작은 이 계획에서 구현하지 않고 독립적으로 검증 가능한 후속 작업으로 분리된다.
+4. 목표를 모두 충족하면 추가 구현 없이 F-002를 완료 처리할 수 있다.

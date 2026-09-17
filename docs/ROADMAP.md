@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 48e28793f9bf9bef3b4e2de2cbc929b5525ba284184febd02f50ff1544332454 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7904f0f864f89ffc876c003e0cd2c263591c99791b6f40633b4e511669e25749 -->
 
 # 프로젝트 로드맵
 
@@ -10,7 +10,7 @@
 
 ## Todo
 
-- [F-002 · Feature — 분산 질문 취소 실행 계획](exec-plans/todo/0012-distributed-question-cancellation.md) — 다음 행동: NVIDIA hosted NIM의 explicit cancel ID 제공 여부를 확인하고 설계 가정을 현행화한다.
+- [F-002 · Feature — 실행 취소 범위·완료조건 감사 계획](exec-plans/todo/0012-distributed-question-cancellation.md) — 다음 행동: 현재 V1·V2 실행 취소 경로와 테스트를 대조해 지원 범위와 목표 충족 여부를 판정한다.
 - [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](exec-plans/todo/0029-d-full-gold-on-demand.md) — 다음 행동: D-full 일반화 판단이 필요해지면 대상 문항·비용 상한을 확정한다.
 - [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
 - [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
