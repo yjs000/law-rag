@@ -60,6 +60,7 @@ from app.application.v2.dependencies import (
     V2ExecutionDependencies,
 )
 from app.application.v2.phase_service import V2QuestionExecutionService
+from app.domain.generation_profiles import build_nvidia_answer_profile_v2
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.ports.question_execution import QuestionExecutionRecord
 from app.settings import Settings
@@ -211,6 +212,10 @@ def build_v1_answer_dependencies(
         question_embedding_timeout_seconds=settings.question_embedding_timeout_seconds,
         retrieval_timeout_seconds=settings.retrieval_timeout_seconds,
         answer_timeout_seconds=settings.answer_timeout_seconds,
+        generation_profile=build_nvidia_answer_profile_v2(
+            settings.nvidia_generation_model,
+            max_output_tokens=settings.answer_max_output_tokens,
+        ),
         ai_available=callbacks.ai_available,
         ai_unavailable_reason=callbacks.ai_unavailable_reason,
         initial_fallback_reason=callbacks.initial_fallback_reason,
@@ -409,7 +414,7 @@ def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
     return NvidiaNimAnswerer(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_answer_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=settings.answer_timeout_seconds,
         max_output_tokens=settings.answer_max_output_tokens,
         max_attempts=settings.answer_generation_max_attempts,
@@ -420,12 +425,12 @@ def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
 def build_nvidia_clarification_interpreter(
     settings: Settings,
 ) -> NvidiaNimClarificationInterpreter:
-    """Create the single configured Ultra interpreter for clarification turns."""
+    """Create the clarification interpreter with the injected generation model."""
 
     return NvidiaNimClarificationInterpreter(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_route_classifier_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=settings.route_classifier_timeout_seconds,
     )
 
@@ -449,7 +454,7 @@ def build_nvidia_question_router(
     return NvidiaNimQuestionRouter(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_route_classifier_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=(
             settings.route_classifier_timeout_seconds
             if timeout_seconds is None

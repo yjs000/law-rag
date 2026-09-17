@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from law_rag_core.ports.repository import LegalRepository
 
+from app.domain.generation_profiles import GenerationProfile
 from app.domain.routing import RouteDecision
 from app.domain.schemas import MockUser, QuestionRequest, QuestionResponse, SearchHit
 from app.domain.search_queries import SearchTrace
@@ -39,6 +40,7 @@ class V1AnswerDependencies:
     question_embedding_timeout_seconds: float
     retrieval_timeout_seconds: float
     answer_timeout_seconds: float
+    generation_profile: GenerationProfile
     ai_available: Callable[[], bool]
     ai_unavailable_reason: Callable[[], str | None]
     initial_fallback_reason: Callable[[QuestionRequest], Any]

@@ -47,7 +47,7 @@ def _build_router() -> QuestionRouter:
         api_key=api_key,
         base_url=os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
         model=os.environ.get(
-            "NVIDIA_ROUTE_CLASSIFIER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"
+            "NVIDIA_GENERATION_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"
         ),
         timeout_seconds=float(os.environ.get("ROUTE_CLASSIFIER_TIMEOUT_SECONDS", "15")),
     )

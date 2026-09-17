@@ -87,6 +87,13 @@ def test_nvidia_key_enables_generation_and_embedding() -> None:
     assert settings.answer_max_output_tokens == 4096
 
 
+def test_generation_model_defaults_to_nemotron_35_and_stays_separate_from_embedding() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.nvidia_generation_model == "nvidia/nemotron-3.5-lightning-30b-a3b"
+    assert settings.nvidia_embedding_model == "nvidia/nemotron-3-embed-1b"
+
+
 def test_missing_nvidia_key_keeps_ai_disabled() -> None:
     settings = Settings(
         nvidia_api_key=None,

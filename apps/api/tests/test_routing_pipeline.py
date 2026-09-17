@@ -12,6 +12,7 @@ import app.main as main_module
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import DraftAnswer
 from app.domain.catalog import SourceKind
+from app.domain.generation_profiles import build_nvidia_answer_profile_v2
 from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import QuestionRouter, RouteJudgment
 from app.domain.schemas import (
@@ -22,6 +23,7 @@ from app.domain.schemas import (
     SearchHit,
 )
 from app.domain.search_queries import SearchTrace
+from app.settings import Settings
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
 
@@ -782,6 +784,55 @@ def test_legal_search_runs_generation_and_validation_after_retrieval(monkeypatch
         index for index, event in enumerate(events) if '"stage": "answer_validation"' in event
     )
     assert answer_generation_index < answer_validation_index
+
+
+def test_generation_diagnostics_follow_environment_injected_model(monkeypatch) -> None:
+    model = "nvidia/environment-injected-model"
+    monkeypatch.setenv("NVIDIA_GENERATION_MODEL", model)
+    runtime_settings = Settings(_env_file=None)
+    monkeypatch.setattr(main_module, "settings", runtime_settings)
+    _configure_ai(monkeypatch)
+    captured_diagnostics: dict[str, object] = {}
+    hit = _hit()
+
+    class Router:
+        async def route(self, question: str) -> RouteJudgment:
+            return RouteJudgment(
+                route="legal_search", confidence=1.0, reason="legal", missing_fields=()
+            )
+
+    class Embedder:
+        async def embed(self, texts):
+            return [[0.0] * 512]
+
+    async def search(*args, **kwargs):
+        return [hit], _trace(1)
+
+    class Answerer:
+        async def answer(self, payload, hits):
+            return _fast_draft()
+
+    async def save_response(user, payload, response, diagnostics=None):
+        captured_diagnostics.update(diagnostics or {})
+        return response
+
+    monkeypatch.setattr(main_module, "_question_router", lambda: Router())
+    monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module.repository, "search_with_trace", search)
+    monkeypatch.setattr(main_module, "_answerer", lambda: Answerer())
+    monkeypatch.setattr(main_module, "_save_if_authenticated", save_response)
+
+    response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
+
+    assert response.status_code == 200
+    expected_profile = build_nvidia_answer_profile_v2(
+        model,
+        max_output_tokens=runtime_settings.answer_max_output_tokens,
+    )
+    generation = captured_diagnostics["answer_generation"]
+    assert isinstance(generation, dict)
+    assert generation["generation_profile_key"] == expected_profile.key
+    assert generation["generation_profile_sha256"] == expected_profile.sha256
 
 
 def test_malformed_unavailable_draft_uses_deterministic_empty_fallback(monkeypatch) -> None:

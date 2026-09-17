@@ -32,6 +32,27 @@ class GenerationProfile:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def build_nvidia_answer_profile_v2(
+    model: str,
+    *,
+    max_output_tokens: int,
+) -> GenerationProfile:
+    """Build diagnostics metadata from the generation model injected at runtime."""
+
+    return GenerationProfile(
+        key=f"{model.replace('/', '-')}-answer-v2",
+        provider="nvidia_nim",
+        model=model,
+        prompt_version="answer-system-prompt-v2",
+        schema_version="draft-answer-v1",
+        context_version="m4-frozen-r1-a",
+        temperature=0.3,
+        top_p=0.95,
+        max_output_tokens=max_output_tokens,
+        profile_version="2",
+    )
+
+
 # TODO(2026-08-08, 0025 M5): temperature=0.3은 잠정값이다. 기존 1.0은 근거 없는 하드코딩
 # 이었다(git blame: 45edf43, 설명 없음). 법률 답변처럼 재현성이 중요한 출력에 맞춰
 # 사용자 결정으로 0.3으로 낮췄지만, D-10/E-10 실제 실행으로 검증 전까지는 확정이 아니다.
@@ -53,17 +74,9 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
 
 # 0043, 2026-08-09: 일반인 답변 계약 v2. prompt만 바뀌고 model/schema/context/sampling은
 # v1과 동일하게 유지해 문체 차이만 비교할 수 있게 한다.
-NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2 = GenerationProfile(
-    key="nvidia-nemotron-3-ultra-550b-a55b-answer-v2",
-    provider="nvidia_nim",
-    model="nvidia/nemotron-3-ultra-550b-a55b",
-    prompt_version="answer-system-prompt-v2",  # openai_answerer.build_messages_v2()
-    schema_version="draft-answer-v1",  # openai_answerer.DraftAnswer, 불변
-    context_version="m4-frozen-r1-a",
-    temperature=0.3,
-    top_p=0.95,
+NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2 = build_nvidia_answer_profile_v2(
+    "nvidia/nemotron-3-ultra-550b-a55b",
     max_output_tokens=4096,
-    profile_version="2",
 )
 
 # MOCK/미확정, 2026-08-08: OpenAI 경로(openai_answerer.py)는 현재 temperature/top_p를

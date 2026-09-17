@@ -47,7 +47,7 @@ def _answerer_for(message_builder) -> NvidiaNimAnswerer:
     return NvidiaNimAnswerer(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_answer_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=settings.answer_timeout_seconds,
         max_output_tokens=settings.answer_max_output_tokens,
         max_attempts=settings.answer_generation_max_attempts,
@@ -76,7 +76,7 @@ def _router() -> NvidiaNimQuestionRouter:
     return NvidiaNimQuestionRouter(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_route_classifier_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=settings.route_classifier_timeout_seconds,
     )
 
@@ -155,7 +155,7 @@ async def main() -> None:
             "experiment": "0043-v1-v2-compare",
             "run_at": datetime.now(UTC).isoformat(),
             "answer_provider": "nvidia_nim",
-            "answer_model": main_module.settings.nvidia_answer_model,
+            "answer_model": main_module.settings.nvidia_generation_model,
             "cases": results,
         }
         OUTPUT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -1,3 +1,4 @@
+import app.domain.generation_profiles as generation_profiles
 from app.domain.generation_profiles import (
     NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE,
     NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2,
@@ -56,3 +57,14 @@ def test_v2_profile_shares_v1_model_and_sampling_settings() -> None:
     assert v2.model == v1.model
     assert v2.temperature == v1.temperature
     assert v2.top_p == v1.top_p
+
+
+def test_v2_profile_is_built_from_the_injected_generation_model() -> None:
+    profile = generation_profiles.build_nvidia_answer_profile_v2(
+        "nvidia/injected-model",
+        max_output_tokens=1234,
+    )
+
+    assert profile.key == "nvidia-injected-model-answer-v2"
+    assert profile.model == "nvidia/injected-model"
+    assert profile.max_output_tokens == 1234

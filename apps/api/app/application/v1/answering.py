@@ -24,7 +24,6 @@ from app.application.v1.retrieval import (
 )
 from app.domain.answer_actions import derive_answer_action
 from app.domain.errors import CorpusSearchUnavailableError
-from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2
 from app.domain.provider_attempts import provider_upstream_status
 from app.domain.routing import RouteDecision
 from app.domain.schemas import (
@@ -320,8 +319,8 @@ async def answer_question(
             # 0043, 2026-08-10: _answerer()가 build_messages_v2를 기본으로 쓰도록 전환하며
             # 이 프로필 참조도 V2로 맞췄다 - 프로필과 message_builder가 항상 짝을 이뤄야
             # generation_profile_sha256가 실제 생성에 쓰인 프롬프트를 정확히 가리킨다.
-            "generation_profile_key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.key,
-            "generation_profile_sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.sha256,
+            "generation_profile_key": dependencies.generation_profile.key,
+            "generation_profile_sha256": dependencies.generation_profile.sha256,
         }
     )
     generation_started = time.monotonic()
