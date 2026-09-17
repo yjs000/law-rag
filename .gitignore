@@ -23,6 +23,7 @@ node_modules/
 .vercel/
 coverage/
 *.tsbuildinfo
+/logs/
 
 # This workspace uses the root pnpm lockfile.
 /apps/web/package-lock.json

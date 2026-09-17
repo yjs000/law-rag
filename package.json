@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.12.0",
   "scripts": {
     "build": "pnpm run build:web",
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
     "test": "pnpm run test:web",
     "typecheck": "pnpm --filter @law-rag/web typecheck",
     "dev:api": "powershell -ExecutionPolicy Bypass -Command \"Set-Location apps/api; & ..\\..\\scripts\\run_python.ps1 -m uvicorn app.main:app --host 127.0.0.1 --port 8000\"",
