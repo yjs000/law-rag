@@ -13,7 +13,9 @@
 
 ## 작업 시작 순서
 
-1. `git status --short --branch`로 현재 변경과 브랜치를 확인한다.
+1. [`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)에 따라 저장소 루트,
+   worktree 경로, 브랜치, `HEAD`, 작업 목적, Graphify 모드를 먼저 선언한다. `git status
+   --short --branch`와 `git worktree list --porcelain`로 현재 위치와 동시 작업을 확인한다.
 2. 이 파일과 `docs/CURRENT_STATE.md` L1-L28만 읽는다.
 3. 작업이 아키텍처·모듈 경계·배포를 건드리면 그때 `ARCHITECTURE.md`를 읽고, 특정 기능의 설계·제품
    요구사항이 필요하면 그때 관련 `docs/design-docs/` 및 `docs/product-specs/` 문서를 읽는다 — 매
@@ -26,6 +28,19 @@
    이전에 다음 작업으로 등록한 항목이면 `docs/exec-plans/todo/`에서 같은 계획을 확인한다.
    Superpowers `writing-plans`로 실행계획이 작성되면 같은 번호의 파일을 `active/`로 이동한다.
 6. 가장 작은 검증 가능한 변경으로 구현하고 테스트·문서를 함께 갱신한다.
+
+작업 중 저장소 루트, worktree, 브랜치 또는 `HEAD`가 외부 작업으로 바뀌면 쓰기를 중단하고 작업 위치를
+다시 선언한다. 읽기 전용 검토는 시작·종료 `git status`가 같아야 하며, Graphify CLI의 자동 갱신을
+포함한 생성 파일 변경을 남겨서는 안 된다.
+
+## Worktree 수명주기
+
+- worktree 생성·선택·보존·정리 기준은
+  [`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)를 따른다.
+- 현재 worktree, 활성 Codex task가 사용하는 worktree, dirty 또는 접근 오류가 있는 worktree, 통합
+  대상에 미병합된 worktree는 삭제 후보가 아니다.
+- `git worktree remove`, `git worktree prune`, branch 삭제는 정책의 사전 검증을 통과한 정확한 대상을
+  사용자에게 제시하고 승인을 받은 뒤 실행한다. 디렉터리를 파일시스템 명령으로 직접 삭제하지 않는다.
 
 ## 로드맵 정본·최소 읽기 운영
 
@@ -210,8 +225,13 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
 Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- 읽기 전용 검토와 기능 worktree에서는 `graphify query/path/explain` CLI를 실행하지 않는다. 해당 CLI가
+  stale graph를 자동 갱신할 수 있으므로 기존 `graphify-out/graph.json`을 직접 읽는 비변경 traversal로
+  질의하고, 시작·종료 `git status`가 같은지 확인한다.
+- 사용자가 Graphify 갱신을 명시적으로 요청한 경우나 통합 브랜치의 통합 단계에서만 Graphify CLI의
+  변경 동작을 허용한다. 실행 전에 현재 worktree와 변경 예상 파일을 선언한다.
+- 시작 시 이미 dirty인 `graphify-out/` 파일은 다른 작업의 소유일 수 있다. 읽기 전용 검토에서는 이를
+  갱신·복구·stage하지 않고 시작 snapshot에 기록한 뒤 그대로 보존한다.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After integrating code into the target branch, run `graphify update .` once there to keep the graph current (AST-only, no API cost). Do not update or commit Graphify outputs from feature worktrees.
