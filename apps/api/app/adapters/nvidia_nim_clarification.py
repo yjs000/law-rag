@@ -16,6 +16,7 @@ from app.provider_observability import (
     emit_provider_attempt,
     provider_attempt_scope,
 )
+from app.runtime_observability import ErrorLogMode
 
 
 class NvidiaNimClarificationInterpreter:
@@ -28,6 +29,7 @@ class NvidiaNimClarificationInterpreter:
         base_url: str,
         model: str,
         timeout_seconds: float,
+        error_log_mode: ErrorLogMode = "redacted",
         client_factory: Callable[[], Any] | None = None,
     ) -> None:
         if not api_key:
@@ -44,6 +46,7 @@ class NvidiaNimClarificationInterpreter:
         ))()
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.error_log_mode = error_log_mode
 
     async def judge_initial(self, question: str) -> ClarificationTurnJudgment:
         with provider_attempt_scope():
@@ -72,10 +75,12 @@ class NvidiaNimClarificationInterpreter:
                     },
                 )
                 result = ClarificationTurnJudgment.model_validate_json(_content(response))
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as exc:
                 finished_at = time.monotonic()
                 emit_provider_attempt(
                     operation="clarification",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="failed",
@@ -84,6 +89,8 @@ class NvidiaNimClarificationInterpreter:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 raise
             except Exception as exc:  # noqa: BLE001 - classified without provider data
@@ -91,6 +98,8 @@ class NvidiaNimClarificationInterpreter:
                 failure_kind, upstream_status = classify_provider_failure(exc)
                 emit_provider_attempt(
                     operation="clarification",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="failed",
@@ -99,6 +108,8 @@ class NvidiaNimClarificationInterpreter:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 if failure_kind in {"provider_http", "timeout", "connection"}:
                     raise ProviderAttemptsExhausted(
@@ -110,6 +121,8 @@ class NvidiaNimClarificationInterpreter:
                 finished_at = time.monotonic()
                 emit_provider_attempt(
                     operation="clarification",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="succeeded",
@@ -118,6 +131,7 @@ class NvidiaNimClarificationInterpreter:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    mode=self.error_log_mode,
                 )
                 return result
 

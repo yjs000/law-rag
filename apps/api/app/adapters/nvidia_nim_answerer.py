@@ -30,6 +30,7 @@ from app.provider_observability import (
     emit_provider_attempt,
     provider_attempt_scope,
 )
+from app.runtime_observability import ErrorLogMode
 
 # Below this many remaining seconds, a retry can't realistically get a response
 # back before the caller's own deadline (Vercel's function hard cap) hits, so
@@ -53,6 +54,7 @@ class NvidiaNimAnswerer:
         timeout_seconds: float,
         max_output_tokens: int,
         max_attempts: int = 3,
+        error_log_mode: ErrorLogMode = "redacted",
         message_builder: MessageBuilder = build_messages,
         client_factory: Callable[[], Any] | None = None,
     ) -> None:
@@ -73,6 +75,7 @@ class NvidiaNimAnswerer:
         self.max_output_tokens = max_output_tokens
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max_attempts
+        self.error_log_mode = error_log_mode
         self.message_builder = message_builder
 
     async def answer(
@@ -139,15 +142,26 @@ class NvidiaNimAnswerer:
         last_error: Exception | None = None
         last_failure_kind: ProviderFailureKind | None = None
         last_upstream_status: int | None = None
-        pending_failure: tuple[int, ProviderFailureKind, int | None, int, int] | None = None
+        pending_failure: tuple[
+            int, ProviderFailureKind, int | None, int, int, Exception
+        ] | None = None
 
         def emit_pending_failure(*, retry_scheduled: bool) -> None:
             nonlocal pending_failure
             if pending_failure is None:
                 return
-            attempt, failure_kind, upstream_status, elapsed_ms, remaining_ms = pending_failure
+            (
+                attempt,
+                failure_kind,
+                upstream_status,
+                elapsed_ms,
+                remaining_ms,
+                error,
+            ) = pending_failure
             emit_provider_attempt(
                 operation=operation,
+                model=self.model,
+                timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                 attempt=attempt,
                 max_attempts=self.max_attempts,
                 outcome="failed",
@@ -156,6 +170,8 @@ class NvidiaNimAnswerer:
                 elapsed_ms=elapsed_ms,
                 remaining_ms=remaining_ms,
                 retry_scheduled=retry_scheduled,
+                error=error,
+                mode=self.error_log_mode,
             )
             pending_failure = None
 
@@ -175,11 +191,13 @@ class NvidiaNimAnswerer:
                         schema,
                         attempt_timeout=attempt_timeout,
                     )
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as exc:
                 finished_at = time.monotonic()
                 emit_pending_failure(retry_scheduled=True)
                 emit_provider_attempt(
                     operation=operation,
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=attempt,
                     max_attempts=self.max_attempts,
                     outcome="failed",
@@ -188,6 +206,8 @@ class NvidiaNimAnswerer:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 raise
             except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
@@ -209,6 +229,7 @@ class NvidiaNimAnswerer:
                         upstream_status,
                         elapsed_ms,
                         remaining_ms,
+                        exc,
                     )
                     last_error = exc
                     last_failure_kind = failure_kind
@@ -216,6 +237,8 @@ class NvidiaNimAnswerer:
                     continue
                 emit_provider_attempt(
                     operation=operation,
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=attempt,
                     max_attempts=self.max_attempts,
                     outcome="failed",
@@ -224,6 +247,8 @@ class NvidiaNimAnswerer:
                     elapsed_ms=elapsed_ms,
                     remaining_ms=remaining_ms,
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 if failure_kind in {"provider_http", "timeout", "connection"}:
                     raise ProviderAttemptsExhausted(
@@ -236,6 +261,8 @@ class NvidiaNimAnswerer:
                 emit_pending_failure(retry_scheduled=True)
                 emit_provider_attempt(
                     operation=operation,
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=attempt,
                     max_attempts=self.max_attempts,
                     outcome="succeeded",
@@ -244,6 +271,7 @@ class NvidiaNimAnswerer:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    mode=self.error_log_mode,
                 )
                 return result
 

@@ -14,6 +14,7 @@ from app.provider_observability import (
     emit_provider_attempt,
     provider_attempt_scope,
 )
+from app.runtime_observability import ErrorLogMode
 
 NVIDIA_HOSTED_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
@@ -33,6 +34,7 @@ class NvidiaNimEmbedder:
         dimensions: int,
         timeout_seconds: float,
         input_type: Literal["query", "passage"] = "query",
+        error_log_mode: ErrorLogMode = "redacted",
         client_factory: Callable[[], Any] | None = None,
     ) -> None:
         if not api_key:
@@ -57,6 +59,7 @@ class NvidiaNimEmbedder:
         self.dimensions = dimensions
         self.input_type = input_type
         self.timeout_seconds = timeout_seconds
+        self.error_log_mode = error_log_mode
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         with provider_attempt_scope():
@@ -85,10 +88,12 @@ class NvidiaNimEmbedder:
                 ):
                     raise ValueError("NVIDIA NIM returned invalid embedding indexes")
                 result = [self._slice_and_normalize(item.embedding) for item in ordered]
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as exc:
                 finished_at = time.monotonic()
                 emit_provider_attempt(
                     operation="query_embedding",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="failed",
@@ -97,6 +102,8 @@ class NvidiaNimEmbedder:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 raise
             except Exception as exc:  # noqa: BLE001 - classified without provider data
@@ -104,6 +111,8 @@ class NvidiaNimEmbedder:
                 failure_kind, upstream_status = classify_provider_failure(exc)
                 emit_provider_attempt(
                     operation="query_embedding",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="failed",
@@ -112,6 +121,8 @@ class NvidiaNimEmbedder:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    error=exc,
+                    mode=self.error_log_mode,
                 )
                 if failure_kind in {"provider_http", "timeout", "connection"}:
                     raise ProviderAttemptsExhausted(
@@ -123,6 +134,8 @@ class NvidiaNimEmbedder:
                 finished_at = time.monotonic()
                 emit_provider_attempt(
                     operation="query_embedding",
+                    model=self.model,
+                    timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                     attempt=1,
                     max_attempts=1,
                     outcome="succeeded",
@@ -131,6 +144,7 @@ class NvidiaNimEmbedder:
                     elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                     remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                     retry_scheduled=False,
+                    mode=self.error_log_mode,
                 )
                 return result
 

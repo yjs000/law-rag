@@ -12,6 +12,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.runtime_observability import (
+    ErrorLogMode,
+    PipelineStage,
+    current_pipeline_stage,
+    serialize_exception,
+)
+
 ProviderOperation = Literal[
     "route",
     "query_embedding",
@@ -38,14 +45,20 @@ _CORRELATION: ContextVar[str | None] = ContextVar("provider_attempt_correlation"
 class ProviderAttemptEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    event_type: Literal["provider_attempt"] = "provider_attempt"
     correlation: str = Field(min_length=16, max_length=16, pattern=r"^[0-9a-f]{16}$")
     provider: Literal["nvidia"] = "nvidia"
     operation: ProviderOperation
+    model: str = Field(min_length=1)
+    timeout_ms: int = Field(gt=0)
+    pipeline_stage: PipelineStage
     attempt: int = Field(ge=1)
     max_attempts: int = Field(ge=1)
     outcome: ProviderAttemptOutcome
     failure_kind: ProviderFailureKind | None
     upstream_status: int | None
+    exception_type: str | None
+    error_detail: str | None
     elapsed_ms: int = Field(ge=0)
     remaining_ms: int = Field(ge=0)
     retry_scheduled: bool
@@ -55,7 +68,12 @@ class ProviderAttemptEvent(BaseModel):
         if self.attempt > self.max_attempts:
             raise ValueError("attempt must not exceed max_attempts")
         if self.outcome == "succeeded":
-            if self.failure_kind is not None or self.upstream_status is not None:
+            if (
+                self.failure_kind is not None
+                or self.upstream_status is not None
+                or self.exception_type is not None
+                or self.error_detail is not None
+            ):
                 raise ValueError("successful attempts cannot have failure metadata")
             if self.retry_scheduled:
                 raise ValueError("successful attempts cannot schedule a retry")
@@ -105,9 +123,22 @@ def classify_provider_failure(error: BaseException) -> tuple[ProviderFailureKind
     return "unknown", None
 
 
+def _pipeline_stage(operation: ProviderOperation) -> PipelineStage:
+    stage = current_pipeline_stage()
+    if stage != "request_validation":
+        return stage
+    if operation == "route":
+        return "routing"
+    if operation == "query_embedding":
+        return "retrieval"
+    return "answer_generation"
+
+
 def emit_provider_attempt(
     *,
     operation: ProviderOperation,
+    model: str,
+    timeout_ms: int,
     attempt: int,
     max_attempts: int,
     outcome: ProviderAttemptOutcome,
@@ -116,15 +147,30 @@ def emit_provider_attempt(
     elapsed_ms: int,
     remaining_ms: int,
     retry_scheduled: bool,
+    error: BaseException | None = None,
+    mode: ErrorLogMode = "redacted",
 ) -> None:
+    serialized = serialize_exception(error, mode=mode) if error is not None else None
+    error_detail = (
+        "[REDACTED]"
+        if serialized is not None and mode == "redacted"
+        else serialized["message"]
+        if serialized is not None
+        else None
+    )
     event = ProviderAttemptEvent(
         correlation=_correlation(),
         operation=operation,
+        model=model,
+        timeout_ms=timeout_ms,
+        pipeline_stage=_pipeline_stage(operation),
         attempt=attempt,
         max_attempts=max_attempts,
         outcome=outcome,
         failure_kind=failure_kind,
         upstream_status=upstream_status,
+        exception_type=(serialized["exception_type"] if serialized else None),
+        error_detail=error_detail,
         elapsed_ms=elapsed_ms,
         remaining_ms=remaining_ms,
         retry_scheduled=retry_scheduled,

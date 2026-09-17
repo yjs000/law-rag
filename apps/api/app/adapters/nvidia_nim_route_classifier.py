@@ -21,6 +21,7 @@ from app.provider_observability import (
     emit_provider_attempt,
     provider_attempt_scope,
 )
+from app.runtime_observability import ErrorLogMode
 
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
 
@@ -159,6 +160,7 @@ class NvidiaNimQuestionRouter:
         model: str,
         timeout_seconds: float,
         max_attempts: int = 2,
+        error_log_mode: ErrorLogMode = "redacted",
         client_factory: Callable[[], Any] | None = None,
     ) -> None:
         if not api_key:
@@ -179,6 +181,7 @@ class NvidiaNimQuestionRouter:
         self.model = model
         self.max_attempts = max_attempts
         self.timeout_seconds = timeout_seconds
+        self.error_log_mode = error_log_mode
 
     async def route(self, question: str) -> RouteJudgment:
         with provider_attempt_scope():
@@ -188,10 +191,12 @@ class NvidiaNimQuestionRouter:
                 attempt_started = time.monotonic()
                 try:
                     result = await self._route_once(question)
-                except asyncio.CancelledError:
+                except asyncio.CancelledError as exc:
                     finished_at = time.monotonic()
                     emit_provider_attempt(
                         operation="route",
+                        model=self.model,
+                        timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                         attempt=attempt,
                         max_attempts=self.max_attempts,
                         outcome="failed",
@@ -200,6 +205,8 @@ class NvidiaNimQuestionRouter:
                         elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                         remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                         retry_scheduled=False,
+                        error=exc,
+                        mode=self.error_log_mode,
                     )
                     raise
                 except Exception as exc:  # noqa: BLE001 - classified without provider data
@@ -211,6 +218,8 @@ class NvidiaNimQuestionRouter:
                     )
                     emit_provider_attempt(
                         operation="route",
+                        model=self.model,
+                        timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                         attempt=attempt,
                         max_attempts=self.max_attempts,
                         outcome="failed",
@@ -219,6 +228,8 @@ class NvidiaNimQuestionRouter:
                         elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                         remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                         retry_scheduled=retry_scheduled,
+                        error=exc,
+                        mode=self.error_log_mode,
                     )
                     if retry_scheduled:
                         continue
@@ -232,6 +243,8 @@ class NvidiaNimQuestionRouter:
                     finished_at = time.monotonic()
                     emit_provider_attempt(
                         operation="route",
+                        model=self.model,
+                        timeout_ms=max(round(self.timeout_seconds * 1000), 1),
                         attempt=attempt,
                         max_attempts=self.max_attempts,
                         outcome="succeeded",
@@ -240,6 +253,7 @@ class NvidiaNimQuestionRouter:
                         elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
                         remaining_ms=max(int((deadline - finished_at) * 1000), 0),
                         retry_scheduled=False,
+                        mode=self.error_log_mode,
                     )
                     return result
         raise AssertionError("route attempts must return or raise")

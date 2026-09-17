@@ -43,7 +43,7 @@ def scripted_answerer(
     answerer = NvidiaNimAnswerer(
         api_key="test-key",
         base_url="https://integrate.api.nvidia.com/v1",
-        model="nvidia/nemotron-3-ultra-550b-a55b",
+        model="nvidia/nemotron-3.5-lightning-30b-a3b",
         timeout_seconds=timeout_seconds,
         max_output_tokens=4096,
         max_attempts=max_attempts,
@@ -139,6 +139,20 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
     assert {event["operation"] for event in events} == {"answer_core"}
     assert {event["provider"] for event in events} == {"nvidia"}
     assert {event["max_attempts"] for event in events} == {3}
+    assert {event["event_type"] for event in events} == {"provider_attempt"}
+    assert {event["model"] for event in events} == {
+        "nvidia/nemotron-3.5-lightning-30b-a3b"
+    }
+    assert {event["timeout_ms"] for event in events} == {30000}
+    assert {event["pipeline_stage"] for event in events} == {"answer_generation"}
+    assert [event["exception_type"] for event in events] == [
+        "RuntimeError",
+        "TimeoutError",
+        None,
+    ]
+    assert events[0]["error_detail"] is not None
+    assert events[1]["error_detail"] is not None
+    assert events[2]["error_detail"] is None
     assert len({event["correlation"] for event in events}) == 1
     assert all(event["elapsed_ms"] >= 0 and event["remaining_ms"] >= 0 for event in events)
     assert "secret response" not in caplog.text

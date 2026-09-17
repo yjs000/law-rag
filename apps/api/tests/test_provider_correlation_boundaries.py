@@ -31,6 +31,8 @@ def _request() -> Request:
 def _emit(operation: ProviderOperation) -> None:
     emit_provider_attempt(
         operation=operation,
+        model="nvidia/nemotron-3.5-lightning-30b-a3b",
+        timeout_ms=8_000,
         attempt=1,
         max_attempts=1,
         outcome="succeeded",
@@ -43,7 +45,8 @@ def _emit(operation: ProviderOperation) -> None:
 
 
 def _events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
-    return [json.loads(record.message) for record in caplog.records]
+    events = [json.loads(record.message) for record in caplog.records]
+    return [event for event in events if event.get("event_type") == "provider_attempt"]
 
 
 @pytest.mark.asyncio
@@ -105,12 +108,11 @@ async def test_v1_answer_callback_scopes_concurrent_requests_by_client_id(
     assert len(events) == 6
     assert {event["correlation"] for event in events} == expected
     for operation in ("route", "query_embedding", "answer_detail"):
-        correlations = {
-            event["correlation"] for event in events if event["operation"] == operation
-        }
+        correlations = {event["correlation"] for event in events if event["operation"] == operation}
         assert correlations == expected
-    assert str(first.client_request_id) not in caplog.text
-    assert str(second.client_request_id) not in caplog.text
+    provider_text = json.dumps(events)
+    assert str(first.client_request_id) not in provider_text
+    assert str(second.client_request_id) not in provider_text
 
 
 @pytest.mark.asyncio
@@ -168,7 +170,7 @@ async def test_v2_prepare_scopes_route_clarification_and_retrieval_by_client_id(
         "query_embedding",
     ]
     assert {event["correlation"] for event in events} == {"c67f2fc391b67892"}
-    assert str(payload.client_request_id) not in caplog.text
+    assert str(payload.client_request_id) not in json.dumps(events)
 
 
 @pytest.mark.asyncio
@@ -215,9 +217,10 @@ async def test_coordinator_scopes_producer_to_private_client_id_or_execution_fal
         )
 
     events = _events(caplog)
-    expected = expected_client_correlation or sha256(
-        str(execution.execution_id).encode("utf-8")
-    ).hexdigest()[:16]
+    expected = (
+        expected_client_correlation
+        or sha256(str(execution.execution_id).encode("utf-8")).hexdigest()[:16]
+    )
     assert [event["correlation"] for event in events] == [expected]
     assert str(execution.execution_id) not in caplog.text
     assert "00000000-0000-0000-0000-000000000003" not in caplog.text

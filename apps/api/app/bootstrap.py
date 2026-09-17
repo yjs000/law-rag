@@ -397,6 +397,7 @@ def build_nvidia_embedder(settings: Settings) -> NvidiaNimEmbedder:
         model=settings.nvidia_embedding_model,
         dimensions=settings.embedding_dimensions,
         timeout_seconds=settings.embedding_timeout_seconds,
+        error_log_mode=settings.error_log_mode,
     )
 
 
@@ -420,6 +421,7 @@ def build_nvidia_answerer(settings: Settings) -> NvidiaNimAnswerer:
         timeout_seconds=settings.answer_timeout_seconds,
         max_output_tokens=settings.answer_max_output_tokens,
         max_attempts=settings.answer_generation_max_attempts,
+        error_log_mode=settings.error_log_mode,
         message_builder=build_messages_v2,
     )
 
@@ -434,6 +436,7 @@ def build_nvidia_clarification_interpreter(
         base_url=settings.nvidia_base_url,
         model=settings.nvidia_generation_model,
         timeout_seconds=settings.route_classifier_timeout_seconds,
+        error_log_mode=settings.error_log_mode,
     )
 
 
@@ -463,6 +466,7 @@ def build_nvidia_question_router(
             else timeout_seconds
         ),
         max_attempts=max_attempts,
+        error_log_mode=settings.error_log_mode,
     )
 
 

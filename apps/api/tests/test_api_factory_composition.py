@@ -218,19 +218,25 @@ def test_one_generation_model_is_injected_into_every_text_adapter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Catch role-specific model defaults drifting apart again."""
-    captured: list[tuple[str, str]] = []
+    captured: list[tuple[str, str, str]] = []
 
     class Answerer:
         def __init__(self, **kwargs: object) -> None:
-            captured.append(("answer", str(kwargs["model"])))
+            captured.append((
+                "answer", str(kwargs["model"]), str(kwargs["error_log_mode"])
+            ))
 
     class ClarificationInterpreter:
         def __init__(self, **kwargs: object) -> None:
-            captured.append(("clarification", str(kwargs["model"])))
+            captured.append((
+                "clarification", str(kwargs["model"]), str(kwargs["error_log_mode"])
+            ))
 
     class QuestionRouter:
         def __init__(self, **kwargs: object) -> None:
-            captured.append(("route", str(kwargs["model"])))
+            captured.append((
+                "route", str(kwargs["model"]), str(kwargs["error_log_mode"])
+            ))
 
     monkeypatch.setattr(bootstrap_module, "NvidiaNimAnswerer", Answerer)
     monkeypatch.setattr(
@@ -242,6 +248,7 @@ def test_one_generation_model_is_injected_into_every_text_adapter(
     settings = Settings(
         nvidia_api_key="nvapi-test",
         nvidia_generation_model="nvidia/injected-model",
+        error_log_mode="raw",
         _env_file=None,
     )
 
@@ -250,7 +257,7 @@ def test_one_generation_model_is_injected_into_every_text_adapter(
     bootstrap_module.build_nvidia_question_router(settings)
 
     assert captured == [
-        ("answer", "nvidia/injected-model"),
-        ("clarification", "nvidia/injected-model"),
-        ("route", "nvidia/injected-model"),
+        ("answer", "nvidia/injected-model", "raw"),
+        ("clarification", "nvidia/injected-model", "raw"),
+        ("route", "nvidia/injected-model", "raw"),
     ]
