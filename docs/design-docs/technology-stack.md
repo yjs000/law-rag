@@ -19,7 +19,7 @@
 | 영속 데이터 | Supabase PostgreSQL, Supabase private Storage | 법령 메타데이터·조문·계보·질문 이력과 원문 보관 | 운영 아키텍처 |
 | 검색 | pgvector, PGroonga | 기준일 유효 조문 dense 검색과 dense 0건/미준비 시 키워드 fallback | v1 현재 구현 |
 | 언어 처리 | 애플리케이션 도메인 정규화·PGroonga | 검색 질의 정규화와 키워드 보조 검색 | v1 현재 구현 |
-| 생성·임베딩 | NVIDIA NIM, `nvidia/nemotron-3-ultra-550b-a55b`, `nvidia/nemotron-3-embed-1b` | 근거 기반 답변/라우팅 판단과 임베딩 생성 | 현재 기본 provider |
+| 생성·임베딩 | NVIDIA NIM, `nvidia/nemotron-3.5-lightning-30b-a3b`, `nvidia/nemotron-3-embed-1b` | 근거 기반 답변/라우팅 판단과 임베딩 생성 | 현재 기본 provider |
 | 인증 | Supabase Auth, Google OAuth/OIDC | 운영 Google 로그인과 API 사용자 검증 | 운영 계약; 개발에서는 목업 가능 |
 | 배포·스케줄링 | Vercel, Windows 작업 스케줄러 | Web·stateless FastAPI 배포, 고정 공인 IP PC의 collector 정기 실행 | 운영 아키텍처 |
 | 개발 도구 | Node.js 24.18, pnpm 11.12, uv | JavaScript 의존성/워크스페이스와 Python 가상환경·의존성 관리 | 현재 사용 |

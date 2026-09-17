@@ -56,7 +56,7 @@ CASES = [
 
 def main() -> None:
     print("provider: nvidia_nim")
-    print("model:", main_module.settings.nvidia_answer_model)
+    print("model:", main_module.settings.nvidia_generation_model)
     print("repository:", type(main_module.repository).__name__)
     client = TestClient(main_module.app)
 

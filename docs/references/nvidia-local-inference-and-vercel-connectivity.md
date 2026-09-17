@@ -36,9 +36,18 @@ Hosted free endpoint는 NVIDIA API Trial Terms가 적용되는 prototype 서비�
 
 1. NVIDIA Developer 계정으로 모델 페이지에서 API key 생성
 2. 키 원문을 채팅이나 저장소에 보내지 않고 Vercel의 Preview/Production `NVIDIA_API_KEY` secret에 각각 등록
-3. `ANSWER_PROVIDER=nvidia_nim`, `NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1`, `NVIDIA_ANSWER_MODEL=nvidia/nemotron-3-ultra-550b-a55b` 등록
+3. 당시에는 `NVIDIA_ANSWER_MODEL=nvidia/nemotron-3-ultra-550b-a55b`를 등록했다. 현재 설정은 아래 2026-09-17 전환 결정을 따른다.
 4. 실제 endpoint smoke와 법률 고정 평가셋을 실행할 때만 AI를 활성화
 5. Trial rate limit·데이터 보존·Production 가격을 NVIDIA 계정의 실제 계약 화면에서 확인하고 승인
+
+## 2026-09-17 Hosted generation model 전환
+
+Ultra의 일반 호출과 production routing 호출이 같은 시간대에 hosted function `404`를 반환한 반면,
+공식 Getting Started 형식의 `nvidia/nemotron-3.5-lightning-30b-a3b` 호출은 `200`으로 성공했다.
+따라서 현재 generation 기본값을 3.5 Lightning으로 전환한다. 답변·질문 라우팅·초기 clarification은
+단일 `NVIDIA_GENERATION_MODEL`을 composition root에서 주입받고, 임베딩은
+`NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b`로 별도 유지한다. 모델 교체 시 역할별 설정을
+각각 수정하지 않는다.
 
 ## “NVIDIA가 최근 무료 배포했다”는 주장 확인
 

@@ -24,15 +24,15 @@ def _interpreter() -> NvidiaNimClarificationInterpreter:
     )
 
 
-def test_composition_factory_uses_the_configured_ultra_router_model() -> None:
+def test_composition_factory_uses_the_configured_generation_model() -> None:
     interpreter = build_nvidia_clarification_interpreter(
         Settings(
             nvidia_api_key="test-key",
-            nvidia_route_classifier_model="nvidia/test-ultra-router",
+            nvidia_generation_model="nvidia/test-generation-model",
         )
     )
 
-    assert interpreter.model == "nvidia/test-ultra-router"
+    assert interpreter.model == "nvidia/test-generation-model"
 
 
 def test_composition_factory_uses_non_nvidia_continuation_extractor() -> None:

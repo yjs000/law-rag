@@ -33,7 +33,7 @@ if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
 import app.main as main_module  # noqa: E402
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter  # noqa: E402
 from app.domain.answer_actions import derive_answer_action  # noqa: E402
-from app.domain.generation_profiles import NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE  # noqa: E402
+from app.domain.generation_profiles import build_nvidia_answer_profile_v2  # noqa: E402
 from app.domain.routing import route_question  # noqa: E402
 from app.domain.schemas import QuestionRequest  # noqa: E402
 
@@ -61,7 +61,7 @@ def _router() -> NvidiaNimQuestionRouter:
     return NvidiaNimQuestionRouter(
         api_key=settings.nvidia_api_key or "",
         base_url=settings.nvidia_base_url,
-        model=settings.nvidia_route_classifier_model,
+        model=settings.nvidia_generation_model,
         timeout_seconds=settings.route_classifier_timeout_seconds,
     )
 
@@ -192,6 +192,10 @@ async def main() -> None:
         ),
     }
 
+    generation_profile = build_nvidia_answer_profile_v2(
+        main_module.settings.nvidia_generation_model,
+        max_output_tokens=main_module.settings.answer_max_output_tokens,
+    )
     report = {
         "schema_version": "1",
         "experiment": "0032-e10-base",
@@ -201,12 +205,12 @@ async def main() -> None:
         # 맞춰야 한다 - build_messages_v2로 바꾸면 이 줄도 같이 갱신한다, 안 그러면 기록이
         # 어긋난다.
         "generation_profile": {
-            "key": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.key,
-            "sha256": NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.sha256,
+            "key": generation_profile.key,
+            "sha256": generation_profile.sha256,
         },
         "answer_provider": "nvidia_nim",
-        "answer_model": main_module.settings.nvidia_answer_model,
-        "route_classifier_model": main_module.settings.nvidia_route_classifier_model,
+        "answer_model": main_module.settings.nvidia_generation_model,
+        "route_classifier_model": main_module.settings.nvidia_generation_model,
         "answer_timeout_seconds": main_module.settings.answer_timeout_seconds,
         "call_budget": {
             "max_routing_calls": MAX_ROUTING_CALLS,

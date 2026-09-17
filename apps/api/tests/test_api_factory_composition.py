@@ -13,6 +13,7 @@ import app.bootstrap as bootstrap_module
 import app.main as main_module
 from app.bootstrap import V2LlamaIndexResources
 from app.domain.schemas import QuestionResponse, SearchHit
+from app.settings import Settings
 
 pytestmark = pytest.mark.usefixtures("ready_corpus_temporal_state")
 
@@ -211,3 +212,45 @@ def test_v2_router_uses_one_attempt_with_the_55_second_provider_budget(
     )
 
     assert captured == [(55, 1)]
+
+
+def test_one_generation_model_is_injected_into_every_text_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch role-specific model defaults drifting apart again."""
+    captured: list[tuple[str, str]] = []
+
+    class Answerer:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(("answer", str(kwargs["model"])))
+
+    class ClarificationInterpreter:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(("clarification", str(kwargs["model"])))
+
+    class QuestionRouter:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(("route", str(kwargs["model"])))
+
+    monkeypatch.setattr(bootstrap_module, "NvidiaNimAnswerer", Answerer)
+    monkeypatch.setattr(
+        bootstrap_module,
+        "NvidiaNimClarificationInterpreter",
+        ClarificationInterpreter,
+    )
+    monkeypatch.setattr(bootstrap_module, "NvidiaNimQuestionRouter", QuestionRouter)
+    settings = Settings(
+        nvidia_api_key="nvapi-test",
+        nvidia_generation_model="nvidia/injected-model",
+        _env_file=None,
+    )
+
+    bootstrap_module.build_nvidia_answerer(settings)
+    bootstrap_module.build_nvidia_clarification_interpreter(settings)
+    bootstrap_module.build_nvidia_question_router(settings)
+
+    assert captured == [
+        ("answer", "nvidia/injected-model"),
+        ("clarification", "nvidia/injected-model"),
+        ("route", "nvidia/injected-model"),
+    ]

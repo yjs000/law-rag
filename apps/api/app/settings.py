@@ -33,11 +33,9 @@ class Settings(BaseSettings):
     # 않는다(기본 search_only_enabled=false에서는 fail-closed).
     nvidia_api_key: str | None = None
     nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_answer_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
-    # D-010: 단일 QuestionRouter가 사용하는 NVIDIA 호환 모델 설정이다. tier 조합이나
-    # embedding hint를 전달하지 않으며, 라우팅 실패 판단은 애플리케이션이
-    # routing_unavailable 안전 응답으로 만든다.
-    nvidia_route_classifier_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    # 답변·질문 라우팅·초기 clarification은 같은 generation model을 composition root에서
+    # 주입한다. 모델 교체가 역할별 환경변수의 불일치로 이어지지 않게 단일 설정으로 둔다.
+    nvidia_generation_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     question_request_timeout_seconds: float = Field(default=52, gt=0, le=55)
     response_reserve_seconds: float = Field(default=3, ge=1, le=10)
     route_classifier_timeout_seconds: float = Field(default=8, gt=0, le=20)
