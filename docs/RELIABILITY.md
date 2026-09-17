@@ -36,6 +36,14 @@
 
 현재 목업 API는 요청 ID·응답 모드·제공 결과만 구조화 이벤트로 남기고 응답 모드별 프로세스 로컬 누계를 제공한다. 중앙 메트릭·분산 추적·비용 계측은 실제 클라우드 연결 계획에서 영속 백엔드로 교체한다.
 
+### NVIDIA provider 시도별 로그 (B-006)
+
+모든 NVIDIA adapter 호출은 실제 provider 시도가 끝날 때마다 `law_rag.provider_attempt` 구조화 JSON 로그를 한 줄 남긴다. 재시도 중 실패한 시도와 그 뒤의 성공 시도를 모두 남기므로, `attempt`와 `max_attempts`로 호출별 실제 시도 횟수를 확인한다. 로그는 `correlation`(client request ID 또는 execution ID의 SHA-256 앞 16자리), 닫힌 `provider`·`operation`, 1부터 시작하는 `attempt`, 전체 허용 횟수 `max_attempts`, `outcome`, `failure_kind`, 선택적 `upstream_status`, `elapsed_ms`, `remaining_ms`, `retry_scheduled`만으로 판독한다. `outcome`은 `succeeded` 또는 `failed`다. 성공 행은 `failure_kind`와 `upstream_status`가 모두 `null`이고 `retry_scheduled=false`여야 하며, 실패 행은 `failure_kind`를 반드시 가진다. `operation`은 `route`, `query_embedding`, `answer_core`, `answer_detail`, `clarification`만, 실패 `failure_kind`는 `provider_http`, `timeout`, `connection`, `invalid_response`, `schema_validation`, `cancelled`, `unknown`만 허용한다. 이 시도 이력은 DB나 `question_execution_issues`에 영속하지 않으며 Vercel 표준 출력 로그만이 운영 관측 원본이다.
+
+HTTP·timeout·connection 실패가 재시도를 모두 소진해 draft를 만들지 못하면 execution은 `provider_unavailable` terminal error로 끝난다. 이를 `grounding_failed` 또는 `core_repair_required → repair_core`로 바꾸지 않는다. grounding 검증 실패는 draft가 실제로 만들어진 뒤에만 기존 repair 경로를 사용할 수 있으며, Web은 세부 원인 대신 “AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.”만 표시한다.
+
+이 닫힌 schema에는 질문·대화·prompt·검색 hit·법령 원문·citation quote, 이메일·사용자 ID·IP, API key·Authorization header·cookie, provider 응답 본문, 예외 메시지·traceback을 넣지 않는다. Vercel 로그 보존기간이 지나면 이 시도 이력은 복구할 수 없다. DB 미영속은 상세 실패 이력의 장기 보존을 포기한 명시적 trade-off다.
+
 ### 조정된 질문 timeout 예산 (0045)
 
 `52 < 55 < 60`: `/v1/questions`는 서버측 전체 예산 52초(`QUESTION_REQUEST_TIMEOUT_SECONDS`) 안에서 routing·embedding·retrieval stage와, provider 재시도까지 포함하는 생성 40초 slice(`ANSWER_TIMEOUT_SECONDS`)를 나눠 쓰고 응답 마무리에 3초(`RESPONSE_RESERVE_SECONDS`)를 남긴다. Web은 각 서버 요청을 55초(`GENERATION_ATTEMPT_TIMEOUT_MS`)로 제한한다 - API가 스스로 끝내는 52초보다 항상 늦게, Vercel이 함수를 강제 종료하는 60초보다 항상 먼저 끊는다. Web 재시도는 매 시도마다 새 `client_request_id`와 새 서버측 예산으로 처음부터 다시 시작하며, UX 전체 상한은 170초(`GENERATION_OVERALL_TIMEOUT_MS`)이고 최대 3회는 최초 시도를 포함한 총 Web 시도 횟수다(최초 1회 + 추가 재시도 3회가 아니다).

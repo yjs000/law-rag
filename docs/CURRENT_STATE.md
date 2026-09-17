@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-최근 완료된 milestone은 [B-005 V2 질문 응답 passthrough](exec-plans/completed/0071-v2-question-response-passthrough.md)다. 질문 실행 화면이 `no_results` 등 메타데이터를 자체 문구로 치환하지 않고 Core·Finalize·HTTP·SSE의 백엔드 공개 값을 그대로 조합해 표시하도록 5개 작은 구현 태스크와 1개 종합 검증 태스크를 완료했다. 다음 실행은 로드맵의 첫 Todo를 따른다.
+현재 `Picked Up` milestone은 없다. 가장 최근 완료된 계획은 [B-006 NVIDIA provider attempt 관측](exec-plans/completed/0072-provider-attempt-observability.md)이며, 모든 NVIDIA 호출의 시도별 안전 로그와 provider 소진 terminal 분류를 B-005 응답 passthrough 위에 통합하고 전체 검증을 마쳤다. 다음 작업은 생성된 로드맵의 첫 `Todo` 항목과 해당 계획 헤더에서 선택한다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.

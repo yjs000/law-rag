@@ -12,6 +12,7 @@ import app.main as main_module
 from app.adapters.nvidia_nim_route_classifier import NvidiaNimQuestionRouter
 from app.adapters.openai_answerer import DraftAnswer
 from app.domain.catalog import SourceKind
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import QuestionRouter, RouteJudgment
 from app.domain.schemas import (
     AnswerSection,
@@ -113,7 +114,9 @@ def test_nvidia_router_retries_transient_failure_with_a_fresh_client() -> None:
     assert clients_created == 2
 
 
-def test_nvidia_router_logs_only_safe_failure_category(caplog: pytest.LogCaptureFixture) -> None:
+def test_nvidia_router_logs_each_exhausted_attempt_as_closed_safe_events(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class ProviderFailure(RuntimeError):
         status_code = 503
 
@@ -132,19 +135,55 @@ def test_nvidia_router_logs_only_safe_failure_category(caplog: pytest.LogCapture
         base_url="https://integrate.api.nvidia.com/v1",
         model="nvidia/test-router",
         timeout_seconds=10,
-        max_attempts=1,
+        max_attempts=2,
         client_factory=Client,
     )
 
-    with caplog.at_level(logging.INFO, logger="law_rag.route_provider"):
-        with pytest.raises(ProviderFailure):
+    with caplog.at_level(logging.INFO, logger="law_rag.provider_attempt"):
+        with pytest.raises(ProviderAttemptsExhausted) as raised:
             asyncio.run(router.route("민감한 질문 원문"))
 
-    assert len(caplog.records) == 1
-    assert '"failure_kind": "http_5xx"' in caplog.records[0].message
-    assert '"attempt": 1' in caplog.records[0].message
-    assert "secret provider response" not in caplog.records[0].message
-    assert "민감한 질문 원문" not in caplog.records[0].message
+    assert (raised.value.failure_kind, raised.value.upstream_status) == ("provider_http", 503)
+    events = [json.loads(record.message) for record in caplog.records]
+    assert len(events) == 2
+    assert [
+        {
+            "provider": event["provider"],
+            "operation": event["operation"],
+            "attempt": event["attempt"],
+            "max_attempts": event["max_attempts"],
+            "outcome": event["outcome"],
+            "failure_kind": event["failure_kind"],
+            "upstream_status": event["upstream_status"],
+            "retry_scheduled": event["retry_scheduled"],
+        }
+        for event in events
+    ] == [
+        {
+            "provider": "nvidia",
+            "operation": "route",
+            "attempt": 1,
+            "max_attempts": 2,
+            "outcome": "failed",
+            "failure_kind": "provider_http",
+            "upstream_status": 503,
+            "retry_scheduled": True,
+        },
+        {
+            "provider": "nvidia",
+            "operation": "route",
+            "attempt": 2,
+            "max_attempts": 2,
+            "outcome": "failed",
+            "failure_kind": "provider_http",
+            "upstream_status": 503,
+            "retry_scheduled": False,
+        },
+    ]
+    assert all(len(event["correlation"]) == 16 for event in events)
+    assert all(event["elapsed_ms"] >= 0 and event["remaining_ms"] >= 0 for event in events)
+    assert "secret provider response" not in caplog.text
+    assert "민감한 질문 원문" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -554,6 +593,13 @@ class _UnavailableAnswerer:
         return _unavailable_draft()
 
 
+class _QuotaExhaustedUnavailableAnswerer:
+    async def answer_blocked_route(
+        self, payload: QuestionRequest, route: str, reason: str | None
+    ) -> DraftAnswer:
+        raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=429)
+
+
 class _FailingRouter:
     async def route(self, question: str) -> RouteJudgment:
         raise RuntimeError("provider body must not escape")
@@ -623,6 +669,20 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
     assert corpus_calls == []
     assert "provider body must not escape" not in response.text
     assert not main_module.settings.search_only_enabled
+
+
+def test_blocked_route_provider_exhaustion_marks_v1_quota(monkeypatch) -> None:
+    _configure_ai(monkeypatch)
+    monkeypatch.setattr(main_module, "_question_router", lambda: _FailingRouter())
+    monkeypatch.setattr(
+        main_module, "_answerer", lambda: _QuotaExhaustedUnavailableAnswerer()
+    )
+
+    response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
+
+    assert response.status_code == 200
+    assert response.json()["route"] == "routing_unavailable"
+    assert main_module.ai_quota_exhausted is True
 
 
 def test_router_timeout_returns_safe_no_search_ai_response(monkeypatch) -> None:

@@ -33,6 +33,33 @@ describe("runV2Execution", () => {
     )).rejects.toThrow("준비 응답");
   });
 
+  it("preserves the safe SSE provider_unavailable reason without reconnecting", async () => {
+    let coreCalls = 0;
+    const fetch = async (url: string) => {
+      if (url.endsWith("/v2/question-executions")) {
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      coreCalls += 1;
+      return new Response(
+        'event: error\ndata: {"reason_code":"provider_unavailable","attempt":3,"exception":"provider secret"}\n\n',
+      );
+    };
+
+    const error = await runV2Execution(
+      { question: "질문", as_of_date: "2026-08-28", project_stage: "planning" },
+      { fetch: fetch as typeof globalThis.fetch, apiUrl: "http://api", headers: {}, idempotencyKey: () => "key" },
+    ).catch((cause) => cause);
+
+    expect(error).toMatchObject({
+      name: "V2ExecutionPhaseError",
+      reasonCode: "provider_unavailable",
+      message: "답변 실행을 완료하지 못했습니다.",
+    });
+    expect(Object.keys(error).sort()).toEqual(["name", "reasonCode"]);
+    expect(JSON.stringify(error)).not.toContain("provider secret");
+    expect(coreCalls).toBe(1);
+  });
+
   it("reconnects one interrupted phase without creating a second execution", async () => {
     let coreAttempts = 0;
     const fetch = async (url: string) => {

@@ -32,9 +32,17 @@ export class V2ExecutionEventError extends Error {
   constructor(
     readonly publicMessage: string | null,
     readonly eventType: "error" | "cancelled",
+    readonly reasonCode: string | null = null,
   ) {
     super(publicMessage ?? `SSE ${eventType}`);
     this.name = "V2ExecutionEventError";
+  }
+}
+
+export class V2ExecutionPhaseError extends Error {
+  constructor(readonly reasonCode: string) {
+    super("답변 실행을 완료하지 못했습니다.");
+    this.name = "V2ExecutionPhaseError";
   }
 }
 
@@ -91,8 +99,19 @@ async function followExecution(
         }
         return event.data.response;
       }
-      if (event.event === "error" || event.event === "cancelled") {
-        throw new V2ExecutionEventError(backendDisplayMessage(event.data), event.event);
+      if (event.event === "error") {
+        const reasonCode = event.data.reason_code;
+        if (reasonCode === "provider_unavailable") {
+          throw new V2ExecutionPhaseError(reasonCode);
+        }
+        throw new V2ExecutionEventError(
+          backendDisplayMessage(event.data),
+          "error",
+          typeof reasonCode === "string" ? reasonCode : null,
+        );
+      }
+      if (event.event === "cancelled") {
+        throw new V2ExecutionEventError(backendDisplayMessage(event.data), "cancelled");
       }
       if (event.event === "phase_complete") {
         const candidate = event.data.next_action;

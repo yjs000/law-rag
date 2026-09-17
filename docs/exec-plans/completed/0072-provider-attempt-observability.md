@@ -1,9 +1,9 @@
 > 작업 ID: `B-006`
-> 상태: `Todo`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
-> 선행 조건: `B-005` 완료 및 [승인된 provider 시도별 관측 설계](../../design-docs/provider-attempt-observability.md)
-> 다음 행동: B-005 완료 뒤 Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
+> 선행 조건: [승인된 provider 시도별 관측 설계](../../design-docs/provider-attempt-observability.md); `B-005`와 별도 worktree에서 병렬 구현하고 통합 뒤 최종 재검증
+> 다음 행동: none
 > 참고 범위:
 > - `docs/design-docs/provider-attempt-observability.md` L1-L174 — 승인된 로그·실패 분류·개인정보 계약
 > - `apps/api/app/adapters/nvidia_nim_answerer.py` L26-L174 — 대표 NVIDIA 제한 재시도와 전체 deadline
@@ -23,7 +23,7 @@
 
 ## Global Constraints
 
-- 구현 착수 전에 `B-005`가 완료됐는지 확인한다. 완료 전에는 이 계획을 `Picked Up`으로 전환하거나 겹치는 Web 파일을 수정하지 않는다.
+- `B-005`와 별도 worktree·branch에서 병렬 구현한다. 겹치는 Web 파일은 이 브랜치에서 독립 검증하고, B-005 통합 뒤 rebase/merge conflict를 해결해 전체 검증을 다시 실행한다.
 - DB table, migration, `question_execution_issues`, 외부 telemetry backend를 추가하지 않는다.
 - NVIDIA 호출 횟수, adapter timeout, V2 phase timeout, Web reconnect/retry 예산을 변경하지 않는다.
 - 질문·prompt·검색 hit·법률 원문·citation quote·provider body·예외 메시지·traceback·API key·인증정보·사용자 식별자를 로그 모델이나 logger 인수로 받지 않는다.
@@ -91,7 +91,7 @@ class ProviderAttemptsExhausted(RuntimeError):
 - `classify_provider_failure(error: BaseException) -> tuple[ProviderFailureKind, int | None]`
 - `emit_provider_attempt(*, operation, attempt, max_attempts, outcome, failure_kind, upstream_status, elapsed_ms, remaining_ms, retry_scheduled) -> None`
 
-### Task 0: 선행 작업 완료 확인과 계획 활성화
+### Task 0: 병렬 worktree 확인과 계획 활성화
 
 **Files:**
 - Read: `docs/CURRENT_STATE.md` L1-L28
@@ -100,13 +100,13 @@ class ProviderAttemptsExhausted(RuntimeError):
 - Modify: `docs/exec-plans/todo/0072-provider-attempt-observability.md` header only
 - Generate: `docs/ROADMAP.md`
 
-- [ ] `git status --short --branch`로 사용자 변경과 `graphify-out/` dirty 파일을 기록한다.
-- [ ] `B-005`가 `Done`이고 0071 계획에 미완료 checkbox가 없는지 확인한다. 아니면 구현을 시작하지 않고 이 계획을 `Todo`로 유지한다.
-- [ ] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005가 바꾼 영역이 있으면 이 계획의 범위만 새 줄 번호로 갱신한다.
-- [ ] 계획 파일을 `docs/exec-plans/active/`로 이동하고 header 상태를 `Picked Up`, 다음 행동을 `Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.`로 바꾼다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/render_roadmap.py`를 실행한다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/check_roadmap.py`가 성공하는지 확인한다.
-- [ ] 계획 활성화만 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
+- [x] `git status --short --branch`로 사용자 변경과 `graphify-out/` dirty 파일을 기록한다.
+- [x] `B-005`가 별도 worktree/branch에서 진행 중인지 확인하고, 현재 worktree가 `codex/b006-provider-attempt-observability`인지 검증한다.
+- [x] 현재 `nvidia_nim_*`, coordinator, V2 Web 파일의 줄 범위를 다시 측정한다. B-005와 겹치는 파일은 최종 통합 재검증 대상으로 기록한다.
+- [x] 이 branch에서만 0071 header 상태를 `Todo`로 두고, 0072 계획 파일을 `docs/exec-plans/active/`로 이동해 header 상태를 `Picked Up`으로 바꾼다. 저장소 전체 Picked Up은 한 개로 유지한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/render_roadmap.py`를 실행한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 scripts/check_roadmap.py`가 성공하는지 확인한다.
+- [x] 계획의 병렬 worktree 계약 정정과 활성화를 `docs: pick up provider attempt observability`로 커밋한다. `graphify-out/`은 stage하지 않는다.
 
 ### Task 1: 개인정보 없는 공통 provider attempt 계약
 
@@ -115,7 +115,7 @@ class ProviderAttemptsExhausted(RuntimeError):
 - Create: `apps/api/app/provider_observability.py`
 - Create: `apps/api/tests/test_provider_observability.py`
 
-- [ ] 아래 test matrix를 `test_provider_observability.py`에 작성한다.
+- [x] 아래 test matrix를 `test_provider_observability.py`에 작성한다.
 
 ```python
 import asyncio
@@ -187,15 +187,15 @@ def test_failure_classifier_uses_type_and_status_only(error, expected):
     assert classify_provider_failure(error) == expected
 ```
 
-- [ ] 고정 UUID의 SHA-256 앞 16자리가 test fixture의 `7d8d49c21f606642`와 일치하는지 독립 계산으로 확인한다.
-- [ ] `ProviderAttemptEvent`가 `extra="forbid"`, 1-based attempt, `attempt <= max_attempts`, non-negative timing, 성공 시 `failure_kind/upstream_status=None`과 `retry_scheduled=False`를 검증하도록 한다.
-- [ ] `provider_attempt_scope(source=None)`는 이미 열린 scope가 있으면 그대로 재사용하고, 없으면 호출 단위 UUID를 생성해 hash만 ContextVar에 저장하도록 한다. token reset으로 동시 async task와 중첩 scope를 격리한다.
-- [ ] 분류 순서를 `cancelled → timeout → integer status → connection type → Pydantic ValidationError → invalid response → unknown`으로 고정한다. 예외 문자열은 읽지 않는다.
-- [ ] `emit_provider_attempt`은 `ProviderAttemptEvent` 검증 뒤 `json.dumps(event.model_dump(mode="json"), sort_keys=True)` 한 줄만 `law_rag.provider_attempt` INFO logger에 출력한다.
-- [ ] RED 확인: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_observability.py -q`가 import 실패로 끝나는지 확인한다.
-- [ ] 두 새 모듈을 최소 구현하고 같은 명령이 PASS인지 확인한다.
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m ruff check apps/api/app/domain/provider_attempts.py apps/api/app/provider_observability.py apps/api/tests/test_provider_observability.py`를 실행한다.
-- [ ] `git diff --check`와 scoped diff를 검토하고 `feat: add safe provider attempt event contract`로 커밋한다.
+- [x] 고정 UUID의 SHA-256 앞 16자리가 test fixture의 `7d8d49c21f606642`와 일치하는지 독립 계산으로 확인한다.
+- [x] `ProviderAttemptEvent`가 `extra="forbid"`, 1-based attempt, `attempt <= max_attempts`, non-negative timing, 성공 시 `failure_kind/upstream_status=None`과 `retry_scheduled=False`를 검증하도록 한다.
+- [x] `provider_attempt_scope(source=None)`는 이미 열린 scope가 있으면 그대로 재사용하고, 없으면 호출 단위 UUID를 생성해 hash만 ContextVar에 저장하도록 한다. token reset으로 동시 async task와 중첩 scope를 격리한다.
+- [x] 분류 순서를 `cancelled → timeout → integer status → connection type → Pydantic ValidationError → invalid response → unknown`으로 고정한다. 예외 문자열은 읽지 않는다.
+- [x] `emit_provider_attempt`은 `ProviderAttemptEvent` 검증 뒤 `json.dumps(event.model_dump(mode="json"), sort_keys=True)` 한 줄만 `law_rag.provider_attempt` INFO logger에 출력한다.
+- [x] RED 확인: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_observability.py -q`가 import 실패로 끝나는지 확인한다.
+- [x] 두 새 모듈을 최소 구현하고 같은 명령이 PASS인지 확인한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m ruff check apps/api/app/domain/provider_attempts.py apps/api/app/provider_observability.py apps/api/tests/test_provider_observability.py`를 실행한다.
+- [x] `git diff --check`와 scoped diff를 검토하고 `feat: add safe provider attempt event contract`로 커밋한다.
 
 ### Task 2: answer core/detail의 모든 제한 재시도 기록
 
@@ -203,7 +203,7 @@ def test_failure_classifier_uses_type_and_status_only(error, expected):
 - Modify: `apps/api/app/adapters/nvidia_nim_answerer.py` L70-L174
 - Create: `apps/api/tests/test_nvidia_nim_attempt_observability.py`
 
-- [ ] `503 → timeout → success`, `503 × 3 terminal`, `402`, `429`, schema validation, cancellation을 가짜 client로 재현한다. 첫 시나리오의 핵심 assertion은 아래와 같다.
+- [x] `503 → timeout → success`, `503 × 3 terminal`, `402`, `429`, schema validation, cancellation을 가짜 client로 재현한다. 첫 시나리오의 핵심 assertion은 아래와 같다.
 
 ```python
 @pytest.mark.asyncio
@@ -233,16 +233,16 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
     assert request.question not in caplog.text
 ```
 
-- [ ] terminal 503 test는 정확히 3개의 failed event와 마지막 `retry_scheduled=False`를 확인하고 `ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)`를 기대한다.
-- [ ] 402/429 parametrized test는 각각 event 1개, `provider_http`, 원래 status, `retry_scheduled=False`와 client call 1회를 확인한다.
-- [ ] invalid content와 Pydantic schema failure도 기존 횟수만큼 로그되지만 `ProviderAttemptsExhausted`로 바뀌지 않고 기존 validation exception 계열로 끝나는지 확인한다.
-- [ ] cancellation은 failed/cancelled event 하나를 남기고 `asyncio.CancelledError`를 그대로 다시 올리며 재시도하지 않는지 확인한다.
-- [ ] `answer()`는 `answer_detail`, `answer_core()`는 `answer_core`, clarification argument가 있으면 두 경로 모두 `clarification`, `answer_blocked_route()`는 `answer_detail`을 사용하도록 operation을 `_generate`에 명시적으로 전달한다.
-- [ ] `_generate`는 각 attempt 직전 `attempt_started`, 호출 전체 `deadline`을 단조 시계로 잡고, 결과/예외 직후 `elapsed_ms`, clamp된 `remaining_ms`, 실제 다음 시도 여부를 계산한 뒤 즉시 emit한다.
-- [ ] 기존 `_MIN_RETRY_SECONDS`, `_NON_RETRYABLE_STATUS_CODES`, `max_attempts`, 전체 deadline을 그대로 사용한다. 로그를 위해 retry 결정을 앞당기거나 새 sleep/backoff를 넣지 않는다.
-- [ ] availability kind의 마지막 실패만 sanitized `ProviderAttemptsExhausted`로 감싸고 exception chaining을 공개 로그에 유출하지 않도록 `from None`으로 올린다. validation/unknown은 원래 exception type을 유지한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_nim_attempt_observability.py apps/api/tests/test_nvidia_nim_answerer.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: log every NVIDIA answer attempt`로 커밋한다.
+- [x] terminal 503 test는 정확히 3개의 failed event와 마지막 `retry_scheduled=False`를 확인하고 `ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)`를 기대한다.
+- [x] 402/429 parametrized test는 각각 event 1개, `provider_http`, 원래 status, `retry_scheduled=False`와 client call 1회를 확인한다.
+- [x] invalid content와 Pydantic schema failure도 기존 횟수만큼 로그되지만 `ProviderAttemptsExhausted`로 바뀌지 않고 기존 validation exception 계열로 끝나는지 확인한다.
+- [x] cancellation은 failed/cancelled event 하나를 남기고 `asyncio.CancelledError`를 그대로 다시 올리며 재시도하지 않는지 확인한다.
+- [x] `answer()`는 `answer_detail`, `answer_core()`는 `answer_core`, clarification argument가 있으면 두 경로 모두 `clarification`, `answer_blocked_route()`는 `answer_detail`을 사용하도록 operation을 `_generate`에 명시적으로 전달한다.
+- [x] `_generate`는 각 attempt 직전 `attempt_started`, 호출 전체 `deadline`을 단조 시계로 잡고, 결과/예외 직후 `elapsed_ms`, clamp된 `remaining_ms`, 실제 다음 시도 여부를 계산한 뒤 즉시 emit한다.
+- [x] 기존 `_MIN_RETRY_SECONDS`, `_NON_RETRYABLE_STATUS_CODES`, `max_attempts`, 전체 deadline을 그대로 사용한다. 로그를 위해 retry 결정을 앞당기거나 새 sleep/backoff를 넣지 않는다.
+- [x] availability kind의 마지막 실패만 sanitized `ProviderAttemptsExhausted`로 감싸고 exception chaining을 공개 로그에 유출하지 않도록 `from None`으로 올린다. validation/unknown은 원래 exception type을 유지한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_nim_attempt_observability.py apps/api/tests/test_nvidia_nim_answerer.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: log every NVIDIA answer attempt`로 커밋한다.
 
 ### Task 3: route, query embedding, clarification의 단일 관측 계약 적용
 
@@ -253,7 +253,7 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
 - Create: `apps/api/tests/test_nvidia_provider_operation_observability.py`
 - Modify: `apps/api/tests/test_routing_pipeline.py` L70-L147
 
-- [ ] 세 adapter별 성공 1건과 실패 1건을 가짜 client로 실행하고 operation과 event 개수를 검증한다.
+- [x] 세 adapter별 성공 1건과 실패 1건을 가짜 client로 실행하고 operation과 event 개수를 검증한다.
 
 ```python
 @pytest.mark.parametrize(
@@ -276,14 +276,14 @@ def test_nvidia_operation_success_emits_one_closed_event(caplog, invoke, operati
     assert event["retry_scheduled"] is False
 ```
 
-- [ ] route의 기존 `law_rag.route_provider` test를 공통 logger와 full event assertion으로 바꾼다. 두 번 실패하면 failed event 2개가 남고 마지막 availability failure가 typed exhaustion인지 확인한다.
-- [ ] route는 기존 최대 2회와 402/429 non-retry 동작을 유지한다. 호출 전체의 관측용 deadline만 계산하되 기존 provider 호출 timeout이나 retry 횟수를 줄이지 않는다.
-- [ ] embedder/clarification은 max_attempts=1로 성공 또는 실패 event 하나를 기록한다. provider HTTP/timeout/connection은 typed exhaustion으로 감싸도 상위 fallback이 유지되어야 하고, 응답 검증 실패는 원래 validation error를 유지한다.
-- [ ] 세 public adapter method 각각을 `provider_attempt_scope()`로 감싸되 이미 application scope가 있으면 그 correlation을 재사용한다. 직접 script/test에서 호출하면 호출별 임시 correlation 하나를 만든다.
-- [ ] embedder는 테스트 주입을 위해 `client_factory: Callable[[], Any] | None = None`만 추가하고 production 기본값과 `max_retries=0`을 유지한다. 별도 재시도 설정은 추가하지 않는다.
-- [ ] clarification도 같은 client seam을 추가하되 호출 횟수는 1을 유지한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_provider_operation_observability.py apps/api/tests/test_routing_pipeline.py apps/api/tests/test_nvidia_nim_embedder.py apps/api/tests/test_nvidia_nim_clarification.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: trace all NVIDIA provider operations`로 커밋한다.
+- [x] route의 기존 `law_rag.route_provider` test를 공통 logger와 full event assertion으로 바꾼다. 두 번 실패하면 failed event 2개가 남고 마지막 availability failure가 typed exhaustion인지 확인한다.
+- [x] route는 기존 최대 2회와 402/429 non-retry 동작을 유지한다. 호출 전체의 관측용 deadline만 계산하되 기존 provider 호출 timeout이나 retry 횟수를 줄이지 않는다.
+- [x] embedder/clarification은 max_attempts=1로 성공 또는 실패 event 하나를 기록한다. provider HTTP/timeout/connection은 typed exhaustion으로 감싸도 상위 fallback이 유지되어야 하고, 응답 검증 실패는 원래 validation error를 유지한다.
+- [x] 세 public adapter method 각각을 `provider_attempt_scope()`로 감싸되 이미 application scope가 있으면 그 correlation을 재사용한다. 직접 script/test에서 호출하면 호출별 임시 correlation 하나를 만든다.
+- [x] embedder는 테스트 주입을 위해 `client_factory: Callable[[], Any] | None = None`만 추가하고 production 기본값과 `max_retries=0`을 유지한다. 별도 재시도 설정은 추가하지 않는다.
+- [x] clarification도 같은 client seam을 추가하되 호출 횟수는 1을 유지한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_nvidia_provider_operation_observability.py apps/api/tests/test_routing_pipeline.py apps/api/tests/test_nvidia_nim_embedder.py apps/api/tests/test_nvidia_nim_clarification.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: trace all NVIDIA provider operations`로 커밋한다.
 
 ### Task 4: V1/V2 request correlation을 모든 production NVIDIA 호출에 연결
 
@@ -293,9 +293,9 @@ def test_nvidia_operation_success_emits_one_closed_event(caplog, invoke, operati
 - Modify: `apps/api/app/application/question_phase_coordinator.py` L48-L145
 - Create: `apps/api/tests/test_provider_correlation_boundaries.py`
 
-- [ ] V1 `_handle_question`의 route→embedding→answer callback 전체가 `payload.client_request_id` scope 안에서 실행되는 test를 작성한다.
-- [ ] V2 prepare의 route→clarification→retrieval 호출이 같은 `payload.client_request_id` hash를 공유하는 test를 작성한다.
-- [ ] coordinator producer test는 execution private payload의 `request.client_request_id`를 우선하고, 없거나 invalid하면 `execution_id`를 fallback source로 쓰는지 확인한다.
+- [x] V1 `_handle_question`의 route→embedding→answer callback 전체가 `payload.client_request_id` scope 안에서 실행되는 test를 작성한다.
+- [x] V2 prepare의 route→clarification→retrieval 호출이 같은 `payload.client_request_id` hash를 공유하는 test를 작성한다.
+- [x] coordinator producer test는 execution private payload의 `request.client_request_id`를 우선하고, 없거나 invalid하면 `execution_id`를 fallback source로 쓰는지 확인한다.
 
 ```python
 def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
@@ -307,12 +307,12 @@ def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
     return execution.execution_id
 ```
 
-- [ ] V1은 기존 timeout/cancellation/task registry try/finally 안에서 `_answer_question` 호출만 scope로 감싼다. request timing의 의미는 바꾸지 않는다.
-- [ ] V2 prepare는 `asyncio.timeout` 안의 `_prepare_clarification_turn`과 service `prepare`를 같은 scope로 감싼다. 인증 조회는 NVIDIA 경계가 아니므로 scope 밖이어도 된다.
-- [ ] coordinator는 claim 성공 뒤 producer 호출만 scope로 감싼다. repository read/write와 replay는 provider log를 만들지 않는다.
-- [ ] 두 concurrent async request에 서로 다른 UUID를 넣어 correlation이 섞이지 않는 회귀 test를 포함한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_correlation_boundaries.py apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `feat: bind provider logs to request correlation`로 커밋한다.
+- [x] V1은 기존 timeout/cancellation/task registry try/finally 안에서 `_answer_question` 호출만 scope로 감싼다. request timing의 의미는 바꾸지 않는다.
+- [x] V2 prepare는 `asyncio.timeout` 안의 `_prepare_clarification_turn`과 service `prepare`를 같은 scope로 감싼다. 인증 조회는 NVIDIA 경계가 아니므로 scope 밖이어도 된다.
+- [x] coordinator는 claim 성공 뒤 producer 호출만 scope로 감싼다. repository read/write와 replay는 provider log를 만들지 않는다.
+- [x] 두 concurrent async request에 서로 다른 UUID를 넣어 correlation이 섞이지 않는 회귀 test를 포함한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_provider_correlation_boundaries.py apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
+- [x] Ruff와 `git diff --check` 후 `feat: bind provider logs to request correlation`로 커밋한다.
 
 ### Task 5: provider 소진과 core grounding repair 분리
 
@@ -321,9 +321,9 @@ def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
 - Modify: `apps/api/tests/test_question_phase_coordinator.py` L1-L102
 - Modify only if B-005 tests require contract coverage: `apps/api/tests/test_v2_question_executions.py` relevant provider-failure section
 
-- [ ] core producer가 `ProviderAttemptsExhausted(provider_http, 503)`를 올리는 test를 추가하고 status `FAILED`, event `AnswerEvent.error("provider_unavailable")`, finalize/repair 미호출을 검증한다.
-- [ ] finalize producer가 같은 typed error를 올려도 `FAILED`와 같은 safe reason code로 끝나는지 검증한다.
-- [ ] 일반 `ValueError`를 올리는 core producer는 기존 `CORE_REPAIR_REQUIRED`와 `next_action=repair_core`를 유지하는 회귀 test를 추가한다.
+- [x] core producer가 `ProviderAttemptsExhausted(provider_http, 503)`를 올리는 test를 추가하고 status `FAILED`, event `AnswerEvent.error("provider_unavailable")`, finalize/repair 미호출을 검증한다.
+- [x] finalize producer가 같은 typed error를 올려도 `FAILED`와 같은 safe reason code로 끝나는지 검증한다.
+- [x] 일반 `ValueError`를 올리는 core producer는 기존 `CORE_REPAIR_REQUIRED`와 `next_action=repair_core`를 유지하는 회귀 test를 추가한다.
 
 ```python
 try:
@@ -338,11 +338,11 @@ except Exception:
     result = _safe_phase_failure(phase)
 ```
 
-- [ ] generic catch-all을 작은 `_safe_phase_failure(phase)` helper로 추출해 기존 core repair/finalize failure 동작을 그대로 보존한다.
-- [ ] typed error의 `upstream_status`나 failure kind는 SSE payload에 넣지 않는다. 상세는 앞선 `law_rag.provider_attempt` 로그에서만 확인한다.
-- [ ] V2 end-to-end repository test에서 provider 소진 execution을 다시 core/finalize 호출해도 새 provider call이 생기지 않고 persisted terminal event가 replay되는지 확인한다.
-- [ ] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
-- [ ] Ruff와 `git diff --check` 후 `fix: separate provider exhaustion from grounding repair`로 커밋한다.
+- [x] generic catch-all을 작은 `_safe_phase_failure(phase)` helper로 추출해 기존 core repair/finalize failure 동작을 그대로 보존한다.
+- [x] typed error의 `upstream_status`나 failure kind는 SSE payload에 넣지 않는다. 상세는 앞선 `law_rag.provider_attempt` 로그에서만 확인한다.
+- [x] V2 end-to-end repository test에서 provider 소진 execution을 다시 core/finalize 호출해도 새 provider call이 생기지 않고 persisted terminal event가 replay되는지 확인한다.
+- [x] RED/PASS: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider apps/api/tests/test_question_phase_coordinator.py apps/api/tests/test_v2_question_executions.py -q`.
+- [x] Ruff와 `git diff --check` 후 `fix: separate provider exhaustion from grounding repair`로 커밋한다.
 
 ### Task 6: Web에 안전한 provider 불가 안내 전달
 
@@ -352,7 +352,7 @@ except Exception:
 - Modify: `apps/web/lib/v2-execution.test.ts` L1-L127
 - Modify: `apps/web/lib/api-client-flow.test.ts` L133-L201
 
-- [ ] SSE `error` event의 `reason_code`를 보존하는 typed transport error test를 먼저 추가한다.
+- [x] SSE `error` event의 `reason_code`를 보존하는 typed transport error test를 먼저 추가한다.
 
 ```typescript
 it("preserves the safe SSE provider_unavailable reason without reconnecting", async () => {
@@ -372,8 +372,8 @@ it("preserves the safe SSE provider_unavailable reason without reconnecting", as
 });
 ```
 
-- [ ] `V2ExecutionPhaseError`는 `reasonCode: string`만 공개하고 raw SSE object를 message에 stringify하지 않는다. `cancelled`는 기존 generic cancellation/abort 의미를 유지한다.
-- [ ] `ApiErrorCode`에 `provider_unavailable`을 추가하고 `askQuestion`이 typed phase error를 아래 고정 문구로 바꾸는 test를 추가한다.
+- [x] `V2ExecutionPhaseError`는 `reasonCode: string`만 공개하고 raw SSE object를 message에 stringify하지 않는다. `cancelled`는 기존 generic cancellation/abort 의미를 유지한다.
+- [x] `ApiErrorCode`에 `provider_unavailable`을 추가하고 `askQuestion`이 typed phase error를 아래 고정 문구로 바꾸는 test를 추가한다.
 
 ```typescript
 await expect(askQuestion(history.request)).rejects.toMatchObject({
@@ -384,11 +384,11 @@ await expect(askQuestion(history.request)).rejects.toMatchObject({
 });
 ```
 
-- [ ] 이 변환에서 `askQuestion` 또는 `runV2Execution`이 새 POST prepare를 자동 호출하지 않는지 fetch call count로 확인한다.
-- [ ] 알 수 없는 reason code는 B-005가 확정한 backend-display-message/error passthrough 계약을 유지한다. `provider_unavailable` 외 provider 세부 status, attempt, exception text는 사용자에게 표시하지 않는다.
-- [ ] RED/PASS: `pnpm.cmd --filter @law-rag/web test -- v2-execution.test.ts api-client-flow.test.ts`.
-- [ ] `pnpm.cmd lint:web`, `pnpm.cmd typecheck`, `pnpm.cmd test:web`를 실행한다.
-- [ ] `git diff --check` 후 `fix: show safe provider unavailable message`로 커밋한다.
+- [x] 이 변환에서 `askQuestion` 또는 `runV2Execution`이 새 POST prepare를 자동 호출하지 않는지 fetch call count로 확인한다.
+- [x] 알 수 없는 reason code는 B-005가 확정한 backend-display-message/error passthrough 계약을 유지한다. `provider_unavailable` 외 provider 세부 status, attempt, exception text는 사용자에게 표시하지 않는다.
+- [x] RED/PASS: `pnpm.cmd --filter @law-rag/web test -- v2-execution.test.ts api-client-flow.test.ts`.
+- [x] `pnpm.cmd lint:web`, `pnpm.cmd typecheck`, `pnpm.cmd test:web`를 실행한다.
+- [x] `git diff --check` 후 `fix: show safe provider unavailable message`로 커밋한다.
 
 ### Task 7: 운영 판독 문서와 전체 검증
 
@@ -398,10 +398,10 @@ await expect(askQuestion(history.request)).rejects.toMatchObject({
 - Modify: `docs/exec-plans/active/0072-provider-attempt-observability.md`
 - Generate: `docs/ROADMAP.md`
 
-- [ ] `docs/RELIABILITY.md`에 모든 NVIDIA attempt의 성공/실패 로그, DB 미영속, provider exhaustion terminal semantics를 기록한다.
-- [ ] runbook에 `law_rag.provider_attempt` 필터 후 correlation 기준 정렬 절차와 판독 예시를 추가한다: attempt 1 `provider_http/503/retry=true`, attempt 2 `timeout/retry=true`, attempt 3 `succeeded/retry=false`이면 “NVIDIA 503 뒤 두 번째 timeout, 세 번째 성공”이다.
-- [ ] 로그에 원문·예외 메시지가 없으며 Vercel 보존기간이 지나면 복구할 수 없다는 제한을 적는다.
-- [ ] focused API suite를 다시 실행한다.
+- [x] `docs/RELIABILITY.md`에 모든 NVIDIA attempt의 성공/실패 로그, DB 미영속, provider exhaustion terminal semantics를 기록한다.
+- [x] runbook에 `law_rag.provider_attempt` 필터 후 correlation 기준 정렬 절차와 판독 예시를 추가한다: attempt 1 `provider_http/503/retry=true`, attempt 2 `timeout/retry=true`, attempt 3 `succeeded/retry=false`이면 “NVIDIA 503 뒤 두 번째 timeout, 세 번째 성공”이다.
+- [x] 로그에 원문·예외 메시지가 없으며 Vercel 보존기간이 지나면 복구할 수 없다는 제한을 적는다.
+- [x] focused API suite를 다시 실행한다.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m pytest -p no:cacheprovider `
@@ -413,27 +413,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run_python.ps1 -m py
   apps/api/tests/test_v2_question_executions.py -q
 ```
 
-- [ ] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1` 전체 검증을 실행한다. runner 권한 오류가 나면 저장소의 Windows Python 검증 정책대로 같은 명령을 platform runtime 권한 상승으로 한 번만 재실행한다.
-- [ ] 독립 whole-branch review를 실행하고 개인정보 유출, 누락된 NVIDIA operation, retry semantics 변화, provider/grounding 오분류를 우선 확인한다.
-- [ ] review 지적을 test-first로 수정하고 focused suite와 `scripts/verify.ps1`을 최신 상태로 다시 통과시킨다.
-- [ ] `rg -n "question|prompt|exception|traceback|authorization|api.key" apps/api/app/provider_observability.py apps/api/app/adapters/nvidia_nim_*.py` 결과를 사람이 검토해 금지 데이터가 logger payload로 전달되지 않는지 확인한다.
-- [ ] `git diff --check`, `git status --short`, 전체 diff를 검토하고 `.env`, credential, 개인 사건자료, `graphify-out/`이 stage되지 않았는지 확인한다.
-- [ ] 문서 변경을 `docs: document provider attempt log operations`로 커밋한다.
-- [ ] 계획의 각 task에 결과 commit과 검증 증거를 기록하고 미완료 checkbox가 0개인지 확인한다.
-- [ ] header를 `상태: Done`, `다음 행동: none`으로 바꾸고 `docs/exec-plans/completed/`로 이동한다.
-- [ ] roadmap renderer와 checker를 실행하고 lifecycle 변경만 `docs: complete provider attempt observability plan`으로 커밋한다.
+- [x] `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify.ps1` 전체 검증을 실행한다. runner 권한 오류가 나면 저장소의 Windows Python 검증 정책대로 같은 명령을 platform runtime 권한 상승으로 한 번만 재실행한다.
+- [x] 독립 whole-branch review를 실행하고 개인정보 유출, 누락된 NVIDIA operation, retry semantics 변화, provider/grounding 오분류를 우선 확인한다.
+- [x] review 지적을 test-first로 수정하고 focused suite와 `scripts/verify.ps1`을 최신 상태로 다시 통과시킨다.
+- [x] `rg -n "question|prompt|exception|traceback|authorization|api.key" apps/api/app/provider_observability.py apps/api/app/adapters/nvidia_nim_*.py` 결과를 사람이 검토해 금지 데이터가 logger payload로 전달되지 않는지 확인한다.
+- [x] `git diff --check`, `git status --short`, 전체 diff를 검토하고 `.env`, credential, 개인 사건자료, `graphify-out/`이 stage되지 않았는지 확인한다.
+- [x] 문서 변경을 `docs: document provider attempt log operations`로 커밋한다.
+- [x] 계획의 각 task에 결과 commit과 검증 증거를 기록하고 미완료 checkbox가 0개인지 확인한다.
+- [x] header를 `상태: Done`, `다음 행동: none`으로 바꾸고 `docs/exec-plans/completed/`로 이동한다.
+- [x] roadmap renderer와 checker를 실행하고 lifecycle 변경만 `docs: complete provider attempt observability plan`으로 커밋한다.
 
 ## Completion Evidence
 
-완료 시 아래를 실제 결과로 채운다.
-
-- Focused API tests: 미실행
-- Focused Web tests: 미실행
-- Full `scripts/verify.ps1`: 미실행
-- Whole-branch review: 미실행
-- Provider operation coverage: 미확인
-- Privacy payload audit: 미실행
-- Commits: 미생성
+- Focused API tests: 90 passed
+- Focused Web tests: 전체 Web suite 23 files, 131 passed
+- Full `scripts/verify.ps1`: core 27 passed; API 963 passed, 3 skipped; collector 97 passed, 5 skipped; Web 131 passed; Ruff, docs, roadmap, lint, typecheck, build 통과
+- Whole-branch review: 최초 Important 2건(INFO logger level, 직접 answerer correlation scope)을 `e92c3ad`에서 TDD로 수정했고 재리뷰 Critical/Important 0, merge ready 판정
+- Provider operation coverage: `route`, `query_embedding`, `answer_core`, `answer_detail`, `clarification` 성공·실패 경계 확인
+- Privacy payload audit: 닫힌 event schema와 logger 인수에 질문·prompt·원문·예외 메시지·traceback·인증정보가 전달되지 않음을 확인
+- Commits: `6cadb8a`, `1e52887`, `82466be`, `ececb51`, `43451e8`, `f1200c7`, `85a974f`, `e92c3ad`
 
 ## Out of Scope Follow-ups
 

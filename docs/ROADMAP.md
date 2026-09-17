@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 85e5e68e2596894753345432ab657a385db93f8f1e1f299b2e3ba82d1d1328a9 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: a39fc48444378e7ef2a9980db6077858dbe3502b474c36a589abf50a2219f447 -->
 
 # 프로젝트 로드맵
 
@@ -24,7 +24,6 @@
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 SSE 상세 생성 진행 표시 Implementation Plan](exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: NVIDIA 무료 티어 안내와 SSE 상세 생성 진행 표시의 프런트엔드 회귀 테스트부터 작성한다.
-- [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/todo/0072-provider-attempt-observability.md) — 다음 행동: B-005 완료 뒤 Task 1의 provider attempt event 개인정보 회귀 테스트를 RED로 만든다.
 
 ## Blocked
 
@@ -38,4 +37,5 @@
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
+- [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [완료 계획 색인](exec-plans/completed/README.md)

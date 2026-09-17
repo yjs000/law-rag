@@ -163,6 +163,32 @@ describe("structured API error details (0039)", () => {
 });
 
 describe("typed HTTP status on ApiError (0045)", () => {
+  it("maps a provider_unavailable SSE reason to the safe fixed ApiError without preparing again", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/v2/question-executions")) {
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      return new Response(
+        'event: error\ndata: {"reason_code":"provider_unavailable","provider_status":503,"exception":"provider secret"}\n\n',
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await askQuestion(history.request).catch((cause) => cause);
+
+    expect(error).toMatchObject({
+      name: "ApiError",
+      status: 503,
+      code: "provider_unavailable",
+      message: "AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.",
+    });
+    expect(Object.keys(error).sort()).toEqual(["code", "name", "publicMessage", "status"]);
+    expect(JSON.stringify(error)).not.toContain("provider secret");
+    expect(JSON.stringify(error)).not.toContain("provider_status");
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/v2/question-executions"))).toHaveLength(1);
+  });
+
   it.each([
     [{ message: "백엔드 메시지" }, "백엔드 메시지"],
     [{ detail: { message: "상세 메시지" } }, "상세 메시지"],

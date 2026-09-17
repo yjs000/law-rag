@@ -13,6 +13,7 @@ from app.application.question_phase_coordinator import PhaseResult
 from app.domain.answer_events import AnswerEvent
 from app.domain.catalog import SourceKind
 from app.domain.grounding import FrozenCitation
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.question_execution import ExecutionStatus
 from app.domain.schemas import AnswerSection, Citation, QuestionRequest, QuestionResponse, SearchHit
 
@@ -1223,6 +1224,69 @@ def test_v2_phase_routes_invoke_main_compatibility_producers(
 
     assert core.status_code == finalized.status_code == 200
     assert invoked == ["core", "finalize"]
+
+
+def test_v2_core_provider_exhaustion_replays_without_another_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+    from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
+
+    async def fake_repository():
+        return object()
+
+    async def fake_retrieval(payload, active, repository):
+        return [], None
+
+    class Provider:
+        async def active(self):
+            return SimpleNamespace(generation=SimpleNamespace(id=uuid4()))
+
+    provider_calls = 0
+
+    async def exhausted_core(execution):
+        nonlocal provider_calls
+        provider_calls += 1
+        raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)
+
+    async def finalize_must_not_run(execution, user):
+        raise AssertionError("finalize must not run after provider exhaustion")
+
+    monkeypatch.setattr(
+        main_module,
+        "question_execution_repository",
+        MemoryQuestionExecutionRepository(),
+    )
+    monkeypatch.setattr(main_module, "_v2_repository", fake_repository)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", _allow_supported_date)
+    monkeypatch.setattr(main_module, "_retrieve_pinned_v2_evidence", fake_retrieval)
+    monkeypatch.setattr(
+        main_module, "_llamaindex_resources", lambda: (Provider(), object(), object())
+    )
+    monkeypatch.setattr(main_module, "_run_v2_core", exhausted_core)
+    monkeypatch.setattr(main_module, "_run_v2_finalize", finalize_must_not_run)
+    client = TestClient(main_module.app)
+
+    prepared = client.post(
+        "/v2/question-executions",
+        headers={"Idempotency-Key": "provider-exhaustion"},
+        json={"question": "전기사업 허가가 필요한가요?", "answer_mode": "search_only"},
+    )
+    execution_id = prepared.json()["execution_id"]
+    headers = {"X-Execution-Capability": prepared.json()["execution_capability"]}
+
+    failed = client.post(f"/v2/question-executions/{execution_id}/core", headers=headers)
+    replay = client.post(f"/v2/question-executions/{execution_id}/core", headers=headers)
+    cross_phase_replay = client.post(
+        f"/v2/question-executions/{execution_id}/finalize", headers=headers
+    )
+
+    assert failed.status_code == replay.status_code == cross_phase_replay.status_code == 200
+    assert failed.text == replay.text == cross_phase_replay.text
+    assert 'event: error\ndata: {"reason_code": "provider_unavailable"}' in failed.text
+    assert "503" not in failed.text
+    assert "provider_http" not in failed.text
+    assert provider_calls == 1
 
 
 def test_prepare_replay_does_not_retrieve_again_and_anonymous_phase_requires_capability(

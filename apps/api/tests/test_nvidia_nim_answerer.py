@@ -18,6 +18,7 @@ from app.adapters.openai_answerer import (
     build_messages_v2,
 )
 from app.domain.catalog import SourceKind
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.schemas import QuestionRequest, SearchHit
 
 
@@ -29,6 +30,11 @@ def _answerer() -> NvidiaNimAnswerer:
         timeout_seconds=30,
         max_output_tokens=4096,
     )
+
+
+def _client(create):
+    completions = SimpleNamespace(create=create)
+    return SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
 
 def _hit() -> SearchHit:
@@ -217,43 +223,35 @@ async def test_nvidia_nim_retries_transient_failures_and_succeeds() -> None:
 async def test_nvidia_nim_stops_after_max_attempts_and_raises_last_error() -> None:
     answerer = _answerer()
     calls = 0
-
     async def create(**kwargs):
         nonlocal calls
         calls += 1
         error = Exception(f"Service Unavailable #{calls}")
         error.status_code = 503  # type: ignore[attr-defined]
         raise error
-
-    answerer.client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
-    with pytest.raises(Exception, match="Service Unavailable #3"):
+    answerer.client = _client(create)
+    with pytest.raises(ProviderAttemptsExhausted, match="^provider attempts exhausted$") as raised:
         await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
-
     assert calls == 3
+    assert (raised.value.failure_kind, raised.value.upstream_status) == ("provider_http", 503)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status_code", [402, 429])
-async def test_nvidia_nim_does_not_retry_billing_or_quota_errors(status_code: int) -> None:
+@pytest.mark.parametrize("status", [402, 429])
+async def test_nvidia_nim_does_not_retry_billing_or_quota_errors(status: int) -> None:
     answerer = _answerer()
     calls = 0
-
     async def create(**kwargs):
         nonlocal calls
         calls += 1
         error = Exception("quota exceeded")
-        error.status_code = status_code  # type: ignore[attr-defined]
+        error.status_code = status  # type: ignore[attr-defined]
         raise error
-
-    answerer.client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
-    with pytest.raises(Exception, match="quota exceeded"):
+    answerer.client = _client(create)
+    with pytest.raises(ProviderAttemptsExhausted, match="^provider attempts exhausted$") as raised:
         await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
-
     assert calls == 1
+    assert (raised.value.failure_kind, raised.value.upstream_status) == ("provider_http", status)
 
 
 @pytest.mark.asyncio
@@ -280,16 +278,14 @@ async def test_nvidia_nim_stops_retrying_once_the_overall_deadline_is_gone(
         error = Exception("Service Unavailable")
         error.status_code = 503  # type: ignore[attr-defined]
         raise error
-
-    answerer.client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
-    with pytest.raises(Exception, match="Service Unavailable"):
+    answerer.client = _client(create)
+    with pytest.raises(ProviderAttemptsExhausted, match="^provider attempts exhausted$") as raised:
         await answerer.answer(QuestionRequest(question="전기사업 근거"), [_hit()])
 
     # Budget is 10s and each attempt burns 9s, so a second attempt (18s) would
     # blow past the deadline - only one attempt should have been made.
     assert calls == 1
+    assert (raised.value.failure_kind, raised.value.upstream_status) == ("provider_http", 503)
 
 
 @pytest.mark.asyncio
@@ -311,8 +307,10 @@ async def test_nvidia_nim_enforces_overall_deadline_when_provider_ignores_reques
 
     monkeypatch.setattr(answerer, "_attempt", stuck_attempt)
 
-    with pytest.raises(TimeoutError):
+    with pytest.raises(ProviderAttemptsExhausted, match="^provider attempts exhausted$") as raised:
         await answerer.answer_core(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    assert (raised.value.failure_kind, raised.value.upstream_status) == ("timeout", None)
 
 
 def test_nvidia_nim_rejects_unapproved_base_url() -> None:

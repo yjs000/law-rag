@@ -12,8 +12,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from app.domain.answer_events import AnswerEvent
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.question_execution import ExecutionStatus
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
+from app.provider_observability import provider_attempt_scope
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,35 @@ class PhaseResult:
 
 
 PhaseProducer = Callable[[QuestionExecutionRecord], Awaitable[PhaseResult]]
+
+
+def _provider_correlation_source(execution: QuestionExecutionRecord) -> object:
+    request_payload = execution.private_payload.get("request")
+    if isinstance(request_payload, Mapping):
+        client_request_id = request_payload.get("client_request_id")
+        if isinstance(client_request_id, str) and client_request_id:
+            return client_request_id
+    return execution.execution_id
+
+
+def _safe_phase_failure(phase: str) -> PhaseResult:
+    if phase == "core":
+        return PhaseResult(
+            target=ExecutionStatus.CORE_REPAIR_REQUIRED,
+            events=(
+                AnswerEvent(
+                    event_type="phase_complete",
+                    payload={
+                        "status": ExecutionStatus.CORE_REPAIR_REQUIRED.value,
+                        "next_action": "repair_core",
+                    },
+                ),
+            ),
+        )
+    return PhaseResult(
+        target=ExecutionStatus.FAILED,
+        events=(AnswerEvent.error("phase_processing_failed"),),
+    )
 
 
 class QuestionPhaseCoordinator:
@@ -62,6 +93,10 @@ class QuestionPhaseCoordinator:
             )
         if current.status is ExecutionStatus.CANCELLED:
             return (AnswerEvent.cancelled(),)
+        if current.status is ExecutionStatus.FAILED:
+            return await self._failed_phase_events(
+                execution_id, owner_scope, phase=phase, capability_hash=capability_hash
+            )
         if self._is_timed_out_running(current):
             recovered = await self._repository.finish_phase(
                 execution_id,
@@ -108,27 +143,15 @@ class QuestionPhaseCoordinator:
                 execution_id, owner_scope, phase=phase, capability_hash=capability_hash
             )
         try:
-            result = await producer(claim.execution)
-        except Exception:  # never expose provider text or traceback through SSE
-            result = (
-                PhaseResult(
-                    target=ExecutionStatus.CORE_REPAIR_REQUIRED,
-                    events=(
-                        AnswerEvent(
-                            event_type="phase_complete",
-                            payload={
-                                "status": ExecutionStatus.CORE_REPAIR_REQUIRED.value,
-                                "next_action": "repair_core",
-                            },
-                        ),
-                    ),
-                )
-                if phase == "core"
-                else PhaseResult(
-                    target=ExecutionStatus.FAILED,
-                    events=(AnswerEvent.error("phase_processing_failed"),),
-                )
+            with provider_attempt_scope(_provider_correlation_source(claim.execution)):
+                result = await producer(claim.execution)
+        except ProviderAttemptsExhausted:
+            result = PhaseResult(
+                target=ExecutionStatus.FAILED,
+                events=(AnswerEvent.error("provider_unavailable"),),
             )
+        except Exception:  # never expose provider text or traceback through SSE
+            result = _safe_phase_failure(phase)
         await self._repository.finish_phase(
             execution_id,
             owner_scope,
@@ -158,6 +181,27 @@ class QuestionPhaseCoordinator:
                 self._finalize,
             )
         raise ValueError("unknown execution phase")
+
+    async def _failed_phase_events(
+        self,
+        execution_id,
+        owner_scope: str,
+        *,
+        phase: str,
+        capability_hash: str | None,
+    ) -> tuple[AnswerEvent, ...]:
+        events = await self._repository.events_for(
+            execution_id, owner_scope, phase=phase, capability_hash=capability_hash
+        )
+        if any(event.terminal for event in events):
+            return events
+        other_phase = "finalize" if phase == "core" else "core"
+        other_events = await self._repository.events_for(
+            execution_id, owner_scope, phase=other_phase, capability_hash=capability_hash
+        )
+        if any(event.terminal for event in other_events):
+            return other_events
+        return events or other_events
 
     def _is_timed_out_running(self, record: QuestionExecutionRecord) -> bool:
         return record.status in {

@@ -11,6 +11,7 @@ import {
   runV2Execution,
   V2ExecutionEventError,
   V2ExecutionHttpError,
+  V2ExecutionPhaseError,
   type V2ExecutionEvent,
 } from "./v2-execution";
 import { backendDisplayMessage } from "./backend-display-message";
@@ -126,8 +127,15 @@ export async function askQuestion(
       onEvent,
     }, signal);
   } catch (error) {
+    if (error instanceof V2ExecutionPhaseError && error.reasonCode === "provider_unavailable") {
+      throw new ApiError(
+        "AI 제공자를 일시적으로 사용할 수 없습니다. 다시 시도해 주세요.",
+        503,
+        "provider_unavailable",
+      );
+    }
     if (error instanceof V2ExecutionEventError) {
-      const code: ApiErrorCode = error.publicMessage === "system_busy" ? "system_busy" : null;
+      const code: ApiErrorCode = error.reasonCode === "system_busy" ? "system_busy" : null;
       throw new ApiError(error.publicMessage, 500, code);
     }
     if (error instanceof V2ExecutionHttpError) {

@@ -18,6 +18,7 @@ from app.application.v2.grounding import ClarificationGrounding, claims_are_grou
 from app.application.v2.phase_service import V2QuestionExecutionService
 from app.domain.clarification import ClarificationCase, FactStatus, GroundedClaim, RequiredFact
 from app.domain.grounding import CitationRegistry, FrozenCitation
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.question_execution import ExecutionStatus
 from app.domain.routing import RouteDecision
 from app.domain.schemas import AnswerSection, QuestionRequest, SearchHit, SourceKind
@@ -211,6 +212,74 @@ def _service(
         run_finalize=lambda *_args: None,
     )
     return V2QuestionExecutionService(lambda: dependencies), executions
+
+
+@pytest.mark.asyncio
+async def test_real_run_finalize_propagates_provider_exhaustion_from_detail_generation() -> None:
+    """A provider failure before a detail draft exists is terminal, not grounding fallback."""
+
+    class ExhaustedDetailAnswerer:
+        async def answer(self, *_args: object, **_kwargs: object) -> object:
+            raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)
+
+    service, _executions = _service(ExhaustedDetailAnswerer())  # type: ignore[arg-type]
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="detail-provider-exhausted",
+            user=None,
+        )
+    )
+
+    with pytest.raises(ProviderAttemptsExhausted):
+        await service.run_finalize(prepared.execution, None)
+
+
+@pytest.mark.asyncio
+async def test_real_run_finalize_propagates_provider_exhaustion_from_clarification_repair(
+) -> None:
+    """A clarification-core provider failure is terminal, not grounding fallback."""
+
+    class ExhaustedRepairAnswerer:
+        async def answer_core(self, *_args: object, **_kwargs: object) -> object:
+            raise ProviderAttemptsExhausted(failure_kind="provider_http", upstream_status=503)
+
+    service, executions = _service(ExhaustedRepairAnswerer())  # type: ignore[arg-type]
+    prepared = await service.prepare(
+        PrepareQuestion(
+            payload=QuestionRequest(question="전기사업 허가가 필요한가요?"),
+            owner_scope="anonymous:test",
+            idempotency_key="clarification-repair-provider-exhausted",
+            user=None,
+            clarification=_context("full"),
+        )
+    )
+    core_claim = await executions.claim_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=prepared.execution.version,
+        target=ExecutionStatus.CORE_RUNNING,
+    )
+    await executions.finish_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=core_claim.execution.version,
+        target=ExecutionStatus.CORE_REPAIR_REQUIRED,
+        phase="core",
+        events=(),
+    )
+    repair_required = await executions.get_owned(prepared.execution.execution_id, "anonymous:test")
+    finalize_claim = await executions.claim_phase(
+        prepared.execution.execution_id,
+        "anonymous:test",
+        expected_version=repair_required.version,
+        target=ExecutionStatus.FINALIZE_RUNNING,
+        private_payload={"finalize_source_status": repair_required.status.value},
+    )
+
+    with pytest.raises(ProviderAttemptsExhausted):
+        await service.run_finalize(finalize_claim.execution, None)
 
 
 async def _active_generation() -> SimpleNamespace:

@@ -43,6 +43,7 @@ from app.application.v2.grounding import (
 )
 from app.domain.answer_events import AnswerEvent
 from app.domain.grounding import CitationRegistry
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.question_execution import ExecutionSnapshot, ExecutionStatus, next_action_for
 from app.domain.routing import RouteDecision
 from app.domain.schemas import (
@@ -508,6 +509,8 @@ class V2QuestionExecutionService:
                     }
                 else:
                     force_grounding_fallback = True
+            except ProviderAttemptsExhausted:
+                raise
             except Exception:
                 force_grounding_fallback = True
         private_payload = repaired_core_payload or execution.private_payload
@@ -518,6 +521,8 @@ class V2QuestionExecutionService:
                 if force_grounding_fallback
                 else await produce_response(execution)
             )
+        except ProviderAttemptsExhausted:
+            raise
         except Exception:
             response = core_degraded_response(payload, core, private_payload)
             degraded = True

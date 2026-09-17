@@ -15,6 +15,7 @@ from app.application.v1.dependencies import V1AnsweringError
 from app.application.v1.retrieval import elapsed_ms, remaining_ms
 from app.domain.schemas import QuestionRequest, QuestionResponse
 from app.observability import QuestionStageTimingOutcome, emit_question_stage_timing
+from app.provider_observability import provider_attempt_scope
 
 router = APIRouter()
 
@@ -43,7 +44,10 @@ async def _handle_question(
         try:
             await asyncio.sleep(0)
             async with asyncio.timeout(budget.remaining_seconds()):
-                response = await main._answer_question(payload, request, user, budget, repository)
+                with provider_attempt_scope(payload.client_request_id):
+                    response = await main._answer_question(
+                        payload, request, user, budget, repository
+                    )
         except V1AnsweringError as exc:
             raise _answering_http_error(main, exc) from exc
         except asyncio.CancelledError as exc:

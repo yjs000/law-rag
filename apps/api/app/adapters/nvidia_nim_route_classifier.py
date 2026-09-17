@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
-import logging
+import asyncio
 import re
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -10,14 +10,19 @@ from typing import Any
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import (
     ROUTE_DEFINITIONS,
     ProviderQuestionRoute,
     RouteJudgment,
 )
+from app.provider_observability import (
+    classify_provider_failure,
+    emit_provider_attempt,
+    provider_attempt_scope,
+)
 
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
-_ROUTER_LOGGER = logging.getLogger("law_rag.route_provider")
 
 _CAPACITY_VALUE = re.compile(
     r"(?:\d+(?:[.,]\d+)?|[일이삼사오육칠팔구십백천만]+)\s*"
@@ -173,26 +178,71 @@ class NvidiaNimQuestionRouter:
         )
         self.model = model
         self.max_attempts = max_attempts
+        self.timeout_seconds = timeout_seconds
 
     async def route(self, question: str) -> RouteJudgment:
-        last_error: Exception
-        for attempt in range(self.max_attempts):
-            try:
-                return await self._route_once(question)
-            except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
-                last_error = exc
-                _ROUTER_LOGGER.info(
-                    json.dumps(
-                        {"attempt": attempt + 1, "failure_kind": _failure_kind(exc)},
-                        sort_keys=True,
+        with provider_attempt_scope():
+            deadline = time.monotonic() + self.timeout_seconds
+            for attempt_index in range(self.max_attempts):
+                attempt = attempt_index + 1
+                attempt_started = time.monotonic()
+                try:
+                    result = await self._route_once(question)
+                except asyncio.CancelledError:
+                    finished_at = time.monotonic()
+                    emit_provider_attempt(
+                        operation="route",
+                        attempt=attempt,
+                        max_attempts=self.max_attempts,
+                        outcome="failed",
+                        failure_kind="cancelled",
+                        upstream_status=None,
+                        elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
+                        remaining_ms=max(int((deadline - finished_at) * 1000), 0),
+                        retry_scheduled=False,
                     )
-                )
-                if (
-                    getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES
-                    or attempt + 1 >= self.max_attempts
-                ):
                     raise
-        raise last_error
+                except Exception as exc:  # noqa: BLE001 - classified without provider data
+                    finished_at = time.monotonic()
+                    failure_kind, upstream_status = classify_provider_failure(exc)
+                    retry_scheduled = (
+                        attempt < self.max_attempts
+                        and getattr(exc, "status_code", None) not in _NON_RETRYABLE_STATUS_CODES
+                    )
+                    emit_provider_attempt(
+                        operation="route",
+                        attempt=attempt,
+                        max_attempts=self.max_attempts,
+                        outcome="failed",
+                        failure_kind=failure_kind,
+                        upstream_status=upstream_status,
+                        elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
+                        remaining_ms=max(int((deadline - finished_at) * 1000), 0),
+                        retry_scheduled=retry_scheduled,
+                    )
+                    if retry_scheduled:
+                        continue
+                    if failure_kind in {"provider_http", "timeout", "connection"}:
+                        raise ProviderAttemptsExhausted(
+                            failure_kind=failure_kind,
+                            upstream_status=upstream_status,
+                        ) from None
+                    raise
+                else:
+                    finished_at = time.monotonic()
+                    emit_provider_attempt(
+                        operation="route",
+                        attempt=attempt,
+                        max_attempts=self.max_attempts,
+                        outcome="succeeded",
+                        failure_kind=None,
+                        upstream_status=None,
+                        elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
+                        remaining_ms=max(int((deadline - finished_at) * 1000), 0),
+                        retry_scheduled=False,
+                    )
+                    return result
+        raise AssertionError("route attempts must return or raise")
 
     async def _route_once(self, question: str) -> RouteJudgment:
         async with self._client_scope() as client:
@@ -265,21 +315,3 @@ class NvidiaNimQuestionRouter:
             yield client
         finally:
             await client.close()
-
-
-def _failure_kind(error: Exception) -> str:
-    if isinstance(error, TimeoutError) or type(error).__name__ == "APITimeoutError":
-        return "timeout"
-    status_code = getattr(error, "status_code", None)
-    if isinstance(status_code, int):
-        if status_code in _NON_RETRYABLE_STATUS_CODES:
-            return f"http_{status_code}"
-        if 400 <= status_code < 500:
-            return "http_4xx"
-        if 500 <= status_code < 600:
-            return "http_5xx"
-    if type(error).__name__ == "APIConnectionError":
-        return "connection_error"
-    if isinstance(error, ValueError):
-        return "invalid_response"
-    return "provider_error"

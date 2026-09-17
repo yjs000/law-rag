@@ -20,8 +20,16 @@ from app.adapters.openai_answerer import (
     build_messages_v2,
 )
 from app.application.v2.grounding import ClarificationGrounding
+from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.routing import QuestionRoute
 from app.domain.schemas import QuestionRequest, SearchHit
+from app.provider_observability import (
+    ProviderFailureKind,
+    ProviderOperation,
+    classify_provider_failure,
+    emit_provider_attempt,
+    provider_attempt_scope,
+)
 
 # Below this many remaining seconds, a retry can't realistically get a response
 # back before the caller's own deadline (Vercel's function hard cap) hits, so
@@ -80,7 +88,11 @@ class NvidiaNimAnswerer:
             else self.message_builder(request, hits)
         )
         schema = ClarificationDraftAnswer if clarification is not None else DraftAnswer
-        return await self._generate(messages, schema)
+        operation: ProviderOperation = (
+            "clarification" if clarification is not None else "answer_detail"
+        )
+        with provider_attempt_scope():
+            return await self._generate(messages, schema, operation=operation)
 
     async def answer_core(
         self,
@@ -91,7 +103,11 @@ class NvidiaNimAnswerer:
     ) -> CoreDraft:
         schema = ClarificationCoreDraft if clarification is not None else CoreDraft
         messages = build_core_messages(request, hits, clarification=clarification)
-        return await self._generate(messages, schema)
+        operation: ProviderOperation = (
+            "clarification" if clarification is not None else "answer_core"
+        )
+        with provider_attempt_scope():
+            return await self._generate(messages, schema, operation=operation)
 
     async def answer_blocked_route(
         self, request: QuestionRequest, route: QuestionRoute, reason: str | None
@@ -99,9 +115,12 @@ class NvidiaNimAnswerer:
         """0046: 사전 라우팅이 legal_search 밖으로 걸러낸 질문(embedding·검색 없음)에
         근거 없이 LLM을 호출한다 - `answer()`와 같은 재시도·타임아웃 정책을 그대로
         쓰되 프롬프트만 `build_blocked_route_messages`로 다르다."""
-        return await self._generate(
-            build_blocked_route_messages(request, route, reason), DraftAnswer
-        )
+        with provider_attempt_scope():
+            return await self._generate(
+                build_blocked_route_messages(request, route, reason),
+                DraftAnswer,
+                operation="answer_detail",
+            )
 
     async def aclose(self) -> None:
         """Release the process-owned NVIDIA HTTP client."""
@@ -110,22 +129,131 @@ class NvidiaNimAnswerer:
             await self.client.close()
 
     async def _generate(
-        self, messages: list[dict[str, str]], schema: type[StructuredAnswer]
+        self,
+        messages: list[dict[str, str]],
+        schema: type[StructuredAnswer],
+        *,
+        operation: ProviderOperation,
     ) -> StructuredAnswer:
         deadline = time.monotonic() + self.timeout_seconds
-        last_error: Exception
-        for attempt in range(self.max_attempts):
-            remaining = deadline - time.monotonic()
-            if attempt > 0 and remaining < _MIN_RETRY_SECONDS:
+        last_error: Exception | None = None
+        last_failure_kind: ProviderFailureKind | None = None
+        last_upstream_status: int | None = None
+        pending_failure: tuple[int, ProviderFailureKind, int | None, int, int] | None = None
+
+        def emit_pending_failure(*, retry_scheduled: bool) -> None:
+            nonlocal pending_failure
+            if pending_failure is None:
+                return
+            attempt, failure_kind, upstream_status, elapsed_ms, remaining_ms = pending_failure
+            emit_provider_attempt(
+                operation=operation,
+                attempt=attempt,
+                max_attempts=self.max_attempts,
+                outcome="failed",
+                failure_kind=failure_kind,
+                upstream_status=upstream_status,
+                elapsed_ms=elapsed_ms,
+                remaining_ms=remaining_ms,
+                retry_scheduled=retry_scheduled,
+            )
+            pending_failure = None
+
+        for attempt_index in range(self.max_attempts):
+            attempt = attempt_index + 1
+            attempt_started = time.monotonic()
+            remaining = deadline - attempt_started
+            if attempt_index > 0 and remaining < _MIN_RETRY_SECONDS:
+                emit_pending_failure(retry_scheduled=False)
                 break
             try:
                 attempt_timeout = max(remaining, _MIN_RETRY_SECONDS)
-                async with asyncio.timeout(max(remaining, 0)):
-                    return await self._attempt(messages, schema, attempt_timeout=attempt_timeout)
+                timeout_at = asyncio.get_running_loop().time() + max(remaining, 0)
+                async with asyncio.timeout_at(timeout_at):
+                    result = await self._attempt(
+                        messages,
+                        schema,
+                        attempt_timeout=attempt_timeout,
+                    )
+            except asyncio.CancelledError:
+                finished_at = time.monotonic()
+                emit_pending_failure(retry_scheduled=True)
+                emit_provider_attempt(
+                    operation=operation,
+                    attempt=attempt,
+                    max_attempts=self.max_attempts,
+                    outcome="failed",
+                    failure_kind="cancelled",
+                    upstream_status=None,
+                    elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
+                    remaining_ms=max(int((deadline - finished_at) * 1000), 0),
+                    retry_scheduled=False,
+                )
+                raise
             except Exception as exc:  # noqa: BLE001 - reclassified by status_code below
-                last_error = exc
-                if getattr(exc, "status_code", None) in _NON_RETRYABLE_STATUS_CODES:
-                    raise
+                finished_at = time.monotonic()
+                failure_kind, upstream_status = classify_provider_failure(exc)
+                remaining_after = deadline - finished_at
+                retry_candidate = (
+                    attempt < self.max_attempts
+                    and getattr(exc, "status_code", None) not in _NON_RETRYABLE_STATUS_CODES
+                    and remaining_after >= _MIN_RETRY_SECONDS
+                )
+                elapsed_ms = max(int((finished_at - attempt_started) * 1000), 0)
+                remaining_ms = max(int(remaining_after * 1000), 0)
+                emit_pending_failure(retry_scheduled=True)
+                if retry_candidate:
+                    pending_failure = (
+                        attempt,
+                        failure_kind,
+                        upstream_status,
+                        elapsed_ms,
+                        remaining_ms,
+                    )
+                    last_error = exc
+                    last_failure_kind = failure_kind
+                    last_upstream_status = upstream_status
+                    continue
+                emit_provider_attempt(
+                    operation=operation,
+                    attempt=attempt,
+                    max_attempts=self.max_attempts,
+                    outcome="failed",
+                    failure_kind=failure_kind,
+                    upstream_status=upstream_status,
+                    elapsed_ms=elapsed_ms,
+                    remaining_ms=remaining_ms,
+                    retry_scheduled=False,
+                )
+                if failure_kind in {"provider_http", "timeout", "connection"}:
+                    raise ProviderAttemptsExhausted(
+                        failure_kind=failure_kind,
+                        upstream_status=upstream_status,
+                    ) from None
+                raise
+            else:
+                finished_at = time.monotonic()
+                emit_pending_failure(retry_scheduled=True)
+                emit_provider_attempt(
+                    operation=operation,
+                    attempt=attempt,
+                    max_attempts=self.max_attempts,
+                    outcome="succeeded",
+                    failure_kind=None,
+                    upstream_status=None,
+                    elapsed_ms=max(int((finished_at - attempt_started) * 1000), 0),
+                    remaining_ms=max(int((deadline - finished_at) * 1000), 0),
+                    retry_scheduled=False,
+                )
+                return result
+
+        emit_pending_failure(retry_scheduled=False)
+        assert last_error is not None
+        if last_failure_kind in {"provider_http", "timeout", "connection"}:
+            raise ProviderAttemptsExhausted(
+                failure_kind=last_failure_kind,
+                upstream_status=last_upstream_status,
+            ) from None
         raise last_error
 
     async def _attempt(
