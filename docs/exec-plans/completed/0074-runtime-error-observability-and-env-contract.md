@@ -1,9 +1,9 @@
 > 작업 ID: `B-007`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: [승인된 런타임 오류 관측과 환경 스코프 설계](../../design-docs/runtime-error-observability-and-environment-scopes.md)
-> 다음 행동: 로그 모드와 Production raw 거부 계약의 실패 테스트부터 작성한다.
+> 다음 행동: 없음 — 구현·문서·전체 검증 완료.
 > 참고 범위:
 > - `docs/design-docs/runtime-error-observability-and-environment-scopes.md` L1-L199 — 승인된 로그·환경·모델·보안 계약
 > - `apps/api/app/settings.py` L1-L126 — 현재 runtime 설정과 Production validation
@@ -11,7 +11,7 @@
 
 # Runtime Error Observability and Environment Contract Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 로컬에서는 raw stack/cause를 터미널에 한 번 출력하고 Production에서는 민감값을 제거한 단계별 stack/cause를 Vercel 로그에 남기며, hosted Nemotron 3.5 generation과 Nemotron 3 embedding 설정을 단일 주입 계약으로 유지한다.
 
@@ -45,13 +45,13 @@
 
 **실행 절차:**
 
-- [ ] `Settings(_env_file=None)`의 redacted 기본값, development raw 허용, Production raw 거부를 검사하는 테스트를 먼저 추가한다.
-- [ ] `scripts/run_python.ps1 -m pytest apps/api/tests/test_settings.py -q`를 실행해 새 테스트가 필드 부재 또는 validation 부재로 실패함을 확인한다.
-- [ ] `ErrorLogMode`과 `error_log_mode` 필드, Production raw 거부 validation을 최소 구현한다.
-- [ ] 두 example 파일을 정리하고 실제 gitignored env 파일은 값 노출 없이 generation·embedding·로그 모드 계약에 맞춘다. 루트 `.env.local`의 API 전용 generation/provider 변수는 제거한다.
-- [ ] 같은 pytest 명령과 `git check-ignore -v apps/api/.env.local apps/api/.env.prod .env.local`을 실행해 테스트 통과와 ignore 상태를 확인한다.
-- [ ] `git diff --check`와 `git status --short`로 `.env*`가 stage 대상에 나타나지 않는지 확인한다.
-- [ ] 추적 파일만 `fix: enforce safe runtime log modes`로 커밋한다.
+- [x] `Settings(_env_file=None)`의 redacted 기본값, development raw 허용, Production raw 거부를 검사하는 테스트를 먼저 추가한다.
+- [x] `scripts/run_python.ps1 -m pytest apps/api/tests/test_settings.py -q`를 실행해 새 테스트가 필드 부재 또는 validation 부재로 실패함을 확인한다.
+- [x] `ErrorLogMode`과 `error_log_mode` 필드, Production raw 거부 validation을 최소 구현한다.
+- [x] 두 example 파일을 정리하고 실제 gitignored env 파일은 값 노출 없이 generation·embedding·로그 모드 계약에 맞춘다. 루트 `.env.local`의 API 전용 generation/provider 변수는 제거한다.
+- [x] 같은 pytest 명령과 `git check-ignore -v apps/api/.env.local apps/api/.env.prod .env.local`을 실행해 테스트 통과와 ignore 상태를 확인한다.
+- [x] `git diff --check`와 `git status --short`로 `.env*`가 stage 대상에 나타나지 않는지 확인한다.
+- [x] 추적 파일만 `fix: enforce safe runtime log modes`로 커밋한다.
 
 **완료 증거:** 설정 테스트가 통과하고 Production raw 구성은 ValidationError이며 세 로컬 env 파일은 Git ignored 상태다.
 
@@ -75,14 +75,14 @@
 
 **실행 절차:**
 
-- [ ] authorization·API key·DB URL·question/prompt/content·SQL parameter가 redacted되고 raw 모드에는 원문과 traceback/cause가 보존되는 실패 테스트를 작성한다.
-- [ ] root/Uvicorn handler가 없는 로컬 조건에서 한 번 출력되고 기존 handler가 있으면 새 handler를 만들지 않는 실패 테스트를 작성한다.
-- [ ] `scripts/run_python.ps1 -m pytest apps/api/tests/test_runtime_observability.py -q`를 실행해 모듈 부재 실패를 확인한다.
-- [ ] 닫힌 stage/context 계약, 깊이 제한 cause traversal, 4 KiB detail 제한, 정규식·key 기반 redaction과 JSON logger를 최소 구현한다.
-- [ ] 같은 pytest 명령을 실행해 통과를 확인하고, 비밀 fixture 문자열이 `caplog.text`에 없는지 결과를 검토한다.
-- [ ] `scripts/run_python.ps1 -m ruff check apps/api/app/runtime_observability.py apps/api/tests/test_runtime_observability.py`와 대상 Pyright 검증을 실행한다.
-- [ ] `git diff --check`와 대상 diff를 검토한다.
-- [ ] `feat: add safe runtime exception diagnostics`로 커밋한다.
+- [x] authorization·API key·DB URL·question/prompt/content·SQL parameter가 redacted되고 raw 모드에는 원문과 traceback/cause가 보존되는 실패 테스트를 작성한다.
+- [x] root/Uvicorn handler가 없는 로컬 조건에서 한 번 출력되고 기존 handler가 있으면 새 handler를 만들지 않는 실패 테스트를 작성한다.
+- [x] `scripts/run_python.ps1 -m pytest apps/api/tests/test_runtime_observability.py -q`를 실행해 모듈 부재 실패를 확인한다.
+- [x] 닫힌 stage/context 계약, 깊이 제한 cause traversal, 4 KiB detail 제한, 정규식·key 기반 redaction과 JSON logger를 최소 구현한다.
+- [x] 같은 pytest 명령을 실행해 통과를 확인하고, 비밀 fixture 문자열이 `caplog.text`에 없는지 결과를 검토한다.
+- [x] `scripts/run_python.ps1 -m ruff check apps/api/app/runtime_observability.py apps/api/tests/test_runtime_observability.py`와 대상 Pyright 검증을 실행한다.
+- [x] `git diff --check`와 대상 diff를 검토한다.
+- [x] `feat: add safe runtime exception diagnostics`로 커밋한다.
 
 **완료 증거:** raw와 redacted fixture 테스트, nested cause, SQLAlchemy 형태 오류, handler 중복 방지 테스트가 모두 통과한다.
 
@@ -103,15 +103,15 @@
 
 **실행 절차:**
 
-- [ ] V1 AttributeError와 V2 DBAPI-style 오류가 각각 올바른 stage·operation·correlation·stack/cause를 기록하되 HTTP payload에는 내부 내용이 없는 실패 테스트를 작성한다.
-- [ ] 동일 예외가 하위 catch와 최상위 middleware를 모두 통과해도 이벤트가 하나뿐인 실패 테스트를 작성한다.
-- [ ] `scripts/run_python.ps1 -m pytest apps/api/tests/test_runtime_exception_boundary.py -q`를 실행해 관측 경계 부재 실패를 확인한다.
-- [ ] 앱 시작 시 logger를 설정하고 request scope를 생성하며 예외 기록 후 기존 FastAPI 처리로 다시 전달하는 middleware를 최소 구현한다.
-- [ ] V1/V2 핵심 외부 경계 직전에 stage를 갱신하고, 안전 fallback으로 소비되는 예외는 해당 catch에서 한 번 기록한다.
-- [ ] 새 테스트와 `apps/api/tests/test_question_phase_coordinator.py`, `apps/api/tests/test_v2_question_executions.py`를 실행해 통과를 확인한다.
-- [ ] HTTP 응답 snapshot에 stack, SQL, secret fixture가 없는지 검사하고 대상 Ruff·Pyright를 실행한다.
-- [ ] `git diff --check`와 대상 diff를 검토한다.
-- [ ] `feat: trace runtime failures by pipeline stage`로 커밋한다.
+- [x] V1 AttributeError와 V2 DBAPI-style 오류가 각각 올바른 stage·operation·correlation·stack/cause를 기록하되 HTTP payload에는 내부 내용이 없는 실패 테스트를 작성한다.
+- [x] 동일 예외가 하위 catch와 최상위 middleware를 모두 통과해도 이벤트가 하나뿐인 실패 테스트를 작성한다.
+- [x] `scripts/run_python.ps1 -m pytest apps/api/tests/test_runtime_exception_boundary.py -q`를 실행해 관측 경계 부재 실패를 확인한다.
+- [x] 앱 시작 시 logger를 설정하고 request scope를 생성하며 예외 기록 후 기존 FastAPI 처리로 다시 전달하는 middleware를 최소 구현한다.
+- [x] V1/V2 핵심 외부 경계 직전에 stage를 갱신하고, 안전 fallback으로 소비되는 예외는 해당 catch에서 한 번 기록한다.
+- [x] 새 테스트와 `apps/api/tests/test_question_phase_coordinator.py`, `apps/api/tests/test_v2_question_executions.py`를 실행해 통과를 확인한다.
+- [x] HTTP 응답 snapshot에 stack, SQL, secret fixture가 없는지 검사하고 대상 Ruff·Pyright를 실행한다.
+- [x] `git diff --check`와 대상 diff를 검토한다.
+- [x] `feat: trace runtime failures by pipeline stage`로 커밋한다.
 
 **완료 증거:** AttributeError·SQL 오류의 정확한 stage와 stack/cause가 로그에 있고 중복 이벤트와 HTTP 정보 노출이 없다.
 
@@ -133,15 +133,15 @@
 
 **실행 절차:**
 
-- [ ] provider 이벤트의 model·timeout_ms·exception_type·error_detail·pipeline_stage 필드와 성공 이벤트의 null 계약을 테스트에 먼저 반영한다.
-- [ ] 네 adapter의 HTTP·timeout·validation failure가 실제 생성 모델/임베딩 모델과 effective timeout을 전달하는 실패 테스트를 추가한다.
-- [ ] `scripts/run_python.ps1 -m pytest apps/api/tests/test_provider_observability.py apps/api/tests/test_nvidia_nim_attempt_observability.py -q`로 schema/signature 실패를 확인한다.
-- [ ] provider schema와 emitter signature를 확장하고 Task 2 serializer를 사용해 모드별 detail을 만든다.
-- [ ] 각 adapter의 모든 success/failure emit call에 모델·timeout·원본 예외를 전달한다.
-- [ ] 위 테스트와 NVIDIA adapter 전체 테스트를 실행해 통과를 확인한다.
-- [ ] `rg -n "emit_provider_attempt\(" apps/api/app` 결과의 모든 호출이 새 필드를 전달하는지 확인하고 Ruff·Pyright를 실행한다.
-- [ ] `git diff --check`와 대상 diff를 검토한다.
-- [ ] `feat: enrich nvidia attempt diagnostics`로 커밋한다.
+- [x] provider 이벤트의 model·timeout_ms·exception_type·error_detail·pipeline_stage 필드와 성공 이벤트의 null 계약을 테스트에 먼저 반영한다.
+- [x] 네 adapter의 HTTP·timeout·validation failure가 실제 생성 모델/임베딩 모델과 effective timeout을 전달하는 실패 테스트를 추가한다.
+- [x] `scripts/run_python.ps1 -m pytest apps/api/tests/test_provider_observability.py apps/api/tests/test_nvidia_nim_attempt_observability.py -q`로 schema/signature 실패를 확인한다.
+- [x] provider schema와 emitter signature를 확장하고 Task 2 serializer를 사용해 모드별 detail을 만든다.
+- [x] 각 adapter의 모든 success/failure emit call에 모델·timeout·원본 예외를 전달한다.
+- [x] 위 테스트와 NVIDIA adapter 전체 테스트를 실행해 통과를 확인한다.
+- [x] `rg -n "emit_provider_attempt\(" apps/api/app` 결과의 모든 호출이 새 필드를 전달하는지 확인하고 Ruff·Pyright를 실행한다.
+- [x] `git diff --check`와 대상 diff를 검토한다.
+- [x] `feat: enrich nvidia attempt diagnostics`로 커밋한다.
 
 **완료 증거:** 모든 NVIDIA operation 이벤트가 모델·timeout·stage를 가지며 local raw와 Production redacted detail 테스트가 통과한다.
 
@@ -160,13 +160,13 @@
 
 **실행 절차:**
 
-- [ ] 문서에 logger 이름이 아니라 `event_type`, `correlation`, `provider`, `pipeline_stage`로 검색하도록 적고 로컬 로그가 실행 터미널 stdout/stderr에만 남는다고 명시한다.
-- [ ] `scripts/run_python.ps1 scripts/check_docs.py`와 `scripts/run_python.ps1 scripts/check_roadmap.py`를 실행한다.
-- [ ] `scripts/verify.ps1`을 실행해 포맷·lint·타입·단위·통합·문서 검증 전체가 통과하는지 확인한다.
-- [ ] 실패가 있으면 원인을 수정하고 관련 좁은 테스트부터 다시 통과시킨 뒤 전체 검증을 새로 실행한다.
-- [ ] `git status --short`, `git diff --check`, commit diff를 검토해 비밀값과 `.env*`가 없는지 확인한다.
-- [ ] 계획 결과·검증 명령을 기록하고 상태를 Done으로 바꿔 `completed/`로 이동한 뒤 roadmap renderer/checker를 실행한다.
-- [ ] 문서·계획 변경을 `docs: document runtime diagnostics operations`로 커밋한다.
+- [x] 문서에 logger 이름이 아니라 `event_type`, `correlation`, `provider`, `pipeline_stage`로 검색하도록 적고 로컬 로그가 실행 터미널 stdout/stderr에만 남는다고 명시한다.
+- [x] `scripts/run_python.ps1 scripts/check_docs.py`와 `scripts/run_python.ps1 scripts/check_roadmap.py`를 실행한다.
+- [x] `scripts/verify.ps1`을 실행해 포맷·lint·타입·단위·통합·문서 검증 전체가 통과하는지 확인한다.
+- [x] 실패가 있으면 원인을 수정하고 관련 좁은 테스트부터 다시 통과시킨 뒤 전체 검증을 새로 실행한다.
+- [x] `git status --short`, `git diff --check`, commit diff를 검토해 비밀값과 `.env*`가 없는지 확인한다.
+- [x] 계획 결과·검증 명령을 기록하고 상태를 Done으로 바꿔 `completed/`로 이동한 뒤 roadmap renderer/checker를 실행한다.
+- [x] 문서·계획 변경을 `docs: document runtime diagnostics operations`로 커밋한다.
 
 **완료 증거:** `scripts/verify.ps1` 최신 실행이 성공하고 B-007은 completed에 있으며 로드맵 checker가 통과한다.
 
@@ -174,6 +174,8 @@
 
 ## 결과 기록
 
-- 구현 결과: 진행 중
-- 검증 결과: 진행 중
-- 잔여 작업: O-001 Vercel 환경 scope rollout과 배포 smoke 검증
+- 구현 결과: `ERROR_LOG_MODE` 안전 gate, raw/redacted exception serializer, FastAPI stage/correlation 경계,
+  NVIDIA route·embedding·answer·clarification의 모델·timeout·예외 진단 필드를 구현했다.
+- 검증 결과: `scripts/verify.ps1` 성공 — core 27, API 985 통과/2 skip, collector 97 통과/5 skip,
+  web 131, Ruff·Pyright·ESLint·TypeScript·Next build·문서/로드맵 검사 통과.
+- 잔여 작업: O-001 Vercel 환경 scope rollout과 배포 smoke 검증을 active로 전이한다.

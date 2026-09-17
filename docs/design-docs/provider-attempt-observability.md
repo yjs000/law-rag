@@ -6,6 +6,11 @@
 로그에 시도별로 모두 남기고, 상세 실패 이력은 운영자에게만 공개하는 설계를 승인했다. DB 영속화와
 외부 telemetry 도입은 제외한다.
 
+> 2026-09-17 후속 결정: 오류 detail, stack/cause, 로그 모드와 환경 scope 계약은
+> [런타임 오류 관측과 환경 스코프](runtime-error-observability-and-environment-scopes.md)가
+> 이 문서의 초기 metadata-only 정책을 대체한다. Production provider 이벤트는 예외 종류만 남기고
+> `error_detail` 전체를 `[REDACTED]`로 기록하며, 개발 `raw` 모드에서만 원문 detail을 출력한다.
+
 ## 문제
 
 `NvidiaNimAnswerer`는 하나의 전체 timeout 안에서 최대 횟수만큼 provider 호출을 재시도한다. 하지만
@@ -25,7 +30,7 @@
 1. 재시도 제한이 적용되는 모든 NVIDIA 호출의 각 시도 결과를 Vercel JSON 로그 한 줄로 남긴다.
 2. 실패 뒤 성공한 경우에도 앞선 모든 실패 기록을 보존한다.
 3. provider 소진 실패와 draft grounding 실패를 실행 상태와 사용자 안내에서 구분한다.
-4. 질문, prompt, 검색 근거, 인증정보, 예외 메시지를 로그에 남기지 않는다.
+4. Production에는 질문, prompt, 검색 근거, 인증정보, 예외 메시지 원문을 남기지 않는다.
 
 ## 비목표
 
@@ -172,3 +177,6 @@ Vercel 로그 보존기간이 지나면 이 시도 이력은 복구할 수 없�
   호출을 동일한 관측 계약에 포함한다.
 - 2026-09-15: provider 소진과 grounding 실패를 분리하고, 실제 draft가 없는 provider 실패에는
   `repair_core`를 사용하지 않는다.
+- 2026-09-17: provider 이벤트에 `event_type`, 실제 주입 모델, effective timeout, pipeline stage,
+  exception type을 추가했다. Production의 `error_detail`은 부분 redaction 오판을 피하려고 전체를
+  `[REDACTED]`로 닫고, 로컬 `raw`에서만 원문 예외 detail을 허용한다.

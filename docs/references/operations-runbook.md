@@ -82,11 +82,26 @@ corpus 임베딩을 갱신한다. 두 번째 명령은 그 결과로 새 V2 immu
 
 ## NVIDIA provider attempt 로그 판독
 
-NVIDIA 호출 지연·실패는 Vercel 로그에서 `law_rag.provider_attempt` 이벤트로 필터한다. 조사 시간 범위를 먼저 좁힌 뒤 (`correlation`, `operation`)별로 그룹화하고, 각 그룹 안에서는 **로그 시각 오름차순**으로 읽는다. `attempt` 전체를 전역 정렬하지 않는다. 같은 request/execution correlation 안에서도 operation별 provider 호출은 별개이며, 같은 operation도 반복 호출될 수 있다(특히 clarification). 따라서 `retry_scheduled=false`인 terminal 행 뒤의 다음 행, 또는 이미 행이 있는 그룹에서 다시 나온 `attempt=1` 행에서 새 adapter 호출 sequence를 분리한다. 각 연속 sequence 안에서만 `attempt`가 1부터 증가하는지 확인하고, reset 전후 행을 하나의 재시도 열로 섞지 않는다. `correlation`은 client request ID 또는 execution ID의 SHA-256 앞 16자리이므로 원본 ID를 로그로 찾거나 복원하지 않는다. 각 행의 `operation`, `attempt`, `max_attempts`, `outcome`, `failure_kind`, `upstream_status`, `elapsed_ms`, `remaining_ms`, `retry_scheduled`를 함께 읽어 실제 재시도 흐름을 판정한다. `operation`은 `route`, `query_embedding`, `answer_core`, `answer_detail`, `clarification` 중 하나이고, 실패 `failure_kind`는 `provider_http`, `timeout`, `connection`, `invalid_response`, `schema_validation`, `cancelled`, `unknown` 중 하나다.
+NVIDIA 호출 지연·실패는 Vercel Runtime Logs에서 logger 이름이 아니라 JSON 필드
+`event_type=provider_attempt`로 찾는다. Vercel이 Python logger 이름을 검색 가능한 필드로 보존한다고
+가정하지 않는다. 조사 시간 범위를 먼저 좁힌 뒤 `correlation`, `provider=nvidia`,
+`pipeline_stage`, `operation`으로 필터하고 그룹 안에서는 **로그 시각 오름차순**으로 읽는다.
+`attempt` 전체를 전역 정렬하지 않는다. 같은 request/execution correlation 안에서도 operation별 provider 호출은 별개이며, 같은 operation도 반복 호출될 수 있다(특히 clarification). 따라서 `retry_scheduled=false`인 terminal 행 뒤의 다음 행, 또는 이미 행이 있는 그룹에서 다시 나온 `attempt=1` 행에서 새 adapter 호출 sequence를 분리한다. 각 연속 sequence 안에서만 `attempt`가 1부터 증가하는지 확인하고, reset 전후 행을 하나의 재시도 열로 섞지 않는다. `correlation`은 client request ID 또는 execution ID의 SHA-256 앞 16자리이므로 원본 ID를 로그로 찾거나 복원하지 않는다. 각 행의 `model`, `timeout_ms`, `operation`, `attempt`, `max_attempts`, `outcome`, `failure_kind`, `upstream_status`, `exception_type`, `elapsed_ms`, `remaining_ms`, `retry_scheduled`를 함께 읽어 실제 재시도 흐름을 판정한다. `operation`은 `route`, `query_embedding`, `answer_core`, `answer_detail`, `clarification` 중 하나이고, 실패 `failure_kind`는 `provider_http`, `timeout`, `connection`, `invalid_response`, `schema_validation`, `cancelled`, `unknown` 중 하나다.
 
 예를 들어 같은 (`correlation`, `operation`)에서 attempt 1이 `provider_http`/`503`/`retry_scheduled=true`, attempt 2가 `timeout`/`retry_scheduled=true`, attempt 3이 `succeeded`/`retry_scheduled=false`이면 판독 결과는 “NVIDIA 503 뒤 두 번째 timeout, 세 번째 성공”이다. `retry_scheduled=false`는 그 이벤트 뒤에 같은 adapter 호출의 다음 재시도를 시작하지 않는다는 뜻이다. 따라서 availability terminal failure는 `attempt == max_attempts`보다 먼저도 발생할 수 있다. 예를 들어 `402`/`429`는 재시도하지 않고, answer adapter는 전체 deadline의 남은 예산이 부족하면 다음 재시도를 예약하지 않는다. 마지막 행의 attempt 값만으로 소진 여부를 단정하지 말고 `retry_scheduled`, failure kind, 그리고 execution의 terminal 상태를 함께 확인한다. draft 없이 HTTP·timeout·connection provider 실패가 terminal이면 `provider_unavailable`이며, 이는 `grounding_failed`가 아니고 `repair_core`를 시작하지 않는다. 사용자에게는 상세 failure kind를 보여 주지 않고 안전한 provider 불가 안내만 제공한다.
 
-이 이벤트는 닫힌 metadata만 허용한다. 질문·prompt·검색/법령 원문·citation quote, 이메일·사용자 ID·IP, API key·Authorization header·cookie, provider 응답, 예외 메시지·traceback은 payload 또는 문제 보고에 넣지 않는다. 시도 이력은 DB에 저장하지 않으며 Vercel 보존기간이 지나면 복구할 수 없다. 장기 이력이 필요하다는 이유로 DB나 외부 telemetry를 임의로 추가하지 말고 별도 설계·승인을 받는다.
+Production의 provider 이벤트는 닫힌 metadata만 허용하며 `error_detail` 전체가 `[REDACTED]`다.
+처리되지 않은 오류는 같은 correlation의 `event_type=runtime_exception`에서 마지막
+`pipeline_stage`, `exception_type`, redacted cause/stack 위치를 확인한다. 질문·prompt·검색/법령
+원문·citation quote, 이메일·사용자 ID·IP, API key·Authorization header·cookie, provider 응답,
+SQL parameter는 payload 또는 문제 보고에 넣지 않는다. 시도 이력은 DB에 저장하지 않으며 Vercel
+보존기간이 지나면 복구할 수 없다. 장기 이력이 필요하다는 이유로 DB나 외부 telemetry를 임의로
+추가하지 말고 별도 설계·승인을 받는다.
+
+로컬 개발은 `ERROR_LOG_MODE=raw`일 때 API를 실행한 터미널의 stdout/stderr에만 전체 exception
+message, traceback, cause chain을 출력한다. 별도 로그 파일은 만들지 않는다. 실패를 재현한 터미널에서
+`event_type`, `correlation`, `pipeline_stage` 순으로 확인하고, 원시 로그를 이슈·채팅에 붙이기 전에는
+반드시 비밀값·질문·SQL parameter를 제거한다.
 
 ## 롤백
 

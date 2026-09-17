@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 91e071cb28d48788a25ef91dc1d35dfb02ba7da4029f60ebce3b41cc71e54826 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 5714c3140cef7e7e4c4a672dd3e734332bc19d39a67fe771d0bd23e8a1aca397 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/active/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 로그 모드와 Production raw 거부 계약의 실패 테스트부터 작성한다.
+- [O-001 · Operations — Vercel Environment Scope Rollout Implementation Plan](exec-plans/active/0075-vercel-environment-scope-rollout.md) — 다음 행동: 값 없이 Vercel Production·Preview 변수 이름과 scope snapshot을 기록한다.
 
 ## Todo
 
@@ -25,7 +25,6 @@
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 SSE 상세 생성 진행 표시 Implementation Plan](exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: NVIDIA 무료 티어 안내와 SSE 상세 생성 진행 표시의 프런트엔드 회귀 테스트부터 작성한다.
-- [O-001 · Operations — Vercel Environment Scope Rollout Implementation Plan](exec-plans/todo/0075-vercel-environment-scope-rollout.md) — 다음 행동: 값 없이 Vercel Production·Preview 변수 이름과 scope snapshot을 기록한다.
 
 ## Blocked
 
@@ -41,4 +40,5 @@
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
+- [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/completed/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 없음 — 구현·문서·전체 검증 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)

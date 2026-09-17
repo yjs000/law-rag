@@ -1,5 +1,5 @@
 > 작업 ID: `O-001`
-> 상태: `Todo`
+> 상태: `Picked Up`
 > 유형: `Operations`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: `B-007` 완료와 전체 로컬 검증 성공
