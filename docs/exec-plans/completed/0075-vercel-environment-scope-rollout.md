@@ -1,9 +1,9 @@
 > 작업 ID: `O-001`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Operations`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: `B-007` 완료와 전체 로컬 검증 성공
-> 다음 행동: 값 없이 Vercel Production·Preview 변수 이름과 scope snapshot을 기록한다.
+> 다음 행동: 없음 — scope rollout, Production 배포와 smoke 검증 완료.
 > 참고 범위:
 > - `docs/design-docs/runtime-error-observability-and-environment-scopes.md` L32-L185 — 환경 토폴로지, Supabase Preview 격리, Vercel 변수와 rollback 계약
 > - `apps/api/.env.example` L1-L60 — API required 변수와 안전한 예시
@@ -69,15 +69,15 @@
 
 **실행 절차:**
 
-- [ ] push 직전 `git status --short --branch`, `git log -5 --oneline`, `git diff --check HEAD`를 확인하고 `.env*`가 commit되지 않았는지 검사한다.
-- [ ] `git push origin main`을 실행한다.
-- [ ] Vercel deployment가 Ready 또는 Error terminal 상태가 될 때까지 확인한다.
-- [ ] Production health endpoint를 호출하고 hosted NVIDIA 일반 질문 한 건을 correlation 가능한 request ID로 호출한다.
-- [ ] Vercel Runtime Logs에서 `event_type`, `correlation`, `provider`, `pipeline_stage`로 해당 요청을 확인한다. 성공이면 model·timeout·stage 필드를, 실패면 exception type·redacted detail·stack/cause를 확인한다.
-- [ ] 로그에 질문·prompt·법률 원문·secret·DB credential·SQL parameter가 없는지 확인한다.
-- [ ] 배포 실패면 이전 deployment rollback 또는 변수 snapshot 복원을 수행하고 원인과 복구 결과를 기록한다.
-- [ ] 계획 상태를 Done으로 바꾸고 `completed/`로 이동한 뒤 roadmap renderer/checker와 docs check를 실행한다.
-- [ ] 운영 결과 문서를 `ops: roll out vercel environment scopes`로 커밋하고 필요하면 이 기록 커밋도 `main`에 push한다.
+- [x] push 직전 `git status --short --branch`, `git log -5 --oneline`, `git diff --check HEAD`를 확인하고 `.env*`가 commit되지 않았는지 검사한다.
+- [x] `git push origin main`을 실행한다.
+- [x] Vercel deployment가 Ready 또는 Error terminal 상태가 될 때까지 확인한다.
+- [x] Production health endpoint를 호출하고 hosted NVIDIA 일반 질문 한 건을 correlation 가능한 request ID로 호출한다.
+- [x] Vercel Runtime Logs에서 `event_type`, `correlation`, `provider`, `pipeline_stage`로 해당 요청을 확인한다. 성공이면 model·timeout·stage 필드를, 실패면 exception type·redacted detail·stack/cause를 확인한다.
+- [x] 로그에 질문·prompt·법률 원문·secret·DB credential·SQL parameter가 없는지 확인한다.
+- [x] 배포 실패면 이전 deployment rollback 또는 변수 snapshot 복원을 수행하고 원인과 복구 결과를 기록한다.
+- [x] 계획 상태를 Done으로 바꾸고 `completed/`로 이동한 뒤 roadmap renderer/checker와 docs check를 실행한다.
+- [x] 운영 결과 문서를 `ops: roll out vercel environment scopes`로 커밋하고 필요하면 이 기록 커밋도 `main`에 push한다.
 
 **완료 증거:** Production deployment terminal 성공, health 성공, NVIDIA smoke와 동일 correlation의 안전 로그, Preview 운영 credential 부재가 모두 확인된다.
 
@@ -91,6 +91,12 @@
 - 변경 후 scope snapshot: Production required 10개 존재, Preview forbidden credential 8개 부재,
   폐기 변수 8개 양 scope 부재를 이름·scope만으로 검증했다. Production은 `.env.prod` 29개 키를
   동기화했고 Preview는 `ENVIRONMENT=test`, `ERROR_LOG_MODE=redacted`, `AI_MODE=off`다.
-- deployment: 진행 전
-- smoke와 Runtime Logs: 진행 전
-- rollback: 필요 시 기록
+- deployment: `origin/main` `9ea32d6` push 후 Production deployment
+  `dpl_CYnWpTk7P6hgjTS1dHgAr8KGgDb8`가 Ready. `/health` 200, 788ms.
+- smoke와 Runtime Logs: 일반 질문 `/v1/questions` 200, 11,259ms, `mode=ai`, citation 5개.
+  correlation `0bf2e31ba3c0316c`에서 route는 3.5 Lightning/8,000ms, embedding은 Nemotron 3
+  Embed/30,000ms, answer detail은 3.5 Lightning/40,000ms로 모두 첫 시도 성공했다. runtime exception
+  0건, 질문·credential·DB marker 0건. hosted NVIDIA 직접 호출은 첫 60초 client timeout 뒤 8-token
+  재시도에서 200/16,442ms였으므로 이번 시점에는 프로젝트 API 경로가 더 안정적으로 성공했다.
+- rollback: 배포와 smoke가 성공해 실행하지 않았다. 최초 `provider_attempt` 검색은 결과가 일시적으로
+  0건이었으나 correlation 재조회에서 세 이벤트를 확인했으므로 Vercel 검색 지연/쿼리 일관성으로 기록한다.
