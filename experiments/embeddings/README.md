@@ -22,7 +22,7 @@ EMBEDDING_TIMEOUT_SECONDS=30
 - `OPENAI_API_KEY`는 임베딩에 사용하지 않으며 기존 `OPENAI_EMBEDDING_MODEL` 변수는 제거한다.
 - API 질문 흐름에서도 NVIDIA 임베딩을 사용하려면 `AI_MODE=auto`가 필요하다.
 - 생성 답변까지 NVIDIA로 실행하려면 별도로 `ANSWER_PROVIDER=nvidia_nim`과
-  `NVIDIA_ANSWER_MODEL`을 설정한다. 실험 B 자체에는 생성 모델 설정이 필요 없다.
+  `NVIDIA_GENERATION_MODEL`을 설정한다. 실험 B 자체에는 생성 모델 설정이 필요 없다.
 
 NVIDIA Build의 모델 화면에서 계정에 연결된 API key를 발급한다. `Free Endpoint`는 trial 서비스이며
 영구 무료, 고정 quota 또는 production SLA를 보장하지 않는다.
