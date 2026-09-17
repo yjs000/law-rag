@@ -6,6 +6,7 @@
     "build": "pnpm run build:web",
     "test": "pnpm run test:web",
     "typecheck": "pnpm --filter @law-rag/web typecheck",
+    "dev:api": "powershell -ExecutionPolicy Bypass -Command \"Set-Location apps/api; & ..\\..\\scripts\\run_python.ps1 -m uvicorn app.main:app --host 127.0.0.1 --port 8000\"",
     "dev:web": "pnpm --filter @law-rag/web dev",
     "build:web": "pnpm --filter @law-rag/web build",
     "test:web": "pnpm --filter @law-rag/web test",
