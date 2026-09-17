@@ -44,13 +44,13 @@
 
 **실행 절차:**
 
-- [ ] 대상 Vercel project·team·Git branch가 Production 프로젝트와 일치하는지 확인한다.
-- [ ] `vercel env ls` 결과에서 변수 이름·scope만 추출해 변경 전 snapshot을 계획 결과에 기록한다.
-- [ ] Production에 `ENVIRONMENT=production`, `ERROR_LOG_MODE=redacted`, `AI_MODE=auto`, `NVIDIA_GENERATION_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`, `NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b`와 기존 required secret을 `.env.prod` 기준으로 add/update한다.
-- [ ] Preview에 `ENVIRONMENT=test`, `ERROR_LOG_MODE=redacted`, `AI_MODE=off`를 설정하고 Production DB·Supabase·NVIDIA credential을 제거한다.
-- [ ] 두 scope에서 폐기된 NVIDIA 역할별 변수와 OpenAI 변수를 제거한다.
-- [ ] `vercel env ls`를 다시 실행해 이름·scope만 비교하고 Production required/Preview forbidden 집합을 검증한다.
-- [ ] 실패 시 변경 전 snapshot을 기준으로 scope를 복원하고 원인을 결과 기록에 남긴다.
+- [x] 대상 Vercel project·team·Git branch가 Production 프로젝트와 일치하는지 확인한다.
+- [x] `vercel env ls` 결과에서 변수 이름·scope만 추출해 변경 전 snapshot을 계획 결과에 기록한다.
+- [x] Production에 `ENVIRONMENT=production`, `ERROR_LOG_MODE=redacted`, `AI_MODE=auto`, `NVIDIA_GENERATION_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b`, `NVIDIA_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b`와 기존 required secret을 `.env.prod` 기준으로 add/update한다.
+- [x] Preview에 `ENVIRONMENT=test`, `ERROR_LOG_MODE=redacted`, `AI_MODE=off`를 설정하고 Production DB·Supabase·NVIDIA credential을 제거한다.
+- [x] 두 scope에서 폐기된 NVIDIA 역할별 변수와 OpenAI 변수를 제거한다.
+- [x] `vercel env ls`를 다시 실행해 이름·scope만 비교하고 Production required/Preview forbidden 집합을 검증한다.
+- [x] 실패 시 변경 전 snapshot을 기준으로 scope를 복원하고 원인을 결과 기록에 남긴다.
 
 **완료 증거:** 값 없는 scope 목록이 Production required 집합과 Preview forbidden 집합을 만족한다.
 
@@ -85,8 +85,12 @@
 
 ## 결과 기록
 
-- 변경 전 scope snapshot: 진행 전
-- 변경 후 scope snapshot: 진행 전
+- 변경 전 scope snapshot: `law-rag-api`가 `origin/main`에 연결됨. Production·Preview에 DB/Supabase와
+  OpenAI 설정이 함께 있었고, 역할별 `NVIDIA_ANSWER_MODEL`/`NVIDIA_ROUTE_CLASSIFIER_MODEL`과 구 quota
+  변수가 남아 있었다. 값은 조회·기록하지 않았다.
+- 변경 후 scope snapshot: Production required 10개 존재, Preview forbidden credential 8개 부재,
+  폐기 변수 8개 양 scope 부재를 이름·scope만으로 검증했다. Production은 `.env.prod` 29개 키를
+  동기화했고 Preview는 `ENVIRONMENT=test`, `ERROR_LOG_MODE=redacted`, `AI_MODE=off`다.
 - deployment: 진행 전
 - smoke와 Runtime Logs: 진행 전
 - rollback: 필요 시 기록
