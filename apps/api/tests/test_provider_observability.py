@@ -42,6 +42,19 @@ def test_attempt_event_hashes_correlation_and_emits_only_closed_fields(caplog):
     assert str(source) not in caplog.text
 
 
+def test_attempt_logger_emits_info_without_test_level_override(caplog):
+    with provider_attempt_scope("production-source"):
+        emit_provider_attempt(
+            operation="route", attempt=1, max_attempts=1,
+            outcome="succeeded", failure_kind=None,
+            upstream_status=None, elapsed_ms=1, remaining_ms=9,
+            retry_scheduled=False,
+        )
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.INFO
+
+
 def test_attempt_event_rejects_extra_and_inconsistent_success_fields():
     with pytest.raises(ValidationError):
         ProviderAttemptEvent.model_validate({

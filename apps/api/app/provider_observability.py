@@ -31,6 +31,7 @@ ProviderFailureKind = Literal[
 ProviderAttemptOutcome = Literal["succeeded", "failed"]
 
 _LOGGER = logging.getLogger("law_rag.provider_attempt")
+_LOGGER.setLevel(logging.INFO)
 _CORRELATION: ContextVar[str | None] = ContextVar("provider_attempt_correlation", default=None)
 
 

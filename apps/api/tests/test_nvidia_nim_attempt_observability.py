@@ -139,6 +139,7 @@ async def test_answer_core_logs_503_timeout_and_success_in_attempt_order(caplog)
     assert {event["operation"] for event in events} == {"answer_core"}
     assert {event["provider"] for event in events} == {"nvidia"}
     assert {event["max_attempts"] for event in events} == {3}
+    assert len({event["correlation"] for event in events}) == 1
     assert all(event["elapsed_ms"] >= 0 and event["remaining_ms"] >= 0 for event in events)
     assert "secret response" not in caplog.text
     assert "secret timeout detail" not in caplog.text

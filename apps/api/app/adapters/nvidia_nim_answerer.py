@@ -28,6 +28,7 @@ from app.provider_observability import (
     ProviderOperation,
     classify_provider_failure,
     emit_provider_attempt,
+    provider_attempt_scope,
 )
 
 # Below this many remaining seconds, a retry can't realistically get a response
@@ -90,7 +91,8 @@ class NvidiaNimAnswerer:
         operation: ProviderOperation = (
             "clarification" if clarification is not None else "answer_detail"
         )
-        return await self._generate(messages, schema, operation=operation)
+        with provider_attempt_scope():
+            return await self._generate(messages, schema, operation=operation)
 
     async def answer_core(
         self,
@@ -104,7 +106,8 @@ class NvidiaNimAnswerer:
         operation: ProviderOperation = (
             "clarification" if clarification is not None else "answer_core"
         )
-        return await self._generate(messages, schema, operation=operation)
+        with provider_attempt_scope():
+            return await self._generate(messages, schema, operation=operation)
 
     async def answer_blocked_route(
         self, request: QuestionRequest, route: QuestionRoute, reason: str | None
@@ -112,11 +115,12 @@ class NvidiaNimAnswerer:
         """0046: 사전 라우팅이 legal_search 밖으로 걸러낸 질문(embedding·검색 없음)에
         근거 없이 LLM을 호출한다 - `answer()`와 같은 재시도·타임아웃 정책을 그대로
         쓰되 프롬프트만 `build_blocked_route_messages`로 다르다."""
-        return await self._generate(
-            build_blocked_route_messages(request, route, reason),
-            DraftAnswer,
-            operation="answer_detail",
-        )
+        with provider_attempt_scope():
+            return await self._generate(
+                build_blocked_route_messages(request, route, reason),
+                DraftAnswer,
+                operation="answer_detail",
+            )
 
     async def aclose(self) -> None:
         """Release the process-owned NVIDIA HTTP client."""
