@@ -39,10 +39,10 @@
 - Modify: `scripts/tests/test_roadmap_registry.py`
 - Modify: `docs/ROADMAP.md` (renderer only)
 
-- [ ] 연결 worktree에서도 common Git hooks directory를 선택하고 marker가 확인된 Graphify hook만 백업·비활성화하는 실패 테스트를 작성한다.
-- [ ] focused test가 기존 구현에서 실패하는 것을 확인한다.
-- [ ] 최소 구현과 `docs/ROADMAP.md text eol=lf` checkout 계약을 추가한다.
-- [ ] focused test와 새 worktree의 read-only roadmap checker를 통과시킨다.
+- [x] 연결 worktree에서도 common Git hooks directory를 선택하고 marker가 확인된 Graphify hook만 백업·비활성화하는 실패 테스트를 작성한다.
+- [x] focused test가 기존 구현에서 실패하는 것을 확인한다.
+- [x] 최소 구현과 `docs/ROADMAP.md text eol=lf` checkout 계약을 추가한다.
+- [x] focused test와 새 worktree의 read-only roadmap checker를 통과시킨다.
 
 ### Task 2: Skill과 harness 책임 단일화
 
@@ -51,10 +51,10 @@
 - Move: `picked-up-plan-runner`, `work-issue`, `writing-roadmap-scoped-plans` to a dated disabled-skill archive
 - Remove: installed `agent-operating-harness` plugin
 
-- [ ] Graphify skill의 implicit invocation 금지 metadata를 생성하고 skill validator로 확인한다.
-- [ ] 세 중복 skill을 날짜가 붙은 복구 가능한 보관 위치로 이동한다.
-- [ ] 활성 도구를 제공하지 않는 중복 harness plugin을 제거한다.
-- [ ] 활성 skill 목록과 보관 목록을 다시 검사한다.
+- [x] Graphify skill의 implicit invocation 금지 metadata를 생성하고 skill validator로 확인한다.
+- [x] 세 중복 skill을 날짜가 붙은 복구 가능한 보관 위치로 이동한다.
+- [x] 활성 도구를 제공하지 않는 중복 harness plugin을 제거한다.
+- [x] 활성 skill 목록과 보관 목록을 다시 검사한다.
 
 ### Task 3: 권위 문서와 운영 명령 정리
 
@@ -64,10 +64,10 @@
 - Modify: `docs/PLANS.md`
 - Modify: `scripts/install_git_hooks.py`
 
-- [ ] AGENTS의 중복 workflow 설명을 정본 포인터로 축약하고 Graphify 명시 실행 계약을 일치시킨다.
-- [ ] hook 설치·Graphify 자동 hook 비활성화 절차와 rollback을 reference 문서에 기록한다.
-- [ ] common hooks에 roadmap pre-commit을 설치하고 marker Graphify hook을 백업·비활성화한다.
-- [ ] 문서 link와 roadmap checker를 실행한다.
+- [x] AGENTS의 중복 workflow 설명을 정본 포인터로 축약하고 Graphify 명시 실행 계약을 일치시킨다.
+- [x] hook 설치·Graphify 자동 hook 비활성화 절차와 rollback을 reference 문서에 기록한다.
+- [x] common hooks에 roadmap pre-commit을 설치하고 marker Graphify hook을 백업·비활성화한다.
+- [x] 문서 link와 roadmap checker를 실행한다.
 
 ### Task 4: 보수적인 worktree 정리
 

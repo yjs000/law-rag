@@ -88,6 +88,24 @@ detached Codex 관리 worktree가 모두 존재했고, 일부 상태 확인에�
 발생했다. 따라서 이 기준선만으로 안전하게 자동 삭제할 수 있는 worktree는 확정하지 않는다. 실제 정리는
 각 후보를 다시 감사하고 활성 task 연결을 확인한 뒤 수행한다.
 
+## Git hook과 Graphify 실행
+
+Git hook은 공통 Git directory에 설치되므로 primary checkout과 연결 worktree가 같은 정책을 사용한다.
+Roadmap pre-commit은 staged 경로가 실행계획 또는 `docs/ROADMAP.md`일 때만 읽기 전용 checker를 실행한다.
+
+```powershell
+.\scripts\run_python.ps1 scripts/install_git_hooks.py
+.\scripts\run_python.ps1 scripts/install_git_hooks.py --disable-graphify-auto-hooks
+```
+
+두 번째 명령은 `graphify-hook-start` 또는 `graphify-checkout-hook-start` marker가 있는
+`post-commit`·`post-checkout`만 각각 `*.graphify-disabled`로 이동한다. 다른 hook은 변경하지 않으며,
+기존 backup과 내용이 다르면 덮어쓰지 않고 실패한다. 복구할 때는 활성 hook 이름이 비어 있고 backup의
+marker가 맞는지 확인한 뒤 원래 이름으로 되돌린다.
+
+Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합 뒤에만 실행한다. 기능 worktree에서는
+`graphify update/query/path/explain`을 실행하지 않고, 필요 시 추적된 JSON을 직접 읽는다.
+
 ## 권한 계약
 
 | Boundary | Destination or resource | Operation | Data/credential involved | Mutation/retention | Purpose | Status and date | Runtime gate |
@@ -95,8 +113,9 @@ detached Codex 관리 worktree가 모두 존재했고, 일부 상태 확인에�
 | 위치·상태 감사 | 등록된 local worktree | Git metadata와 status 읽기 | 경로·branch·commit hash | 없음 | 분류와 충돌 방지 | Not required — 2026-09-17 | 접근 오류 시 `Keep`으로 중단 |
 | 정책 작성 | `AGENTS.md`, `docs/PLANS.md`, 이 문서 | 문서 생성·수정 | 없음 | repository 문서 변경 | 운영 계약 고정 | Approved — 2026-09-17 사용자 요청 | 저장소 검증과 diff 확인 |
 | 읽기 전용 Graphify | `graphify-out/graph.json` | 직접 읽기 | 코드·문서 graph metadata | 없음 | 구조 질의 | Approved — 2026-09-17 사용자 요청 범위 | CLI 자동 갱신 금지 |
-| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | 생성 파일 갱신 | repository content | 추적 산출물 변경 | 통합 후 graph 일치 | Not required — 현재 정책 작업 | 통합 task에서 별도 실행 |
-| worktree 제거·prune | 승인된 정확한 local path | 등록 해제·디렉터리 제거 | local files | 파괴적, 복구 비용 있음 | 불필요 worktree 정리 | Not required — 현재 정책 작업 | 후보별 사용자 승인 필요 |
+| Graphify 자동 hook 비활성화 | common Git hooks directory | marker hook 백업·비활성화 | repository content metadata | local hook 이름 변경 | 읽기·commit 부작용 제거 | Approved — 2026-09-17 사용자 요청 | marker와 backup 충돌 검사 |
+| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | 생성 파일 갱신 | repository content | 추적 산출물 변경 | 통합 후 graph 일치 | Not required — 현재 작업 | 통합 task에서 별도 실행 |
+| worktree 제거·prune | 승인된 정확한 local path | 등록 해제·디렉터리 제거 | local files | 파괴적, 복구 비용 있음 | 불필요 worktree 정리 | Approved — 2026-09-17 사용자 요청 | clean·merged·inactive 후보만 |
 | branch 삭제 | 승인된 정확한 local branch | ref 삭제 | commit history | 미병합 시 손실 가능 | 종료 branch 정리 | Not required — 현재 정책 작업 | worktree 제거와 별도 승인 |
 | 외부 네트워크·서비스 | 없음 | 없음 | 없음 | 없음 | 정책 작성에 불필요 | Not required — 2026-09-17 | 사용하지 않음 |
 
