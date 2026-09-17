@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import install_git_hooks
 
@@ -117,6 +118,30 @@ class GitHookManagerTests(unittest.TestCase):
         self.assertTrue(post_commit.exists())
         self.assertTrue(post_checkout.exists())
         self.assertFalse((hooks / "post-commit.graphify-disabled").exists())
+
+    def test_disable_graphify_hooks_refuses_symlink_backup(self) -> None:
+        hooks = self.root / ".git" / "hooks"
+        post_commit = hooks / "post-commit"
+        post_commit.write_text(
+            "#!/bin/sh\n# graphify-hook-start\necho commit\n# graphify-hook-end\n",
+            encoding="utf-8",
+        )
+        backup = hooks / "post-commit.graphify-disabled"
+        backup.write_bytes(post_commit.read_bytes())
+        original_is_symlink = Path.is_symlink
+
+        with patch.object(
+            Path,
+            "is_symlink",
+            autospec=True,
+            side_effect=lambda path: path == backup or original_is_symlink(path),
+        ):
+            disabled, message = install_git_hooks.disable_graphify_auto_hooks(self.linked)
+
+        self.assertFalse(disabled)
+        self.assertIn("Refusing to overwrite", message)
+        self.assertTrue(post_commit.exists())
+        self.assertTrue(backup.exists())
 
     def test_repository_attributes_keep_roadmap_lf_in_new_worktree(self) -> None:
         project_root = Path(__file__).resolve().parents[2]

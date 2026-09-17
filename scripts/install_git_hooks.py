@@ -191,7 +191,11 @@ def disable_graphify_auto_hooks(repo_root: str | Path) -> tuple[bool, str]:
             if not managed:
                 continue
             if backup_path.exists() or backup_path.is_symlink():
-                if not backup_path.is_file() or hook_path.read_bytes() != backup_path.read_bytes():
+                if (
+                    backup_path.is_symlink()
+                    or not backup_path.is_file()
+                    or hook_path.read_bytes() != backup_path.read_bytes()
+                ):
                     return False, f"Refusing to overwrite the existing backup {backup_path}"
                 actions.append(("unlink", hook_path, backup_path))
             else:

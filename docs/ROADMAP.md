@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: d093aa938ddad1cd9d72638adcd21333a95f0643c4205dfb863ee3c3d3185413 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: a595bfe7d0734abbb9282c1e623ea4c2c51202d2bcd5ea4cf6c9ae17280174bc -->
 
 # 프로젝트 로드맵
 
