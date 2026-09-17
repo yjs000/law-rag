@@ -40,6 +40,7 @@
 | [V2 질문 응답 표시 계약](v2-question-response-presentation-contract.md) | 승인 | 백엔드 소유 답변·오류 문구의 Core/Finalize 점진 표시와 Web 치환 금지 |
 | [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
+| [에이전트 제어면 단순화](agent-control-plane-simplification.md) | 승인 | workflow·skill·hook·worktree 수명주기의 단일 책임과 부작용 없는 자동화 |
 | [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 승인 | LangGraph StateGraph·Postgres 체크포인터 대화 영속화·스레드/run API, F-005 호환 run/evidence/grounding 경계와 M1~M5 구현 순서 |
 
 ## 버전 표기

@@ -19,6 +19,9 @@ navigation일 뿐 상태 정본이 아니다.
 이 문서의 역할은 law-rag repository 안에서 실행 계획의 저장 위치, 상태 lifecycle,
 repository-specific metadata를 정의하는 것이다.
 
+일반 구현 workflow는 Superpowers가, 이 저장소의 작업 선택·상태 전이는 `roadmap-operator`가 각각
+단독 소유한다. 별도 개인 skill이나 hook이 다음 계획을 자동 선택·실행하거나 상태를 전이하지 않는다.
+
 ## 작업 위치
 
 계획을 착수·재개하기 전에 [`references/worktree-policy.md`](references/worktree-policy.md)의 작업 위치

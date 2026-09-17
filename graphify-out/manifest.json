@@ -2094,9 +2094,9 @@
     "semantic_hash": "0de0e27ba1ecf229a5e174d9189a172c"
   },
   "AGENTS.md": {
-    "mtime": 1789615807.2020311,
-    "seen": 1789615853.99877,
-    "ast_hash": "be6a38243bcff6b97640bc5ce322b4dd",
+    "mtime": 1789618008.3987756,
+    "seen": 1789618067.444139,
+    "ast_hash": "c4c422da849f5beb327541235dc961d1",
     "semantic_hash": ""
   },
   "ARCHITECTURE.md": {
@@ -2154,9 +2154,9 @@
     "semantic_hash": "6ccc95ad9ac7359788e76d4f75286745"
   },
   "docs/PLANS.md": {
-    "mtime": 1789615779.8414786,
-    "seen": 1789615853.998784,
-    "ast_hash": "5b35c5baaa95237c6f3f0d9cabbdf7f9",
+    "mtime": 1789618008.399778,
+    "seen": 1789618067.4455462,
+    "ast_hash": "571380f4903c549bcf2435a59c000936",
     "semantic_hash": ""
   },
   "docs/PRODUCT_SENSE.md": {
@@ -2178,9 +2178,9 @@
     "semantic_hash": ""
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789616541.7706778,
-    "seen": 1789616593.9528844,
-    "ast_hash": "bc9dc4cfb5b1d459238153673933dd26",
+    "mtime": 1789618016.9393992,
+    "seen": 1789618067.4460094,
+    "ast_hash": "924a7dcfcaa42a577f559977ed4b6f58",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -2916,8 +2916,8 @@
     "semantic_hash": ""
   },
   "pnpm-workspace.yaml": {
-    "mtime": 1783946211.4069517,
-    "seen": 1789039836.0043674,
+    "mtime": 1789617081.5604198,
+    "seen": 1789618067.4728363,
     "ast_hash": "d3dc03f140612272d512c84b8abc053a",
     "semantic_hash": ""
   },
@@ -3186,9 +3186,9 @@
     "semantic_hash": ""
   },
   "docs/design-docs/index.md": {
-    "mtime": 1789460114.533498,
-    "seen": 1789460160.8315654,
-    "ast_hash": "c2d2d495bb35847091d0fec3b63290ba",
+    "mtime": 1789618008.4007792,
+    "seen": 1789618067.448973,
+    "ast_hash": "ecaf2f04a87e356c327638eaeeb7878e",
     "semantic_hash": ""
   },
   "docs/design-docs/layperson-answer-contract-v2.md": {
@@ -3504,9 +3504,9 @@
     "semantic_hash": ""
   },
   "scripts/install_git_hooks.py": {
-    "mtime": 1788438294.6509397,
-    "seen": 1789039836.004125,
-    "ast_hash": "45d3a0a7f7e20aaa2fa06ea391e074e5",
+    "mtime": 1789618008.4037755,
+    "seen": 1789618067.4382954,
+    "ast_hash": "88bf320a04e21ec64f52893bf1aeca9f",
     "semantic_hash": ""
   },
   "scripts/render_roadmap.py": {
@@ -3972,9 +3972,9 @@
     "semantic_hash": ""
   },
   "docs/references/worktree-policy.md": {
-    "mtime": 1789615807.5889673,
-    "seen": 1789615853.998996,
-    "ast_hash": "e4384bbbe2d808ec64c9afaeb35a744e",
+    "mtime": 1789618008.402777,
+    "seen": 1789618067.4702792,
+    "ast_hash": "50ac64a24ea655315cbcefa70685f272",
     "semantic_hash": ""
   },
   "apps/api/app/domain/provider_attempts.py": {
@@ -4017,6 +4017,30 @@
     "mtime": 1789616541.7806804,
     "seen": 1789616593.968552,
     "ast_hash": "b3f396bf2b3bf37684fbfeef602a3bea",
+    "semantic_hash": ""
+  },
+  "scripts/tests/test_git_hooks.py": {
+    "mtime": 1789618008.4047751,
+    "seen": 1789618067.4387696,
+    "ast_hash": "0c84745a49b11f3c4009d1451f433bd8",
+    "semantic_hash": ""
+  },
+  "docs/design-docs/agent-control-plane-simplification.md": {
+    "mtime": 1789618008.4007792,
+    "seen": 1789618067.446163,
+    "ast_hash": "1d314a6b8fcf0513e272b8cc5fe1b8e1",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/completed/0073-agent-control-plane-simplification.md": {
+    "mtime": 1789618008.4017768,
+    "seen": 1789618067.4607553,
+    "ast_hash": "87408071c126ceb19709bf0751573229",
+    "semantic_hash": ""
+  },
+  "docs/references/agent-runtime-policy.md": {
+    "mtime": 1789618008.402777,
+    "seen": 1789618067.468736,
+    "ast_hash": "892737ce3e6341db9c64448893f35080",
     "semantic_hash": ""
   }
 }

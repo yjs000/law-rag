@@ -12,6 +12,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_NAME = "pre-commit"
 HOOK_MARKER = "# law-rag scoped roadmap pre-commit hook"
+GRAPHIFY_HOOK_MARKERS = {
+    "post-commit": "# graphify-hook-start",
+    "post-checkout": "# graphify-checkout-hook-start",
+}
+GRAPHIFY_HOOK_END_MARKERS = {
+    "post-commit": "# graphify-hook-end",
+    "post-checkout": "# graphify-checkout-hook-end",
+}
+GRAPHIFY_BACKUP_SUFFIX = ".graphify-disabled"
 HOOK_TEXT = f"""#!/bin/sh
 {HOOK_MARKER}
 # Keep unrelated hooks in .git/hooks untouched and run the roadmap checker only
@@ -70,15 +79,15 @@ def discover_repo_root(start: str | Path | None = None) -> Path | None:
         return None
 
 
-def _git_dir(repo_root: Path) -> Path | None:
-    output = _git_output(repo_root, "rev-parse", "--git-dir")
+def _git_common_dir(repo_root: Path) -> Path | None:
+    output = _git_output(repo_root, "rev-parse", "--git-common-dir")
     if output is None:
         return None
-    git_dir = Path(output)
-    if not git_dir.is_absolute():
-        git_dir = repo_root / git_dir
+    common_dir = Path(output)
+    if not common_dir.is_absolute():
+        common_dir = repo_root / common_dir
     try:
-        return git_dir.resolve()
+        return common_dir.resolve()
     except OSError:
         return None
 
@@ -101,11 +110,11 @@ def install(repo_root: str | Path) -> tuple[bool, str]:
     """Install the managed hook and return ``(installed, message)``."""
 
     root = Path(repo_root).resolve()
-    git_dir = _git_dir(root)
-    if git_dir is None:
+    common_dir = _git_common_dir(root)
+    if common_dir is None:
         return False, f"Git repository metadata was not found under {root}"
 
-    hooks_dir = git_dir / "hooks"
+    hooks_dir = common_dir / "hooks"
     try:
         hooks_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -132,12 +141,91 @@ def install(repo_root: str | Path) -> tuple[bool, str]:
     return True, f"Installed scoped roadmap pre-commit hook at {hook_path}"
 
 
+def _managed_graphify_hook(path: Path, start_marker: str, end_marker: str) -> bool | None:
+    """Return managed status, or ``None`` when markers occur in a composite hook."""
+
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return False
+    if start_marker not in text and end_marker not in text:
+        return False
+    lines = text.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if (
+        len(lines) >= 3
+        and lines[0] == "#!/bin/sh"
+        and lines[1] == start_marker
+        and lines[-1] == end_marker
+    ):
+        return True
+    return None
+
+
+def disable_graphify_auto_hooks(repo_root: str | Path) -> tuple[bool, str]:
+    """Back up recognized Graphify auto-update hooks without touching other hooks."""
+
+    root = Path(repo_root).resolve()
+    common_dir = _git_common_dir(root)
+    if common_dir is None:
+        return False, f"Git repository metadata was not found under {root}"
+
+    hooks_dir = common_dir / "hooks"
+    actions: list[tuple[str, Path, Path]] = []
+    try:
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        for name, start_marker in GRAPHIFY_HOOK_MARKERS.items():
+            hook_path = hooks_dir / name
+            backup_path = hooks_dir / f"{name}{GRAPHIFY_BACKUP_SUFFIX}"
+            managed = _managed_graphify_hook(
+                hook_path, start_marker, GRAPHIFY_HOOK_END_MARKERS[name]
+            )
+            if managed is None:
+                return (
+                    False,
+                    f"Refusing to disable user-owned or composite hook {hook_path}",
+                )
+            if not managed:
+                continue
+            if backup_path.exists() or backup_path.is_symlink():
+                if (
+                    backup_path.is_symlink()
+                    or not backup_path.is_file()
+                    or hook_path.read_bytes() != backup_path.read_bytes()
+                ):
+                    return False, f"Refusing to overwrite the existing backup {backup_path}"
+                actions.append(("unlink", hook_path, backup_path))
+            else:
+                actions.append(("rename", hook_path, backup_path))
+
+        for operation, hook_path, backup_path in actions:
+            if operation == "unlink":
+                hook_path.unlink()
+            else:
+                hook_path.rename(backup_path)
+    except OSError as exc:
+        return False, f"Unable to disable Graphify auto-update hooks in {hooks_dir}: {exc}"
+
+    if actions:
+        disabled = [hook_path.name for _, hook_path, _ in actions]
+        return True, f"Disabled Graphify auto-update hooks: {', '.join(disabled)}"
+    return True, f"No active managed Graphify auto-update hooks found in {hooks_dir}"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repo-root",
         type=Path,
         help="Repository root to modify; defaults to the Git repository containing the cwd.",
+    )
+    parser.add_argument(
+        "--disable-graphify-auto-hooks",
+        action="store_true",
+        help="Back up recognized Graphify post-commit/post-checkout hooks instead of installing.",
     )
     return parser
 
@@ -152,7 +240,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Unable to locate a Git repository from {start}", file=sys.stderr)
         return 1
 
-    installed, message = install(repo_root)
+    if args.disable_graphify_auto_hooks:
+        installed, message = disable_graphify_auto_hooks(repo_root)
+    else:
+        installed, message = install(repo_root)
     stream = sys.stdout if installed else sys.stderr
     print(message, file=stream)
     return 0 if installed else 1
@@ -162,4 +253,14 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-__all__ = ["HOOK_MARKER", "HOOK_TEXT", "discover_repo_root", "install", "main"]
+__all__ = [
+    "GRAPHIFY_BACKUP_SUFFIX",
+    "GRAPHIFY_HOOK_END_MARKERS",
+    "GRAPHIFY_HOOK_MARKERS",
+    "HOOK_MARKER",
+    "HOOK_TEXT",
+    "disable_graphify_auto_hooks",
+    "discover_repo_root",
+    "install",
+    "main",
+]

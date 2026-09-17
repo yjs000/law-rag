@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: a39fc48444378e7ef2a9980db6077858dbe3502b474c36a589abf50a2219f447 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: fd79fce8568a499193764345d519de7d95bcb66c360444a41290bf2dc87a9808 -->
 
 # 프로젝트 로드맵
 
@@ -38,4 +38,5 @@
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
+- [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [완료 계획 색인](exec-plans/completed/README.md)

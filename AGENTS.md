@@ -5,7 +5,8 @@
 
 어떻게 개발할지(skill 선택, brainstorming, planning, TDD, 구현, 리뷰, 검증)는 설치된 Superpowers가
 결정한다. 무엇을 지켜야 하는지(도메인 불변조건, 데이터·보안 규칙, 문서·Git 정책)는 이 파일이
-결정한다. 자세한 역할 분담은 "개발 작업 워크플로우"를 참고한다.
+결정한다. 조건부 runtime 절차는 필요한 경우에만
+[`docs/references/agent-runtime-policy.md`](docs/references/agent-runtime-policy.md)를 읽는다.
 
 이 저장소 규칙은 어떤 사용자·전역 설정(예: 사용자 홈 디렉터리의 전역 `AGENTS.md`)보다 우선한다. 이
 문서와 전역 설정이 다르면 이 문서를 따른다. 전역 설정은 이 문서가 다루지 않는 부분에서만 보조로
@@ -33,27 +34,16 @@
 다시 선언한다. 읽기 전용 검토는 시작·종료 `git status`가 같아야 하며, Graphify CLI의 자동 갱신을
 포함한 생성 파일 변경을 남겨서는 안 된다.
 
-## Worktree 수명주기
-
-- worktree 생성·선택·보존·정리 기준은
-  [`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)를 따른다.
-- 현재 worktree, 활성 Codex task가 사용하는 worktree, dirty 또는 접근 오류가 있는 worktree, 통합
-  대상에 미병합된 worktree는 삭제 후보가 아니다.
-- `git worktree remove`, `git worktree prune`, branch 삭제는 정책의 사전 검증을 통과한 정확한 대상을
-  사용자에게 제시하고 승인을 받은 뒤 실행한다. 디렉터리를 파일시스템 명령으로 직접 삭제하지 않는다.
+Worktree의 생성·선택·보존·정리는 `docs/references/worktree-policy.md`만 정본으로 사용한다.
 
 ## 로드맵 정본·최소 읽기 운영
 
 - 실행계획 파일의 상단 메타데이터가 상태·유형·제목·다음 행동·참고 범위의 유일한 정본이다.
   `docs/ROADMAP.md`는 이 헤더에서 생성되는 산출물이며, 상태·제목·다음 행동을 직접 편집하지 않는다.
   헤더를 바꾼 뒤 `python scripts/render_roadmap.py`를 실행한다.
-- `docs/exec-plans/{todo,active,completed}/README.md`는 lifecycle navigation only이며 상태의 정본이
-  아니다. 실제 상태와 우선순위는 생성된 `docs/ROADMAP.md`와 선택한 계획 헤더에서 확인한다.
 - 시작·재개·상태 전이 시 `roadmap-operator`의 네 범위(현재 상태 L1-L28와 마지막 비완료 roadmap 행,
   선택한 계획 헤더, 헤더의 선언 범위)를 순서대로 읽는다. 다른 계획 본문·완료 계획·전체 아키텍처는
   기본적으로 읽지 않는다.
-- 범위 밖 문맥이 필요하면 읽기 전에 `경로`, `시작줄`, `끝줄`, `이유`를 명시하고 사용자에게 알리거나
-  작업 기록에 남긴다. 상태 전이 전후에는 읽은 범위와 각 이유를 간결하게 보고한다.
 
 ## Docker·로컬 DB 정책
 
@@ -66,9 +56,7 @@
 개발 작업의 skill 선택, brainstorming, 설계 승인, planning, worktree 격리, TDD, 구현, 코드 리뷰,
 검증 및 완료 절차는 설치된 Superpowers의 현재 skill과 trigger 조건을 따른다.
 
-이 저장소는 Superpowers workflow의 발동 조건이나 절차를 별도로 재정의하지 않는다.
-
-단, Superpowers가 생성하는 repository artifact의 저장 위치와 lifecycle은 이 저장소의 문서 규칙
+이 저장소는 workflow를 재정의하지 않는다. 단, repository artifact의 저장 위치와 lifecycle은 이 저장소의 문서 규칙
 (`docs/design-docs/`, `docs/exec-plans/active/`, 아래 "권위 문서")을 따른다 — `CLAUDE.md`가 경로를
 override한다.
 
@@ -93,24 +81,7 @@ Superpowers workflow 중에도 항상 유지한다.
   2. 필요한 검증 명령의 최신 성공 증거가 있음
   3. 활성 실행계획의 해당 작업에 미완료 항목이 없음
 
-## Subagent 모델·reasoning 정책
-
-Superpowers를 포함해 subagent를 dispatch할 때는 역할에 맞는 `model`과 `reasoning_effort`를 항상
-명시한다. 둘 중 하나라도 생략하여 부모 세션의 모델이나 reasoning effort를 암묵적으로 상속하게 해서는
-안 된다.
-
-- 명세가 완전한 단일 파일·기계적 구현 및 작은 scoped re-review: `gpt-5.6-luna`, `max`
-- 일반 구현 : `gpt-5.6-luna`, `max`
-- 다중 파일 통합, 디버깅 및 task-level review: `gpt-5.6-terra`, `xhigh`
-- 아키텍처·설계 판단 및 최종 whole-branch review: `gpt-5.6-sol`, `medium`
-- fix-loop escalation은 필요한 경우에만 한 단계 올리며, 최종 review가 아니라는 이유만으로
-  `gpt-5.6-terra`를 선택하지 않는다.
-- `gpt-5.6-sol`은 `medium` 이하에서만 사용하며, `high` 이상은 어떠한 경우에도 사용하지 않는다.
-
-명시적 모델 override와 호환되도록 subagent의 `fork_turns`는 `none` 또는 필요한 최근 turn 수로
-제한한다. 요청한 모델이나 effort를 사용할 수 없으면 다른 모델로 조용히 fallback하지 말고
-dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하는 guardian 등 모델을 직접 지정할 수 없는
-내부 agent는 이 정책의 적용 대상에서 제외한다.
+Subagent dispatch 전에만 `docs/references/agent-runtime-policy.md`의 모델·reasoning 절을 읽고 적용한다.
 
 ## 커밋 원칙
 
@@ -185,24 +156,8 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 4. 스키마 변경 시 마이그레이션 및 `docs/generated/db-schema.md` 갱신
 5. 사용자 동작 변경 시 제품 명세와 운영 문서 갱신
 
-### Windows Python 검증 실행
-
-- 이미 준비된 workspace 의존성으로 Python 테스트·lint·문서 검증을 실행할 때는
-  `scripts/run_python.ps1`을 사용한다. 전체 검증 진입점은 `scripts/verify.ps1`이다.
-- `uv run`이 `.uv-cache` 초기화, `.venv\.lock`, `access denied` 또는 trampoline 경로 정규화
-  오류로 실패하면 같은 명령을 반복하지 않는다. 이는 테스트 실패가 아닌 runner 오류로 분류하고
-  `scripts/run_python.ps1`로 전환한다.
-- pytest `tmp_path`가 새 임시 디렉터리에서 `access denied`로 실패하면 다른 temp 경로를 반복해서
-  시도하지 않는다. 전체 `scripts/verify.ps1`을 platform runtime 권한 상승으로 한 번 재실행한다.
-- 의존성 설치·동기화가 실제로 필요한 경우에만 `uv`를 사용하며, 그때는 sandbox가 쓸 수 있는 새
-  cache와 project environment를 함께 지정한다.
-
-## GitHub 인증 확인
-
-- sandbox 안에서 실행한 `gh auth status`가 token을 `invalid`로 보고해도 곧바로 실제 인증 실패로 단정하거나 사용자에게 재로그인을 요구하지 않는다. Windows Credential Manager/keyring 접근이 sandbox에 차단된 false negative일 수 있다.
-- 먼저 동일한 read-only 명령인 `gh auth status`를 승인된 권한 상승 실행으로 한 번 더 확인한다. 권한 상승 결과가 정상이라면 해당 결과를 기준으로 commit·push 작업을 계속한다.
-- 권한 상승 확인에서도 인증이 실패할 때만 사용자에게 `gh auth login -h github.com` 실행을 요청한다. device login 직후에도 같은 권한 상승 확인으로 새 인증이 보이는지 검증한다.
-- 인증 확인 과정에서 token 원문을 출력하거나 문서·로그·채팅에 기록하지 않는다.
+Windows Python runner 오류나 GitHub 인증 확인이 필요할 때만
+`docs/references/agent-runtime-policy.md`의 해당 절을 읽는다.
 
 ## 금지 사항
 
@@ -211,27 +166,10 @@ dispatch를 중단해 사용자에게 알린다. 시스템이 자동 생성하�
 - 인용 검증을 우회해 답변 품질을 높이는 것처럼 보이게 하는 변경
 - 근거 없는 기술·법률 요구사항을 임의로 확정
 
-## Graphify 산출물 커밋 정책
-
-- 기능 worktree와 기능 커밋에서는 `graphify update .`를 실행하거나 `graphify-out/` 산출물을 커밋하지 않는다. 여러 worktree가 같은 생성 파일을 각각 갱신해 병합 충돌을 만드는 일을 피하기 위해 Graphify 산출물은 통합 대상 브랜치가 소유한다.
-- 기능 브랜치를 통합 대상 브랜치에 모두 적용한 뒤 그 브랜치에서 `graphify update .`를 한 번 실행한다. 가능하면 `git merge --no-ff --no-commit <branch>`로 소스 병합을 준비하고, 갱신된 추적 산출물을 같은 merge commit에 포함한다. 선형 이력이나 fast-forward 때문에 별도 커밋이 필요하면 하나의 `chore(graph): refresh knowledge graph` 통합 커밋으로 묶을 수 있다.
-- 통합 시 갱신이 실패하면 원인을 해결하거나, 해결이 현재 범위를 벗어나면 실패 원인과 잔여 산출물을 실행 계획에 기록한다. 기존 사용자 변경이나 다른 작업의 `graphify-out/` 변경을 현재 통합 커밋에 섞지 않는다.
-- `.graphify_python`, `.graphify_root`, 질의 memory/reflection, vocabulary, stale marker, 학습 sidecar와 `cache/` 전체는 worktree별 로컬 상태다. `.gitignore`에 유지하고 커밋하지 않는다.
-
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
-Rules:
-- 읽기 전용 검토와 기능 worktree에서는 `graphify query/path/explain` CLI를 실행하지 않는다. 해당 CLI가
-  stale graph를 자동 갱신할 수 있으므로 기존 `graphify-out/graph.json`을 직접 읽는 비변경 traversal로
-  질의하고, 시작·종료 `git status`가 같은지 확인한다.
-- 사용자가 Graphify 갱신을 명시적으로 요청한 경우나 통합 브랜치의 통합 단계에서만 Graphify CLI의
-  변경 동작을 허용한다. 실행 전에 현재 worktree와 변경 예상 파일을 선언한다.
-- 시작 시 이미 dirty인 `graphify-out/` 파일은 다른 작업의 소유일 수 있다. 읽기 전용 검토에서는 이를
-  갱신·복구·stage하지 않고 시작 snapshot에 기록한 뒤 그대로 보존한다.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After integrating code into the target branch, run `graphify update .` once there to keep the graph current (AST-only, no API cost). Do not update or commit Graphify outputs from feature worktrees.
+Graphify skill은 implicit invocation을 금지한다. 사용자가 `/graphify` 또는 `$graphify`를 명시했을 때만
+호출하고, 읽기 전용 검토·기능 worktree에서는 자동 갱신 가능 CLI를 실행하지 않는다. 기존 graph가
+필요하면 추적된 `graphify-out/graph.json`을 직접 읽는다. 갱신과 산출물 commit은 소스 통합 뒤 통합
+대상 branch가 한 번만 소유하며, 자세한 실행·hook·rollback 절차는
+[`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)를 따른다.
