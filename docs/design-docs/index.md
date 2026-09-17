@@ -31,6 +31,7 @@
 | [질문 사전 라우팅](pre-retrieval-question-routing.md) | 대체됨 | 0028의 tier1/tier2 라우팅 근거와 한계를 보존한 역사 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
 | [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) | 승인 | 단일 NVIDIA 라우터, `routing_unavailable` 안전 fallback, 법령 답변·안내 생성 경계 |
 | [NVIDIA provider 시도별 관측과 실패 분류](provider-attempt-observability.md) | 승인 | 모든 NVIDIA 호출의 시도별 Vercel 구조화 로그와 provider 소진·grounding 실패 분리 |
+| [런타임 오류 관측과 환경 스코프 분리](runtime-error-observability-and-environment-scopes.md) | 승인 | 로컬 raw·운영 redacted stack trace, NVIDIA 3.5 모델 주입과 Vercel Production·Preview 변수 분리 |
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
