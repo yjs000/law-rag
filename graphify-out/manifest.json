@@ -2142,9 +2142,9 @@
     "semantic_hash": "3349aea2307e876ac82ac0598d1f18ed"
   },
   "docs/CURRENT_STATE.md": {
-    "mtime": 1789181247.4601722,
-    "seen": 1789181321.5956788,
-    "ast_hash": "5f91e82ef78ba664f6434b49bb520f83",
+    "mtime": 1789460541.8631165,
+    "seen": 1789460697.904282,
+    "ast_hash": "155b094e98ddc7221e6a6260faad58f9",
     "semantic_hash": ""
   },
   "docs/DESIGN.md": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": "153c33223d88657f09e1608575c2d34a"
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789181262.2994125,
-    "seen": 1789181321.5966928,
-    "ast_hash": "2a8116c8b6384d9c889dd17e76c59fe7",
+    "mtime": 1789462869.8816679,
+    "seen": 1789562309.9678538,
+    "ast_hash": "d04b4388326eac89389436003151e109",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -2610,9 +2610,9 @@
     "semantic_hash": ""
   },
   "docs/exec-plans/todo/0060-v2-dynamic-today-date-bound.md": {
-    "mtime": 1788446143.5964496,
-    "seen": 1789039836.0042975,
-    "ast_hash": "6d1c8023f872ddb0883bdba5911957ae",
+    "mtime": 1789462862.8214257,
+    "seen": 1789562309.9679928,
+    "ast_hash": "6ccb9b4d5bfacaf5fbc5be8aaa17c1d9",
     "semantic_hash": ""
   },
   "docs/exec-plans/todo/README.md": {
@@ -3198,9 +3198,9 @@
     "semantic_hash": ""
   },
   "docs/design-docs/index.md": {
-    "mtime": 1789114024.1314726,
-    "seen": 1789114058.8866124,
-    "ast_hash": "fc5512556bc0c3855c72728c9c024a15",
+    "mtime": 1789460114.533498,
+    "seen": 1789460160.8315654,
+    "ast_hash": "c2d2d495bb35847091d0fec3b63290ba",
     "semantic_hash": ""
   },
   "docs/design-docs/layperson-answer-contract-v2.md": {
@@ -3540,9 +3540,9 @@
     "semantic_hash": ""
   },
   ".codex/skills/roadmap-operator/SKILL.md": {
-    "mtime": 1789041959.2413983,
-    "seen": 1789042438.592459,
-    "ast_hash": "068bd058035d1b2db02e5adacfd554d9",
+    "mtime": 1789562096.125027,
+    "seen": 1789562309.9677937,
+    "ast_hash": "591b7472dcf7af1a41362a547d36ffec",
     "semantic_hash": ""
   },
   ".superpowers/sdd/0066-roadmap-registry-and-context-diet/final-review.md": {
@@ -3897,6 +3897,54 @@
     "mtime": 1789179559.1369503,
     "seen": 1789181321.6234262,
     "ast_hash": "ae044097acdf365961bb0b02548f19e5",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md": {
+    "mtime": 1789457489.8906252,
+    "seen": 1789457553.667618,
+    "ast_hash": "19c9585cdd86b7b7c3a153df3460ce7c",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260912_032137_\ub2e4\uc74c\uc791\uc5c5\uc774\ubb50\uc9c0.md": {
+    "mtime": 1789183297.0663157,
+    "seen": 1789457553.6676977,
+    "ast_hash": "c117b4f2da23824163fc699535ec9ec1",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260912_033442_e006\uc5d0\uc11c_\ud55c_\uc791\uc5c5_\ube0c\ub9ac\ud551__\ubb34\uc2a8\ubb38\uc81c\uac00\uc788\uc5c8\uace0_\uc6d0\uc778\uc774\ubb50\uc600\uc73c\uba70_\uc5b4\ub5bb\uac8c_\ud574\uacb0\ud588\ub294\uc9c0__\uac01\uacfc\uc815\uc758.md": {
+    "mtime": 1789184082.3726766,
+    "seen": 1789457553.6676998,
+    "ast_hash": "42b05f029df1d1df14f249cc60c2da3b",
+    "semantic_hash": ""
+  },
+  "docs/design-docs/v2-question-response-presentation-contract.md": {
+    "mtime": 1789459777.2295718,
+    "seen": 1789459807.2881045,
+    "ast_hash": "3efa9f53a440214d0ac1c6f07210a023",
+    "semantic_hash": ""
+  },
+  "docs/design-docs/provider-attempt-observability.md": {
+    "mtime": 1789462729.1968596,
+    "seen": 1789462824.6973054,
+    "ast_hash": "94585615d9b955100903fb9ed4315830",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/active/0071-v2-question-response-passthrough.md": {
+    "mtime": 1789460658.7846134,
+    "seen": 1789460697.9043524,
+    "ast_hash": "9ada6c7765edcb7cab9813ac1207fc94",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/todo/0072-provider-attempt-observability.md": {
+    "mtime": 1789462769.4697256,
+    "seen": 1789462824.697431,
+    "ast_hash": "cd7b74bb9ce1eca0c7be04497ff0ee6d",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260915_090204_routing\uc774_\ubd88\uac00\ub2a5\ud55c_\uc774\uc720\uac00_\ubb34\uc5c7\uc774\uc5c8\ub294\uc9c0_vercel_log_\ucc3e\uae30.md": {
+    "mtime": 1789462924.3570714,
+    "seen": 1789562309.968082,
+    "ast_hash": "a4025cf02df4e6366ab8bdc140614185",
     "semantic_hash": ""
   }
 }
