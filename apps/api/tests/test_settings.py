@@ -74,6 +74,35 @@ def test_production_accepts_explicit_dependencies_and_rate_limit_secret() -> Non
     assert settings.environment == "production"
 
 
+def test_error_log_mode_defaults_to_redacted() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.error_log_mode == "redacted"
+
+
+def test_development_allows_raw_error_logging() -> None:
+    settings = Settings(
+        environment="development",
+        error_log_mode="raw",
+        _env_file=None,
+    )
+
+    assert settings.error_log_mode == "raw"
+
+
+def test_production_rejects_raw_error_logging() -> None:
+    with pytest.raises(ValidationError, match="production requires redacted error logs"):
+        Settings(
+            environment="production",
+            error_log_mode="raw",
+            database_url="postgresql://example",
+            supabase_url="https://project.supabase.co",
+            supabase_secret_key="sb_secret_example",
+            rate_limit_secret="replace-with-managed-secret",
+            _env_file=None,
+        )
+
+
 def test_nvidia_key_enables_generation_and_embedding() -> None:
     settings = Settings(
         nvidia_api_key="nvapi-test",

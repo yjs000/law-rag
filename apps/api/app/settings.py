@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     app_name: str = "에너지 법령 RAG"
     environment: Literal["development", "test", "production"] = "development"
+    error_log_mode: Literal["raw", "redacted"] = "redacted"
     collector_state_dir: Path = Path(".collector-state")
     database_url: str | None = None
     direct_url: str | None = None
@@ -97,6 +98,8 @@ class Settings(BaseSettings):
             raise ValueError("v2 provider budget must leave time to persist the phase result")
         if self.environment != "production":
             return self
+        if self.error_log_mode != "redacted":
+            raise ValueError("production requires redacted error logs")
         missing = [
             name
             for name, value in (
