@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: b91fe51f400aa778416efa7a848a8af18679a6fdc07969e8cebc28c6b538ec93 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 94c2ecfc355ae9a5d8c94cb21527bc839246c53188ebe7bdcf3ca5d223d9321f -->
 
 # 프로젝트 로드맵
 
@@ -25,6 +25,8 @@
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: finalize 상단 고정 3점 표시의 상태·위치 회귀 테스트부터 작성한다.
 - [B-008 · Bug — 내부 라우팅 문구의 “범위와 한계” 노출 제거 Implementation Plan](exec-plans/todo/0076-hide-internal-routing-copy-from-limitations.md) — 다음 행동: no-search 안내 응답의 사용자용 `scope` 계약을 회귀 테스트로 먼저 고정한다.
+- [F-010 · Feature — 초등학생도 이해할 수 있는 쉬운 한국어 프롬프트 정교화 Implementation Plan](exec-plans/todo/0077-elementary-plain-language-prompt-refinement.md) — 다음 행동: 쉬운 말 품질 기준과 대표 질문 평가표를 회귀 테스트로 먼저 고정한다.
+- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/todo/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 
 ## Blocked
 
