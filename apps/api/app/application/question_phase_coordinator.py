@@ -16,6 +16,12 @@ from app.domain.provider_attempts import ProviderAttemptsExhausted
 from app.domain.question_execution import ExecutionStatus
 from app.ports.question_execution import QuestionExecutionRecord, QuestionExecutionRepository
 from app.provider_observability import provider_attempt_scope
+from app.runtime_observability import (
+    ErrorLogMode,
+    bind_runtime_correlation,
+    emit_runtime_exception,
+    set_pipeline_stage,
+)
 
 
 @dataclass(frozen=True)
@@ -69,12 +75,14 @@ class QuestionPhaseCoordinator:
         finalize: PhaseProducer,
         now: Callable[[], datetime] | None = None,
         phase_timeout: timedelta = timedelta(seconds=57),
+        error_log_mode: ErrorLogMode = "redacted",
     ) -> None:
         self._repository = repository
         self._core = core
         self._finalize = finalize
         self._now = now or (lambda: datetime.now(UTC))
         self._phase_timeout = phase_timeout
+        self._error_log_mode = error_log_mode
 
     async def run(
         self,
@@ -142,16 +150,29 @@ class QuestionPhaseCoordinator:
             return await self.run(
                 execution_id, owner_scope, phase=phase, capability_hash=capability_hash
             )
+        bind_runtime_correlation(_provider_correlation_source(claim.execution))
+        set_pipeline_stage("answer_generation")
         try:
             with provider_attempt_scope(_provider_correlation_source(claim.execution)):
                 result = await producer(claim.execution)
-        except ProviderAttemptsExhausted:
+        except ProviderAttemptsExhausted as error:
+            emit_runtime_exception(
+                error,
+                operation=f"v2_{phase}_provider",
+                mode=self._error_log_mode,
+            )
             result = PhaseResult(
                 target=ExecutionStatus.FAILED,
                 events=(AnswerEvent.error("provider_unavailable"),),
             )
-        except Exception:  # never expose provider text or traceback through SSE
+        except Exception as error:  # never expose provider text or traceback through SSE
+            emit_runtime_exception(
+                error,
+                operation=f"v2_{phase}_producer",
+                mode=self._error_log_mode,
+            )
             result = _safe_phase_failure(phase)
+        set_pipeline_stage("persistence")
         await self._repository.finish_phase(
             execution_id,
             owner_scope,

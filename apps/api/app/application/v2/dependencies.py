@@ -50,6 +50,7 @@ class V2ExecutionDependencies:
     FastAPI, SQLAlchemy, LlamaIndex, or NVIDIA SDK types.
     """
 
+    error_log_mode: Literal["raw", "redacted"]
     executions: QuestionExecutionRepository
     clarification_cases: ClarificationCaseRepository | None
     resolve_repository: Callable[[], Awaitable[LegalRepository]]

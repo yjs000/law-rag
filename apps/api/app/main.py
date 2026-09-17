@@ -70,6 +70,7 @@ from app.domain.privacy import anonymous_rate_limit_subject, daily_subject_hash
 from app.domain.question_execution import ExecutionStatus
 from app.domain.routing import route_question
 from app.domain.schemas import CorpusTemporalState, MockUser, QuestionRequest
+from app.runtime_observability import install_runtime_exception_middleware
 from app.settings import get_settings
 
 _DEFAULT_LLAMAINDEX_EMBEDDER_FACTORY = build_llamaindex_embedder
@@ -405,6 +406,7 @@ def create_app(app_dependencies: AppDependencies) -> FastAPI:
         version="0.1.0",
         lifespan=app_dependencies.lifespan,
     )
+    install_runtime_exception_middleware(application, mode=settings.error_log_mode)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.web_origins,

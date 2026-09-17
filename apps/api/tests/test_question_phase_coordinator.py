@@ -1,3 +1,5 @@
+import json
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -240,7 +242,7 @@ async def test_finalize_provider_exhaustion_replays_terminal_failure_over_nonemp
     assert finalize_calls == 1
 
 
-async def test_core_value_error_still_requires_grounding_repair() -> None:
+async def test_core_value_error_still_requires_grounding_repair(caplog) -> None:
     started_at = datetime(2026, 9, 15, tzinfo=UTC)
     repository = MemoryQuestionExecutionRepository(now=lambda: started_at)
     execution = await repository.prepare_or_get(
@@ -256,13 +258,20 @@ async def test_core_value_error_still_requires_grounding_repair() -> None:
     async def finalize(record):
         raise AssertionError("finalize must not run")
 
-    coordinator = QuestionPhaseCoordinator(repository, core=core, finalize=finalize)
-
-    events = await coordinator.run(
-        execution.execution_id, "user:1", phase="core", capability_hash=None
+    coordinator = QuestionPhaseCoordinator(
+        repository, core=core, finalize=finalize, error_log_mode="raw"
     )
-    current = await repository.get_owned(execution.execution_id, "user:1")
 
+    with caplog.at_level(logging.ERROR, logger="law_rag.runtime_exception"):
+        events = await coordinator.run(
+            execution.execution_id, "user:1", phase="core", capability_hash=None
+        )
+    current = await repository.get_owned(execution.execution_id, "user:1")
+    runtime_event = json.loads(caplog.records[-1].message)
+
+    assert runtime_event["pipeline_stage"] == "answer_generation"
+    assert runtime_event["exception_type"] == "ValueError"
+    assert runtime_event["message"] == "grounding validation failed"
     assert current.status is ExecutionStatus.CORE_REPAIR_REQUIRED
     assert events == (
         AnswerEvent(

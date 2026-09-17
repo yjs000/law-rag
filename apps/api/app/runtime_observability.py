@@ -4,11 +4,12 @@ import json
 import logging
 import re
 import traceback
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from hashlib import sha256
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
 ErrorLogMode = Literal["raw", "redacted"]
@@ -33,6 +34,12 @@ class SerializedException(SerializedCause):
     cause_chain: list[SerializedCause]
 
 
+@dataclass
+class _RuntimeObservationState:
+    correlation: str
+    stage: PipelineStage
+    logged_exception_ids: set[int] = field(default_factory=set)
+
 _LOGGER = logging.getLogger("law_rag.runtime_exception")
 _LOGGER.setLevel(logging.ERROR)
 _CORRELATION: ContextVar[str | None] = ContextVar("runtime_correlation", default=None)
@@ -41,6 +48,9 @@ _STAGE: ContextVar[PipelineStage] = ContextVar(
 )
 _LOGGED_EXCEPTION_IDS: ContextVar[set[int] | None] = ContextVar(
     "runtime_logged_exception_ids", default=None
+)
+_OBSERVATION_STATE: ContextVar[_RuntimeObservationState | None] = ContextVar(
+    "runtime_observation_state", default=None
 )
 
 _SECRET_PATTERNS = (
@@ -126,32 +136,50 @@ def runtime_observation_scope(
 ) -> Iterator[None]:
     """Bind correlation, stage, and duplicate suppression to one request."""
 
-    if _CORRELATION.get() is not None:
+    if _OBSERVATION_STATE.get() is not None:
         yield
         return
 
     source = uuid4() if correlation_source is None else correlation_source
-    correlation_token = _CORRELATION.set(_hash_source(source))
-    stage_token = _STAGE.set(initial_stage)
-    logged_token = _LOGGED_EXCEPTION_IDS.set(set())
+    state_token = _OBSERVATION_STATE.set(
+        _RuntimeObservationState(
+            correlation=_hash_source(source),
+            stage=initial_stage,
+        )
+    )
     try:
         yield
     finally:
-        _LOGGED_EXCEPTION_IDS.reset(logged_token)
-        _STAGE.reset(stage_token)
-        _CORRELATION.reset(correlation_token)
+        _OBSERVATION_STATE.reset(state_token)
 
 
 def set_pipeline_stage(stage: PipelineStage) -> None:
+    state = _OBSERVATION_STATE.get()
+    if state is not None:
+        state.stage = stage
+        return
     _STAGE.set(stage)
 
 
 def current_pipeline_stage() -> PipelineStage:
-    return _STAGE.get()
+    state = _OBSERVATION_STATE.get()
+    return state.stage if state is not None else _STAGE.get()
 
 
 def current_runtime_correlation() -> str:
+    state = _OBSERVATION_STATE.get()
+    if state is not None:
+        return state.correlation
     return _CORRELATION.get() or _hash_source(uuid4())
+
+
+def bind_runtime_correlation(source: object) -> None:
+    correlation = _hash_source(source)
+    state = _OBSERVATION_STATE.get()
+    if state is not None:
+        state.correlation = correlation
+        return
+    _CORRELATION.set(correlation)
 
 
 def emit_runtime_exception(
@@ -162,7 +190,8 @@ def emit_runtime_exception(
 ) -> None:
     """Emit one structured exception event per exception object and request."""
 
-    logged_ids = _LOGGED_EXCEPTION_IDS.get()
+    state = _OBSERVATION_STATE.get()
+    logged_ids = state.logged_exception_ids if state is not None else _LOGGED_EXCEPTION_IDS.get()
     if logged_ids is None:
         logged_ids = set()
         _LOGGED_EXCEPTION_IDS.set(logged_ids)
@@ -205,3 +234,31 @@ def configure_runtime_logging(_mode: ErrorLogMode) -> None:
     handler.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(handler)
     logger.propagate = False
+
+def install_runtime_exception_middleware(
+    application: Any, *, mode: ErrorLogMode
+) -> None:
+    """Log uncaught request failures while preserving FastAPI's safe response."""
+
+    configure_runtime_logging(mode)
+
+    @application.middleware("http")
+    async def runtime_exception_boundary(
+        request: Any,
+        call_next: Callable[[Any], Awaitable[Any]],
+    ) -> Any:
+        correlation_source = (
+            request.headers.get("x-request-id")
+            or request.headers.get("idempotency-key")
+            or uuid4()
+        )
+        with runtime_observation_scope(correlation_source):
+            try:
+                return await call_next(request)
+            except Exception as error:
+                emit_runtime_exception(
+                    error,
+                    operation=f"{request.method} {request.url.path}",
+                    mode=mode,
+                )
+                raise

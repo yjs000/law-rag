@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -592,6 +593,7 @@ async def test_v2_core_persists_only_verified_summary_and_finalize_generates_det
 @pytest.mark.asyncio
 async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
     monkeypatch: pytest.MonkeyPatch,
+    caplog,
 ) -> None:
     import app.main as main_module
 
@@ -599,10 +601,14 @@ async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
     hit = _v2_hit()
 
     async def unavailable_detail(_execution):
-        raise RuntimeError("provider unavailable")
+        raise RuntimeError(
+            "postgresql://private-user:private-password@db.internal/law "
+            "[parameters: {\"id\": 7}]"
+        )
 
     monkeypatch.setattr(main_module, "_v2_response_from_frozen_evidence", unavailable_detail)
-    result = await main_module._run_v2_finalize(
+    with caplog.at_level(logging.ERROR, logger="law_rag.runtime_exception"):
+        result = await main_module._run_v2_finalize(
         SimpleNamespace(
             private_payload={
                 "request": request.model_dump(mode="json"),
@@ -628,9 +634,21 @@ async def test_v2_finalize_reports_degraded_when_detail_generation_fails(
             frozen_citations=(FrozenCitation(id="C1", quote=hit.content),),
             status=main_module.ExecutionStatus.CORE_ANSWERED,
         ),
-        None,
+            None,
+        )
+    runtime_event = json.loads(
+        next(
+            record.message
+            for record in caplog.records
+            if record.name == "law_rag.runtime_exception"
+        )
     )
+    encoded_event = json.dumps(runtime_event)
 
+    assert runtime_event["pipeline_stage"] == "answer_generation"
+    assert runtime_event["exception_type"] == "RuntimeError"
+    assert "[REDACTED]" in encoded_event
+    assert "private-password" not in encoded_event
     assert result.response is not None
     assert result.response["summary"] == "전기사업자는 허가를 받아야 합니다."
     assert result.response["checklist"] == [

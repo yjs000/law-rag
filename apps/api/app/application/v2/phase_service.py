@@ -54,6 +54,11 @@ from app.domain.schemas import (
 )
 from app.ports.clarification_case import ClarificationCaseStatus
 from app.ports.question_execution import ExecutionNotFound, QuestionExecutionRecord
+from app.runtime_observability import (
+    bind_runtime_correlation,
+    emit_runtime_exception,
+    set_pipeline_stage,
+)
 
 lease_release_logger = logging.getLogger("law_rag.phase_lease_release")
 
@@ -86,6 +91,8 @@ class V2QuestionExecutionService:
         """Freeze the active generation and its evidence before provider work."""
 
         dependencies = self._dependencies()
+        bind_runtime_correlation(request.payload.client_request_id)
+        set_pipeline_stage("persistence")
         await dependencies.executions.expire(dependencies.now())
         existing = await dependencies.executions.find_by_prepare_key(
             request.owner_scope, request.idempotency_key
@@ -102,12 +109,14 @@ class V2QuestionExecutionService:
         await dependencies.check_quota(quota_kind, request.user)
         await dependencies.require_supported_date(request.payload.as_of_date, repository)
 
+        set_pipeline_stage("routing")
         route, missing_fields = await self._route(
             dependencies,
             request.payload.question,
             request.payload.answer_mode,
             request.route_decision,
         )
+        set_pipeline_stage("retrieval")
         active = await dependencies.active_provider().active()
         await self._require_evaluation_binding(request, repository, active, dependencies)
         hits, corpus_as_of = await self._retrieve_if_legal(
@@ -140,6 +149,7 @@ class V2QuestionExecutionService:
                 request,
                 dependencies,
             )
+        set_pipeline_stage("persistence")
         execution = await dependencies.executions.prepare_or_get(
             owner_scope=request.owner_scope,
             prepare_idempotency_key=request.idempotency_key,
@@ -251,6 +261,8 @@ class V2QuestionExecutionService:
 
         dependencies = self._dependencies()
         payload, hits, corpus_as_of = execution_request_and_hits(execution)
+        bind_runtime_correlation(payload.client_request_id)
+        set_pipeline_stage("answer_generation")
         fallback = search_only_answer(payload, hits, corpus_as_of)
         fallback.request_id = str(payload.client_request_id)
         route = execution.private_payload.get("route", "legal_search")
@@ -325,6 +337,8 @@ class V2QuestionExecutionService:
 
         dependencies = self._dependencies()
         payload, hits, corpus_as_of = execution_request_and_hits(execution)
+        bind_runtime_correlation(payload.client_request_id)
+        set_pipeline_stage("answer_generation")
         route = execution.private_payload.get("route", "legal_search")
         if route != "legal_search":
             missing_fields = execution.private_payload.get("missing_fields", [])
@@ -400,9 +414,11 @@ class V2QuestionExecutionService:
     async def run_core(self, execution: QuestionExecutionRecord) -> PhaseResult:
         """Validate a core draft before persisting the only publishable core event."""
 
+        set_pipeline_stage("answer_generation")
         core, citations, scope, limitations, used_safe_fallback = (
             await self._core_result_from_frozen_evidence(execution)
         )
+        set_pipeline_stage("grounding_validation")
         clarification = self._clarification_grounding(execution)
         if used_safe_fallback:
             core_is_valid = True
@@ -474,6 +490,8 @@ class V2QuestionExecutionService:
 
         dependencies = self._dependencies()
         payload, _hits, _corpus_as_of = execution_request_and_hits(execution)
+        bind_runtime_correlation(payload.client_request_id)
+        set_pipeline_stage("answer_generation")
         stored_core = execution.private_payload.get("verified_core")
         core = self._core_from_payload(dependencies, stored_core)
         degraded = (
@@ -511,10 +529,16 @@ class V2QuestionExecutionService:
                     force_grounding_fallback = True
             except ProviderAttemptsExhausted:
                 raise
-            except Exception:
+            except Exception as error:
+                emit_runtime_exception(
+                    error,
+                    operation="v2_repair_core",
+                    mode=dependencies.error_log_mode,
+                )
                 force_grounding_fallback = True
         private_payload = repaired_core_payload or execution.private_payload
         produce_response = response_from_frozen_evidence or self.response_from_frozen_evidence
+        set_pipeline_stage("answer_generation")
         try:
             response = (
                 grounding_fallback(payload)
@@ -523,9 +547,15 @@ class V2QuestionExecutionService:
             )
         except ProviderAttemptsExhausted:
             raise
-        except Exception:
+        except Exception as error:
+            emit_runtime_exception(
+                error,
+                operation="v2_generate_detail",
+                mode=dependencies.error_log_mode,
+            )
             response = core_degraded_response(payload, core, private_payload)
             degraded = True
+        set_pipeline_stage("grounding_validation")
         citation_registry = CitationRegistry(execution.frozen_citations)
         fallback = search_only_answer(payload, _hits, _corpus_as_of)
         is_deterministic_search_fallback = (
@@ -582,11 +612,17 @@ class V2QuestionExecutionService:
                     execution,
                     response,
                 )
-            except Exception:
+            except Exception as error:
+                emit_runtime_exception(
+                    error,
+                    operation="persist_clarification_outcome",
+                    mode=dependencies.error_log_mode,
+                )
                 response = core_degraded_response(payload, core, private_payload)
                 degraded = True
         if response.action in {"fully_answerable", "partially_answerable"}:
             response.limitations = safe_answer_limitations(response.action)
+        set_pipeline_stage("persistence")
         response = await dependencies.save_authenticated(user, payload, response)
         response_data = response.model_dump(mode="json")
         return PhaseResult(
@@ -638,6 +674,7 @@ class V2QuestionExecutionService:
         self, request: PhaseRequest, phase: Literal["core", "finalize"]
     ) -> PhaseRun:
         dependencies = self._dependencies()
+        set_pipeline_stage("persistence")
         await dependencies.executions.expire(dependencies.now())
         execution = await dependencies.executions.get_owned(
             request.execution_id,
@@ -652,6 +689,7 @@ class V2QuestionExecutionService:
             core=dependencies.run_core,
             finalize=lambda current: dependencies.run_finalize(current, request.user),
             phase_timeout=dependencies.phase_timeout,
+            error_log_mode=dependencies.error_log_mode,
         )
         existing = self._phase_tasks.get(request.execution_id)
         owns_task = existing is None or existing.done()

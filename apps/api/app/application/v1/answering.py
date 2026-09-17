@@ -39,6 +39,11 @@ from app.observability import (
     emit_question_stage_timing,
     emit_route_outcome,
 )
+from app.runtime_observability import (
+    bind_runtime_correlation,
+    emit_runtime_exception,
+    set_pipeline_stage,
+)
 
 
 async def answer_question(
@@ -53,6 +58,8 @@ async def answer_question(
     정상 법령 경로의 생성 실패·grounding 거부는 기존 검색 전용 fallback 계약을 따른다.
     라우터 불가 경로는 검색을 시작하지 않고 항상 AI-mode의 빈 unanswerable 응답으로 끝난다.
     """
+    bind_runtime_correlation(payload.client_request_id)
+    set_pipeline_stage("request_validation")
     if payload.answer_mode == "search_only" and not dependencies.search_only_enabled:
         raise V1AnsweringError("search_only_disabled")
     if not dependencies.ai_available() and not dependencies.search_only_enabled:
@@ -96,6 +103,15 @@ async def answer_question(
         "blocked_response_validation": {"attempted": False, "status": "not_attempted"},
         "outcome": {},
     }
+    async def persist(response: QuestionResponse) -> QuestionResponse:
+        set_pipeline_stage("persistence")
+        return await dependencies.save_response(user, payload, response, diagnostics)
+
+    def observe(error: BaseException, operation: str) -> None:
+        emit_runtime_exception(
+            error, operation=operation, mode=dependencies.error_log_mode
+        )
+
     await dependencies.check_quota("ai" if use_ai else "search", user)
     await asyncio.sleep(0)
     # Routing applies only to Terra requests. Search-only requests intentionally retain
@@ -108,6 +124,7 @@ async def answer_question(
         routing_started = time.monotonic()
         routing_outcome: QuestionStageTimingOutcome = "failed"
         routing_timed_out = False
+        set_pipeline_stage("routing")
         try:
             route_decision = await budget.run(
                 "routing",
@@ -115,7 +132,8 @@ async def answer_question(
                 cap_seconds=dependencies.route_classifier_timeout_seconds,
             )
             routing_outcome = "succeeded"
-        except StageTimeoutError:
+        except StageTimeoutError as error:
+            observe(error, "route_question")
             routing_timed_out = True
             routing_outcome = "timed_out"
             route_decision = RouteDecision(
@@ -123,7 +141,8 @@ async def answer_question(
                 reason_code="routing_timeout",
                 confidence=0.0,
             )
-        except Exception:
+        except Exception as error:
+            observe(error, "route_question")
             routing_outcome = "failed"
             route_decision = RouteDecision(
                 route="routing_unavailable",
@@ -186,7 +205,7 @@ async def answer_question(
                 dependencies,
                 stage_name=guidance_stage,
             )
-            return await dependencies.save_response(user, payload, route_answer, diagnostics)
+            return await persist(route_answer)
         await dependencies.require_supported_date(payload.as_of_date, repository)
     query_embedding = None
     embedding_failed = False
@@ -202,6 +221,7 @@ async def answer_question(
         # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
         # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
         embedding_outcome: QuestionStageTimingOutcome = "failed"
+        set_pipeline_stage("retrieval")
         try:
             query_embedding = (
                 await budget.run(
@@ -212,11 +232,13 @@ async def answer_question(
             )[0]
             embedding_outcome = "succeeded"
             embedding_stage.update({"status": "succeeded", "dimensions": len(query_embedding)})
-        except StageTimeoutError:
+        except StageTimeoutError as error:
+            observe(error, "embed_question")
             embedding_failed = True
             embedding_outcome = "timed_out"
             embedding_stage.update({"status": "timed_out", "dimensions": None})
-        except Exception:
+        except Exception as error:
+            observe(error, "embed_question")
             embedding_failed = True
             embedding_outcome = "failed"
             embedding_stage.update({"status": "failed", "dimensions": None})
@@ -236,6 +258,7 @@ async def answer_question(
     # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
     # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
     retrieval_outcome: QuestionStageTimingOutcome = "failed"
+    set_pipeline_stage("retrieval")
     try:
         hits, search_trace, corpus_as_of = await budget.run(
             "retrieval",
@@ -244,15 +267,18 @@ async def answer_question(
         )
         retrieval_outcome = "succeeded"
     except StageTimeoutError as exc:
+        observe(exc, "retrieve_evidence")
         # 검색 stage 예산을 다 썼다 - 아직 신뢰할 근거가 없으므로(부분 결과로 답을
         # 만들지 않는다) 재시도를 유도하는 고정 503 메시지로 끝낸다. corpus 미준비·일반
         # 검색 실패와는 원인이 다르므로 별도 분기로 유지한다.
         retrieval_outcome = "timed_out"
         raise V1AnsweringError("retrieval_timeout") from exc
     except CorpusSearchUnavailableError as exc:
+        observe(exc, "retrieve_evidence")
         retrieval_outcome = "failed"
         raise V1AnsweringError("corpus_unready") from exc
     except Exception as exc:
+        observe(exc, "retrieve_evidence")
         retrieval_outcome = "failed"
         raise V1AnsweringError("retrieval_unavailable") from exc
     finally:
@@ -300,7 +326,7 @@ async def answer_question(
         generation_stage["status"] = (
             "skipped_search_only" if payload.answer_mode == "search_only" else "skipped_ai_disabled"
         )
-        return await dependencies.save_response(user, payload, fallback, diagnostics)
+        return await persist(fallback)
     generation_stage = diagnostics["answer_generation"]
     assert isinstance(generation_stage, dict)
     generation_hits = dependencies.select_generation_hits(
@@ -327,6 +353,7 @@ async def answer_question(
     # 성공을 명시적으로 표시한다 - 기본값이 "succeeded"면 asyncio.CancelledError가
     # stage를 죽여도 finally가 잘못된 "succeeded"를 로깅해버린다(Finding 2).
     generation_outcome: QuestionStageTimingOutcome = "failed"
+    set_pipeline_stage("answer_generation")
     try:
         draft = await budget.run(
             "answer_generation",
@@ -335,6 +362,7 @@ async def answer_question(
         )
         generation_outcome = "succeeded"
     except StageTimeoutError as exc:
+        observe(exc, "generate_answer")
         if not dependencies.search_only_enabled:
             raise V1AnsweringError("generation_failed") from exc
         # 생성 stage 예산을 다 썼다 - 이미 검증된 근거(fallback)가 있으니 에러가 아니라
@@ -343,8 +371,9 @@ async def answer_question(
         generation_outcome = "timed_out"
         fallback.fallback_reason = AiFallbackReason.GENERATION_ERROR
         generation_stage["status"] = "timed_out"
-        return await dependencies.save_response(user, payload, fallback, diagnostics)
+        return await persist(fallback)
     except Exception as exc:
+        observe(exc, "generate_answer")
         generation_outcome = "failed"
         status_code = provider_upstream_status(exc)
         if status_code in {402, 429}:
@@ -357,7 +386,7 @@ async def answer_question(
         )
         if not dependencies.search_only_enabled:
             raise V1AnsweringError("generation_failed") from exc
-        return await dependencies.save_response(user, payload, fallback, diagnostics)
+        return await persist(fallback)
     finally:
         emit_question_stage_timing(
             str(payload.client_request_id),
@@ -366,6 +395,7 @@ async def answer_question(
             elapsed_ms(generation_started),
             remaining_ms(budget),
         )
+    set_pipeline_stage("grounding_validation")
     validation_stage = diagnostics["answer_validation"]
     assert isinstance(validation_stage, dict)
     validation_stage.update({"attempted": True, "status": "started"})
@@ -384,7 +414,7 @@ async def answer_question(
             raise V1AnsweringError("generation_failed")
         fallback.fallback_reason = AiFallbackReason.GROUNDING_FAILED
         generation_stage["status"] = "grounding_failed"
-        return await dependencies.save_response(user, payload, fallback, diagnostics)
+        return await persist(fallback)
     validation_stage["status"] = "succeeded"
     # 2026-08-08: 모델이 스스로 판단한 action이 checklist 기반 추정(derive_answer_action)과
     # 얼마나 일치하는지 diagnostics에 남긴다 - 라우터 설명을 저장하던 것과 같은 이유로,
@@ -401,7 +431,7 @@ async def answer_question(
             mode="search_only" if dependencies.search_only_enabled else "ai",
         )
         generation_stage["status"] = "clarification_required"
-        return await dependencies.save_response(user, payload, clarification, diagnostics)
+        return await persist(clarification)
     citations = [
         Citation(
             id=f"C{index}",
@@ -431,4 +461,4 @@ async def answer_question(
         route=route_decision.route if route_decision is not None else None,
     )
     generation_stage["status"] = "succeeded"
-    return await dependencies.save_response(user, payload, answer, diagnostics)
+    return await persist(answer)

@@ -205,6 +205,7 @@ def build_v1_answer_dependencies(
     """Assemble the v1 use case without exposing its adapter implementations."""
 
     return V1AnswerDependencies(
+        error_log_mode=settings.error_log_mode,
         search_only_enabled=settings.search_only_enabled,
         embedding_enabled=settings.embedding_enabled,
         answer_evidence_max_characters=settings.answer_evidence_max_characters,
@@ -243,6 +244,7 @@ def build_v2_execution_dependencies(
     """Assemble the v2 use case while retaining explicit transport seams."""
 
     return V2ExecutionDependencies(
+        error_log_mode=settings.error_log_mode,
         executions=executions,
         clarification_cases=callbacks.clarification_cases,
         resolve_repository=callbacks.resolve_repository,

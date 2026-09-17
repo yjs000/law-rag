@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from law_rag_core.ports.repository import LegalRepository
 
@@ -33,6 +33,7 @@ class V1AnsweringError(RuntimeError):
 class V1AnswerDependencies:
     """Injected collaborators for one v1 answer execution."""
 
+    error_log_mode: Literal["raw", "redacted"]
     search_only_enabled: bool
     embedding_enabled: bool
     answer_evidence_max_characters: int
