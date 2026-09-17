@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: a595bfe7d0734abbb9282c1e623ea4c2c51202d2bcd5ea4cf6c9ae17280174bc -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: e79730e0501f07a9f1d9fcb8fe946aa55697084ddd3a6eff969dee0de8f5ae9a -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/active/0073-agent-control-plane-simplification.md) — 다음 행동: review 수정 뒤 전체 검증과 완료 전이를 수행한다.
 
 ## Todo
 
@@ -39,4 +38,5 @@
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
+- [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [완료 계획 색인](exec-plans/completed/README.md)

@@ -1,9 +1,9 @@
 > 작업 ID: `DOC-003`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Documentation`
 > 보조 라벨: `Reliability`
 > 선행 조건: 에이전트 제어면 단순화 설계가 승인되어야 한다.
-> 다음 행동: review 수정 뒤 전체 검증과 완료 전이를 수행한다.
+> 다음 행동: 완료되어 잔여 작업이 없습니다.
 > 참고 범위:
 > - `docs/design-docs/agent-control-plane-simplification.md` L1-L106 — 승인된 skill·hook·worktree 책임 경계
 > - `scripts/install_git_hooks.py` L1-L266 — common hook 설치와 Graphify hook 보존·비활성화 동작
@@ -85,10 +85,10 @@
 - Modify: 이 계획의 체크박스·결과 기록과 lifecycle 위치
 - Modify: `docs/ROADMAP.md` (renderer only)
 
-- [ ] focused Python test, roadmap checker, 문서 검사, 전체 `scripts/verify.ps1`을 실행한다.
-- [ ] 최종 diff와 민감정보·의도치 않은 Graphify 산출물 부재를 검토한다.
-- [ ] whole-branch review를 수행하고 발견된 문제를 수정·재검증한다.
-- [ ] 결과와 잔여 작업을 기록하고 계획을 `completed/`로 이동한 뒤 roadmap을 재생성한다.
+- [x] focused Python test, roadmap checker, 문서 검사, 전체 `scripts/verify.ps1`을 실행한다.
+- [x] 최종 diff와 민감정보·의도치 않은 Graphify 산출물 부재를 검토한다.
+- [x] whole-branch review를 수행하고 발견된 문제를 수정·재검증한다.
+- [x] 결과와 잔여 작업을 기록하고 계획을 `completed/`로 이동한 뒤 roadmap을 재생성한다.
 
 ## 결과 기록
 
@@ -97,3 +97,7 @@
   marker 부재를 재검증한 뒤 제거했고 repository-local `core.longpaths=true`를 설정했다.
 - `codex-gold100-evaluation-registry`는 대량의 untracked 검증 cache·Graphify 로컬 상태와 접근 오류가 있어
   `Keep`으로 분류하고 변경하지 않았다. 다른 dirty·미병합·활성·Codex-managed worktree도 보존했다.
+- 최종 `scripts/verify.ps1`은 core 27개, API 902개(3 skipped), collector 97개(5 skipped), Web 129개
+  테스트와 Python lint, 문서·roadmap 검사, Web lint·typecheck·production build를 모두 통과했다.
+- Whole-branch review에서 발견한 composite hook 보존, 전체 backup 사전검사, symlink backup 거부를
+  회귀 테스트로 고정했으며 최종 재검토 결과 Critical·Important 지적은 0건이다.
