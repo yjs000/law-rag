@@ -81,6 +81,11 @@ worktree는 다음 조건을 모두 만족할 때만 제거 후보가 된다.
 재귀 파일 삭제로 worktree 디렉터리를 직접 지우지 않는다. `--force`, 미병합 branch 삭제, dirty
 worktree 제거는 파괴적 예외이며 정확한 대상과 손실 내용을 사용자가 별도로 승인해야 한다.
 
+Windows 저장소는 긴 검증 cache 경로 때문에 정상 제거가 중단되지 않도록 repository-local
+`core.longpaths=true`를 사용한다. `git worktree remove`가 등록과 `.git` marker는 제거했지만
+`Filename too long`으로 디렉터리만 남긴 경우에는 예외적으로 절대 경로가 `.worktrees` 바로 아래의 승인
+대상인지, worktree 목록에 없고 `.git` marker도 없는지 다시 확인한 뒤 그 orphan만 확장 경로로 제거한다.
+
 ## 현재 감사 기준선 (2026-09-17)
 
 정책 작성 시 등록된 worktree는 10개였다. 이 중 tracked 변경이 있는 항목, main 미병합 branch,
@@ -125,3 +130,5 @@ Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합
   읽기 전용 검토에서 Graphify 자동 갱신으로 복구 시간이 발생하지 않게 해 달라고 요청했다. 이에 따라
   위치 선행 선언, read-only 무변경 계약, 자동 삭제 금지, 후보별 승인, 통합 branch 단일 Graphify 갱신을
   채택했다.
+- 2026-09-17: clean·병합·비활성 후보 하나의 제거 중 Windows 긴 경로로 Git 등록만 해제되는 사례를
+  확인했다. `core.longpaths=true`와 엄격히 검증된 orphan 정리 예외를 추가했다.

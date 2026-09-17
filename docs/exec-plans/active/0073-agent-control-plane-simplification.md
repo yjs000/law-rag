@@ -75,9 +75,9 @@
 - Candidate: `.worktrees/codex-gold100-evaluation-registry`
 - Candidate: `.worktrees/codex-repair-qa-network-errors`
 
-- [ ] 제거 직전에 각 후보가 clean, merged, inactive이고 접근 오류가 없는지 다시 검사한다.
-- [ ] 조건을 모두 만족하는 후보만 `git worktree remove`로 제거하고 branch는 보존한다.
-- [ ] `git worktree list --porcelain`과 잔여 worktree 상태를 확인한다.
+- [x] 제거 직전에 각 후보가 clean, merged, inactive이고 접근 오류가 없는지 다시 검사한다.
+- [x] 조건을 모두 만족하는 후보만 `git worktree remove`로 제거하고 branch는 보존한다.
+- [x] `git worktree list --porcelain`과 잔여 worktree 상태를 확인한다.
 
 ### Task 5: 통합 검증과 완료 전이
 
@@ -92,4 +92,8 @@
 
 ## 결과 기록
 
-- 진행 중.
+- `codex-repair-qa-network-errors`는 clean·main 병합·비활성 조건을 통과해 worktree만 제거하고 branch는
+  보존했다. Git 등록 해제 뒤 Windows `Filename too long`으로 남은 orphan은 절대 경로·등록 부재·`.git`
+  marker 부재를 재검증한 뒤 제거했고 repository-local `core.longpaths=true`를 설정했다.
+- `codex-gold100-evaluation-registry`는 대량의 untracked 검증 cache·Graphify 로컬 상태와 접근 오류가 있어
+  `Keep`으로 분류하고 변경하지 않았다. 다른 dirty·미병합·활성·Codex-managed worktree도 보존했다.
