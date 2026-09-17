@@ -150,7 +150,7 @@ git commit -m "feat(law-rag-agent): scaffold new uv workspace app"
 **인터페이스:**
 - 산출물: `Settings`(pydantic `BaseSettings`) — `database_url: str | None`, `nvidia_api_key: str | None`, `nvidia_base_url: str`, `nvidia_route_model: str`, `nvidia_generate_model: str`; `get_settings() -> Settings`(`lru_cache`).
 
-route/generate에 서로 다른 모델을 쓸 수 있게 필드를 분리한다(기본값은 같은 모델이어도, 나중에 라우팅용 소형 모델로 바꿀 여지를 남김 — v1의 `nvidia_route_classifier_model` 분리와 같은 이유).
+route/generate에 서로 다른 모델을 쓸 수 있게 필드를 분리한다(기본값은 같은 모델이어도, 나중에 라우팅용 소형 모델로 바꿀 여지를 남김). 현재 v1은 역할별 설정 드리프트를 막기 위해 단일 `nvidia_generation_model`을 공유하므로, 이 분리는 v3 전용 확장 지점이다.
 
 - [x] **1단계: 실패하는 테스트 작성**
 
