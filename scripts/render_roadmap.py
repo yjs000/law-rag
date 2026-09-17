@@ -47,6 +47,41 @@ def _record_row(record: PlanRecord) -> str:
     )
 
 
+def _dropped_row(record: PlanRecord) -> str:
+    task_id = record.task_id or "<작업 ID 없음>"
+    plan_type = record.plan_type or "<유형 없음>"
+    title = record.title or "<제목 없음>"
+    reason = record.dropped_reason or "<폐기 사유 없음>"
+    return (
+        f"- [{task_id} · {plan_type} — {title}]"
+        f"({_roadmap_link(record)}) — 폐기 사유: {reason}"
+    )
+
+
+def _orchestration_table(parent: PlanRecord, records: Sequence[PlanRecord]) -> list[str]:
+    children = sorted(
+        (record for record in records if record.orchestration == parent.task_id),
+        key=lambda record: (record.priority or "P9", record.plan_number or 0),
+    )
+    if not children:
+        return []
+    lines = [
+        f"### {parent.task_id} 관리 작업",
+        "",
+        "| 우선순위 | 작업 | 관리 상태 | 선행 작업 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for child in children:
+        dependencies = ", ".join(child.orchestration_dependencies) or "없음"
+        child_link = f"[{child.task_id}]({_roadmap_link(child)})"
+        lines.append(
+            f"| {child.priority or '-'} | {child_link} | "
+            f"{child.management_status or '-'} | {dependencies} |"
+        )
+    lines.append("")
+    return lines
+
+
 def render_roadmap(records: Iterable[PlanRecord]) -> str:
     """Return deterministic Markdown for the supplied registry records."""
 
@@ -63,12 +98,24 @@ def render_roadmap(records: Iterable[PlanRecord]) -> str:
         "",
     ]
 
-    for section_name in ("Picked Up", "Todo", "Blocked", "Done"):
+    orchestration_child_ids = {
+        record.task_id for record in records_list if record.orchestration and record.task_id
+    }
+    for section_name in ("Picked Up", "Todo", "Blocked", "Done", "Dropped"):
         lines.extend((f"## {section_name}", ""))
         section_records: Sequence[PlanRecord] = sections[section_name]
+        if section_name == "Todo":
+            section_records = [
+                record for record in section_records if record.task_id not in orchestration_child_ids
+            ]
         if section_name == "Done":
             section_records = section_records[-_DONE_LIMIT:]
-        lines.extend(_record_row(record) for record in section_records)
+        row_renderer = _dropped_row if section_name == "Dropped" else _record_row
+        for record in section_records:
+            lines.append(row_renderer(record))
+            if section_name == "Picked Up" and record.plan_type == "Orchestration":
+                lines.append("")
+                lines.extend(_orchestration_table(record, records_list))
         if section_name == "Done":
             lines.append(f"- [완료 계획 색인]({_COMPLETED_INDEX_LINK})")
         lines.append("")

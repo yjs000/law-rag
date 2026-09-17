@@ -1,9 +1,10 @@
 > 작업 ID: `F-004`
-> 상태: `Todo`
+> 상태: `Dropped`
 > 유형: `Feature`
 > 보조 라벨: `Reliability`
 > 선행 조건: provider/model 프로필·공개 선택 범위를 확정하고 저장 데이터·공개 API 호환 마이그레이션 설계를 승인해야 한다.
-> 다음 행동: provider/model 프로필과 공개 선택 범위를 설계한다.
+> 다음 행동: 없음.
+> 폐기 사유: 사용자가 provider 중립 모델 선택 계약을 진행하지 않기로 결정했다.
 > 참고 범위:
 > - `docs/product-specs/grounded-legal-qa.md` L9-L13 — AI 답변 선택과 근거 부족 시 검색 결과·한계 표시
 > - `docs/product-specs/grounded-legal-qa.md` L90-L95 — Terra 호환값과 공급자·모델 비노출 계약

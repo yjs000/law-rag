@@ -4,6 +4,14 @@
 > 보조 라벨: UX, Performance
 > 선행 조건: 없음
 > 다음 행동: finalize 상단 고정 3점 표시의 상태·위치 회귀 테스트부터 작성한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P1`
+> 관리 상태: `대기`
+> 선행 작업: `F-007`
+> 소유 범위:
+> - `apps/web/app/page.tsx`
+> - `apps/web/lib/chat-state.ts`
+> - `apps/web/app/answer-view.tsx`
 > 참고 범위:
 > - `apps/web/app/page.tsx` L552-L850 — 질문 실행, SSE 핵심 답변 반영, 채팅 상단·메시지·입력 영역 렌더링 경계
 > - `apps/web/lib/chat-state.ts` L270-L285 — 핵심 답변 수신 뒤 streaming 상태를 만드는 상태 전이

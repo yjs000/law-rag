@@ -44,6 +44,9 @@ Worktree의 생성·선택·보존·정리는 `docs/references/worktree-policy.m
 - 시작·재개·상태 전이 시 `roadmap-operator`의 네 범위(현재 상태 L1-L28와 마지막 비완료 roadmap 행,
   선택한 계획 헤더, 헤더의 선언 범위)를 순서대로 읽는다. 다른 계획 본문·완료 계획·전체 아키텍처는
   기본적으로 읽지 않는다.
+- `Orchestration`이 `Picked Up`이면 해당 OC가 자식 작업의 우선순위·선행 관계·소유 범위와 완료 판정을
+  관리한다. 서로 겹치지 않는 준비 작업만 독립 worktree에서 병렬 실행하며 상세 전이는
+  `roadmap-operator`를 따른다.
 
 ## Docker·로컬 DB 정책
 

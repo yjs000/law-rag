@@ -67,6 +67,8 @@ description: Use when creating, starting, resuming, or transitioning a law-rag e
   계획 기록에 남긴다.
 - 검증을 마친 계획은 헤더를 `Done`으로 바꾸고 같은 파일명으로 `completed/`로 이동한다. 결과와
   잔여 작업을 본문에 기록한다.
+- 사용자가 실행하지 않기로 결정한 계획은 `폐기 사유`와 `다음 행동: 없음.`을 기록하고 `Dropped`로
+  바꾼 뒤 `dropped/`로 이동한다. 기존 구현과 commit은 삭제하지 않으며 재개 시 새 계획을 만든다.
 - 각 전이는 먼저 헤더와 선언된 범위를 읽고, 메타데이터·파일 위치를 함께 바꾼 다음 renderer와
   checker를 실행한다. `docs/ROADMAP.md`를 손으로 수정하지 않는다.
 
@@ -79,6 +81,22 @@ description: Use when creating, starting, resuming, or transitioning a law-rag e
 
 파일을 이동하지 않은 전이는 같은 path를 반복하고, 범위 밖 자료를 읽었다면 그 항목도 같은 형식으로
 추가한다. 보고는 읽은 파일·범위·이유만 담아 간결하게 유지한다.
+
+## Orchestration 실행
+
+`OC-*`가 `Picked Up`이면 일반 Todo를 임의로 선택하지 않고 OC 자식 표를 따른다.
+
+1. 가장 높은 우선순위에서 선행 작업이 모두 `Done`인 `준비 중` 자식을 고른다.
+2. 소유 범위가 서로 겹치지 않는 작업만 같은 파동에 넣고, 통합 담당자를 제외한 가용 슬롯 안에서
+   독립 worktree·branch로 병렬 실행한다.
+3. 배정 시 `실행 중`, focused 검증과 리뷰 통과 시 `통합 대기`, 기준 branch 반영 시 `검증 중`으로
+   전이한다.
+4. 통합 검증 후 부모 `오케스트레이션` 연결만 남기고 실행용 OC 필드를 제거한 뒤 `Done`으로
+   `completed/`에 이동한다.
+5. 모든 자식이 Done이고 OC 전체 검증이 통과한 뒤에만 부모를 완료한다.
+
+공유 roadmap·계획 메타데이터와 여러 자식이 함께 건드리는 파일은 통합 담당자만 수정한다. 준비된
+자식이 있으면 다른 자식의 차단만으로 OC 전체를 막지 않는다.
 
 ## 검증 명령
 

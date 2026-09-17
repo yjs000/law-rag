@@ -4,6 +4,14 @@
 > 보조 라벨: `Data`, `UX`
 > 선행 조건: 없음
 > 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P0`
+> 관리 상태: `준비 중`
+> 선행 작업: 없음
+> 소유 범위:
+> - `apps/api/app/domain/corpus_temporal_contract.py`
+> - `apps/api/app/api/v2/search.py`
+> - `apps/web/app/page.tsx`
 > 참고 범위:
 > - `apps/api/app/domain/corpus_temporal_contract.py` L23-L59 — KST today와 지원 범위 검사 계약
 > - `apps/api/app/api/v2/search.py` L21-L48 — v2 search의 기준일 gate와 검색 호출 경계

@@ -4,6 +4,14 @@
 > 보조 라벨: `UX`, `Evaluation`
 > 선행 조건: 실제 모델 출력 평가에는 NVIDIA 개발 credential과 network 실행 승인이 필요하다.
 > 다음 행동: 쉬운 말 품질 기준과 대표 질문 평가표를 회귀 테스트로 먼저 고정한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P1`
+> 관리 상태: `대기`
+> 선행 작업: `B-003`, `B-008`, `B-010`
+> 소유 범위:
+> - `apps/api/app/adapters/openai_answerer.py`
+> - `apps/api/app/adapters/nvidia_nim_clarification.py`
+> - `apps/api/tests/test_layperson_prompt_v2.py`
 > 참고 범위:
 > - `apps/api/app/adapters/openai_answerer.py` L184-L330 — V2 답변·core 프롬프트의 현재 일반인 문체 계약
 > - `apps/api/app/adapters/nvidia_nim_clarification.py` L50-L78 — 추가 질문 후보를 만드는 clarification 판단 프롬프트

@@ -4,6 +4,14 @@
 > 보조 라벨: `UX`
 > 선행 조건: 없음
 > 다음 행동: 한 글자 입력 허용과 공백 전용 입력 거부를 Web·API 회귀 테스트로 먼저 고정한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P0`
+> 관리 상태: `대기`
+> 선행 작업: `B-003`, `B-008`
+> 소유 범위:
+> - `apps/web/lib/composer-state.ts`
+> - `apps/web/app/page.tsx`
+> - `packages/law-rag-core/src/law_rag_core/domain/schemas.py`
 > 참고 범위:
 > - `apps/web/lib/composer-state.ts` L1-L11 — trim 이후 두 글자 미만 입력을 버리는 현재 제출 경계
 > - `apps/web/app/page.tsx` L552-L848 — 제출 함수와 두 글자 미만일 때 비활성화되는 전송 버튼

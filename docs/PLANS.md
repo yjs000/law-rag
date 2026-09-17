@@ -7,7 +7,7 @@ skill을 따른다. 이 문서는 plan이 필요한지 다시 판단하지 않�
 
 실행계획 파일의 상단 메타데이터가 상태·유형·제목·다음 행동·참고 범위의 유일한 정본이다. `docs/ROADMAP.md`는
 그 헤더에서 생성되는 색인이므로 직접 편집하지 않고, 헤더를 바꾼 뒤 `python scripts/render_roadmap.py`로
-재생성한다. `docs/exec-plans/{todo,active,completed}/README.md`는 artifact 위치를 안내하는 lifecycle README
+재생성한다. `docs/exec-plans/{todo,active,completed,dropped}/README.md`는 artifact 위치를 안내하는 lifecycle README
 navigation일 뿐 상태 정본이 아니다.
 
 시작·재개·상태 전이 시 project-scoped [`roadmap-operator`](../.codex/skills/roadmap-operator/SKILL.md)의 네 가지
@@ -34,6 +34,7 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
 - 사용자 제안·미착수: docs/exec-plans/todo/
 - 진행 중: docs/exec-plans/active/
 - 완료: docs/exec-plans/completed/
+- 진행하지 않기로 결정: docs/exec-plans/dropped/
 - 알려진 장기 부채: docs/exec-plans/tech-debt-tracker.md
 
 ## 작업 관리 메타데이터
@@ -52,13 +53,14 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
 > - `docs/product-specs/history.md` L15-L38 — 사용자 요구
 ```
 
-- 상태는 `Todo`, `Picked Up`, `Blocked`, `Done` 중 하나다.
+- 상태는 `Todo`, `Picked Up`, `Blocked`, `Done`, `Dropped` 중 하나다.
   - `Todo`: 선행 조건이 충족됐지만 아직 착수하지 않은 milestone.
   - `Picked Up`: 현재 주 에이전트가 수행 중인 유일한 milestone. 없을 수는 있지만 둘 이상일 수 없다.
   - `Blocked`: 사용자 승인, credential, 운영환경 등 외부 입력을 기다리는 milestone. 본문에 차단 사유와
     재개 조건을 반드시 남긴다.
   - `Done`: 구현·검증·상태 문서 갱신까지 끝난 milestone.
-- 유형은 `Feature`, `Bug`, `Tech Debt`, `Experiment`, `Operations`, `Documentation` 중 정확히 하나다.
+  - `Dropped`: 사용자가 실행하지 않기로 결정한 milestone. `dropped/`로 이동하고 `폐기 사유`를 남긴다.
+- 유형은 `Feature`, `Bug`, `Tech Debt`, `Experiment`, `Operations`, `Documentation`, `Orchestration` 중 정확히 하나다.
 - 보조 라벨은 선택 사항이며 `Security`, `Reliability`, `Performance`, `Data`, `UX`, `Evaluation`만
   사용한다. 새 보조 라벨은 필요한 실제 분류가 생겼을 때 이 문서를 먼저 갱신해 추가한다.
 - 작업 ID는 유형별 독립 시퀀스이며 접두사는 다음과 같다.
@@ -68,6 +70,7 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
   - `Experiment`: `E-001`
   - `Operations`: `O-001`
   - `Documentation`: `DOC-001`
+  - `Orchestration`: `OC-001`
   파일명의 기존 숫자 계획 ID는 바꾸지 않는다. 기존 `D-*` 로드맵 ID는 역사 식별자로 보존하며 새 ID로
   소급 변환하지 않는다.
 - `참고 범위`의 각 항목은 저장소 상대 경로, 시작·끝 줄, 그 범위를 읽는 이유를 가진다. 줄을 고정 계약으로
@@ -76,13 +79,15 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
 
 ## 작업 상태 계약
 
-실행계획 디렉터리(`todo/`, `active/`, `completed/`)는 계획 artifact의 lifecycle을 보존하고, 문서 상단
+실행계획 디렉터리(`todo/`, `active/`, `completed/`, `dropped/`)는 계획 artifact의 lifecycle을 보존하고, 문서 상단
 `상태`는 현재 milestone의 운영 상태를 나타낸다.
 
 - 사용자가 다음 작업·추후 개선안으로 명시했지만 아직 착수하지 않은 일은 `todo/`에 등록한다.
 - 사용자가 착수를 요청하고 범위·완료 조건·외부 병목 점검이 끝나면 같은 번호와 파일명을 유지한 채
   `todo/`에서 `active/`로 이동한다.
 - 구현과 요구 검증이 끝나면 실제 결과와 잔여 작업을 기록하고 같은 파일을 `completed/`로 이동한다.
+- 진행하지 않기로 결정하면 기존 구현 이력은 보존한 채 `폐기 사유`와 `다음 행동: 없음.`을 기록하고
+  `dropped/`로 이동한다. 되살릴 때는 기존 계획을 되돌리지 않고 새 계획을 만든다.
 - 진행 기록이 있는 계획이라도 다음 milestone이 아직 시작되지 않았다면 상단 상태는 `Todo`로 둘 수 있다.
 - 정책 도입 시 초기 이행은 현재 `todo/`와 `active/` 계획에만 적용한다. 완료된 계획은 새 작업이
   완료되거나 수정될 때부터 적용하며, 완료 계획 전체를 새 메타데이터로 일괄 라벨링하지 않는다.
@@ -90,6 +95,17 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
   원장에 유지하고 TODO 또는 active 계획에서 연결한다.
 - GitHub 프로젝트 `Backlog`은 외부 이슈 상태다. 저장소 TODO와 자동 동기화하지 않으며 사용자가 요청한
   경우에만 이슈를 만들거나 상태를 변경한다.
+
+## Orchestration 메타데이터
+
+`Orchestration` 계획은 여러 독립 실행계획의 우선순위·선행 관계·병렬 소유 범위를 관리한다. 자식은
+`active/`의 `Todo`로 두고 `오케스트레이션`, `우선순위`, `관리 상태`, `선행 작업`, `소유 범위`를 모두
+기록한다. 허용 우선순위는 `P0`~`P3`, 관리 상태는 `대기`, `준비 중`, `실행 중`, `통합 대기`, `검증 중`이다.
+
+선행 작업이 모두 `Done`인 자식만 `준비 중` 이상으로 전이할 수 있다. 동시에 `실행 중`인 자식은 소유
+범위가 겹치면 안 된다. 완료된 자식은 부모 `오케스트레이션` 연결만 남기고 실행용 OC 관리 필드를 제거한
+뒤 `Done`으로 `completed/`에 이동한다.
+모든 자식이 `Done`이고 전체 검증이 통과해야 부모 OC를 완료할 수 있다.
 
 ## 기존 계획의 섹션 형식 (repository-specific metadata)
 

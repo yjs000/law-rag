@@ -4,6 +4,14 @@
 > 보조 라벨: `UX`
 > 선행 조건: 없음
 > 다음 행동: no-search 안내 응답의 사용자용 `scope` 계약을 회귀 테스트로 먼저 고정한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P0`
+> 관리 상태: `준비 중`
+> 선행 작업: 없음
+> 소유 범위:
+> - `apps/api/app/application/v1/guidance.py`
+> - `apps/api/tests/test_routing_pipeline.py`
+> - `apps/web/app/answer-view.test.tsx`
 > 참고 범위:
 > - `apps/api/app/application/v1/guidance.py` L73-L116 — no-search 경로가 사용자용 `scope`와 내부 `route`를 함께 만드는 현재 경계
 > - `apps/api/tests/test_routing_pipeline.py` L621-L733 — 검색 미실행 응답과 내부 route 보존을 검증하는 API 회귀 테스트

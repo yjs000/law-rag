@@ -24,7 +24,7 @@
 
 **비범위:** 답변 화면의 점진적 공개·섹션 접기·API 응답 스키마 재설계, 검색·재순위·문맥 조립 변경 또는 근거 부족을 프롬프트로 보완, 인용 검증 완화·법률 기억 기반 보충·다른 corpus·외부 웹 근거 도입, 일반 가독성 위반을 즉시 Production fallback 사유로 만드는 runtime style gate, Vercel 함수 시간 제한과 Web 재요청 자체의 구현 변경.
 
-**의존성:** D-10 동결 질문·근거와 answerability 판정, 현재 `DraftAnswer`·`QuestionResponse`·citation 구조, 실제 비교 시 정상 동작하는 Production 또는 동등한 hosted 질문 경로. [0042](../todo/0042-wire-reranking-into-live-search-path.md)는 독립 작업이며 이 항목의 선행 조건이 아니다(다만 v2 평가에서 핵심 근거 누락이 발견되면 문체 실패와 검색 실패를 분리해 0042에 기록한다).
+**의존성:** D-10 동결 질문·근거와 answerability 판정, 현재 `DraftAnswer`·`QuestionResponse`·citation 구조, 실제 비교 시 정상 동작하는 Production 또는 동등한 hosted 질문 경로. [0042](../dropped/0042-wire-reranking-into-live-search-path.md)는 독립 작업이며 이 항목의 선행 조건이 아니다(다만 v2 평가에서 핵심 근거 누락이 발견되면 문체 실패와 검색 실패를 분리해 0042에 기록한다).
 
 **승격 조건 (원본):** 사용자가 이 항목의 착수를 명시한다 → 착수 시 실제 비교 문항 3개·NVIDIA 호출 상한·일반인 rubric의 합격 기준을 확정한다 → 실행 계획을 작성하면 저장소 규칙에 따라 같은 번호의 이 파일을 `active/`로 이동한다(본 문서가 그 결과물이다). 범위 1~3번은 이 계획에서 구현·검증했고, 범위 4번(실제 hosted 비교)은 호출 제한 설계 완료 후 별도 착수로 todo에 남아 있다.
 

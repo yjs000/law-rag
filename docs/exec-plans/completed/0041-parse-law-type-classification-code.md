@@ -47,7 +47,7 @@
 ## 비범위
 
 - 검색 쿼리 필터(`WHERE source_kind=...`)는 이번 항목에 포함하지 않는다(위 4번).
-- 재순위 신호로 source_kind를 쓰는 것은 이 항목이 아니라 [0042](../todo/0042-wire-reranking-into-live-search-path.md)의
+- 재순위 신호로 source_kind를 쓰는 것은 이 항목이 아니라 [0042](../dropped/0042-wire-reranking-into-live-search-path.md)의
   세부 항목으로 다룬다.
 - `admrul`(행정규칙) 쪽에 동등한 분류 필드가 있는지, 있다면 어떻게 다룰지는 착수 시 조사
   범위에 포함한다(미확인 상태).

@@ -4,6 +4,14 @@
 > 보조 라벨: UX
 > 선행 조건: 없음
 > 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
+> 오케스트레이션: `OC-001`
+> 우선순위: `P1`
+> 관리 상태: `대기`
+> 선행 작업: `B-003`, `B-008`, `B-010`
+> 소유 범위:
+> - `apps/web/app/page.tsx`
+> - `apps/web/lib/checklist-export.ts`
+> - `apps/web/lib/checklist-export.test.ts`
 > 참고 범위:
 > - `docs/product-specs/grounded-legal-qa.md` L32-L40 — grounded 응답의 체크리스트 계약
 > - `apps/web/app/page.tsx` L327-L327 — 체크리스트 내보내기 UI

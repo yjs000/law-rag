@@ -17,8 +17,8 @@ from pathlib import Path, PureWindowsPath
 from typing import Iterable, Sequence
 
 
-PLAN_DIRECTORIES = ("todo", "active", "completed")
-ALLOWED_STATUSES = ("Todo", "Picked Up", "Blocked", "Done")
+PLAN_DIRECTORIES = ("todo", "active", "completed", "dropped")
+ALLOWED_STATUSES = ("Todo", "Picked Up", "Blocked", "Done", "Dropped")
 ALLOWED_TYPES = (
     "Feature",
     "Bug",
@@ -26,6 +26,7 @@ ALLOWED_TYPES = (
     "Experiment",
     "Operations",
     "Documentation",
+    "Orchestration",
 )
 ALLOWED_LABELS = (
     "Security",
@@ -42,20 +43,24 @@ _TYPE_PREFIXES = {
     "Experiment": "E",
     "Operations": "O",
     "Documentation": "DOC",
+    "Orchestration": "OC",
 }
 _TASK_ID_RE = re.compile(
-    r"^(?P<prefix>F|B|TD|E|O|DOC|D)-(?P<number>\d{3,})(?:-[A-Z])?$"
+    r"^(?P<prefix>F|B|TD|E|O|DOC|OC|D)-(?P<number>\d{3,})(?:-[A-Z])?$"
 )
 _PLAN_FILENAME_RE = re.compile(r"^(?P<number>\d+)-[^/\\]+\.md$")
 _H2_RE = re.compile(r"^\s*##(?!#)(?:\s|$)")
 _H1_RE = re.compile(r"^\s*#(?!#)\s+(.+?)\s*$")
 _FIELD_RE = re.compile(
-    r"^\s*>\s*(?P<field>작업 ID|상태|유형|보조 라벨|선행 조건|다음 행동|참고 범위)\s*:\s*(?P<value>.*?)\s*$"
+    r"^\s*>\s*(?P<field>작업 ID|상태|유형|보조 라벨|선행 조건|다음 행동|폐기 사유|"
+    r"오케스트레이션|우선순위|관리 상태|선행 작업|소유 범위|참고 범위)\s*:\s*(?P<value>.*?)\s*$"
 )
 _REFERENCE_RE = re.compile(
     r"^\s*(?P<path>`[^`]*`|[^\s]+)\s+L(?P<start>\d+)-L(?P<end>\d+)\s*$"
 )
 _REFERENCE_LINE_RE = re.compile(r"^\s*>\s*-\s*(?P<body>.*?)\s*$")
+ALLOWED_PRIORITIES = ("P0", "P1", "P2", "P3")
+ALLOWED_MANAGEMENT_STATUSES = ("대기", "준비 중", "실행 중", "통합 대기", "검증 중")
 # Sentence rule for ``다음 행동``: terminal punctuation is one or more of
 # ``. ! ? 。 ！ ？`` followed by whitespace or the end of the value.  A value
 # without terminal punctuation is allowed as one unpunctuated action; more
@@ -108,6 +113,12 @@ class PlanRecord:
     labels: tuple[str, ...]
     prerequisites: str | None
     next_action: str | None
+    dropped_reason: str | None
+    orchestration: str | None
+    priority: str | None
+    management_status: str | None
+    orchestration_dependencies: tuple[str, ...]
+    ownership_scopes: tuple[str, ...]
     references: tuple[ReferenceRange, ...]
     title: str | None
     path: Path
@@ -119,6 +130,14 @@ class PlanRecord:
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", Path(self.path))
         object.__setattr__(self, "labels", tuple(str(label).strip() for label in self.labels))
+        object.__setattr__(
+            self,
+            "orchestration_dependencies",
+            tuple(str(item).strip() for item in self.orchestration_dependencies),
+        )
+        object.__setattr__(
+            self, "ownership_scopes", tuple(str(item).strip() for item in self.ownership_scopes)
+        )
         object.__setattr__(self, "references", tuple(self.references))
         object.__setattr__(self, "parse_errors", tuple(self.parse_errors))
 
@@ -331,9 +350,10 @@ def _parse_plan(
 
     values: dict[str, str] = {}
     references: list[ReferenceRange] = []
+    ownership_scopes: list[str] = []
     issues: list[_ParseIssue] = []
     field_positions: dict[str, int] = {}
-    in_reference_section = False
+    list_section: str | None = None
     h1_positions: list[tuple[int, str]] = []
 
     title_found = False
@@ -358,18 +378,20 @@ def _parse_plan(
             else:
                 field_positions[field] = index
                 values[field] = match.group("value").strip()
-            in_reference_section = field == "참고 범위"
+            list_section = field if field in {"참고 범위", "소유 범위"} else None
             continue
 
         reference_match = _REFERENCE_LINE_RE.match(line)
         if reference_match is not None:
-            if not in_reference_section:
-                issues.append(_ParseIssue("참고 범위", "참고 범위 필드 아래에 있어야 합니다"))
-            else:
+            if list_section == "참고 범위":
                 reference, issue = _parse_reference(reference_match.group("body"))
                 references.append(reference)
                 if issue is not None:
                     issues.append(issue)
+            elif list_section == "소유 범위":
+                ownership_scopes.append(_strip_code(reference_match.group("body").strip()))
+            else:
+                issues.append(_ParseIssue("색인 헤더", "목록 필드 아래에 있어야 합니다"))
             continue
 
         issues.append(_ParseIssue("색인 헤더", "허용되지 않은 색인 헤더 입력입니다"))
@@ -383,6 +405,26 @@ def _parse_plan(
     labels = _parse_labels(labels_value)
     prerequisites = values.get("선행 조건", "").strip() or None
     next_action = values.get("다음 행동", "").strip() or None
+    dropped_reason = values.get("폐기 사유", "").strip() or None
+    orchestration = _strip_code(values.get("오케스트레이션", "")) or None
+    priority = _strip_code(values.get("우선순위", "")) or None
+    management_status = _strip_code(values.get("관리 상태", "")) or None
+    dependencies_value = values.get("선행 작업", "").strip()
+    orchestration_dependencies = (
+        ()
+        if not dependencies_value or _strip_code(dependencies_value) in {"없음", "-", "None"}
+        else tuple(
+            item
+            for item in (
+                _strip_code(part.strip()) for part in dependencies_value.split(",")
+            )
+            if item
+        )
+    )
+    oc_field_names = {"오케스트레이션", "우선순위", "관리 상태", "선행 작업", "소유 범위"}
+    if oc_field_names.intersection(field_positions) and status not in {"Done", "Dropped"}:
+        for missing_field in sorted(oc_field_names.difference(field_positions)):
+            issues.append(_ParseIssue(missing_field, "OC 자식 메타데이터는 모든 필드가 필요합니다"))
     title = h1_positions[0][1] if h1_positions else None
     if not field_positions:
         issues.append(_ParseIssue("색인 헤더", "필수 색인 헤더가 없습니다"))
@@ -412,6 +454,12 @@ def _parse_plan(
         labels=labels,
         prerequisites=prerequisites,
         next_action=next_action,
+        dropped_reason=dropped_reason,
+        orchestration=orchestration,
+        priority=priority,
+        management_status=management_status,
+        orchestration_dependencies=orchestration_dependencies,
+        ownership_scopes=tuple(ownership_scopes),
         references=tuple(references),
         title=title,
         path=relative_path,
@@ -642,6 +690,66 @@ def _validate_reference(
     return errors
 
 
+def _validate_ownership_scope(
+    record: PlanRecord, raw_scope: str, root: Path, index: int
+) -> list[RegistryError]:
+    scope = _normal_relative_path(raw_scope)
+    if scope is None or any(character in raw_scope for character in "*?[]"):
+        return [
+            _error(
+                record,
+                root,
+                f"소유 범위[{index}]",
+                f"소유 범위 '{raw_scope}'는 glob 없는 저장소 상대 경로여야 합니다",
+            )
+        ]
+    return []
+
+
+def _scopes_overlap(left: str, right: str) -> bool:
+    left_parts = _normal_relative_path(left)
+    right_parts = _normal_relative_path(right)
+    if left_parts is None or right_parts is None:
+        return False
+    left_tuple = tuple(left_parts.parts)
+    right_tuple = tuple(right_parts.parts)
+    shorter = min(len(left_tuple), len(right_tuple))
+    return left_tuple[:shorter] == right_tuple[:shorter]
+
+
+def _dependency_cycles(children: Sequence[PlanRecord]) -> set[str]:
+    child_ids = {record.task_id for record in children if record.task_id}
+    graph = {
+        record.task_id: tuple(
+            dependency
+            for dependency in record.orchestration_dependencies
+            if dependency in child_ids
+        )
+        for record in children
+        if record.task_id
+    }
+    visiting: set[str] = set()
+    visited: set[str] = set()
+    cyclic: set[str] = set()
+
+    def visit(task_id: str, trail: tuple[str, ...]) -> None:
+        if task_id in visiting:
+            cycle_start = trail.index(task_id) if task_id in trail else 0
+            cyclic.update(trail[cycle_start:])
+            return
+        if task_id in visited:
+            return
+        visiting.add(task_id)
+        for dependency in graph.get(task_id, ()):
+            visit(dependency, (*trail, task_id))
+        visiting.remove(task_id)
+        visited.add(task_id)
+
+    for task_id in graph:
+        visit(task_id, ())
+    return cyclic
+
+
 def validate_registry(
     records: Iterable[PlanRecord], root: str | Path
 ) -> list[RegistryError]:
@@ -678,6 +786,7 @@ def validate_registry(
                 "todo": ("Todo",),
                 "active": ("Todo", "Picked Up", "Blocked"),
                 "completed": ("Done",),
+                "dropped": ("Dropped",),
             }[directory]
             if record.status not in expected_statuses:
                 errors.append(
@@ -795,6 +904,50 @@ def validate_registry(
                 )
             )
 
+        if record.status == "Dropped":
+            if not record.dropped_reason:
+                errors.append(_error(record, root_path, "폐기 사유", "Dropped 계획에는 폐기 사유가 필요합니다"))
+            if record.next_action != "없음.":
+                errors.append(_error(record, root_path, "다음 행동", "Dropped 계획의 다음 행동은 '없음.'이어야 합니다"))
+
+        orchestration_values = (
+            record.orchestration,
+            record.priority,
+            record.management_status,
+            record.ownership_scopes,
+        )
+        has_any_orchestration_field = any(orchestration_values) or bool(
+            record.orchestration_dependencies
+        )
+        if has_any_orchestration_field and record.status not in {"Done", "Dropped"}:
+            missing_fields = [
+                name
+                for name, value in (
+                    ("오케스트레이션", record.orchestration),
+                    ("우선순위", record.priority),
+                    ("관리 상태", record.management_status),
+                    ("소유 범위", record.ownership_scopes),
+                )
+                if not value
+            ]
+            for field_name in missing_fields:
+                errors.append(_error(record, root_path, field_name, "OC 자식 메타데이터는 모든 필드가 필요합니다"))
+        if record.status in {"Done", "Dropped"} and any(
+            (
+                record.priority,
+                record.management_status,
+                record.orchestration_dependencies,
+                record.ownership_scopes,
+            )
+        ):
+            errors.append(_error(record, root_path, "관리 상태", "Done 또는 Dropped OC 자식에는 부모 연결 외 관리 필드를 둘 수 없습니다"))
+        if record.priority and record.priority not in ALLOWED_PRIORITIES:
+            errors.append(_error(record, root_path, "우선순위", f"허용 우선순위는 {', '.join(ALLOWED_PRIORITIES)}입니다"))
+        if record.management_status and record.management_status not in ALLOWED_MANAGEMENT_STATUSES:
+            errors.append(_error(record, root_path, "관리 상태", f"허용 관리 상태는 {', '.join(ALLOWED_MANAGEMENT_STATUSES)}입니다"))
+        for index, scope in enumerate(record.ownership_scopes, start=1):
+            errors.extend(_validate_ownership_scope(record, scope, root_path, index))
+
         if not record.references:
             errors.append(_error(record, root_path, "참고 범위", "최소 하나의 참고 범위가 필요합니다"))
         elif len(record.references) > 3:
@@ -820,6 +973,57 @@ def validate_registry(
                 "한 계획만 Picked Up으로 두고 나머지는 Todo 또는 Blocked로 바꾸세요",
             )
         )
+
+    records_by_id = {record.task_id: record for record in records_list if record.task_id}
+    children = [record for record in records_list if record.orchestration]
+    for child in children:
+        parent = records_by_id.get(child.orchestration)
+        if parent is None or parent.plan_type != "Orchestration":
+            errors.append(_error(child, root_path, "오케스트레이션", f"부모 '{child.orchestration}'가 존재하는 Orchestration 계획이어야 합니다"))
+        elif child.status not in {"Done", "Dropped"} and parent.status not in {"Picked Up", "Blocked"}:
+            errors.append(_error(child, root_path, "오케스트레이션", "OC 부모 상태는 Picked Up 또는 Blocked여야 합니다"))
+        child_parts = child.path.as_posix().split("/")
+        child_directory = child_parts[2] if len(child_parts) >= 3 else ""
+        if child.status not in {"Done", "Dropped"} and (
+            child.status != "Todo" or child_directory != "active"
+        ):
+            errors.append(
+                _error(
+                    child,
+                    root_path,
+                    "상태",
+                    "완료 전 OC 자식은 active/ 디렉터리의 Todo 상태여야 합니다",
+                )
+            )
+        if child.task_id in child.orchestration_dependencies:
+            errors.append(_error(child, root_path, "선행 작업", "자기 자신을 선행 작업으로 둘 수 없습니다"))
+        for dependency in child.orchestration_dependencies:
+            dependency_record = records_by_id.get(dependency)
+            if dependency_record is None:
+                errors.append(_error(child, root_path, "선행 작업", f"선행 작업 '{dependency}'가 존재하지 않습니다"))
+            elif child.management_status != "대기" and dependency_record.status != "Done":
+                errors.append(_error(child, root_path, "선행 작업", f"완료되지 않은 선행 작업 '{dependency}' 뒤에는 관리 상태를 진행할 수 없습니다"))
+
+    for task_id in _dependency_cycles(children):
+        child = records_by_id[task_id]
+        errors.append(_error(child, root_path, "선행 작업", "OC 자식 선행 작업에 순환 의존성이 있습니다"))
+
+    running_children = [record for record in children if record.management_status == "실행 중"]
+    for index, left in enumerate(running_children):
+        for right in running_children[index + 1 :]:
+            if left.orchestration != right.orchestration:
+                continue
+            if any(
+                _scopes_overlap(left_scope, right_scope)
+                for left_scope in left.ownership_scopes
+                for right_scope in right.ownership_scopes
+            ):
+                errors.append(_error(left, root_path, "소유 범위", f"동시 실행 중인 '{right.task_id}'와 소유 범위가 겹칩니다"))
+
+    for parent in (record for record in records_list if record.plan_type == "Orchestration"):
+        parent_children = [record for record in children if record.orchestration == parent.task_id]
+        if parent.status == "Done" and any(child.status != "Done" for child in parent_children):
+            errors.append(_error(parent, root_path, "상태", "모든 OC 자식이 Done이어야 Orchestration을 완료할 수 있습니다"))
 
     return errors
 
@@ -852,6 +1056,12 @@ def _canonical_record(record: PlanRecord) -> dict[str, object]:
         "labels": sorted(record.labels),
         "prerequisites": record.prerequisites,
         "next_action": record.next_action,
+        "dropped_reason": record.dropped_reason,
+        "orchestration": record.orchestration,
+        "priority": record.priority,
+        "management_status": record.management_status,
+        "orchestration_dependencies": sorted(record.orchestration_dependencies),
+        "ownership_scopes": sorted(record.ownership_scopes),
         "references": references,
         "title": record.title,
     }
@@ -885,17 +1095,20 @@ def roadmap_sections(records: Iterable[PlanRecord]) -> dict[str, list[PlanRecord
         "Todo": [],
         "Blocked": [],
         "Done": [],
+        "Dropped": [],
     }
     for record in sorted(records, key=_record_sort_key):
         if record.status in {"Picked Up", "Todo"}:
             sections[record.status].append(record)
-        elif record.status in {"Blocked", "Done"}:
+        elif record.status in {"Blocked", "Done", "Dropped"}:
             sections[record.status].append(record)
     return sections
 
 
 __all__ = [
     "ALLOWED_LABELS",
+    "ALLOWED_MANAGEMENT_STATUSES",
+    "ALLOWED_PRIORITIES",
     "ALLOWED_STATUSES",
     "ALLOWED_TYPES",
     "PLAN_DIRECTORIES",

@@ -26,6 +26,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         (self.root / "docs" / "exec-plans" / "todo").mkdir(parents=True)
         (self.root / "docs" / "exec-plans" / "active").mkdir(parents=True)
         (self.root / "docs" / "exec-plans" / "completed").mkdir(parents=True)
+        (self.root / "docs" / "exec-plans" / "dropped").mkdir(parents=True)
         (self.root / "apps").mkdir()
         (self.root / "apps" / "module.py").write_text(
             "line one\nline two\nline three\nline four\n", encoding="utf-8"
@@ -44,12 +45,15 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         prerequisites: str = "없음",
         next_action: str = "요구사항별 회귀 테스트부터 시작",
         references: list[str] | None = None,
+        extra_fields: list[str] | None = None,
         title: str = "로드맵 레지스트리 테스트",
     ) -> str:
         if references is None:
             references = [
                 "- `apps/module.py` L1-L2 — 현재 동작 경계",
             ]
+        if extra_fields is None:
+            extra_fields = []
         return "\n".join(
             [
                 f"> 작업 ID: `{task_id}`",
@@ -58,6 +62,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
                 f"> 보조 라벨: {labels}",
                 f"> 선행 조건: {prerequisites}",
                 f"> 다음 행동: {next_action}",
+                *extra_fields,
                 "> 참고 범위:",
                 *[f"> {reference}" for reference in references],
                 "",
@@ -87,7 +92,7 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         return [str(error) for error in validate_registry(records, self.root)]
 
     def _clear_plans(self) -> None:
-        for directory in ("todo", "active", "completed"):
+        for directory in ("todo", "active", "completed", "dropped"):
             for path in (self.root / "docs" / "exec-plans" / directory).glob("*.md"):
                 path.unlink()
 
@@ -329,6 +334,153 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         self.assertTrue(any("F-006-A" in message and "중복" in message for message in errors))
         self.assertFalse(any("F-006-B" in message and "형식" in message for message in errors))
 
+    def test_dropped_plan_requires_reason_and_dropped_lifecycle_directory(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="dropped",
+            status="Dropped",
+            next_action="없음.",
+            extra_fields=["> 폐기 사유: 사용자가 이 작업을 진행하지 않기로 결정했다."],
+        )
+
+        records = load_registry(self.root)
+
+        self.assertEqual(self._errors(records), [])
+        self.assertEqual(records[0].dropped_reason, "사용자가 이 작업을 진행하지 않기로 결정했다.")
+
+    def test_orchestration_child_metadata_and_runtime_invariants(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="active",
+            task_id="OC-001",
+            status="Picked Up",
+            plan_type="Orchestration",
+            filename="0001-orchestration.md",
+        )
+        self._write_plan(
+            number="0002",
+            directory="active",
+            task_id="B-001",
+            status="Todo",
+            plan_type="Bug",
+            filename="0002-child.md",
+            extra_fields=[
+                "> 오케스트레이션: `OC-001`",
+                "> 우선순위: `P0`",
+                "> 관리 상태: `실행 중`",
+                "> 선행 작업: 없음",
+                "> 소유 범위:",
+                "> - `apps/child`",
+            ],
+        )
+
+        records = load_registry(self.root)
+
+        self.assertEqual(self._errors(records), [])
+        child = next(record for record in records if record.task_id == "B-001")
+        self.assertEqual(child.orchestration, "OC-001")
+        self.assertEqual(child.priority, "P0")
+        self.assertEqual(child.management_status, "실행 중")
+        self.assertEqual(child.orchestration_dependencies, ())
+        self.assertEqual(child.ownership_scopes, ("apps/child",))
+
+    def test_orchestration_rejects_cycles_unready_children_and_running_scope_overlap(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="active",
+            task_id="OC-001",
+            status="Picked Up",
+            plan_type="Orchestration",
+            filename="0001-orchestration.md",
+        )
+        common = [
+            "> 오케스트레이션: `OC-001`",
+            "> 우선순위: `P0`",
+            "> 관리 상태: `실행 중`",
+            "> 소유 범위:",
+            "> - `apps/shared`",
+        ]
+        self._write_plan(
+            number="0002",
+            directory="active",
+            task_id="B-001",
+            status="Todo",
+            plan_type="Bug",
+            filename="0002-first.md",
+            extra_fields=[*common[:3], "> 선행 작업: B-002", *common[3:]],
+        )
+        self._write_plan(
+            number="0003",
+            directory="active",
+            task_id="B-002",
+            status="Todo",
+            plan_type="Bug",
+            filename="0003-second.md",
+            extra_fields=[*common[:3], "> 선행 작업: B-001", *common[3:]],
+        )
+
+        errors = self._errors(load_registry(self.root))
+
+        self.assertTrue(any("순환" in message for message in errors))
+        self.assertTrue(any("완료되지 않은 선행 작업" in message for message in errors))
+        self.assertTrue(any("소유 범위" in message and "겹" in message for message in errors))
+
+    def test_orchestration_completion_uses_completed_child_parent_link(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="completed",
+            task_id="OC-001",
+            status="Done",
+            plan_type="Orchestration",
+            filename="0001-orchestration.md",
+        )
+        self._write_plan(
+            number="0002",
+            directory="completed",
+            task_id="B-001",
+            status="Done",
+            plan_type="Bug",
+            filename="0002-child.md",
+            extra_fields=["> 오케스트레이션: `OC-001`"],
+        )
+
+        records = load_registry(self.root)
+
+        self.assertEqual(self._errors(records), [])
+        child = next(record for record in records if record.task_id == "B-001")
+        self.assertEqual(child.orchestration, "OC-001")
+        self.assertIsNone(child.management_status)
+
+    def test_nonterminal_orchestration_child_must_be_active_todo(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="active",
+            task_id="OC-001",
+            status="Picked Up",
+            plan_type="Orchestration",
+            filename="0001-orchestration.md",
+        )
+        self._write_plan(
+            number="0002",
+            directory="todo",
+            task_id="B-001",
+            status="Todo",
+            plan_type="Bug",
+            filename="0002-child.md",
+            extra_fields=[
+                "> 오케스트레이션: `OC-001`",
+                "> 우선순위: `P0`",
+                "> 관리 상태: `준비 중`",
+                "> 선행 작업: 없음",
+                "> 소유 범위:",
+                "> - `apps/child`",
+            ],
+        )
+
+        errors = self._errors(load_registry(self.root))
+
+        self.assertTrue(any("active/" in message and "Todo" in message for message in errors))
+
     def test_picked_up_cardinality_is_one_actionable_global_error(self) -> None:
         self._write_plan(
             number="0001",
@@ -467,11 +619,12 @@ class RoadmapRegistryFixtures(unittest.TestCase):
         records = load_registry(self.root)
 
         sections = roadmap_sections(records)
-        self.assertEqual(list(sections), ["Picked Up", "Todo", "Blocked", "Done"])
+        self.assertEqual(list(sections), ["Picked Up", "Todo", "Blocked", "Done", "Dropped"])
         self.assertEqual([record.status for record in sections["Picked Up"]], ["Picked Up"])
         self.assertEqual(sections["Todo"], [])
         self.assertEqual([record.status for record in sections["Blocked"]], ["Blocked"])
         self.assertEqual([record.status for record in sections["Done"]], ["Done"])
+        self.assertEqual(sections["Dropped"], [])
         self.assertEqual(roadmap_digest(records), roadmap_digest(list(reversed(records))))
         self.assertNotEqual(roadmap_digest(records), roadmap_digest(records[:-1]))
 
@@ -552,6 +705,55 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             self.assertNotIn("보조 라벨", row)
             self.assertNotIn("선행 조건", row)
             self.assertTrue("다음 행동:" in row or "재개 조건:" in row)
+
+    def test_renderer_groups_orchestration_children_and_renders_dropped_history(self) -> None:
+        self._write_plan(
+            number="0001",
+            directory="active",
+            task_id="OC-001",
+            status="Picked Up",
+            plan_type="Orchestration",
+            title="첫 오케스트레이션",
+            filename="0001-orchestration.md",
+        )
+        self._write_plan(
+            number="0002",
+            directory="active",
+            task_id="B-001",
+            status="Todo",
+            plan_type="Bug",
+            title="첫 자식",
+            filename="0002-child.md",
+            extra_fields=[
+                "> 오케스트레이션: `OC-001`",
+                "> 우선순위: `P0`",
+                "> 관리 상태: `준비 중`",
+                "> 선행 작업: 없음",
+                "> 소유 범위:",
+                "> - `apps/child`",
+            ],
+        )
+        self._write_plan(
+            number="0003",
+            directory="dropped",
+            task_id="F-003",
+            status="Dropped",
+            next_action="없음.",
+            title="폐기 계획",
+            filename="0003-dropped.md",
+            extra_fields=["> 폐기 사유: 사용자가 진행하지 않기로 결정했다."],
+        )
+
+        records = load_registry(self.root)
+        rendered = render_roadmap.render_roadmap(records)
+
+        self.assertIn("### OC-001 관리 작업", rendered)
+        self.assertIn("| P0 | [B-001]", rendered)
+        self.assertIn("| 준비 중 | 없음 |", rendered)
+        todo_body = rendered.split("## Todo", 1)[1].split("## Blocked", 1)[0]
+        self.assertNotIn("B-001", todo_body)
+        self.assertIn("## Dropped", rendered)
+        self.assertIn("사용자가 진행하지 않기로 결정했다.", rendered)
 
     def test_done_section_keeps_only_newest_twelve_records_and_completed_index(self) -> None:
         self._clear_plans()
