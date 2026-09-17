@@ -127,6 +127,6 @@ def test_dev_runner_stops_the_peer_promptly_after_a_service_failure(tmp_path: Pa
 
     assert result.returncode != 0
     elapsed = time.monotonic() - started_at
-    time.sleep(3)
+    time.sleep(4)
     assert not frontend_completed.exists()
     assert elapsed < 2
