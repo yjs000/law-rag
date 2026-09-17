@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 85e5e68e2596894753345432ab657a385db93f8f1e1f299b2e3ba82d1d1328a9 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 938da18b8014dc24cef53bb62ed0207ca913bed125f24c8d21e202d2fbadbb22 -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/active/0073-agent-control-plane-simplification.md) — 다음 행동: hook manager 회귀 테스트와 ROADMAP LF checkout 계약을 먼저 고정한다.
 
 ## Todo
 
