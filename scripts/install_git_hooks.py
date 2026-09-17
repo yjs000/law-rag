@@ -16,6 +16,10 @@ GRAPHIFY_HOOK_MARKERS = {
     "post-commit": "# graphify-hook-start",
     "post-checkout": "# graphify-checkout-hook-start",
 }
+GRAPHIFY_HOOK_END_MARKERS = {
+    "post-commit": "# graphify-hook-end",
+    "post-checkout": "# graphify-checkout-hook-end",
+}
 GRAPHIFY_BACKUP_SUFFIX = ".graphify-disabled"
 HOOK_TEXT = f"""#!/bin/sh
 {HOOK_MARKER}
@@ -137,13 +141,28 @@ def install(repo_root: str | Path) -> tuple[bool, str]:
     return True, f"Installed scoped roadmap pre-commit hook at {hook_path}"
 
 
-def _contains_marker(path: Path, marker: str) -> bool:
+def _managed_graphify_hook(path: Path, start_marker: str, end_marker: str) -> bool | None:
+    """Return managed status, or ``None`` when markers occur in a composite hook."""
+
     if path.is_symlink() or not path.is_file():
         return False
     try:
-        return marker in path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return False
+    if start_marker not in text and end_marker not in text:
+        return False
+    lines = text.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if (
+        len(lines) >= 3
+        and lines[0] == "#!/bin/sh"
+        and lines[1] == start_marker
+        and lines[-1] == end_marker
+    ):
+        return True
+    return None
 
 
 def disable_graphify_auto_hooks(repo_root: str | Path) -> tuple[bool, str]:
@@ -155,25 +174,39 @@ def disable_graphify_auto_hooks(repo_root: str | Path) -> tuple[bool, str]:
         return False, f"Git repository metadata was not found under {root}"
 
     hooks_dir = common_dir / "hooks"
-    disabled: list[str] = []
+    actions: list[tuple[str, Path, Path]] = []
     try:
         hooks_dir.mkdir(parents=True, exist_ok=True)
-        for name, marker in GRAPHIFY_HOOK_MARKERS.items():
+        for name, start_marker in GRAPHIFY_HOOK_MARKERS.items():
             hook_path = hooks_dir / name
             backup_path = hooks_dir / f"{name}{GRAPHIFY_BACKUP_SUFFIX}"
-            if not _contains_marker(hook_path, marker):
+            managed = _managed_graphify_hook(
+                hook_path, start_marker, GRAPHIFY_HOOK_END_MARKERS[name]
+            )
+            if managed is None:
+                return (
+                    False,
+                    f"Refusing to disable user-owned or composite hook {hook_path}",
+                )
+            if not managed:
                 continue
             if backup_path.exists() or backup_path.is_symlink():
                 if not backup_path.is_file() or hook_path.read_bytes() != backup_path.read_bytes():
                     return False, f"Refusing to overwrite the existing backup {backup_path}"
+                actions.append(("unlink", hook_path, backup_path))
+            else:
+                actions.append(("rename", hook_path, backup_path))
+
+        for operation, hook_path, backup_path in actions:
+            if operation == "unlink":
                 hook_path.unlink()
             else:
                 hook_path.rename(backup_path)
-            disabled.append(name)
     except OSError as exc:
         return False, f"Unable to disable Graphify auto-update hooks in {hooks_dir}: {exc}"
 
-    if disabled:
+    if actions:
+        disabled = [hook_path.name for _, hook_path, _ in actions]
         return True, f"Disabled Graphify auto-update hooks: {', '.join(disabled)}"
     return True, f"No active managed Graphify auto-update hooks found in {hooks_dir}"
 
@@ -218,6 +251,7 @@ if __name__ == "__main__":
 
 __all__ = [
     "GRAPHIFY_BACKUP_SUFFIX",
+    "GRAPHIFY_HOOK_END_MARKERS",
     "GRAPHIFY_HOOK_MARKERS",
     "HOOK_MARKER",
     "HOOK_TEXT",

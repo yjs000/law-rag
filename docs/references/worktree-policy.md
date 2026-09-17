@@ -105,8 +105,10 @@ Roadmap pre-commit은 staged 경로가 실행계획 또는 `docs/ROADMAP.md`일 
 
 두 번째 명령은 `graphify-hook-start` 또는 `graphify-checkout-hook-start` marker가 있는
 `post-commit`·`post-checkout`만 각각 `*.graphify-disabled`로 이동한다. 다른 hook은 변경하지 않으며,
-기존 backup과 내용이 다르면 덮어쓰지 않고 실패한다. 복구할 때는 활성 hook 이름이 비어 있고 backup의
-marker가 맞는지 확인한 뒤 원래 이름으로 되돌린다.
+시작 marker가 shebang 바로 뒤에 있고 대응하는 끝 marker가 파일의 마지막 줄인 완전한 Graphify 관리
+hook만 대상으로 한다. 사용자 명령이 앞뒤에 있는 복합 hook은 거부한다. 모든 대상과 backup 충돌을 먼저
+검사한 뒤 변경하므로 중간 상태를 남기지 않으며, 기존 backup과 내용이 다르면 덮어쓰지 않고 실패한다.
+복구할 때는 활성 hook 이름이 비어 있고 backup의 marker가 맞는지 확인한 뒤 원래 이름으로 되돌린다.
 
 Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합 뒤에만 실행한다. 기능 worktree에서는
 `graphify update/query/path/explain`을 실행하지 않고, 필요 시 추적된 JSON을 직접 읽는다.

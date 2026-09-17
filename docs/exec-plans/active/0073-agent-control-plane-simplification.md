@@ -3,11 +3,11 @@
 > 유형: `Documentation`
 > 보조 라벨: `Reliability`
 > 선행 조건: 에이전트 제어면 단순화 설계가 승인되어야 한다.
-> 다음 행동: hook manager 회귀 테스트와 ROADMAP LF checkout 계약을 먼저 고정한다.
+> 다음 행동: review 수정 뒤 전체 검증과 완료 전이를 수행한다.
 > 참고 범위:
 > - `docs/design-docs/agent-control-plane-simplification.md` L1-L106 — 승인된 skill·hook·worktree 책임 경계
-> - `scripts/install_git_hooks.py` L1-L165 — 기존 roadmap pre-commit 설치 동작
-> - `docs/references/worktree-policy.md` L1-L108 — 위치 선언과 안전한 worktree 정리 계약
+> - `scripts/install_git_hooks.py` L1-L262 — common hook 설치와 Graphify hook 보존·비활성화 동작
+> - `docs/references/worktree-policy.md` L1-L136 — 위치 선언과 안전한 worktree 정리 계약
 
 # 0073: 에이전트 제어면 단순화 실행 계획
 
