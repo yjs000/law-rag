@@ -13,6 +13,7 @@ os.environ["SUPABASE_SECRET_KEY"] = ""
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["NVIDIA_API_KEY"] = ""
 os.environ["AI_MODE"] = "auto"
+os.environ["ERROR_LOG_MODE"] = "redacted"
 os.environ["ANSWER_PROVIDER"] = "openai"
 os.environ["COLLECTOR_STATE_DIR"] = ".data/nonexistent-api-test-state"
 
@@ -34,6 +35,7 @@ def ready_corpus_temporal_state(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(main_module, "_load_corpus_temporal_state", ready_state)
+
 
 @pytest.fixture
 def search_only_enabled(monkeypatch: pytest.MonkeyPatch) -> None:

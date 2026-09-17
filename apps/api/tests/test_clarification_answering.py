@@ -186,6 +186,7 @@ def _service(
 
     dependencies = SimpleNamespace(
         executions=executions,
+        error_log_mode="redacted",
         clarification_cases=clarification_cases,
         resolve_repository=_resolve_repository,
         active_provider=lambda: SimpleNamespace(active=lambda: _active_generation()),
@@ -348,6 +349,7 @@ async def test_generated_clarification_core_with_retrieval_is_preserved() -> Non
     summary = core.private_payload["verified_core"]["summary"]
     assert summary.endswith("추가 정보:\n- 설비용량: [ ]")
     assert "전기사업법이 적용됩니다" not in summary
+
 
 async def _case_record(cases: MemoryClarificationCaseRepository, context: ClarificationGrounding):
     return await cases.create_or_get(
@@ -822,7 +824,9 @@ async def test_non_clarification_core_repair_uses_safe_fallback() -> None:
             self.core_calls = 0
             self.detail_calls = 0
 
-        async def answer_core(self, _request: QuestionRequest, _hits: list[SearchHit]) -> CoreDraft:
+        async def answer_core(
+            self, _request: QuestionRequest, _hits: list[SearchHit]
+        ) -> CoreDraft:
             self.core_calls += 1
             return CoreDraft(
                 summary="근거와 일치하지 않는 요약입니다.",

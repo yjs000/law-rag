@@ -45,6 +45,7 @@ async def test_completed_phase_reports_timeout_releasing_capacity_lease_without_
     now = datetime(2026, 9, 4, tzinfo=UTC)
     dependencies = SimpleNamespace(
         executions=_Executions(),
+        error_log_mode="redacted",
         now=lambda: now,
         phase_timeout=timedelta(seconds=10),
         admit_phase=admit_phase,
