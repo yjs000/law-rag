@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: fd79fce8568a499193764345d519de7d95bcb66c360444a41290bf2dc87a9808 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 91e071cb28d48788a25ef91dc1d35dfb02ba7da4029f60ebce3b41cc71e54826 -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/active/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 로그 모드와 Production raw 거부 계약의 실패 테스트부터 작성한다.
 
 ## Todo
 
@@ -24,6 +25,7 @@
 - [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/todo/0060-v2-dynamic-today-date-bound.md) — 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
 - [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/todo/0065-remove-checklist-export-frontend.md) — 다음 행동: UI·클라이언트 제거의 테스트 우선 구현을 시작한다.
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 SSE 상세 생성 진행 표시 Implementation Plan](exec-plans/todo/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: NVIDIA 무료 티어 안내와 SSE 상세 생성 진행 표시의 프런트엔드 회귀 테스트부터 작성한다.
+- [O-001 · Operations — Vercel Environment Scope Rollout Implementation Plan](exec-plans/todo/0075-vercel-environment-scope-rollout.md) — 다음 행동: 값 없이 Vercel Production·Preview 변수 이름과 scope snapshot을 기록한다.
 
 ## Blocked
 
