@@ -19,12 +19,22 @@ def _write_fake_command(
     delay_seconds: int = 0,
     completion_path: Path | None = None,
 ) -> None:
-    delay = (
-        f'powershell -NoProfile -Command "Start-Sleep -Seconds {delay_seconds}"\r\n'
-        if delay_seconds
-        else ""
-    )
-    completion = f'echo completed> "{completion_path}"\r\n' if completion_path else ""
+    if delay_seconds and completion_path:
+        escaped_path = str(completion_path).replace("'", "''")
+        delay = (
+            'powershell -NoProfile -Command "'
+            f"Start-Sleep -Seconds {delay_seconds}; "
+            f"Set-Content -LiteralPath '{escaped_path}' -Value completed"
+            '"\r\n'
+        )
+        completion = ""
+    else:
+        delay = (
+            f'powershell -NoProfile -Command "Start-Sleep -Seconds {delay_seconds}"\r\n'
+            if delay_seconds
+            else ""
+        )
+        completion = f'echo completed> "{completion_path}"\r\n' if completion_path else ""
     path.write_text(
         f"@echo off\r\n{delay}{completion}echo {stdout}\r\necho {stderr} 1>&2\r\n"
         f"exit /b {exit_code}\r\n",
@@ -116,6 +126,7 @@ def test_dev_runner_stops_the_peer_promptly_after_a_service_failure(tmp_path: Pa
     )
 
     assert result.returncode != 0
-    assert time.monotonic() - started_at < 2
+    elapsed = time.monotonic() - started_at
     time.sleep(3)
     assert not frontend_completed.exists()
+    assert elapsed < 2
