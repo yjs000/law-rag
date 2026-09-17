@@ -1,6 +1,6 @@
 ---
 name: roadmap-operator
-description: Use when starting, resuming, or transitioning a law-rag execution-plan milestone and context must stay limited to authoritative metadata and declared ranges.
+description: Use when creating, starting, resuming, or transitioning a law-rag execution-plan milestone and context must stay limited to authoritative metadata and declared ranges.
 ---
 
 # Roadmap Operator
@@ -10,6 +10,31 @@ description: Use when starting, resuming, or transitioning a law-rag execution-p
 이 프로젝트 범위 skill은 실행계획의 상태를 찾고 전이할 때 읽는 문맥을 최소화한다. 실행계획 파일의
 상단 메타데이터가 유일한 정본이고, 생성된 로드맵은 그 메타데이터에서 나온 색인이다.
 로드맵의 상태·제목·다음 행동을 직접 고치지 말고 원본 헤더를 고친 뒤 renderer를 실행한다.
+
+## 실행계획 작성 계약
+
+이 저장소의 실행계획은 구현 코드의 대체물이 아니라, 작업자가 추가 설계 없이 순서대로 실행하고 각
+결과를 검증할 수 있는 작업 목록이다. 범용 planning skill이 코드 예시를 요구하더라도 이 저장소에서는
+아래 형식이 우선한다.
+
+계획을 쓰기 전에 현재 파일을 확인하고 각 태스크를 하나의 독립적으로 검토·검증 가능한 결과로 나눈다.
+각 태스크에는 다음 항목을 모두 적는다.
+
+- 결과: 태스크가 끝났을 때 관찰 가능한 단일 완료 상태
+- 대상: 생성·수정·검증할 정확한 경로와 현재 기준 `L시작-L끝`; 새 파일은 `새 파일`로 표시
+- 예상 변경량: 파일별 추가·수정·삭제 라인 수의 추정치와 태스크 합계
+- 실행 절차: 테스트 실패 확인, 최소 변경, 관련 검증, diff 확인의 순서와 정확한 실행 명령
+- 완료 증거: 기대하는 테스트 결과, 산출물, 또는 관찰 가능한 상태
+- 의존성: 선행 태스크의 결과를 사용할 때 그 태스크와 인터페이스·산출물 이름
+
+계획에는 구현 코드, 테스트 코드, diff, 의사코드 예시를 넣지 않는다. 대신 변경할 동작, 계약, 심볼,
+테스트 사례, 실행 명령과 기대 결과를 자연어로 명시한다. 라인 범위와 예상 변경량은 계획 작성 시점의
+근거 있는 작업 경계이며, 실행 중 파일이 달라지면 구현 전에 다시 확인한다.
+
+하나의 계획이 여러 독립 서브시스템·배포 단계·별도 승인 경계를 함께 포함하거나, 태스크를 위 형식의
+단일 검증 결과와 구체적인 라인 범위로 한정할 수 없으면 계획을 억지로 작성하지 않는다. 먼저 로드맵
+단계를 각각 독립적으로 완료·검증 가능한 순서로 나누는 안을 사용자에게 제안하고, 승인된 단계별로
+별도 실행계획을 작성한다.
 
 ## 네 가지 읽기 범위 (순서 고정)
 
@@ -28,6 +53,7 @@ description: Use when starting, resuming, or transitioning a law-rag execution-p
 | 목적 | 기준 또는 명령 |
 | --- | --- |
 | 시작·재개 | roadmap의 `Picked Up` 또는 첫 `Todo` 행과 선택한 헤더 |
+| 새 계획 작성 | 무코드 태스크, 현재 라인 범위, 예상 변경량, 실행 명령, 완료 증거 |
 | 헤더 변경 후 생성 | `python scripts/render_roadmap.py` |
 | 작업 트리 검증 | `python scripts/check_roadmap.py` |
 | staged 검증 | `python scripts/check_roadmap.py --staged` |
@@ -73,5 +99,8 @@ staged 상태를 확인할 때는 `python scripts/check_roadmap.py --staged`를 
 - 계획 본문·완료 계획·전체 아키텍처를 먼저 읽는 것 — 선택한 헤더와 `참고 범위`부터 확인한다.
 - 범위 확장 선언 없이 파일을 여는 것 — path, 시작줄, 끝줄, 이유를 먼저 기록한다.
 - 전이 전후에 읽은 범위를 보고하지 않는 것 — 위의 두 줄 형식을 사용한다.
+- 실행계획에 구현·테스트 코드나 diff를 넣는 것 — 동작·계약·심볼·테스트 사례와 명령으로 바꾼다.
+- 라인 범위나 예상 변경량 없이 파일명만 적는 것 — 현재 파일을 확인하고 태스크별 작업 경계를 수치화한다.
+- 서로 독립적으로 완료할 수 있는 큰 범위를 한 계획에 넣는 것 — 로드맵 단계 분할안을 먼저 제안한다.
 - Windows Codex sandbox에서 기존 `.uv-cache` 또는 `.venv`의 lock 접근 오류가 난 뒤
   `uv run`을 반복하는 것 — 저장소의 `scripts/run_python.ps1`을 사용한다.

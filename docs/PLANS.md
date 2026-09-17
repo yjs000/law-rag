@@ -19,6 +19,13 @@ navigation일 뿐 상태 정본이 아니다.
 이 문서의 역할은 law-rag repository 안에서 실행 계획의 저장 위치, 상태 lifecycle,
 repository-specific metadata를 정의하는 것이다.
 
+## 작업 위치
+
+계획을 착수·재개하기 전에 [`references/worktree-policy.md`](references/worktree-policy.md)의 작업 위치
+선언을 남긴다. 하나의 구현 계획은 하나의 branch worktree에서 실행하고, 통합 branch의 checkout을
+여러 task가 공유해 구현하지 않는다. 계획 완료 기록에는 구현 worktree와 통합 대상 branch를 적는다.
+worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실행을 중단하고 위치·상태를 다시 확인한다.
+
 ## 위치
 
 - 사용자 제안·미착수: docs/exec-plans/todo/

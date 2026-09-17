@@ -10,7 +10,7 @@ describe("question submission busy notice", () => {
     expect(pageSource).toContain('className="error-banner" role="alert"');
   });
 
-  it("uses only a backend public message for non-busy question failures", () => {
+  it("uses the silent interruption transition only after a non-public question failure", () => {
     const submitPath = pageSource.slice(
       pageSource.indexOf("const answer = await askQuestion"),
       pageSource.indexOf("function stopGeneration"),
@@ -19,6 +19,9 @@ describe("question submission busy notice", () => {
     expect(submitPath).toContain("cause.publicMessage");
     expect(submitPath).toContain("if (message)");
     expect(submitPath).toContain("stopPendingTurn(current, requestId)");
+    expect(submitPath).toMatch(
+      /if \(message\) \{[\s\S]*failPendingTurn\(current, requestId, message\)[\s\S]*\} else \{\s*setActiveChat\(\(current\) => settleInterruptedPendingTurn\(current, requestId\)\);/,
+    );
     expect(submitPath).not.toContain('cause instanceof Error ? cause.message : "연결 오류"');
   });
 });
