@@ -103,6 +103,25 @@ def test_question_context_rejects_aggregate_input_over_safe_budget() -> None:
         )
 
 
+@pytest.mark.parametrize("question", ["가", "1", "?", "🧭"])
+def test_question_request_accepts_non_whitespace_one_character(question: str) -> None:
+    assert QuestionRequest(question=question).question == question
+
+
+@pytest.mark.parametrize("question", ["", " ", "\t", "\n", " \t\n "])
+def test_question_request_rejects_whitespace_only(question: str) -> None:
+    with pytest.raises(ValidationError):
+        QuestionRequest(question=question)
+
+
+def test_question_request_trims_before_enforcing_the_2000_character_limit() -> None:
+    question = f" {'가' * 2_000} "
+    assert QuestionRequest(question=question).question == "가" * 2_000
+
+    with pytest.raises(ValidationError):
+        QuestionRequest(question="가" * 2_001)
+
+
 def test_request_defaults_use_korea_standard_date(monkeypatch: pytest.MonkeyPatch) -> None:
     class FrozenDatetime:
         @classmethod

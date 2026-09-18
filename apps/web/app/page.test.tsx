@@ -25,3 +25,11 @@ describe("question submission busy notice", () => {
     expect(submitPath).not.toContain('cause instanceof Error ? cause.message : "연결 오류"');
   });
 });
+
+describe("question composer input boundary", () => {
+  it("enables the send button for one non-whitespace character and keeps the UI cap", () => {
+    expect(pageSource).toContain('disabled={question.trim().length === 0}');
+    expect(pageSource).toContain('maxLength={2000}');
+    expect(pageSource).not.toContain("question.trim().length < 2");
+  });
+});

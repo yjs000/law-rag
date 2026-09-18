@@ -48,6 +48,28 @@ afterEach(() => {
 });
 
 describe("Supabase authenticated question workflow", () => {
+  it("forwards a one-character question through the v2 prepare request", async () => {
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/v2/question-executions")) {
+        expect(init?.method).toBe("POST");
+        return Response.json({ execution_id: "exec-1", next_action: "generate_core" });
+      }
+      if (url.endsWith("/core")) {
+        return new Response('event: phase_complete\ndata: {"next_action":"generate_detail"}\n\n');
+      }
+      return new Response(`event: complete\ndata: {"response":${JSON.stringify(answer)}}\n\n`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askQuestion({ question: "가", as_of_date: "2026-07-14", project_stage: "planning" }))
+      .resolves.toEqual(answer);
+
+    const prepareCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/v2/question-executions"));
+    expect(JSON.parse(String(prepareCall?.[1]?.body))).toMatchObject({ question: "가" });
+  });
+
   it("keeps browser fetch bound to Window during v2 execution", async () => {
     auth.getSession.mockResolvedValue({ data: { session: null } });
     const fetchMock = vi.fn(async function (

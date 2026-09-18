@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Literal, Self
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from law_rag_core.domain.catalog import SourceKind
 
@@ -116,7 +116,10 @@ class QuestionRequest(BaseModel):
     # 클라이언트가 중복 요청을 구분하기 위해 부여한 ID.
     client_request_id: UUID = Field(default_factory=uuid4)
     # 사용자가 입력한 법률 질의 또는 이전 대화의 질문.
-    question: Annotated[str, Field(min_length=2, max_length=2000)]
+    question: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=2000),
+    ]
     # 법령의 효력을 판단하는 기준일.
     as_of_date: date = Field(default_factory=_korea_today)
     # 질의 대상 프로젝트의 진행 단계.

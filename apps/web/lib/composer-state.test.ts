@@ -9,7 +9,22 @@ describe("consumeQuestionDraft", () => {
     });
   });
 
-  it("does not consume a draft that is too short", () => {
-    expect(consumeQuestionDraft("  가 ")).toBeNull();
+  it.each(["가", "1", "?", "🧭"])("consumes a non-whitespace one-character draft: %s", (question) => {
+    expect(consumeQuestionDraft(` ${question} `)).toEqual({
+      submittedQuestion: question,
+      nextDraft: "",
+    });
+  });
+
+  it.each(["", " ", "\t", "\n", " \t\n "])("does not consume a whitespace-only draft: %j", (question) => {
+    expect(consumeQuestionDraft(question)).toBeNull();
+  });
+
+  it("accepts the 2,000-character question limit", () => {
+    expect(consumeQuestionDraft("가".repeat(2_000))).not.toBeNull();
+  });
+
+  it("rejects a question longer than 2,000 characters", () => {
+    expect(consumeQuestionDraft("가".repeat(2_001))).toBeNull();
   });
 });
