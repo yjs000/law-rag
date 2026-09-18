@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 33bdb6ecd1a1dfbcd44a329ac8c7700f001d36206672f016243a8e6134ba8e1a -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4eab314d613ea2cf8789eea9ce16c828cf3d35fc848e45a39d6987ade1196b25 -->
 
 # 프로젝트 로드맵
 
@@ -13,7 +13,7 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 대기 | F-007 |
+| P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 실행 중 | F-007 |
 | P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
 | - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
 | - | [F-007](exec-plans/completed/0065-remove-checklist-export-frontend.md) | - | 없음 |
