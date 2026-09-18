@@ -6,7 +6,7 @@
 > 다음 행동: B-003과 B-008을 독립 worktree에서 병렬 실행한다.
 > 참고 범위:
 > - `docs/design-docs/roadmap-dropped-and-orchestration.md` L72-L156 — OC-001 자식·파동·상태 전이·완료 계약
-> - `docs/exec-plans/active/0065-remove-checklist-export-frontend.md` L1-L16 — 다음 P1 병렬 자식의 범위와 소유 파일
+> - `docs/exec-plans/completed/0065-remove-checklist-export-frontend.md` L1-L9 — 완료된 P1 자식(F-007)의 완료 기록
 > - `docs/exec-plans/active/0077-elementary-plain-language-prompt-refinement.md` L1-L16 — 다음 P1 병렬 자식의 범위와 소유 파일
 
 # OC-001: 우선순위 로드맵 병렬 오케스트레이션

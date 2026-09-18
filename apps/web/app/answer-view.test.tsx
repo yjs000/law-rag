@@ -26,13 +26,8 @@ const baseResponse: QuestionResponse = {
 const requiredProps = {
   asOf: "2026-09-15",
   documentKinds: new Set<DocumentKind>(["law", "decree", "rule", "administrative_rule"]),
-  exportFormat: "md" as const,
-  exporting: false,
   messageId: "message-1",
   onCitation: vi.fn(),
-  onExport: vi.fn(),
-  onExportFormat: vi.fn(),
-  question: "집앞에 원전을 설치하고싶어.",
   selectedCitationId: null,
 };
 
@@ -83,6 +78,8 @@ describe("AnswerView", () => {
     expect(html).toContain("백엔드 확인 항목");
     expect(html).toContain("C1 원문");
     expect(html).not.toContain('class="detail-progress"');
+    expect(html).not.toContain("내보내기");
+    expect(html).not.toContain("export-controls");
     expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("백엔드 주장"));
     expect(html.indexOf("백엔드 주장")).toBeLessThan(html.indexOf("확인 체크리스트"));
     expect(html.indexOf("백엔드 요약")).toBeLessThan(html.indexOf("answer-meta"));
