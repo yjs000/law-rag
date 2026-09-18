@@ -4,6 +4,7 @@ import sys
 from contextlib import asynccontextmanager
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 
@@ -57,8 +58,12 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def fake_search(store, embedder, query, as_of_date, limit):
         return []
 
+    async def allow_supported_date(*args) -> None:
+        del args
+
     monkeypatch.setattr(main_module, "_v2_index_ready", fake_ready)
     monkeypatch.setattr(main_module, "llamaindex_search", fake_search)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", allow_supported_date)
     return TestClient(main_module.app)
 
 
@@ -95,11 +100,15 @@ def test_v2_search_resolves_the_active_generation_store(
         observed["index"] = index
         return []
 
+    async def allow_supported_date(*args) -> None:
+        del args
+
     monkeypatch.setattr(main_module, "llamaindex_vector_store", ActiveProvider())
     monkeypatch.setattr(main_module, "llamaindex_embedder", object())
     monkeypatch.setattr(main_module, "_v2_index_ready", fake_ready)
     monkeypatch.setattr(main_module, "llamaindex_search", fake_search)
     monkeypatch.setattr(main_module, "llamaindex_search_index", fake_index_search)
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", allow_supported_date)
 
     response = TestClient(main_module.app).post(
         "/v2/search", json={"query": "태양광", "as_of_date": "2026-01-01", "limit": 5}
@@ -107,6 +116,43 @@ def test_v2_search_resolves_the_active_generation_store(
 
     assert response.status_code == 200
     assert observed["index"] is active_index
+
+
+def test_v2_search_rejects_unsupported_date_before_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.main as main_module
+
+    observed: list[str] = []
+
+    async def reject_unsupported_date(requested_date, repository) -> None:
+        del repository
+        observed.append(requested_date.isoformat())
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "unsupported_corpus_date"},
+        )
+
+    async def fail_search(*args) -> list[object]:
+        raise AssertionError("unsupported dates must be rejected before retrieval")
+
+    monkeypatch.setattr(main_module, "_require_supported_as_of_date", reject_unsupported_date)
+    monkeypatch.setattr(main_module, "llamaindex_vector_store", object())
+    monkeypatch.setattr(main_module, "llamaindex_embedder", object())
+
+    async def ready() -> bool:
+        return True
+
+    monkeypatch.setattr(main_module, "_v2_index_ready", ready)
+    monkeypatch.setattr(main_module, "llamaindex_search", fail_search)
+
+    response = TestClient(main_module.app).post(
+        "/v2/search", json={"query": "태양광", "as_of_date": "2026-08-05", "limit": 5}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "unsupported_corpus_date"
+    assert observed == ["2026-08-05"]
 
 
 def test_v2_search_returns_503_with_stable_code_when_not_configured(

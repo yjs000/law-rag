@@ -29,6 +29,7 @@ async def search_v2(payload: SearchRequest, request: Request) -> list[SearchHit]
     vector_store, embedder, _ = resources
     if vector_store is None or embedder is None or not await main._v2_ready():
         raise _not_ready_error()
+    await main._require_supported_as_of_date(payload.as_of_date, main.repository)
     active = getattr(vector_store, "active", None)
     if active is not None:
         try:
