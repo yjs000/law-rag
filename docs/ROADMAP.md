@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00a6b1f683a8612b9fca99ef3f7241ae40b75fb21cd757d41cfb70b71917d7ed -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7e6e22ebcc24db94cbd173b533ab2d2d599eb755421b728ea89aef23228f0106 -->
 
 # 프로젝트 로드맵
 
@@ -13,7 +13,7 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P0 | [B-010](exec-plans/active/0079-allow-single-character-question-submission.md) | 대기 | B-003, B-008 |
+| P0 | [B-010](exec-plans/active/0079-allow-single-character-question-submission.md) | 실행 중 | B-003, B-008 |
 | P1 | [F-007](exec-plans/active/0065-remove-checklist-export-frontend.md) | 대기 | B-003, B-008, B-010 |
 | P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 대기 | F-007 |
 | P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
