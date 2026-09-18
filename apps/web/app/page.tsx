@@ -52,7 +52,6 @@ import {
 import type {
   ConversationSummary,
   MockUser,
-  QuestionInput,
   QuestionResponse,
 } from "../lib/contracts";
 import {
@@ -90,16 +89,6 @@ export function conversationSearch(search: string, conversationId: string | null
   else params.delete("conversation");
   const nextSearch = params.toString();
   return nextSearch ? `?${nextSearch}` : "";
-}
-
-export async function submitQuestionRequest(
-  input: QuestionInput,
-  signal?: AbortSignal,
-  onEvent?: Parameters<typeof askQuestion>[2],
-): Promise<QuestionResponse | null> {
-  const submission = consumeQuestionDraft(input.question);
-  if (!submission) return null;
-  return askQuestion({ ...input, question: submission.submittedQuestion }, signal, onEvent);
 }
 
 export function shouldApplyConversationRestore(expectedAuthEpoch: number, currentAuthEpoch: number, expectedConversationEpoch: number, currentConversationEpoch: number): boolean {
@@ -587,7 +576,7 @@ export default function Home() {
     const clarification = activeChat.clarification;
     const clarificationCapability = clarification?.capability ?? crypto.randomUUID();
     try {
-      const answer = await submitQuestionRequest({
+      const answer = await askQuestion({
         client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
@@ -612,7 +601,6 @@ export default function Home() {
         setResult(core);
         setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
       });
-      if (!answer) return;
       if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer, SEARCH_ONLY_ENABLED);
       setModeNotice(resolution.notice ?? "");

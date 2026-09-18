@@ -1,6 +1,28 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { submitQuestionRequest } from "./page";
+
+const reactHooks = vi.hoisted(() => ({ cursor: 0, initialQuestion: " \t\n " }));
+
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useCallback: (callback: unknown) => callback,
+    useEffect: () => undefined,
+    useRef: (current: unknown) => ({ current }),
+    useState: (initial: unknown) => {
+      const index = reactHooks.cursor++;
+      const value = index === 0
+        ? reactHooks.initialQuestion
+        : typeof initial === "function"
+          ? (initial as () => unknown)()
+          : initial;
+      return [value, () => undefined];
+    },
+  };
+});
+
+import Home from "./page";
 
 const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 
@@ -17,7 +39,7 @@ describe("question submission busy notice", () => {
 
   it("uses the silent interruption transition only after a non-public question failure", () => {
     const submitPath = pageSource.slice(
-      pageSource.indexOf("const answer = await submitQuestionRequest"),
+      pageSource.indexOf("const answer = await askQuestion"),
       pageSource.indexOf("function stopGeneration"),
     );
 
@@ -42,12 +64,33 @@ describe("question composer input boundary", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(submitQuestionRequest({
-      question: " \t\n ",
-      as_of_date: "2026-09-18",
-      project_stage: "planning",
-    })).resolves.toBeNull();
+    reactHooks.cursor = 0;
+    const form = findElement(Home(), (node) => node.type === "form");
+    expect(form).not.toBeNull();
+    await form?.props.onSubmit?.({ preventDefault: vi.fn() });
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+type TestElement = {
+  props: {
+    children?: unknown;
+    onSubmit?: (event: { preventDefault: () => void }) => unknown;
+  };
+  type: unknown;
+};
+
+function findElement(value: unknown, predicate: (node: TestElement) => boolean): TestElement | null {
+  if (!value || typeof value !== "object") return null;
+  const node = value as Partial<TestElement>;
+  if (node.type !== undefined && node.props && predicate(node as TestElement)) return node as TestElement;
+  const children = node.props?.children;
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const match = findElement(child, predicate);
+      if (match) return match;
+    }
+  }
+  return findElement(children, predicate);
+}
