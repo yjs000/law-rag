@@ -6,7 +6,7 @@
 > 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
 > 오케스트레이션: `OC-001`
 > 우선순위: `P0`
-> 관리 상태: `준비 중`
+> 관리 상태: `실행 중`
 > 선행 작업: 없음
 > 소유 범위:
 > - `apps/api/app/domain/corpus_temporal_contract.py`

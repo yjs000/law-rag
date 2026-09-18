@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 0a62ec01b7731d47b7185687afdf51a9537bb1a00958d4afb7d4b30bb4cfcde7 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 3af649ff192cc692eeb84f886819d243abc9064eaa37adee7a5891db3f8219d0 -->
 
 # 프로젝트 로드맵
 
@@ -13,8 +13,8 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P0 | [B-003](exec-plans/active/0060-v2-dynamic-today-date-bound.md) | 준비 중 | 없음 |
-| P0 | [B-008](exec-plans/active/0076-hide-internal-routing-copy-from-limitations.md) | 준비 중 | 없음 |
+| P0 | [B-003](exec-plans/active/0060-v2-dynamic-today-date-bound.md) | 실행 중 | 없음 |
+| P0 | [B-008](exec-plans/active/0076-hide-internal-routing-copy-from-limitations.md) | 실행 중 | 없음 |
 | P0 | [B-010](exec-plans/active/0079-allow-single-character-question-submission.md) | 대기 | B-003, B-008 |
 | P1 | [F-007](exec-plans/active/0065-remove-checklist-export-frontend.md) | 대기 | B-003, B-008, B-010 |
 | P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 대기 | F-007 |
