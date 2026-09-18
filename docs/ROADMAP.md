@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 9dfba83c05a87b723cdb9105d29308622525e378a1f54e8465e01e3bf3a527e3 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: bd18e48748f2d2aaa25d9c6d3f88e2d9d1ee4496436b7e0e207d7d01216fb659 -->
 
 # 프로젝트 로드맵
 
@@ -13,12 +13,12 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P0 | [B-003](exec-plans/active/0060-v2-dynamic-today-date-bound.md) | 통합 대기 | 없음 |
 | P0 | [B-008](exec-plans/active/0076-hide-internal-routing-copy-from-limitations.md) | 실행 중 | 없음 |
 | P0 | [B-010](exec-plans/active/0079-allow-single-character-question-submission.md) | 대기 | B-003, B-008 |
 | P1 | [F-007](exec-plans/active/0065-remove-checklist-export-frontend.md) | 대기 | B-003, B-008, B-010 |
 | P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 대기 | F-007 |
 | P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
+| - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
 
 
 ## Todo
@@ -39,6 +39,7 @@
 
 ## Done
 
+- [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) — 다음 행동: 없음 — 구현·통합 검증 완료.
 - [F-006-A · Feature — Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan](exec-plans/completed/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-006-B · Feature — F-006-B 대화형 clarification workflow Implementation Plan](exec-plans/completed/0065-conversational-clarification-workflow.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행

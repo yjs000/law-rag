@@ -1,17 +1,10 @@
 > 작업 ID: `B-003`
-> 상태: `Todo`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Data`, `UX`
 > 선행 조건: 없음
-> 다음 행동: `/v2/search`를 포함한 v2 runtime 경로의 KST today gate 누락을 회귀 테스트로 고정한다.
+> 다음 행동: 없음 — 구현·통합 검증 완료.
 > 오케스트레이션: `OC-001`
-> 우선순위: `P0`
-> 관리 상태: `통합 대기`
-> 선행 작업: 없음
-> 소유 범위:
-> - `apps/api/app/domain/corpus_temporal_contract.py`
-> - `apps/api/app/api/v2/search.py`
-> - `apps/web/app/page.tsx`
 > 참고 범위:
 > - `apps/api/app/domain/corpus_temporal_contract.py` L23-L59 — KST today와 지원 범위 검사 계약
 > - `apps/api/app/api/v2/search.py` L21-L48 — v2 search의 기준일 gate와 검색 호출 경계
@@ -96,3 +89,11 @@ F-005 구현은 완료됐으므로 B-003을 독립 bugfix로 수행한다. 별�
 
 - 2026-09-15: 이 제품은 시각이 아니라 한국 달력 날짜만 필요하므로 `TodayProvider`/clock port 추상화를
   추가하지 않는다. 기존 `korea_today()` 직접 호출과 monkeypatch 기반 테스트가 요구사항에 충분하다.
+
+## 실행 결과
+
+- 자식 commit `3beccb1`(통합 commit `f796d24`)에서 `/v2/search` 요청이 active generation·retrieval 전에
+  공통 KST corpus-date gate를 통과하도록 고정했다.
+- task review에서 명세 적합과 품질 모두 승인됐고 Critical·Important·Minor 지적은 없었다.
+- 통합 checkout의 `apps/api`에서 v2 search·temporal focused 테스트 32개와 Ruff 검사가 통과했다.
+- 잔여 작업은 없다. Web 전체 회귀는 OC-001 최종 통합 검증에서 다시 실행한다.

@@ -6,7 +6,7 @@
 > 다음 행동: B-003과 B-008을 독립 worktree에서 병렬 실행한다.
 > 참고 범위:
 > - `docs/design-docs/roadmap-dropped-and-orchestration.md` L72-L156 — OC-001 자식·파동·상태 전이·완료 계약
-> - `docs/exec-plans/active/0060-v2-dynamic-today-date-bound.md` L1-L16 — 첫 P0 자식의 범위와 소유 파일
+> - `docs/exec-plans/completed/0060-v2-dynamic-today-date-bound.md` L1-L12 — 완료된 첫 P0 자식의 결과와 오케스트레이션 연결
 > - `docs/exec-plans/active/0076-hide-internal-routing-copy-from-limitations.md` L1-L16 — 병렬 실행할 둘째 P0 자식의 범위와 소유 파일
 
 # OC-001: 우선순위 로드맵 병렬 오케스트레이션
