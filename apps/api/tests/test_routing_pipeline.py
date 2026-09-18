@@ -738,6 +738,11 @@ def test_clarification_route_keeps_internal_route_structured_and_hides_it_from_s
     assert "clarification_required" not in body["scope"]
     assert "라우팅:" not in body["scope"]
     assert "(검색 미실행)" not in body["scope"]
+    assert all(
+        marker not in limitation
+        for limitation in body["limitations"]
+        for marker in ("clarification_required", "라우팅:", "(검색 미실행)")
+    )
     assert embedding_calls == []
     assert retrieval_calls == []
 
