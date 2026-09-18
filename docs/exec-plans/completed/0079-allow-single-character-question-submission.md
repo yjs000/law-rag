@@ -1,17 +1,10 @@
 > 작업 ID: `B-010`
-> 상태: `Todo`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `UX`
 > 선행 조건: 없음
-> 다음 행동: 한 글자 입력 허용과 공백 전용 입력 거부를 Web·API 회귀 테스트로 먼저 고정한다.
+> 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 > 오케스트레이션: `OC-001`
-> 우선순위: `P0`
-> 관리 상태: `통합 대기`
-> 선행 작업: `B-003`, `B-008`
-> 소유 범위:
-> - `apps/web/lib/composer-state.ts`
-> - `apps/web/app/page.tsx`
-> - `packages/law-rag-core/src/law_rag_core/domain/schemas.py`
 > 참고 범위:
 > - `apps/web/lib/composer-state.ts` L1-L11 — trim 이후 두 글자 미만 입력을 버리는 현재 제출 경계
 > - `apps/web/app/page.tsx` L552-L848 — 제출 함수와 두 글자 미만일 때 비활성화되는 전송 버튼
@@ -46,3 +39,12 @@
 - **실행 절차:** 한 글자 질문이 V2 prepare 요청 body까지 전달되는 통합 테스트를 추가하고 공백 전용 입력은 fetch가 시작되지 않는지 확인한다. `pnpm lint:web`, `pnpm typecheck`, `pnpm test:web`, `pnpm build:web`와 API 포맷·lint·타입·단위 테스트를 실행한다. `git diff --check`와 전체 diff를 확인하고 계획을 `completed/`로 이동한 뒤 roadmap renderer와 checker를 실행한다.
 - **완료 증거:** 한 글자 질문의 Web→V2 요청 경로가 통과하고 빈 입력 방지·최대 길이 보호가 유지되며 계획이 `Done`으로 생성된 로드맵에 반영된다.
 - **의존성:** Task 1과 Task 2 완료.
+
+## 실행 결과
+
+- 자식 commit `026737b`, `e0de379`, `110c9b7`, `0ae4092`(통합 commit `ba7f14b`, `d6818ec`,
+  `60f9ef6`, `0c42895`)에서 Web·`QuestionRequest`의 trim 후 1~2,000자 계약을 통일했다.
+- task review의 공백 전용 fetch 0회 커버리 지적을 fix round 2의 실제 `Home()` form 제출 테스트로 해결했다.
+- 제품 명세에 한 글자 허용·공백 전용 거부·2,000자 상한 계약과 2026-09-18 결정을 반영했다.
+- 통합 checkout에서 core 16개, Web 144개, Ruff, lint, typecheck, production build, docs·roadmap 검사가 통과했다.
+- 잔여 작업은 없다.
