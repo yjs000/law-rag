@@ -22,7 +22,7 @@ import {
   renderMarkdown,
 } from "../lib/checklist-export";
 import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
-import { consumeQuestionDraft } from "../lib/composer-state";
+import { submitQuestionDraft, type ConsumedQuestionDraft } from "../lib/composer-state";
 import {
   type AnswerPreference,
   isTerraAvailabilityFailure,
@@ -551,7 +551,8 @@ export default function Home() {
     event.preventDefault();
     if (loading) return;
     conversationEpoch.current += 1;
-    const submission = consumeQuestionDraft(question);
+    let submission: ConsumedQuestionDraft | null = null;
+    if (!submitQuestionDraft(question, (next) => { submission = next; })) return;
     if (!submission) return;
     const { submittedQuestion: trimmed, nextDraft } = submission;
     const requestId = crypto.randomUUID();
