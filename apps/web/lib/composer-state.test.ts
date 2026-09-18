@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { consumeQuestionDraft, submitQuestionDraft } from "./composer-state";
+import { describe, expect, it } from "vitest";
+import { consumeQuestionDraft } from "./composer-state";
 
 describe("consumeQuestionDraft", () => {
   it("keeps the normalized submitted message and clears the next draft", () => {
@@ -26,15 +26,5 @@ describe("consumeQuestionDraft", () => {
 
   it("rejects a question longer than 2,000 characters", () => {
     expect(consumeQuestionDraft("가".repeat(2_001))).toBeNull();
-  });
-
-  it("does not start a fetch when submitting a whitespace-only draft", () => {
-    const fetchMock = vi.fn();
-
-    submitQuestionDraft(" \t\n ", ({ submittedQuestion }) => {
-      fetchMock("/v2/question-executions", { body: JSON.stringify({ question: submittedQuestion }) });
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

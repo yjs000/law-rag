@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { submitQuestionRequest } from "./page";
 
 const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("question submission busy notice", () => {
   it("maps the typed provider admission error to the existing alert banner", () => {
@@ -12,7 +17,7 @@ describe("question submission busy notice", () => {
 
   it("uses the silent interruption transition only after a non-public question failure", () => {
     const submitPath = pageSource.slice(
-      pageSource.indexOf("const answer = await askQuestion"),
+      pageSource.indexOf("const answer = await submitQuestionRequest"),
       pageSource.indexOf("function stopGeneration"),
     );
 
@@ -31,5 +36,18 @@ describe("question composer input boundary", () => {
     expect(pageSource).toContain('disabled={question.trim().length === 0}');
     expect(pageSource).toContain('maxLength={2000}');
     expect(pageSource).not.toContain("question.trim().length < 2");
+  });
+
+  it("does not start the production request path for a whitespace-only submission", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(submitQuestionRequest({
+      question: " \t\n ",
+      as_of_date: "2026-09-18",
+      project_stage: "planning",
+    })).resolves.toBeNull();
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

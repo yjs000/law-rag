@@ -9,13 +9,3 @@ export function consumeQuestionDraft(draft: string): ConsumedQuestionDraft | nul
 
   return { submittedQuestion, nextDraft: "" };
 }
-
-export function submitQuestionDraft(
-  draft: string,
-  onSubmit: (submission: ConsumedQuestionDraft) => void,
-): boolean {
-  const submission = consumeQuestionDraft(draft);
-  if (!submission) return false;
-  onSubmit(submission);
-  return true;
-}

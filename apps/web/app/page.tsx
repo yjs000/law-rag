@@ -22,7 +22,7 @@ import {
   renderMarkdown,
 } from "../lib/checklist-export";
 import { claimAnonymousLoginPrompt } from "../lib/anonymous-prompt";
-import { submitQuestionDraft, type ConsumedQuestionDraft } from "../lib/composer-state";
+import { consumeQuestionDraft } from "../lib/composer-state";
 import {
   type AnswerPreference,
   isTerraAvailabilityFailure,
@@ -52,6 +52,7 @@ import {
 import type {
   ConversationSummary,
   MockUser,
+  QuestionInput,
   QuestionResponse,
 } from "../lib/contracts";
 import {
@@ -89,6 +90,16 @@ export function conversationSearch(search: string, conversationId: string | null
   else params.delete("conversation");
   const nextSearch = params.toString();
   return nextSearch ? `?${nextSearch}` : "";
+}
+
+export async function submitQuestionRequest(
+  input: QuestionInput,
+  signal?: AbortSignal,
+  onEvent?: Parameters<typeof askQuestion>[2],
+): Promise<QuestionResponse | null> {
+  const submission = consumeQuestionDraft(input.question);
+  if (!submission) return null;
+  return askQuestion({ ...input, question: submission.submittedQuestion }, signal, onEvent);
 }
 
 export function shouldApplyConversationRestore(expectedAuthEpoch: number, currentAuthEpoch: number, expectedConversationEpoch: number, currentConversationEpoch: number): boolean {
@@ -551,8 +562,7 @@ export default function Home() {
     event.preventDefault();
     if (loading) return;
     conversationEpoch.current += 1;
-    let submission: ConsumedQuestionDraft | null = null;
-    if (!submitQuestionDraft(question, (next) => { submission = next; })) return;
+    const submission = consumeQuestionDraft(question);
     if (!submission) return;
     const { submittedQuestion: trimmed, nextDraft } = submission;
     const requestId = crypto.randomUUID();
@@ -577,7 +587,7 @@ export default function Home() {
     const clarification = activeChat.clarification;
     const clarificationCapability = clarification?.capability ?? crypto.randomUUID();
     try {
-      const answer = await askQuestion({
+      const answer = await submitQuestionRequest({
         client_request_id: requestId,
         question: trimmed,
         as_of_date: asOf,
@@ -602,6 +612,7 @@ export default function Home() {
         setResult(core);
         setActiveChat((current) => applyLiveCoreSummary(current, requestId, core));
       });
+      if (!answer) return;
       if (activeRequest.current?.id !== requestId) return;
       const resolution = resolveResponseAnswerMode(requestedAnswerMode, answer, SEARCH_ONLY_ENABLED);
       setModeNotice(resolution.notice ?? "");
