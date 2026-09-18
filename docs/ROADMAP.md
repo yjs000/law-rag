@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4eab314d613ea2cf8789eea9ce16c828cf3d35fc848e45a39d6987ade1196b25 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 31fb1a0a16cb7a758802b46eed64e47a99d9f183be798e3ee7d95cc23c184c34 -->
 
 # 프로젝트 로드맵
 
@@ -13,10 +13,10 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 실행 중 | F-007 |
 | P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
 | - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
 | - | [F-007](exec-plans/completed/0065-remove-checklist-export-frontend.md) | - | 없음 |
+| - | [F-009](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) | - | 없음 |
 | - | [B-008](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) | - | 없음 |
 | - | [B-010](exec-plans/completed/0079-allow-single-character-question-submission.md) | - | 없음 |
 
@@ -39,11 +39,11 @@
 
 ## Done
 
-- [F-007 · Feature — 체크리스트 내보내기 프런트 제거 Implementation Plan](exec-plans/completed/0065-remove-checklist-export-frontend.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 - [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
+- [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.

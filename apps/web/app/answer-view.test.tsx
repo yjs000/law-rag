@@ -35,7 +35,6 @@ describe("AnswerView", () => {
   it("passes through a no-results summary and renders core fields in order", () => {
     const html = renderToStaticMarkup(<AnswerView
       {...requiredProps}
-      pendingDetail
       response={{
         ...baseResponse,
         result_status: "no_results",
@@ -55,14 +54,13 @@ describe("AnswerView", () => {
     expect(html.startsWith('<p class="summary">')).toBe(true);
     expect(html.indexOf("summary")).toBeLessThan(html.indexOf("sources"));
     expect(html.indexOf("sources")).toBeLessThan(html.indexOf("limitations"));
-    expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("detail-progress"));
+    expect(html).not.toContain('class="detail-progress"');
     expect(html.indexOf("summary")).toBeLessThan(html.indexOf("answer-meta"));
   });
 
   it("renders finalized sections and checklist after core fields without progress ellipsis", () => {
     const html = renderToStaticMarkup(<AnswerView
       {...requiredProps}
-      pendingDetail={false}
       response={{
         ...baseResponse,
         summary: "최종 백엔드 요약",
@@ -89,7 +87,6 @@ describe("AnswerView", () => {
   it("keeps selected citations and SafeText escaping", () => {
     const html = renderToStaticMarkup(<AnswerView
       {...requiredProps}
-      pendingDetail={false}
       selectedCitationId="message-1:C1"
       response={{ ...baseResponse, summary: "<script>백엔드</script>" }}
     />);
