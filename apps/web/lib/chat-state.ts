@@ -269,6 +269,15 @@ export function reconcileClarification(
   };
 }
 
+/**
+ * True only while the assistant message's detailed answer is being finalized after the SSE
+ * core summary has arrived. Drives the top-pinned finalize progress indicator; the internal
+ * "finalize" stage name is never surfaced from this boolean.
+ */
+export function shouldShowFinalizeProgress(message: AssistantChatMessage): boolean {
+  return message.status === "streaming";
+}
+
 export function applyLiveCoreSummary(
   session: ChatSession,
   requestId: string,

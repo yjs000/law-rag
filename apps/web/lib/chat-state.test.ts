@@ -15,7 +15,9 @@ import {
   firstQuestionTitle,
   selectConversationContext,
   settleInterruptedPendingTurn,
+  shouldShowFinalizeProgress,
   stopPendingTurn,
+  type AssistantChatMessage,
   type ChatMessage,
   type ChatSession,
 } from "./chat-state";
@@ -254,5 +256,25 @@ describe("clarification continuation", () => {
     expect(JSON.stringify(pending.messages)).not.toContain("opaque-capability");
 
     expect(reconcileClarification(pending, response, "new-capability").clarification).toBeUndefined();
+  });
+});
+
+describe("finalize progress indicator contract", () => {
+  const assistantMessage = (status: AssistantChatMessage["status"]): AssistantChatMessage => ({
+    id: "assistant-1",
+    role: "assistant",
+    requestId: "request-1",
+    status,
+  });
+
+  it("shows the top finalize indicator only while the core answer streams", () => {
+    expect(shouldShowFinalizeProgress(assistantMessage("streaming"))).toBe(true);
+  });
+
+  it("hides the top finalize indicator for every terminal or pre-core status", () => {
+    expect(shouldShowFinalizeProgress(assistantMessage("pending"))).toBe(false);
+    expect(shouldShowFinalizeProgress(assistantMessage("complete"))).toBe(false);
+    expect(shouldShowFinalizeProgress(assistantMessage("stopped"))).toBe(false);
+    expect(shouldShowFinalizeProgress(assistantMessage("error"))).toBe(false);
   });
 });

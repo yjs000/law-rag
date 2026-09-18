@@ -73,6 +73,26 @@ describe("question composer input boundary", () => {
   });
 });
 
+describe("NVIDIA free-tier delay notice and finalize progress indicator", () => {
+  it("shows the free-tier delay notice on the welcome screen", () => {
+    expect(pageSource).toContain(
+      "NVIDIA Nemotron 무료 티어 사용으로 답변 생성에 1분 이상 걸릴 수 있습니다.",
+    );
+  });
+
+  it("pins a top finalize indicator only for the streaming assistant status, never exposing the internal stage name", () => {
+    expect(pageSource).toContain("shouldShowFinalizeProgress");
+    expect(pageSource).toContain('className="finalize-progress"');
+    expect(pageSource).toContain('role="status"');
+    expect(pageSource).not.toContain(">finalize<");
+    expect(pageSource).not.toMatch(/finalize-progress[\s\S]{0,200}>finalize</);
+  });
+
+  it("removes the bottom finalize ellipsis by no longer passing pendingDetail to AnswerView", () => {
+    expect(pageSource).not.toContain("pendingDetail=");
+  });
+});
+
 type TestElement = {
   props: {
     children?: unknown;

@@ -8,7 +8,6 @@ export function AnswerView({
   documentKinds,
   messageId,
   onCitation,
-  pendingDetail,
   response,
   selectedCitationId,
 }: {
@@ -16,7 +15,6 @@ export function AnswerView({
   documentKinds: Set<DocumentKind>;
   messageId: string;
   onCitation: (messageId: string, response: QuestionResponse, id: string) => void;
-  pendingDetail: boolean;
   response: QuestionResponse;
   selectedCitationId: string | null;
 }) {
@@ -41,7 +39,6 @@ export function AnswerView({
           {response.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}
         </section>
       )}
-      {pendingDetail && <p aria-label="상세 답변 생성 중" className="detail-progress">…</p>}
       {response.sections.map((section, index) => (
         <section className="claim" key={`${section.claim}-${index}`}>
           <h2><SafeText>{section.claim}</SafeText></h2>

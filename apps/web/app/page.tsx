@@ -32,8 +32,10 @@ import {
   createChatSession,
   failPendingTurn,
   settleInterruptedPendingTurn,
+  shouldShowFinalizeProgress,
   stopPendingTurn,
   selectConversationContext,
+  type AssistantChatMessage,
   type ChatSession,
 } from "../lib/chat-state";
 import {
@@ -736,6 +738,10 @@ export default function Home() {
   }
 
   const terraUnavailable = terraUnavailableFromResponse;
+  const finalizingAssistant = activeChat.messages.find(
+    (message): message is AssistantChatMessage =>
+      message.role === "assistant" && shouldShowFinalizeProgress(message),
+  );
 
   return (
     <main className="app-shell">
@@ -777,6 +783,13 @@ export default function Home() {
         {modeNotice && <div aria-live="polite" className="mode-notice" role="status"><span>{modeNotice}</span><button aria-label="모델 전환 알림 닫기" onClick={() => setModeNotice("")}><Icon name="close" /></button></div>}
 
         <div className={`chat-scroll ${result || loading ? "has-conversation" : ""}`} onScroll={(event) => { if (event.currentTarget.scrollTop < 80) void loadOlderTurns(); }}>
+          {finalizingAssistant && (
+            <div aria-label="상세 답변을 정리하고 있습니다" className="finalize-progress" role="status">
+              <span aria-hidden="true" className="finalize-dot" />
+              <span aria-hidden="true" className="finalize-dot" />
+              <span aria-hidden="true" className="finalize-dot" />
+            </div>
+          )}
           <section className="conversation" id="conversation" tabIndex={-1}>
             {activeChat.messages.length === 0 ? (
               <div className="welcome">
@@ -784,6 +797,7 @@ export default function Home() {
                 <p className="eyebrow">Energy Law Research System</p>
                 <h1>질문에서 근거 원문까지,<br />한 흐름으로 확인하세요.</h1>
                 <p className="welcome-copy">국가법령정보 공동활용 Open API의 법령·시행령·시행규칙·행정규칙만 검색합니다. 핵심 주장마다 확인 가능한 조문을 연결합니다.</p>
+                <p className="welcome-delay-notice">NVIDIA Nemotron 무료 티어 사용으로 답변 생성에 1분 이상 걸릴 수 있습니다.</p>
                 <div className="suggestions">{SUGGESTED_QUESTIONS.map((suggestion) => <button key={suggestion} onClick={() => startNewChat(suggestion)}>{suggestion}<Icon name="arrow" /></button>)}</div>
                 <div className="capabilities"><span>근거 인용</span><span>기준일 검색</span><span>체크리스트</span></div>
               </div>
@@ -799,7 +813,7 @@ export default function Home() {
                     {message.status === "pending" && <div className="thinking"><span /><span /><span />근거를 확인하고 있습니다</div>}
                     {message.status === "stopped" && <p className="stopped-response">응답 대기를 중지했습니다.</p>}
                     {message.status === "error" && <p className="stopped-response">{message.error}</p>}
-                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <><AnswerView asOf={previous.asOf} documentKinds={documentKinds} messageId={message.id} onCitation={jumpToCitation} pendingDetail={message.status === "streaming"} response={message.response} selectedCitationId={selectedCitationId} />{message.response.clarification && <aside aria-label="추가 정보 질문" className="clarification-prompts"><p>정확한 안내를 위해 다음 정보를 알려주세요.</p>{message.response.clarification.question_format.map((fact) => <p key={fact.id}><strong>{fact.label}</strong> — {fact.why_needed}</p>)}<button onClick={() => setQuestion("현재 정보로 답변해 주세요.")} type="button">현재 정보로 답변 요청</button></aside>}</>}
+                    {(message.status === "streaming" || message.status === "complete") && message.response && previous?.role === "user" && <><AnswerView asOf={previous.asOf} documentKinds={documentKinds} messageId={message.id} onCitation={jumpToCitation} response={message.response} selectedCitationId={selectedCitationId} />{message.response.clarification && <aside aria-label="추가 정보 질문" className="clarification-prompts"><p>정확한 안내를 위해 다음 정보를 알려주세요.</p>{message.response.clarification.question_format.map((fact) => <p key={fact.id}><strong>{fact.label}</strong> — {fact.why_needed}</p>)}<button onClick={() => setQuestion("현재 정보로 답변해 주세요.")} type="button">현재 정보로 답변 요청</button></aside>}</>}
                   </div></article>;
                 })}
                 {showAnonymousNudge && !user && <aside className="login-nudge"><div><strong>이 질문을 다시 열어보고 싶나요?</strong><p>지금 로그인해도 현재 익명 질문은 저장되지 않습니다. 다음 질문부터 기록됩니다.</p></div><button onClick={() => openAuth("login")}>로그인</button><button aria-label="안내 닫기" className="icon-button" onClick={() => setShowAnonymousNudge(false)}><Icon name="close" /></button></aside>}
