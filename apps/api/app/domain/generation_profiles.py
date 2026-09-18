@@ -43,7 +43,9 @@ def build_nvidia_answer_profile_v2(
         key=f"{model.replace('/', '-')}-answer-v2",
         provider="nvidia_nim",
         model=model,
-        prompt_version="answer-system-prompt-v2",
+        # F-010, 2026-09-18: 쉬운 말 언어 계약 정교화(짧은 문장, 쉬운 말 우선, 법률 용어
+        # 즉시 풀이, 내부 상태명/불필요한 영어 금지). schema·context·sampling은 그대로다.
+        prompt_version="answer-system-prompt-v2.1",
         schema_version="draft-answer-v1",
         context_version="m4-frozen-r1-a",
         temperature=0.3,
