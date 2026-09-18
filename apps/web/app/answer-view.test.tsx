@@ -45,12 +45,17 @@ describe("AnswerView", () => {
         ...baseResponse,
         result_status: "no_results",
         summary: "정확한 절차를 확인하려면 추가 정보가 필요합니다.",
-        scope: "라우팅: clarification_required (검색 미실행)",
+        scope: "질문에 답하려면 추가 정보가 필요합니다.",
         limitations: ["이 서비스는 법률 자문을 대체하지 않습니다."],
       }}
     />);
 
     expect(html).toContain("정확한 절차를 확인하려면 추가 정보가 필요합니다.");
+    expect(html).toContain("질문에 답하려면 추가 정보가 필요합니다.");
+    expect(html).not.toContain("clarification_required");
+    expect(html).not.toContain("라우팅:");
+    expect(html).not.toContain("(검색 미실행)");
+    expect(html).toContain("이 서비스는 법률 자문을 대체하지 않습니다.");
     expect(html).not.toContain("기준일에 유효한 MVP 법령 범위");
     expect(html.startsWith('<p class="summary">')).toBe(true);
     expect(html.indexOf("summary")).toBeLessThan(html.indexOf("sources"));

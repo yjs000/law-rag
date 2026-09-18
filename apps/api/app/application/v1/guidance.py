@@ -101,11 +101,16 @@ async def generate_blocked_answer(
         if draft.action == "clarification_required"
         else draft.summary
     )
+    scope = (
+        "질문에 답하려면 추가 정보가 필요합니다."
+        if route_decision.route == "clarification_required"
+        else f"라우팅: {route_decision.route} (검색 미실행)"
+    )
     return QuestionResponse(
         request_id=str(payload.client_request_id),
         mode="ai",
         summary=summary,
-        scope=f"라우팅: {route_decision.route} (검색 미실행)",
+        scope=scope,
         sections=[],
         checklist=[],
         citations=[],

@@ -328,6 +328,7 @@ async def test_nvidia_router_deterministically_finds_named_axes_without_values()
     assert judgment.route == "clarification_required"
     assert judgment.missing_fields == ("설비용량", "전기 사용 방식")
 
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("question", "expected_route", "expected_missing"),
@@ -676,15 +677,69 @@ def test_router_provider_error_returns_safe_no_search_ai_response(monkeypatch) -
 def test_blocked_route_provider_exhaustion_marks_v1_quota(monkeypatch) -> None:
     _configure_ai(monkeypatch)
     monkeypatch.setattr(main_module, "_question_router", lambda: _FailingRouter())
-    monkeypatch.setattr(
-        main_module, "_answerer", lambda: _QuotaExhaustedUnavailableAnswerer()
-    )
+    monkeypatch.setattr(main_module, "_answerer", lambda: _QuotaExhaustedUnavailableAnswerer())
 
     response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
 
     assert response.status_code == 200
     assert response.json()["route"] == "routing_unavailable"
     assert main_module.ai_quota_exhausted is True
+
+
+def test_clarification_route_keeps_internal_route_structured_and_hides_it_from_scope(
+    monkeypatch,
+) -> None:
+    _configure_ai(monkeypatch)
+    embedding_calls: list[object] = []
+    retrieval_calls: list[object] = []
+
+    class Router:
+        async def route(self, question: str) -> RouteJudgment:
+            return RouteJudgment(
+                route="clarification_required",
+                confidence=1.0,
+                reason="missing facts",
+                missing_fields=("설비용량",),
+            )
+
+    class Embedder:
+        async def embed(self, texts):
+            embedding_calls.append(texts)
+            raise AssertionError("embedding must not run")
+
+    async def search(*args, **kwargs):
+        retrieval_calls.append((args, kwargs))
+        raise AssertionError("retrieval must not run")
+
+    class Answerer:
+        async def answer_blocked_route(self, payload, route, reason):
+            return DraftAnswer(
+                summary="추가 정보가 필요합니다.",
+                scope="검색 미실행",
+                sections=[],
+                checklist=[],
+                limitations=[],
+                action="clarification_required",
+                missing_information=["설비용량"],
+            )
+
+    monkeypatch.setattr(main_module, "_question_router", lambda: Router())
+    monkeypatch.setattr(main_module, "_embedder", lambda: Embedder())
+    monkeypatch.setattr(main_module.repository, "search_with_trace", search)
+    monkeypatch.setattr(main_module, "_answerer", lambda: Answerer())
+
+    response = TestClient(main_module.app).post("/v1/questions", json=_payload_json())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == "clarification_required"
+    assert body["action"] == "clarification_required"
+    assert body["scope"] == "질문에 답하려면 추가 정보가 필요합니다."
+    assert "clarification_required" not in body["scope"]
+    assert "라우팅:" not in body["scope"]
+    assert "(검색 미실행)" not in body["scope"]
+    assert embedding_calls == []
+    assert retrieval_calls == []
 
 
 def test_router_timeout_returns_safe_no_search_ai_response(monkeypatch) -> None:
