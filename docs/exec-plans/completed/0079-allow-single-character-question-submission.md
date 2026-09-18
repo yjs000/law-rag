@@ -7,7 +7,7 @@
 > 오케스트레이션: `OC-001`
 > 참고 범위:
 > - `apps/web/lib/composer-state.ts` L1-L11 — trim 이후 두 글자 미만 입력을 버리는 현재 제출 경계
-> - `apps/web/app/page.tsx` L552-L848 — 제출 함수와 두 글자 미만일 때 비활성화되는 전송 버튼
+> - `apps/web/app/page.tsx` L552-L828 — 제출 함수와 두 글자 미만일 때 비활성화되는 전송 버튼
 > - `packages/law-rag-core/src/law_rag_core/domain/schemas.py` L89-L123 — 공용 `QuestionRequest.question`의 현재 최소 두 글자 API 계약
 
 # 공백이 아닌 한 글자 질문도 전송 허용 Implementation Plan
@@ -27,7 +27,7 @@
 ### Task 2: Web과 공용 API 최소 길이 일치
 
 - **결과:** Web이 허용한 한 글자 질문을 V1·V2 API도 받아들이며, 공백 전용 질문은 서버 경계에서 거부된다.
-- **대상:** `apps/web/lib/composer-state.ts` L1-L11 수정 약 2줄, `apps/web/app/page.tsx` L552-L848 수정 약 2줄, `packages/law-rag-core/src/law_rag_core/domain/schemas.py` L89-L123 수정 약 3줄, `packages/law-rag-core/tests/test_contracts.py` 질문 계약 구간 수정 약 24줄, 합계 약 31줄.
+- **대상:** `apps/web/lib/composer-state.ts` L1-L11 수정 약 2줄, `apps/web/app/page.tsx` L552-L828 수정 약 2줄, `packages/law-rag-core/src/law_rag_core/domain/schemas.py` L89-L123 수정 약 3줄, `packages/law-rag-core/tests/test_contracts.py` 질문 계약 구간 수정 약 24줄, 합계 약 31줄.
 - **실행 절차:** Web의 제출 함수와 버튼 조건을 trim 후 비어 있는지만 검사하도록 맞춘다. 공용 `QuestionRequest.question`은 공백을 정규화한 뒤 최소 길이 1을 요구하도록 바꾸고 최대 길이 2,000은 유지한다. 한 글자·공백 전용·2,000자·2,001자 API 계약 테스트를 추가한다. `pnpm --filter @law-rag/web test -- composer-state.test.ts page.test.tsx`와 `.\scripts\run_python.ps1 -m pytest packages/law-rag-core/tests/test_contracts.py`를 실행하고 diff를 확인한다.
 - **완료 증거:** 같은 한 글자 입력이 Web과 `QuestionRequest`에서 모두 통과하고, whitespace-only와 2,001자 입력은 양쪽 경계에서 거부된다.
 - **의존성:** Task 1의 입력 사례 표.

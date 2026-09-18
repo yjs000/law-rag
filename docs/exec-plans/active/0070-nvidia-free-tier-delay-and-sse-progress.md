@@ -13,7 +13,7 @@
 > - `apps/web/lib/chat-state.ts`
 > - `apps/web/app/answer-view.tsx`
 > 참고 범위:
-> - `apps/web/app/page.tsx` L552-L850 — 질문 실행, SSE 핵심 답변 반영, 채팅 상단·메시지·입력 영역 렌더링 경계
+> - `apps/web/app/page.tsx` L552-L828 — 질문 실행, SSE 핵심 답변 반영, 채팅 상단·메시지·입력 영역 렌더링 경계
 > - `apps/web/lib/chat-state.ts` L270-L285 — 핵심 답변 수신 뒤 streaming 상태를 만드는 상태 전이
 > - `apps/web/app/answer-view.tsx` L1-L57 — 현재 답변 하단 finalize 말줄임표 표시 경계
 
@@ -40,7 +40,7 @@
 ### Task 2: 메인 화면 안내와 SSE 진행 표시 구현
 
 - **결과:** finalize 동안 참고 이미지와 같은 민트색 3점 표시가 채팅 상단에 고정되고, terminal 상태에서는 즉시 사라진다.
-- **대상:** `apps/web/app/page.tsx` L552-L850 수정 약 20줄, `apps/web/app/answer-view.tsx` L1-L57 수정 약 4줄, `apps/web/app/globals.css` L70-L160 및 responsive/reduced-motion 구간 수정 약 30줄, 합계 약 54줄.
+- **대상:** `apps/web/app/page.tsx` L552-L828 수정 약 20줄, `apps/web/app/answer-view.tsx` L1-L57 수정 약 4줄, `apps/web/app/globals.css` L70-L160 및 responsive/reduced-motion 구간 수정 약 30줄, 합계 약 54줄.
 - **실행 절차:** 환영 화면에 승인된 NVIDIA Nemotron 무료 티어 지연 안내를 추가한다. 현재 요청의 assistant 메시지가 `streaming`일 때만 chat header 바로 아래에 `role="status"` 상단 표시를 렌더링하고 점 3개는 `aria-hidden`으로 둔다. sticky 또는 overlay 배치로 긴 답변을 스크롤해도 보이되 header·본문·입력창을 가리지 않게 한다. 기존 `AnswerView` 하단 단일 `…`를 제거한다. 기존 accent 색과 pulse 리듬을 재사용하고 `prefers-reduced-motion`에서는 정적 점으로 유지한다. focused 테스트를 통과시키고 diff를 확인한다.
 - **완료 증거:** desktop·mobile viewport에서 표시가 채팅 상단 중앙에 유지되고, 핵심 답변 본문은 가리지 않으며, 완료·실패·중지·취소 직후 잔상이 없다.
 - **의존성:** Task 1의 상태·위치·접근성 회귀 계약.

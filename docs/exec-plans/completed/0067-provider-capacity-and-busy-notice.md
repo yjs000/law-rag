@@ -7,7 +7,7 @@
 > 참고 범위:
 > - `apps/api/app/settings.py` L45-L50 — V2 provider lease 예산과 슬롯 기본값
 > - `apps/api/app/api/v2/sse.py` L71-L102 — lease admission 실패의 `503 system_busy` 경계
-> - `apps/web/app/page.tsx` L552-L845 — 질문 제출 실패 처리와 red error banner
+> - `apps/web/app/page.tsx` L552-L828 — 질문 제출 실패 처리와 red error banner
 
 # F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan
 

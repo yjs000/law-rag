@@ -1,5 +1,4 @@
 import type { QuestionResponse } from "../lib/contracts";
-import type { ExportFormat } from "../lib/checklist-export";
 import { filterCitations, type DocumentKind } from "../lib/source-filter";
 import { answerModeBadgeLabel } from "../lib/provider-neutral-copy";
 import { CitationCard } from "./citation-card";
@@ -7,27 +6,17 @@ import { SafeText } from "./safe-text";
 export function AnswerView({
   asOf,
   documentKinds,
-  exportFormat,
-  exporting,
   messageId,
   onCitation,
-  onExport,
-  onExportFormat,
   pendingDetail,
-  question,
   response,
   selectedCitationId,
 }: {
   asOf: string;
   documentKinds: Set<DocumentKind>;
-  exportFormat: ExportFormat;
-  exporting: boolean;
   messageId: string;
   onCitation: (messageId: string, response: QuestionResponse, id: string) => void;
-  onExport: (response: QuestionResponse, question: string, asOf: string) => void;
-  onExportFormat: (format: ExportFormat) => void;
   pendingDetail: boolean;
-  question: string;
   response: QuestionResponse;
   selectedCitationId: string | null;
 }) {
@@ -72,14 +61,6 @@ export function AnswerView({
         <section className="checklist">
           <div className="section-title-row">
             <h2>확인 체크리스트</h2>
-            <div className="export-controls">
-              <select aria-label="내보내기 형식" value={exportFormat} onChange={(event) => onExportFormat(event.target.value as ExportFormat)}>
-                <option value="md">Markdown</option>
-                <option value="csv">CSV</option>
-                <option value="pdf">PDF</option>
-              </select>
-              <button disabled={exporting} onClick={() => onExport(response, question, asOf)}>{exporting ? "생성 중" : "내보내기"}</button>
-            </div>
           </div>
           {response.checklist.map((item, index) => (
             <div className="check-item" key={`${item.label}-${index}`}>

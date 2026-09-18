@@ -6,7 +6,7 @@
 > 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 > 참고 범위:
 > - `docs/product-specs/web-e2e-validation.md` L1-L120 — 승인된 전체 E2E 체크리스트와 우선순위
-> - `apps/web/app/page.tsx` L332-L856 — 웹 사용자 흐름과 화면 상태
+> - `apps/web/app/page.tsx` L332-L828 — 웹 사용자 흐름과 화면 상태
 > - `apps/web/lib/v2-execution.ts` L1-L241 — 질문 실행 단계와 재연결·취소 계약
 
 # Production Web E2E Completion Loop Implementation Plan
