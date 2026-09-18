@@ -100,3 +100,11 @@
 - 2026-08-03: [대체됨] 당시 감사한 corpus의 검색 기준일을 `2026-06-03..2026-08-03` 양끝 포함으로 한정하고 범위 밖은 `422 unsupported_corpus_date`로 차단했다. 프런트 선제 차단은 상태 API 기반 후속 TODO이며 서버 검사가 최종 권위다.
 - 2026-08-04: 지원 시작일은 오늘 이하인 수집·현재 parser·검색 가능 버전의 `effective_from` 전역 최솟값, 종료일은 한국 날짜의 오늘로 계산한다. 오늘 유효 population이 준비되지 않으면 `503`, 준비된 범위 밖이면 검색 전에 `422`로 구분하며 프런트는 후속 작업에서 상태 API를 그대로 사용한다.
 - 2026-08-04: corpus 갱신 중에는 검색 게이트를 먼저 닫고 65초 drain하며, 운영 reader는 공유 lock을 기다리지 않고 `503 corpus_unready`로 즉시 닫는다.
+- 2026-09-18: 답변·core 요약·근거 부족 안내·clarification 프롬프트에 초등학생도 따라갈 수
+  있는 쉬운 한국어 언어 계약(F-010)을 적용했다. 실제 NVIDIA 모델로 대표 질문 6건 중
+  4건(허가·신고·기준일·적용 대상)이 네 기준을 모두 충족했다. 나머지 2건은 F-010 소유
+  범위 밖 한계(clarification 응답의 missing_information을 지우는 input allowlist,
+  routing_unavailable 안내에 대한 비결정적 프롬프트 준수)로 확인되어 각각
+  [0082](../exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md),
+  [0083](../exec-plans/todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
+  분리 등록했다.
