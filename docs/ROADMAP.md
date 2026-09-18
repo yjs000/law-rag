@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 9bc954fb2f141ed945ec4df8dff5bc9a5773a08769831a76c36588b0e75bfa5b -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00a6b1f683a8612b9fca99ef3f7241ae40b75fb21cd757d41cfb70b71917d7ed -->
 
 # 프로젝트 로드맵
 
@@ -13,12 +13,12 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P0 | [B-008](exec-plans/active/0076-hide-internal-routing-copy-from-limitations.md) | 통합 대기 | 없음 |
 | P0 | [B-010](exec-plans/active/0079-allow-single-character-question-submission.md) | 대기 | B-003, B-008 |
 | P1 | [F-007](exec-plans/active/0065-remove-checklist-export-frontend.md) | 대기 | B-003, B-008, B-010 |
 | P1 | [F-009](exec-plans/active/0070-nvidia-free-tier-delay-and-sse-progress.md) | 대기 | F-007 |
 | P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
 | - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
+| - | [B-008](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) | - | 없음 |
 
 
 ## Todo
@@ -39,7 +39,6 @@
 
 ## Done
 
-- [B-003 · Bug — 0060: V2 기준일 지원 상한을 한국 날짜 today로 동적 계산](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) — 다음 행동: 없음 — 구현·통합 검증 완료.
 - [F-006-A · Feature — Web 기준일 선택 상한을 한국 오늘으로 동적 유지 Implementation Plan](exec-plans/completed/0064-web-dynamic-today-date-bound.md) — 다음 행동: 요구사항별 API 계약 회귀 테스트부터 시작
 - [F-006-B · Feature — F-006-B 대화형 clarification workflow Implementation Plan](exec-plans/completed/0065-conversational-clarification-workflow.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
@@ -51,6 +50,7 @@
 - [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/completed/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 없음 — 구현·문서·전체 검증 완료.
 - [O-001 · Operations — Vercel Environment Scope Rollout Implementation Plan](exec-plans/completed/0075-vercel-environment-scope-rollout.md) — 다음 행동: 없음 — scope rollout, Production 배포와 smoke 검증 완료.
+- [B-008 · Bug — 내부 라우팅 문구의 “범위와 한계” 노출 제거 Implementation Plan](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped

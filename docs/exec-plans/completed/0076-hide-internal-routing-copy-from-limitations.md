@@ -1,17 +1,10 @@
 > 작업 ID: `B-008`
-> 상태: `Todo`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `UX`
 > 선행 조건: 없음
-> 다음 행동: no-search 안내 응답의 사용자용 `scope` 계약을 회귀 테스트로 먼저 고정한다.
+> 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 > 오케스트레이션: `OC-001`
-> 우선순위: `P0`
-> 관리 상태: `통합 대기`
-> 선행 작업: 없음
-> 소유 범위:
-> - `apps/api/app/application/v1/guidance.py`
-> - `apps/api/tests/test_routing_pipeline.py`
-> - `apps/web/app/answer-view.test.tsx`
 > 참고 범위:
 > - `apps/api/app/application/v1/guidance.py` L73-L116 — no-search 경로가 사용자용 `scope`와 내부 `route`를 함께 만드는 현재 경계
 > - `apps/api/tests/test_routing_pipeline.py` L621-L733 — 검색 미실행 응답과 내부 route 보존을 검증하는 API 회귀 테스트
@@ -46,3 +39,12 @@
 - **실행 절차:** `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`와 `./scripts/run_python.ps1 scripts/check_docs.py`를 실행한다. `git diff --check`와 `git diff`로 내부 route 필드 및 검색 미실행 동작이 유지되는지 확인한다. 계획에 결과를 기록하고 `completed/`로 이동한 뒤 roadmap renderer와 checker를 실행한다.
 - **완료 증거:** 저장소 대표 검증이 모두 통과하고 계획이 `Done`으로 생성된 로드맵에 반영된다.
 - **의존성:** Task 1과 Task 2 완료.
+
+## 실행 결과
+
+- 자식 commit `9da515a`, `1ee1b0a`(통합 commit `4b01a43`, `11a0a33`)에서 no-search 응답의
+  구조화된 `route`는 유지하고 사용자용 `scope`·`limitations`의 내부 라우팅 문구를 제거했다.
+- task review 후 `limitations` 비노출 assertion을 fix round 1에 추가했고 scoped re-review에서 해결을 확인했다.
+- `docs/product-specs/grounded-legal-qa.md`에 사용자 표시 계약과 2026-09-18 결정 기록을 반영했다.
+- Web 131개, API focused 31개, lint, typecheck, production build, docs 185파일, roadmap 검사가 통과했다.
+- 잔여 작업은 없다.
