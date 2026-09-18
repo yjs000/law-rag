@@ -23,7 +23,7 @@
 
 **Language contract:** 한 문장에는 한 가지 뜻만 담고, 짧은 생활 언어를 먼저 쓴다. 법률 용어가 꼭 필요하면 바로 쉬운 뜻을 붙인다. 긴 명사 나열, 이중 부정, 내부 상태명, 불필요한 영어를 피한다. 추가 질문은 “무엇을 알려 달라는지”와 간단한 입력 예시를 바로 이해할 수 있게 쓴다.
 
-### Task 1: 쉬운 말 기준과 평가 회귀 고정
+### Task 1: 쉬운 말 기준과 평가 회귀 고정 [x] 완료
 
 - **결과:** 쉬운 말의 합격 기준이 주관적인 인상 대신 반복 가능한 프롬프트·출력 평가표와 실패 테스트로 고정된다.
 - **대상:** `apps/api/tests/test_layperson_prompt_v2.py` L36-L147 수정 약 35줄, 쉬운 말 대표 질문 fixture 새 파일 약 60줄, 합계 약 95줄.
@@ -31,7 +31,7 @@
 - **완료 증거:** 새 회귀 테스트가 현재 프롬프트에서 의도한 이유로 실패하고, 대표 질문마다 네 가지 합격 기준이 명시된다.
 - **의존성:** 없음.
 
-### Task 2: 답변·추가 질문 프롬프트 최소 정교화
+### Task 2: 답변·추가 질문 프롬프트 최소 정교화 [x] 완료
 
 - **결과:** 정상 답변, core 요약, 근거 부족 안내와 clarification 질문이 같은 쉬운 말 규칙을 따르며 기존 grounding 규칙은 약해지지 않는다.
 - **대상:** `apps/api/app/adapters/openai_answerer.py` L184-L330 및 L427-L456 수정 약 28줄, `apps/api/app/adapters/nvidia_nim_clarification.py` L50-L78 수정 약 10줄, `apps/api/app/domain/generation_profiles.py` L75-L93 prompt version 수정 약 2줄, 합계 약 40줄.
@@ -39,7 +39,13 @@
 - **완료 증거:** 쉬운 말 회귀 테스트와 기존 citation·grounding·action 테스트가 통과하고, 모든 변경 프롬프트가 같은 문체 규칙과 근거 안전 규칙을 가진다.
 - **의존성:** Task 1의 언어 계약과 대표 질문 fixture.
 
-### Task 3: 대표 출력 평가와 전체 검증
+### Task 3: 대표 출력 평가와 전체 검증 [ ] 미완료 - 차단됨
+
+> 2026-09-18 진행 메모: Task 3는 실제 NVIDIA 개발 credential과 network 실행 승인이 있어야
+> 대표 질문을 실제 모델에 실행해 평가할 수 있다. 이 worktree 세션에는 해당 credential과
+> network 실행 승인이 없어 착수하지 않았다. Task 1·2는 완료되어 회귀 테스트와 focused API
+> 테스트(citation·grounding·clarification·action 포함 122건)가 통과한다. 승인 확보 후
+> Task 3을 재개한다.
 
 - **결과:** 실제 대표 출력도 쉬운 말 기준을 충족하며 변경 결과와 한계가 문서에 남는다.
 - **대상:** Task 1의 대표 질문 평가 기록 약 40줄, `docs/product-specs/grounded-legal-qa.md` 결정 기록 추가 약 4줄, 이 계획 결과 기록 약 10줄, `docs/ROADMAP.md` renderer 생성 변경.
