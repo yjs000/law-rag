@@ -1,9 +1,9 @@
 > 작업 ID: `OC-001`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Orchestration`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: 없음
-> 다음 행동: B-003과 B-008을 독립 worktree에서 병렬 실행한다.
+> 다음 행동: 없음 — 여섯 자식 모두 Done·completed/이고 통합·전체 검증이 완료됨.
 > 참고 범위:
 > - `docs/design-docs/roadmap-dropped-and-orchestration.md` L72-L156 — OC-001 자식·파동·상태 전이·완료 계약
 > - `docs/exec-plans/completed/0065-remove-checklist-export-frontend.md` L1-L9 — 완료된 P1 자식(F-007)의 완료 기록
@@ -93,3 +93,32 @@
 3. 동시에 실행된 자식 사이에 소유 범위 충돌이나 미통합 결과가 없다.
 4. roadmap checker, 문서 검사, 관련 Python·Web 전체 검증이 최신 실행에서 통과한다.
 5. 제품 작업을 추가로 끼워 넣지 않고 확정된 여섯 작업만 완료한다.
+
+## 결과 기록
+
+- B-003(V2 KST today 상한), B-008(내부 라우팅 문구 비노출), B-010(한 글자 질문 허용): 실행 파동 1-2에서
+  병렬·순차 통합 완료. `docs/exec-plans/completed/0060-v2-dynamic-today-date-bound.md`,
+  `0076-hide-internal-routing-copy-from-limitations.md`,
+  `0079-allow-single-character-question-submission.md` 참고.
+- F-007(체크리스트 내보내기 프런트 제거): worktree `.worktrees/codex-f007-remove-checklist-export`에서
+  구현·검증 후 main merge commit `5bba32d`. web lint/typecheck/test(142)/build 전원 통과.
+  `docs/exec-plans/completed/0065-remove-checklist-export-frontend.md` 참고.
+- F-009(NVIDIA 무료 티어 지연 안내·finalize 상단 진행 표시): F-007 완료 뒤 worktree
+  `.worktrees/codex-f009-nvidia-delay-progress`에서 구현·검증 후 main merge commit `41fbb28`
+  (conflict는 completed 계획 파일·ROADMAP.md 재생성으로 해결). web test 147/147, build 통과.
+  `docs/exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md` 참고.
+- F-010(쉬운 한국어 프롬프트 정교화): Task 1-2는 worktree `.worktrees/codex-f010-plain-language-prompt`에서
+  구현·검증 후 main merge commit `18576c4`(pytest 122 passed). Task 3(대표 출력 실제 NVIDIA 평가)는
+  사용자 승인(2026-09-18, "호출진행")을 받아 worktree `.worktrees/codex-f010-task3-eval`에서 실제
+  NVIDIA 호출로 6개 대표 문항을 평가했고, 4개(허가·신고·기준일·적용 대상)는 네 기준을 전부 충족했다.
+  나머지 2개(clarification, 근거 부족)는 F-010 소유 범위 밖 구조적 한계로 확인되어 사용자 결정(2026-09-18,
+  "한계에 대해서는 별도 작업으로 달기")에 따라 완료 조건을 "언어 계약이 적용된 4개 대표 문항 전원 통과,
+  2건은 범위 밖 한계로 별도 작업 이관"으로 정정하고 후속 작업
+  `docs/exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md`,
+  `docs/exec-plans/todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md`으로 분리했다.
+  merge commit `06582c1`. `docs/exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md` 참고.
+- 통합 HEAD는 main의 최신 merge commit이며, roadmap checker·문서 검사(187 files)·web 전체
+  검증(lint/typecheck/test 147/build)이 최신 실행에서 통과했다. 사용한 worktree(F-007/F-009/F-010 계열)는
+  병합 확인 후 모두 제거했다.
+- OC-001의 여섯 관리 대상(B-003, B-008, B-010, F-007, F-010, F-009)이 모두 `Done`이고 `completed/`에 있다.
+  F-010의 Task 3 한계 2건은 별도 Todo 계획으로 명시적으로 이관되었으며 OC-001 범위에는 포함하지 않는다.

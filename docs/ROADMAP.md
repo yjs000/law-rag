@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7aa5b13e26217325a221ba5c5ae814cec36d31e7273126e455bf50b09002f6ff -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f16674d5a9213ab366067e0f42cedeb8664ec7d7c59f26ab517a2bf9cbbe1c91 -->
 
 # 프로젝트 로드맵
 
@@ -6,19 +6,6 @@
 실행계획 작성 전인 승인 설계는 연결된 설계 문서를 따릅니다.
 
 ## Picked Up
-
-- [OC-001 · Orchestration — OC-001: 우선순위 로드맵 병렬 오케스트레이션](exec-plans/active/0081-oc001-priority-roadmap-orchestration.md) — 다음 행동: B-003과 B-008을 독립 worktree에서 병렬 실행한다.
-
-### OC-001 관리 작업
-
-| 우선순위 | 작업 | 관리 상태 | 선행 작업 |
-| --- | --- | --- | --- |
-| - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
-| - | [F-007](exec-plans/completed/0065-remove-checklist-export-frontend.md) | - | 없음 |
-| - | [F-009](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) | - | 없음 |
-| - | [B-008](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) | - | 없음 |
-| - | [F-010](exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md) | - | 없음 |
-| - | [B-010](exec-plans/completed/0079-allow-single-character-question-submission.md) | - | 없음 |
 
 
 ## Todo
@@ -41,7 +28,6 @@
 
 ## Done
 
-- [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
@@ -53,6 +39,7 @@
 - [B-008 · Bug — 내부 라우팅 문구의 “범위와 한계” 노출 제거 Implementation Plan](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [F-010 · Feature — 초등학생도 이해할 수 있는 쉬운 한국어 프롬프트 정교화 Implementation Plan](exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md) — 다음 행동: 없음 - 완료됨(확인된 한계 두 건은 0082, 0083 후속 작업으로 이관).
 - [B-010 · Bug — 공백이 아닌 한 글자 질문도 전송 허용 Implementation Plan](exec-plans/completed/0079-allow-single-character-question-submission.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
+- [OC-001 · Orchestration — OC-001: 우선순위 로드맵 병렬 오케스트레이션](exec-plans/completed/0081-oc001-priority-roadmap-orchestration.md) — 다음 행동: 없음 — 여섯 자식 모두 Done·completed/이고 통합·전체 검증이 완료됨.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped

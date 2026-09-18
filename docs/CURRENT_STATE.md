@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 [OC-001 우선순위 로드맵 병렬 오케스트레이션](exec-plans/active/0081-oc001-priority-roadmap-orchestration.md)이다. 첫 파동은 소유 범위가 겹치지 않는 `B-003`과 `B-008`을 독립 worktree에서 병렬 실행하며, 이후 자식 상태와 다음 파동은 OC 계획과 생성된 로드맵 표를 따른다.
+현재 `Picked Up` milestone은 없다. [OC-001 우선순위 로드맵 병렬 오케스트레이션](exec-plans/completed/0081-oc001-priority-roadmap-orchestration.md)은 여섯 자식(B-003, B-008, B-010, F-007, F-009, F-010)을 모두 Done으로 완료했다. 다음 세션은 생성된 `docs/ROADMAP.md`의 `Todo` 첫 항목을 확인한다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
