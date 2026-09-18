@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 31fb1a0a16cb7a758802b46eed64e47a99d9f183be798e3ee7d95cc23c184c34 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7aa5b13e26217325a221ba5c5ae814cec36d31e7273126e455bf50b09002f6ff -->
 
 # 프로젝트 로드맵
 
@@ -13,11 +13,11 @@
 
 | 우선순위 | 작업 | 관리 상태 | 선행 작업 |
 | --- | --- | --- | --- |
-| P1 | [F-010](exec-plans/active/0077-elementary-plain-language-prompt-refinement.md) | 대기 | B-003, B-008, B-010 |
 | - | [B-003](exec-plans/completed/0060-v2-dynamic-today-date-bound.md) | - | 없음 |
 | - | [F-007](exec-plans/completed/0065-remove-checklist-export-frontend.md) | - | 없음 |
 | - | [F-009](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) | - | 없음 |
 | - | [B-008](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) | - | 없음 |
+| - | [F-010](exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md) | - | 없음 |
 | - | [B-010](exec-plans/completed/0079-allow-single-character-question-submission.md) | - | 없음 |
 
 
@@ -33,13 +33,14 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/todo/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
+- [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: allowlist 완화안과 언어 계약 재검토안을 비교해 design-doc으로 먼저 고정한다.
+- [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 다음 행동: routing_unavailable 재현율을 소표본으로 측정해 classifier 문제인지 프롬프트 순응 문제인지 분리한다.
 
 ## Blocked
 
 
 ## Done
 
-- [DOC-002 · Documentation — 0066: 로드맵 정본·컨텍스트 절약 구현 계획](exec-plans/completed/0066-roadmap-registry-and-context-diet.md) — 다음 행동: 완료 검증 기록을 유지하고 후속 변경에서 roadmap checker를 실행
 - [B-004 · Bug — Production Web E2E Completion Loop Implementation Plan](exec-plans/completed/0067-production-web-e2e-completion-loop.md) — 다음 행동: 완료 — 다음 Todo 실행계획을 선택
 - [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
@@ -50,6 +51,7 @@
 - [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/completed/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 없음 — 구현·문서·전체 검증 완료.
 - [O-001 · Operations — Vercel Environment Scope Rollout Implementation Plan](exec-plans/completed/0075-vercel-environment-scope-rollout.md) — 다음 행동: 없음 — scope rollout, Production 배포와 smoke 검증 완료.
 - [B-008 · Bug — 내부 라우팅 문구의 “범위와 한계” 노출 제거 Implementation Plan](exec-plans/completed/0076-hide-internal-routing-copy-from-limitations.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
+- [F-010 · Feature — 초등학생도 이해할 수 있는 쉬운 한국어 프롬프트 정교화 Implementation Plan](exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md) — 다음 행동: 없음 - 완료됨(확인된 한계 두 건은 0082, 0083 후속 작업으로 이관).
 - [B-010 · Bug — 공백이 아닌 한 글자 질문도 전송 허용 Implementation Plan](exec-plans/completed/0079-allow-single-character-question-submission.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
