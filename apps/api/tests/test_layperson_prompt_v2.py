@@ -3,12 +3,14 @@ from uuid import uuid4
 
 from app.adapters.openai_answerer import (
     CoreDraft,
+    build_blocked_route_messages,
     build_core_messages,
     build_messages,
     build_messages_v2,
 )
 from app.domain.catalog import SourceKind
 from app.domain.schemas import QuestionRequest, SearchHit
+from fixtures.layperson_plain_language_questions import PLAIN_LANGUAGE_CASES
 
 
 def _request() -> QuestionRequest:
@@ -145,3 +147,77 @@ def test_v2_user_message_carries_same_evidence_block_as_v1() -> None:
     v1_user = build_messages(_request(), _hits())[-1]["content"]
     v2_user = build_messages_v2(_request(), _hits())[-1]["content"]
     assert v1_user == v2_user
+
+
+# --- F-010: 초등학생도 이해할 수 있는 쉬운 한국어 언어 계약 회귀 ---
+#
+# 네 가지 합격 기준(fixtures/layperson_plain_language_questions.py와 동일하게 유지):
+# no_unexplained_jargon, directly_answers, clear_next_action, no_ungrounded_claims.
+
+
+def test_plain_language_fixture_covers_representative_categories() -> None:
+    categories = {case.category for case in PLAIN_LANGUAGE_CASES}
+    assert categories == {"허가", "신고", "기준일", "적용 대상", "근거 부족", "clarification"}
+    expected_criteria = {
+        "no_unexplained_jargon",
+        "directly_answers",
+        "clear_next_action",
+        "no_ungrounded_claims",
+    }
+    for case in PLAIN_LANGUAGE_CASES:
+        assert set(case.pass_criteria) == expected_criteria
+        assert case.question.strip()
+
+
+def test_v2_system_prompt_requires_short_one_idea_sentences() -> None:
+    """F-010: 문장은 짧게, 한 문장에는 한 가지 뜻만 담아야 한다(길이 상한 명시)."""
+    text = _v2_system_text()
+    assert "짧은 문장" in text
+    assert "한 문장에는 한 가지 뜻만" in text
+
+
+def test_v2_system_prompt_requires_plain_word_before_legal_term() -> None:
+    """F-010: 쉬운 생활 언어를 먼저 쓰고, 법률 용어는 그 다음에 보조로만 쓴다."""
+    text = _v2_system_text()
+    assert "쉬운 말을 먼저" in text
+
+
+def test_v2_system_prompt_requires_immediate_gloss_next_to_legal_term() -> None:
+    """F-010: 법률 용어가 나오면 바로 옆에서 쉬운 뜻을 풀어줘야 한다(문단 뒤가 아니라)."""
+    text = _v2_system_text()
+    assert "법률 용어 바로 뒤에 쉬운 뜻을 붙인다" in text
+
+
+def test_v2_system_prompt_forbids_internal_state_names_and_stray_english() -> None:
+    """F-010: 내부 상태명(예: action 값)이나 불필요한 영어를 답변 문장에 그대로 쓰지 않는다."""
+    text = _v2_system_text()
+    assert "내부 상태명" in text
+    assert "불필요한 영어" in text
+
+
+def test_v2_no_search_results_prompt_uses_plain_language_contract() -> None:
+    """F-010: 검색 근거가 없을 때 안내 문구도 같은 쉬운 말 계약을 따라야 한다."""
+    messages = build_blocked_route_messages(_request(), "realtime_required", None)
+    text = messages[0]["content"]
+    assert "짧은 문장" in text
+    assert "쉬운 말을 먼저" in text
+
+
+def test_clarification_route_missing_information_requires_example_value() -> None:
+    """F-010: clarification 요청은 "무엇을 알려 달라는지"뿐 아니라 간단한 입력 예시(값)도
+    바로 이해할 수 있게 써야 한다 - 필드명만이 아니라 구체적인 예시 값을 요구한다."""
+    messages = build_blocked_route_messages(_request(), "clarification_required", None)
+    text = messages[0]["content"]
+    assert "간단한 예시 값" in text
+
+
+def test_nvidia_clarification_judgment_prompt_uses_plain_language_contract() -> None:
+    """F-010: NVIDIA NIM clarification 후보 생성 프롬프트도 같은 언어 계약을 따라야 한다."""
+    from app.adapters.nvidia_nim_clarification import build_initial_judgment_messages
+
+    text = build_initial_judgment_messages("태양광 발전사업 허가가 필요한가요?")[0]["content"]
+    assert "짧은 문장" in text
+    assert "한 문장에는 한 가지 뜻만" in text
+    assert "쉬운 말을 먼저" in text
+    assert "법률 용어 바로 뒤에 쉬운 뜻을 붙인다" in text
+    assert "간단한 예시 값" in text
