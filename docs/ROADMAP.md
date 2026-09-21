@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f16674d5a9213ab366067e0f42cedeb8664ec7d7c59f26ab517a2bf9cbbe1c91 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 207dd70d71dc098206b98fd08b77b0515ef015c28629343a576a2e16fbd90465 -->
 
 # 프로젝트 로드맵
 
@@ -21,7 +21,6 @@
 - [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/todo/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
 - [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: allowlist 완화안과 언어 계약 재검토안을 비교해 design-doc으로 먼저 고정한다.
-- [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 다음 행동: routing_unavailable 재현율을 소표본으로 측정해 classifier 문제인지 프롬프트 순응 문제인지 분리한다.
 
 ## Blocked
 
@@ -47,3 +46,4 @@
 - [F-003 · Feature — 0042: 재순위를 실제 검색 경로에 연결](exec-plans/dropped/0042-wire-reranking-into-live-search-path.md) — 폐기 사유: 사용자가 라이브 검색 재순위를 진행하지 않기로 결정했다.
 - [F-004 · Feature — 0044: 공급자 중립 답변 모델 선택 계약](exec-plans/dropped/0044-provider-neutral-answer-model-selection.md) — 폐기 사유: 사용자가 provider 중립 모델 선택 계약을 진행하지 않기로 결정했다.
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격 구현 계획](exec-plans/dropped/0055-v3-langgraph-agent-foundation.md) — 폐기 사유: 사용자가 V3를 아직 진행하지 않기로 결정했다.
+- [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 폐기 사유: `routing_unavailable` 이후 LLM이 최종 안내를 생성하는 현재 동작과 출력 변동을 허용하기로 결정했다. 이 질문의 기대 route는 `external_document_required`가 맞지만, 이는 별도의 확장 가능한 routing 개발 calibration pool에서 다룰 평가 항목이며 이 버그 계획으로 재현·수정하지 않는다.

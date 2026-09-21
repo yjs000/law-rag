@@ -1,9 +1,10 @@
 > 작업 ID: `B-012`
-> 상태: `Todo`
+> 상태: `Dropped`
 > 유형: `Bug`
 > 보조 라벨: `Evaluation`
 > 선행 조건: 실제 모델 재현에는 NVIDIA 개발 credential과 network 실행 승인이 필요하다.
-> 다음 행동: routing_unavailable 재현율을 소표본으로 측정해 classifier 문제인지 프롬프트 순응 문제인지 분리한다.
+> 다음 행동: 없음.
+> 폐기 사유: `routing_unavailable` 이후 LLM이 최종 안내를 생성하는 현재 동작과 출력 변동을 허용하기로 결정했다. 이 질문의 기대 route는 `external_document_required`가 맞지만, 이는 별도의 확장 가능한 routing 개발 calibration pool에서 다룰 평가 항목이며 이 버그 계획으로 재현·수정하지 않는다.
 > 참고 범위:
 > - `apps/api/app/adapters/openai_answerer.py` L436-L441 — 재시도 안내만 담으라는 routing_unavailable 안내
 > - `apps/api/app/application/v1/guidance.py` L38-L94 — draft를 그대로 요약에 반영하는 경로
@@ -11,11 +12,24 @@
 
 # 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제
 
-상태: `제안됨 (2026-09-18)`
+상태: `폐기됨 (2026-09-21)`
 
 제안 출처: F-010 Task 3(대표 출력 평가)에서 실제 NVIDIA 개발 credential로
 `insufficient_evidence` 대표 질문("계약서상 위약금 조항이 유효한가요?")을 2회 독립
 실행해 재현했다.
+
+## 폐기 결정
+
+- `routing_unavailable` 뒤의 최종 안내를 LLM이 생성하는 현재 경로를 유지하며, 안내 표현의 실행별
+  변동 자체를 결함으로 보지 않는다.
+- "계약서상 위약금 조항이 유효한가요?"의 기대 route는 실제 계약서 내용 확인이 필요하므로
+  `external_document_required`로 판정한다.
+- 봉인된 D-10은 질문·검색·답변 calibration 범위를 유지한다. 이 사례처럼 의미 route를 검증하는
+  항목은 D-10이나 단위 테스트에 섞지 않고, 현재 router에 맞춘 별도의 확장 가능한 개발 calibration
+  pool을 만들 때 포함한다. 단위 테스트는 provider 응답 파싱, deterministic guard, timeout·오류 처리
+  같은 코드 계약만 검증한다.
+- `routing_unavailable`의 timeout/provider 오류 원인은 기존 `reason_code`와 단계 진단으로 관측 가능하다.
+  발생률 증가 등 운영 근거가 생기기 전에는 별도 조사 작업을 열지 않는다.
 
 ## 재현 요약
 
