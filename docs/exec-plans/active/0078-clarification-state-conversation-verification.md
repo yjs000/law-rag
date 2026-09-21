@@ -1,5 +1,5 @@
 > 작업 ID: `B-009`
-> 상태: `Todo`
+> 상태: `Picked Up`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: 없음

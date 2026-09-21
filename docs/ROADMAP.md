@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7df1143804e38ceadcd5617d897e45d3ddc449623890f48b02d279b1f36e652e -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: b9bd43c14bf71e0c1fca7f194320710196d26f7425ade8108b5323a84a614aaa -->
 
 # 프로젝트 로드맵
 
@@ -7,6 +7,7 @@
 
 ## Picked Up
 
+- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 
 ## Todo
 
@@ -18,8 +19,9 @@
 - [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
-- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/todo/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
+- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/todo/0084-clarification-workflow-context-state-contract.md) — 다음 행동: PostgreSQL의 턴 간 case 상태와 LlamaIndex Context의 실행 내 상태 책임을 고정하고, write-only Context 기록과 workflow 인스턴스 공유 상태를 재현 테스트로 교정한다.
+- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/todo/0085-clarification-continuation-cross-layer-regression.md) — 다음 행동: 동시 workflow run, stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 RED 테스트를 추가한다.
 
 ## Blocked
 

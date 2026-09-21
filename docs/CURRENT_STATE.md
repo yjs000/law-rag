@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 없다. 최근 완료된 [B-011 clarification missing_information 구조적 검증](exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md)은 고정 필드 allowlist를 자연어 질문·예시 프롬프트와 구조·표시 안전성 검증으로 대체했다. 다음 세션은 생성된 `docs/ROADMAP.md`의 `Todo` 첫 항목을 확인한다.
+현재 `Picked Up` milestone은 [B-009 clarification_required 상태·대화 연결 검증](exec-plans/active/0078-clarification-state-conversation-verification.md)이다. clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 설계·검증한다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
