@@ -146,7 +146,9 @@ def build_messages(request: QuestionRequest, hits: list[SearchHit]) -> list[dict
                 "'partially_answerable', 질문자의 개별 사실(설비용량·계약 조건 등)을 알아야 "
                 "만 좁힐 수 있으면 'clarification_required', 제공된 근거가 질문과 근본적으로 "
                 "무관하거나 다루지 않으면 'unanswerable'을 쓴다. 'clarification_required'면 "
-                "missing_information에 필요한 사실을 구체적으로 적는다(예: '발전설비용량'). "
+                "missing_information의 각 항목은 사용자가 답할 수 있는 질문으로 쓰고, "
+                "간단한 예시 값을 함께 적는다(예: '발전설비의 용량은 얼마인가요? "
+                "(예: 50kW)'). missing_information에는 법률 판단이나 답변을 쓰지 않는다. "
                 "'unanswerable'이면 sections·checklist는 비워도 되고, summary에는 제공된 "
                 "근거가 왜 부족한지만 쓴다 - '~할 수 없다/판단하기 어렵다' 같은 겸양 표현은 "
                 "허용되지만, 다른 법령·기관을 지목할 때는 단정하지 말고(예: '~법 소관이다') "
@@ -259,8 +261,10 @@ def build_messages_v2(
                 "달라지는 자기 설비의 절차는 무엇인가'처럼 결정축의 실제 값을 주지 않았다면 "
                 "'clarification_required'다. 문장에 '어떻게 달라지는가'가 있어도 같다. "
                 "제공된 근거가 질문과 근본적으로 무관하거나 다루지 않으면 'unanswerable'을 쓴다. "
-                "'clarification_required'면 missing_information에 필요한 사실을 구체적으로 "
-                "적는다(예: '발전설비용량'). 'unanswerable'이면 sections·checklist는 "
+                "'clarification_required'면 missing_information의 각 항목을 사용자가 답할 수 "
+                "있는 질문으로 쓰고, 간단한 예시 값을 함께 적는다(예: '발전설비의 용량은 "
+                "얼마인가요? (예: 50kW)'). missing_information에는 법률 판단이나 답변을 쓰지 "
+                "않는다. 'unanswerable'이면 sections·checklist는 "
                 "비워도 되고, summary에는 제공된 근거가 왜 부족한지만 쉬운 말로 쓴다 - "
                 "'~할 수 없다/판단하기 어렵다' 같은 겸양 표현은 허용되지만, 다른 "
                 "법령·기관을 지목할 때는 단정하지 말고(예: '~법 소관이다') 반드시 권유형으로 "
@@ -331,8 +335,10 @@ def build_core_messages(
             "내부 필드이며 공개되지 않는다. 일반 법적 기준은 근거로 설명할 수 있지만 질문자의 "
             "실제 사유까지는 확정할 수 없는 경우, summary에는 확인되는 일반 기준을 쓰고 "
             "decision_limitations에는 확인하지 못한 개별 사유를 적으며 action은 "
-            "'partially_answerable'로 쓴다. clarification_required이면 필요한 사실을 "
-            "missing_information에 구체적으로 적는다."
+            "'partially_answerable'로 쓴다. clarification_required이면 missing_information의 "
+            "각 항목을 사용자가 답할 수 있는 질문으로 쓰고, 간단한 예시 값을 함께 적는다"
+            "(예: '발전설비의 용량은 얼마인가요? (예: 50kW)'). missing_information에는 "
+            "법률 판단이나 답변을 쓰지 않는다."
         ),
     }
     return messages
@@ -455,9 +461,10 @@ def build_blocked_route_messages(
         "clarification_required": (
             "이 질문은 사용자의 개별 사실(설비용량·계약 조건 등)에 따라 답이 달라져 "
             "먼저 확인해야 한다. action은 반드시 'clarification_required'로 쓰고, "
-            "missing_information에 질문에 답하기 위해 꼭 필요한 사실을 구체적으로 "
-            "나열한다. 각 항목은 무엇을 알려줘야 하는지와 함께 간단한 예시 값을 "
-            "붙여 쓴다(예: '발전설비용량(예: 50kW)')."
+            "missing_information에는 질문에 답하기 위해 꼭 필요한 사실만 나열한다. "
+            "각 항목은 사용자가 답할 수 있는 질문으로 쓰고, 간단한 예시 값을 함께 적는다"
+            "(예: '발전설비의 용량은 얼마인가요? (예: 50kW)'). missing_information에는 "
+            "법률 판단이나 답변을 쓰지 않는다."
         ),
     }
     try:

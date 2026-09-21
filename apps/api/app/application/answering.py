@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from uuid import uuid4
 
 from app.domain.answer_actions import derive_fallback_action
@@ -144,27 +146,27 @@ def is_deterministic_nonanswer_route_guidance(route: str | None, summary: str) -
     }.get(route)
     return expected is not None and summary == expected
 
-_SAFE_CLARIFICATION_FIELD_ALIASES = {
-    "설비용량": "설비용량",
-    "발전설비용량": "설비용량",
-    "발전 설비 용량": "설비용량",
-    "용량": "설비용량",
-    "정격용량": "설비용량",
-    "정격 용량": "설비용량",
-    "전압": "전압",
-    "전기 사용 방식": "전기 사용 방식",
-    "전기사용방식": "전기 사용 방식",
-    "사용 방식": "전기 사용 방식",
-    "판매용·자가소비용 여부": "전기 사용 방식",
-    "판매용/자가소비용 여부": "전기 사용 방식",
-    "공사 종류": "공사 종류",
-    "공사종류": "공사 종류",
-    "토지 지목": "토지 지목",
-    "지목": "토지 지목",
-    "용도지역": "용도지역",
-}
 _GENERIC_LEGAL_DISCLAIMER = "이 서비스는 법률 자문을 대체하지 않습니다."
 _PARTIAL_ANSWER_LIMITATION = "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다."
+_UNSAFE_CLARIFICATION_MARKUP = frozenset("#*`[]<>")
+_CLARIFICATION_QUESTION_WITH_EXAMPLE = re.compile(
+    r"\?\s*\((?:예|예시):\s*[^()\s][^()]*\)\s*$"
+)
+_CLARIFICATION_SENTENCE_ENDING = re.compile(
+    r"(?:주세요|인가요|나요|까요|습니까|합니다|됩니다|입니다|이다|한다)$"
+)
+
+
+def _is_safe_clarification_display(value: str) -> bool:
+    lowered = value.casefold()
+    return (
+        not any(unicodedata.category(character).startswith("C") for character in value)
+        and not any(character in _UNSAFE_CLARIFICATION_MARKUP for character in value)
+        and "://" not in lowered
+        and "http://" not in lowered
+        and "https://" not in lowered
+        and "www." not in lowered
+    )
 
 
 def safe_answer_limitations(action: str | None) -> list[str]:
@@ -179,15 +181,29 @@ def safe_answer_limitations(action: str | None) -> list[str]:
 def safe_clarification_missing_fields(
     missing_fields: tuple[str, ...] | list[str],
 ) -> tuple[str, ...]:
-    """Reduce untrusted router/model fields to fixed, non-substantive fact labels."""
-    return tuple(
-        dict.fromkeys(
-            canonical
-            for value in missing_fields
-            if isinstance(value, str)
-            if (canonical := _SAFE_CLARIFICATION_FIELD_ALIASES.get(value.strip()))
-        )
-    )
+    """Return safe clarification prompts while preserving first-seen order."""
+    safe_fields: list[str] = []
+    for value in missing_fields:
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if not stripped or not _is_safe_clarification_display(stripped):
+            continue
+        canonical = None
+        if _CLARIFICATION_QUESTION_WITH_EXAMPLE.search(stripped) and len(stripped) <= 160:
+            canonical = stripped
+        elif (
+            "(예" not in stripped
+            and len(stripped) <= 40
+            and not stripped.endswith((".", "!", "?"))
+            and not _CLARIFICATION_SENTENCE_ENDING.search(stripped)
+        ):
+            canonical = stripped
+        if canonical is not None and canonical not in safe_fields:
+            safe_fields.append(canonical)
+            if len(safe_fields) == 5:
+                break
+    return tuple(safe_fields)
 
 
 def clarification_resubmission_summary(

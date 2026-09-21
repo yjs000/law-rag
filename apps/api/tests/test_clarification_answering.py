@@ -301,7 +301,10 @@ async def test_initial_clarification_route_preserves_clarification_action_in_cor
                 route="clarification_required",
                 reason_code="router_judgment",
                 confidence=0.9,
-                missing_fields=("설비용량", "전기사업법이 적용됩니다"),
+                missing_fields=(
+                    "발전설비의 용량은 얼마인가요? (예: 50kW)",
+                    "전기사업법이 적용됩니다",
+                ),
             ),
         )
     )
@@ -312,7 +315,9 @@ async def test_initial_clarification_route_preserves_clarification_action_in_cor
     assert core.private_payload is not None
     assert core.private_payload["verified_core"]["action"] == "clarification_required"
     summary = core.private_payload["verified_core"]["summary"]
-    assert summary.endswith("추가 정보:\n- 설비용량: [ ]")
+    assert summary.endswith(
+        "추가 정보:\n- 발전설비의 용량은 얼마인가요? (예: 50kW): [ ]"
+    )
     assert "전기사업법이 적용됩니다" not in summary
     assert answerer.core_calls == 0
 
@@ -327,7 +332,10 @@ async def test_generated_clarification_core_with_retrieval_is_preserved() -> Non
                 summary="전기사업법이 적용됩니다.",
                 citation_ids=[],
                 action="clarification_required",
-                missing_information=["설비용량", "전기사업법이 적용됩니다"],
+                missing_information=[
+                    "발전설비의 용량은 얼마인가요? (예: 50kW)",
+                    "전기사업법이 적용됩니다",
+                ],
             )
 
     service, _executions = _service(ClarificationCoreAnswerer())  # type: ignore[arg-type]
@@ -347,7 +355,9 @@ async def test_generated_clarification_core_with_retrieval_is_preserved() -> Non
     assert core.private_payload["verified_core"]["action"] == "clarification_required"
     assert core.private_payload["verified_core"]["citation_ids"] == []
     summary = core.private_payload["verified_core"]["summary"]
-    assert summary.endswith("추가 정보:\n- 설비용량: [ ]")
+    assert summary.endswith(
+        "추가 정보:\n- 발전설비의 용량은 얼마인가요? (예: 50kW): [ ]"
+    )
     assert "전기사업법이 적용됩니다" not in summary
 
 
@@ -933,7 +943,10 @@ async def test_successful_core_repair_persists_clarification_transition() -> Non
                 summary="전기사업법이 적용됩니다.",
                 citation_ids=[],
                 action="clarification_required",
-                missing_information=["설비용량", "전기사업법이 적용됩니다"],
+                missing_information=[
+                    "발전설비의 용량은 얼마인가요? (예: 50kW)",
+                    "전기사업법이 적용됩니다",
+                ],
                 grounded_claims=[],
             )
 
@@ -1000,5 +1013,7 @@ async def test_successful_core_repair_persists_clarification_transition() -> Non
     assert persisted.status is ClarificationCaseStatus.WAITING_FOR_USER
     assert finalized.events[0].payload["outcome"] == "normal"
     assert published["clarification"]["status"] == "waiting_for_user"
-    assert published["summary"].endswith("추가 정보:\n- 설비용량: [ ]")
+    assert published["summary"].endswith(
+        "추가 정보:\n- 발전설비의 용량은 얼마인가요? (예: 50kW): [ ]"
+    )
     assert "전기사업법이 적용됩니다" not in published["summary"]

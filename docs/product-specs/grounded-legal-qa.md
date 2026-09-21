@@ -105,6 +105,9 @@
   4건(허가·신고·기준일·적용 대상)이 네 기준을 모두 충족했다. 나머지 2건은 F-010 소유
   범위 밖 한계(clarification 응답의 missing_information을 지우는 input allowlist,
   routing_unavailable 안내에 대한 비결정적 프롬프트 준수)로 확인되어 각각
-  [0082](../exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md),
-  [0083](../exec-plans/todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
+  [0082](../exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md),
+  [0083](../exec-plans/dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
   분리 등록했다.
+- 2026-09-21: clarification의 고정 필드 allowlist를 제거했다. 모델은 필요한 추가정보를
+  `질문? (예: 값)` 형태로 최대 5개 생성하고, 서버는 길이·표시 안전성·질문 구조를 검증한
+  항목만 V1·V2 공용 재제출 안내에 표시한다.

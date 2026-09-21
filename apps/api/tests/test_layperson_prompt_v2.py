@@ -1,6 +1,8 @@
 from datetime import date
 from uuid import uuid4
 
+from fixtures.layperson_plain_language_questions import PLAIN_LANGUAGE_CASES
+
 from app.adapters.openai_answerer import (
     CoreDraft,
     build_blocked_route_messages,
@@ -10,7 +12,6 @@ from app.adapters.openai_answerer import (
 )
 from app.domain.catalog import SourceKind
 from app.domain.schemas import QuestionRequest, SearchHit
-from fixtures.layperson_plain_language_questions import PLAIN_LANGUAGE_CASES
 
 
 def _request() -> QuestionRequest:
@@ -209,6 +210,20 @@ def test_clarification_route_missing_information_requires_example_value() -> Non
     messages = build_blocked_route_messages(_request(), "clarification_required", None)
     text = messages[0]["content"]
     assert "간단한 예시 값" in text
+
+
+def test_all_clarification_prompts_require_questions_examples_and_no_legal_answers() -> None:
+    prompt_texts = [
+        build_messages(_request(), _hits())[0]["content"],
+        build_messages_v2(_request(), _hits())[0]["content"],
+        build_core_messages(_request(), _hits())[0]["content"],
+        build_blocked_route_messages(_request(), "clarification_required", None)[0]["content"],
+    ]
+
+    for text in prompt_texts:
+        assert "사용자가 답할 수 있는 질문" in text
+        assert "간단한 예시 값" in text
+        assert "법률 판단이나 답변" in text
 
 
 def test_nvidia_clarification_judgment_prompt_uses_plain_language_contract() -> None:

@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 207dd70d71dc098206b98fd08b77b0515ef015c28629343a576a2e16fbd90465 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 7df1143804e38ceadcd5617d897e45d3ddc449623890f48b02d279b1f36e652e -->
 
 # 프로젝트 로드맵
 
@@ -20,14 +20,12 @@
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/todo/0078-clarification-state-conversation-verification.md) — 다음 행동: clarification 상태 전이표와 첫 질문부터 후속 답변까지의 회귀 시나리오를 고정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
-- [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/todo/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: allowlist 완화안과 언어 계약 재검토안을 비교해 design-doc으로 먼저 고정한다.
 
 ## Blocked
 
 
 ## Done
 
-- [F-008-A · Feature — F-008-A V2 Provider Capacity 3 Slots and Busy Notice Implementation Plan](exec-plans/completed/0067-provider-capacity-and-busy-notice.md) — 다음 행동: none
 - [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
@@ -39,6 +37,7 @@
 - [F-010 · Feature — 초등학생도 이해할 수 있는 쉬운 한국어 프롬프트 정교화 Implementation Plan](exec-plans/completed/0077-elementary-plain-language-prompt-refinement.md) — 다음 행동: 없음 - 완료됨(확인된 한계 두 건은 0082, 0083 후속 작업으로 이관).
 - [B-010 · Bug — 공백이 아닌 한 글자 질문도 전송 허용 Implementation Plan](exec-plans/completed/0079-allow-single-character-question-submission.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [OC-001 · Orchestration — OC-001: 우선순위 로드맵 병렬 오케스트레이션](exec-plans/completed/0081-oc001-priority-roadmap-orchestration.md) — 다음 행동: 없음 — 여섯 자식 모두 Done·completed/이고 통합·전체 검증이 완료됨.
+- [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: 없음 — 구조 검증, 프롬프트 계약, provenance와 전체 회귀 검증 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped

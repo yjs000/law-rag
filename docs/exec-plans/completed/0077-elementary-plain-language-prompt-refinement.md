@@ -43,8 +43,8 @@
 
 - **완료 증거(조정됨, 사용자 승인 2026-09-18):** 언어 계약이 실제로 적용되는 4개 대표
   문항(허가·신고·기준일·적용 대상) 전원이 네 기준을 충족했고, 남은 2개 문항은 F-010
-  소유 범위 밖 원인으로 확인되어 각각 [0082](../todo/0082-clarification-missing-information-allowlist-drops-fields.md),
-  [0083](../todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
+  소유 범위 밖 원인으로 확인되어 각각 [0082](../completed/0082-clarification-missing-information-allowlist-drops-fields.md),
+  [0083](../dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
   분리 등록했다. 기존 grounding·citation 회귀는 계속 통과하고, 계획이 `Done`으로 생성된
   로드맵에 반영된다.
 
@@ -71,8 +71,8 @@ nvidia/nemotron-3.5-lightning-30b-a3b — API 키 값은 어디에도 기록하�
 - 대표 질문 6건 중 4건(허가·신고·기준일·적용 대상)이 쉬운 말 네 기준을 모두 충족했다.
 - 2건(clarification, 근거 부족)은 F-010 소유 범위(`openai_answerer.py`,
   `nvidia_nim_clarification.py`) 밖 원인(input allowlist, router 신뢰성)으로 확인되어
-  [0082](../todo/0082-clarification-missing-information-allowlist-drops-fields.md),
-  [0083](../todo/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
+  [0082](../completed/0082-clarification-missing-information-allowlist-drops-fields.md),
+  [0083](../dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md)로
   분리 등록했다.
 - 근거·인용 안전성은 어떤 문항에서도 낮추지 않았다 — 평가 중 프롬프트/allowlist/router
   코드는 변경하지 않았다.

@@ -35,6 +35,7 @@
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
 | [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
 | [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
+| [clarification missing_information 구조적 검증](clarification-missing-information-structural-validation.md) | 승인·구현 완료 | 고정 필드 allowlist를 자유형 질문·예시 프롬프트와 구조 검증으로 대체 |
 | [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 대체됨 | 역사적 tier1/tier2·`search_only` 설계 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
 | [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 대체됨 | 구현된 Phase 1의 역사 기록; 현재 개편 계약은 아래 후속 설계 |
 | [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 | generation 색인, engine 주입, Router·QueryEngine·ResponseSynthesizer와 문장별 grounding SSE |
