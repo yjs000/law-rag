@@ -1,9 +1,9 @@
 > 작업 ID: `B-013`
-> 상태: `Todo`
+> 상태: `Picked Up`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
-> 선행 조건: `B-009` 완료 후
-> 다음 행동: PostgreSQL의 턴 간 case 상태와 LlamaIndex Context의 실행 내 상태 책임을 고정하고, write-only Context 기록과 workflow 인스턴스 공유 상태를 재현 테스트로 교정한다.
+> 선행 조건: 없음
+> 다음 행동: PostgreSQL cross-turn state와 LlamaIndex per-run Context의 책임 경계 설계를 승인한다.
 > 참고 범위:
 > - `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 — 현재 `_turns` 상태와 `Context.store` 기록
 > - `apps/api/app/ports/clarification_case.py` L29-L65 — 턴 간 clarification case 영속 계약
@@ -19,7 +19,7 @@
 
 - **결과:** 같은 Workflow 인스턴스에서 서로 다른 두 turn을 동시에 실행해 state 교차 오염·정리 누락·write-only Context 기록을 관찰하는 RED 또는 characterization 테스트가 생긴다.
 - **대상:** `apps/api/tests/test_clarification_workflow.py` L102-L319 수정 약 55줄, `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L84 검토, 합계 약 55줄.
-- **실행 절차:** `asyncio.gather`로 서로 다른 case·owner·judgment를 동시에 실행하고 각 결과가 자기 입력만 반영하는지, 성공·예외 후 임시 상태가 남지 않는지 검증한다. `ctx.store`에 기록한 값이 어느 step에서도 소비되지 않는 현재 계약을 테스트 이름과 assertion으로 드러낸다. `\.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`로 RED 또는 기존 동작의 characterization 결과를 확인한다.
+- **실행 절차:** `asyncio.gather`로 서로 다른 case·owner·judgment를 동시에 실행하고 각 결과가 자기 입력만 반영하는지, 성공·예외 후 임시 상태가 남지 않는지 검증한다. `ctx.store`에 기록한 값이 어느 step에서도 소비되지 않는 현재 계약을 테스트 이름과 assertion으로 드러낸다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`로 RED 또는 기존 동작의 characterization 결과를 확인한다.
 - **완료 증거:** 재현 테스트가 인스턴스 공유 상태와 Context 상태의 책임 차이를 명시하며, 동시 요청의 결과가 서로 바뀌면 실패한다.
 - **의존성:** 없음.
 
@@ -35,6 +35,6 @@
 
 - **결과:** Context와 repository의 책임 경계가 운영·설계 문서에 명시되고 관련 API 회귀가 통과한다.
 - **대상:** `docs/design-docs/`의 clarification 관련 설계 문서 수정 약 12줄, `apps/api/tests/test_clarification_answering.py` L419-L625 검증, 이 계획 결과 기록 약 10줄, `docs/ROADMAP.md` renderer 생성 변경.
-- **실행 절차:** Context는 per-run, repository는 cross-turn이라는 계약과 Context 비직렬화 원칙을 기록한다. `\.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `git diff --check`, roadmap renderer와 checker를 실행한다.
+- **실행 절차:** Context는 per-run, repository는 cross-turn이라는 계약과 Context 비직렬화 원칙을 기록한다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `git diff --check`, roadmap renderer와 checker를 실행한다.
 - **완료 증거:** 상태 소유권 문서와 동시 run 회귀 테스트가 일치하고 관련 API 테스트가 모두 통과한다.
 - **의존성:** Task 2 완료.

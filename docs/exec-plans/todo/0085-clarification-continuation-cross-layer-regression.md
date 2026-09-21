@@ -2,8 +2,8 @@
 > 상태: `Todo`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
-> 선행 조건: `B-009` 완료 후
-> 다음 행동: 동시 workflow run, stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 RED 테스트를 추가한다.
+> 선행 조건: `B-013` 완료 후
+> 다음 행동: B-013 완료 후 stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 RED 테스트를 추가한다.
 > 참고 범위:
 > - `apps/api/tests/test_clarification_workflow.py` L144-L319 — 최초·부분·전체 clarification 상태 전이 단위 테스트
 > - `apps/api/tests/test_v2_question_executions.py` L178-L505 — capability 전달, continuation 호출, case 오류 API 경계
@@ -19,7 +19,7 @@
 
 - **결과:** 서로 다른 run의 상태 격리와 같은 case version 충돌의 HTTP 동작이 회귀 테스트로 고정된다.
 - **대상:** `apps/api/tests/test_clarification_workflow.py` L144-L319 수정 약 55줄, `apps/api/tests/test_v2_question_executions.py` L178-L505 수정 약 45줄, `apps/api/app/api/v2/executions.py` L169-L225 필요 시 수정 약 12줄, 합계 최대 약 112줄.
-- **실행 절차:** 서로 다른 owner·case의 동시 run과 동일 case의 중복 후속 답변을 재현한다. optimistic version conflict가 fact를 덮어쓰지 않고 capability·case 존재 여부를 노출하지 않는 응답으로 변환되는지 RED 테스트를 먼저 만든다. 최소 오류 변환만 적용한 뒤 `\.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_v2_question_executions.py -q`를 실행한다.
+- **실행 절차:** 서로 다른 owner·case의 동시 run과 동일 case의 중복 후속 답변을 재현한다. optimistic version conflict가 fact를 덮어쓰지 않고 capability·case 존재 여부를 노출하지 않는 응답으로 변환되는지 RED 테스트를 먼저 만든다. 최소 오류 변환만 적용한 뒤 `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_v2_question_executions.py -q`를 실행한다.
 - **완료 증거:** 동시 run 교차 오염이 없고 stale 후속 답변이 일관된 HTTP 결과를 반환하며 repository state가 보존된다.
 - **의존성:** 없음.
 
@@ -35,6 +35,6 @@
 
 - **결과:** 최초 `clarification_required`, 부분 답변, 남은 질문, 전체 답변 또는 현재 정보 답변을 하나의 재현 가능한 시나리오로 검증한다.
 - **대상:** `apps/api/tests/test_clarification_answering.py` L419-L625 수정 약 65줄, `apps/web/lib/api-client-flow.test.ts` clarification 시나리오 수정 약 55줄, `apps/web/app/page.test.tsx` clarification 사용자 흐름 수정 약 55줄, 이 계획 결과 기록 약 10줄, `docs/ROADMAP.md` renderer 생성 변경, 합계 약 185줄.
-- **실행 절차:** 동일 case ID를 사용해 remaining count가 감소하고 마지막 턴에서 clarification이 사라지는지 API 응답과 Web state를 대조한다. 익명 capability가 공개 응답·화면·conversation context에 없는지 확인한다. `\.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `pnpm test:web`, `pnpm lint:web`, `pnpm typecheck`, `git diff --check`를 실행한다.
+- **실행 절차:** 동일 case ID를 사용해 remaining count가 감소하고 마지막 턴에서 clarification이 사라지는지 API 응답과 Web state를 대조한다. 익명 capability가 공개 응답·화면·conversation context에 없는지 확인한다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `pnpm test:web`, `pnpm lint:web`, `pnpm typecheck`, `git diff --check`를 실행한다.
 - **완료 증거:** 첫 질문부터 terminal 응답까지 동일 case의 상태·payload·화면 동작이 자동 회귀 테스트로 재현되고 전체 관련 검증이 통과한다.
 - **의존성:** Task 1과 Task 2 완료.
