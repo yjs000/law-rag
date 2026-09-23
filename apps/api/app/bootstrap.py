@@ -28,6 +28,7 @@ from app.adapters.llamaindex_clarification_workflow import (
     LlamaIndexClarificationWorkflow,
 )
 from app.adapters.llamaindex_repository import LlamaIndexLegalRepository
+from app.adapters.llm_clarification_continuation import LlmClarificationContinuationExtractor
 from app.adapters.memory_clarification_case import MemoryClarificationCaseRepository
 from app.adapters.memory_question_execution import MemoryQuestionExecutionRepository
 from app.adapters.memory_repository import repository as memory_repository
@@ -46,9 +47,6 @@ from app.adapters.postgres_clarification_case import PostgresClarificationCaseRe
 from app.adapters.postgres_identity import PostgresIdentityRepository
 from app.adapters.postgres_question_execution import PostgresQuestionExecutionRepository
 from app.adapters.postgres_repository import PostgresLegalRepository
-from app.adapters.structured_clarification_continuation import (
-    StructuredClarificationContinuationExtractor,
-)
 from app.adapters.supabase_auth import SupabaseAuth
 from app.application.clarification_workflow import ClarificationTurnOrchestrator
 from app.application.v1.dependencies import (
@@ -351,7 +349,7 @@ def build_app_dependencies(
             ClarificationWorkflowDependencies(
                 repository=clarification_cases,
                 initial_judge=nvidia_clarification_interpreter,
-                continuation_extractor=build_structured_clarification_continuation_extractor(),
+                continuation_extractor=build_llm_clarification_continuation_extractor(settings),
                 now=lambda: datetime.now(UTC),
                 case_ttl=timedelta(days=1),
             )
@@ -440,12 +438,18 @@ def build_nvidia_clarification_interpreter(
     )
 
 
-def build_structured_clarification_continuation_extractor() -> (
-    StructuredClarificationContinuationExtractor
-):
-    """Create the non-NVIDIA structured extractor used after the initial turn."""
+def build_llm_clarification_continuation_extractor(
+    settings: Settings,
+) -> LlmClarificationContinuationExtractor:
+    """Create the continuation extractor with the injected generation model."""
 
-    return StructuredClarificationContinuationExtractor()
+    return LlmClarificationContinuationExtractor(
+        api_key=settings.nvidia_api_key or "",
+        base_url=settings.nvidia_base_url,
+        model=settings.nvidia_generation_model,
+        timeout_seconds=settings.route_classifier_timeout_seconds,
+        error_log_mode=settings.error_log_mode,
+    )
 
 
 def build_nvidia_question_router(

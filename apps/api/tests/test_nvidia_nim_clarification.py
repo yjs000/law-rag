@@ -6,12 +6,9 @@ from pydantic import ValidationError
 
 from app.adapters.llm_clarification_continuation import LlmClarificationContinuationExtractor
 from app.adapters.nvidia_nim_clarification import NvidiaNimClarificationInterpreter
-from app.adapters.structured_clarification_continuation import (
-    StructuredClarificationContinuationExtractor,
-)
 from app.bootstrap import (
+    build_llm_clarification_continuation_extractor,
     build_nvidia_clarification_interpreter,
-    build_structured_clarification_continuation_extractor,
 )
 from app.domain.clarification import RequiredFact
 from app.settings import Settings
@@ -37,11 +34,16 @@ def test_composition_factory_uses_the_configured_generation_model() -> None:
     assert interpreter.model == "nvidia/test-generation-model"
 
 
-def test_composition_factory_uses_non_nvidia_continuation_extractor() -> None:
-    assert isinstance(
-        build_structured_clarification_continuation_extractor(),
-        StructuredClarificationContinuationExtractor,
+def test_composition_factory_uses_llm_continuation_extractor() -> None:
+    extractor = build_llm_clarification_continuation_extractor(
+        Settings(
+            nvidia_api_key="test-key",
+            nvidia_generation_model="nvidia/test-generation-model",
+        )
     )
+
+    assert isinstance(extractor, LlmClarificationContinuationExtractor)
+    assert extractor.model == "nvidia/test-generation-model"
 
 
 def test_build_continuation_extraction_messages_includes_fact_ids_and_user_text() -> None:
@@ -153,26 +155,6 @@ async def test_nvidia_clarification_propagates_provider_failure_to_safe_workflow
 
     with pytest.raises(RuntimeError, match="provider details"):
         await interpreter.judge_initial("허가 요건")
-
-
-@pytest.mark.asyncio
-async def test_continuation_uses_structured_intent_and_fact_extraction_only() -> None:
-    extractor = StructuredClarificationContinuationExtractor()
-    judgment = await extractor.extract_continuation(
-        original_question="태양광 발전 사업의 허가 요건은 무엇인가요?",
-        unresolved_facts=(SimpleNamespace(id="fact-1", label="설비 용량"),),
-        user_text=json.dumps(
-            {
-                "intent": "request_answer_now",
-                "submitted_facts": [{"fact_id": "fact-1", "status": "answered", "value": "100kW"}],
-            }
-        ),
-    )
-
-    assert judgment.intent == "request_answer_now"
-    assert judgment.submitted_facts[0].value == "100kW"
-    assert judgment.required_facts == ()
-    assert not hasattr(_interpreter(), "extract_continuation")
 
 
 def _continuation_extractor() -> LlmClarificationContinuationExtractor:
