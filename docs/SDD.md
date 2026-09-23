@@ -46,8 +46,8 @@ Codex 개발 작업은 **판단 → SPEC → 구현 → TEST·SPEC 준수 검토
 | 단계 | 역할 | 모델 | reasoning effort |
 | --- | --- | --- | --- |
 | 판단·SPEC | 범위와 난이도 판단, 수용 기준 명세 | `gpt-6-sol` | `medium` |
-| 단순 task | 명확하고 국소적인 구현 | `gpt-6-luna` | `medium` |
-| 어려운 task | 복잡한 구현·통합·디버깅 | `gpt-6-luna` | `max` |
+| 단순 task | 명확하고 국소적인 구현 | `gpt-6-luna` | `max` |
+| 어려운 task | 복잡한 구현·통합·디버깅 | `gpt-6-sol` | `low` |
 | TEST·SPEC 준수 검토 | 최신 테스트 결과와 승인된 수용 기준 대조 | `gpt-6-sol` | `low` |
 | 문제 발견 시 | 원인 판단, 수정 범위 결정, 재검증 지시 | `gpt-6-sol` | `medium` |
 
