@@ -1,9 +1,9 @@
 > 작업 ID: `B-014`
-> 상태: `Todo`
+> 상태: `Blocked`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: `B-013` 완료 후
-> 다음 행동: B-013 완료 후 stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 RED 테스트를 추가한다.
+> 다음 행동: B-013 완료 뒤 API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
 > 참고 범위:
 > - `apps/api/tests/test_clarification_workflow.py` L144-L319 — 최초·부분·전체 clarification 상태 전이 단위 테스트
 > - `apps/api/tests/test_v2_question_executions.py` L178-L505 — capability 전달, continuation 호출, case 오류 API 경계
@@ -15,13 +15,17 @@
 
 **Safety contract:** 동시 요청은 서로의 turn state를 읽지 않는다. 같은 case의 stale 답변은 데이터를 덮어쓰지 않고 열거 불가능한 안정적 오류로 끝난다. Web은 capability를 화면·대화 context에 노출하지 않고 continuation 요청에만 전달한다.
 
+**차단 사유:** B-013에서 같은 LlamaIndex Workflow 인스턴스의 run 간 임시 상태 격리와 per-run Context 계약을 먼저 확정·검증해야 API 경계 회귀의 기준이 생긴다.
+
+**재개 조건:** B-013이 `Done`이고 run별 Context 격리의 focused 검증 증거가 기록되어야 한다.
+
 ### Task 1: workflow 동시 실행과 stale case conflict API 검증
 
 - **결과:** 서로 다른 run의 상태 격리와 같은 case version 충돌의 HTTP 동작이 회귀 테스트로 고정된다.
 - **대상:** `apps/api/tests/test_clarification_workflow.py` L144-L319 수정 약 55줄, `apps/api/tests/test_v2_question_executions.py` L178-L505 수정 약 45줄, `apps/api/app/api/v2/executions.py` L169-L225 필요 시 수정 약 12줄, 합계 최대 약 112줄.
 - **실행 절차:** 서로 다른 owner·case의 동시 run과 동일 case의 중복 후속 답변을 재현한다. optimistic version conflict가 fact를 덮어쓰지 않고 capability·case 존재 여부를 노출하지 않는 응답으로 변환되는지 RED 테스트를 먼저 만든다. 최소 오류 변환만 적용한 뒤 `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_v2_question_executions.py -q`를 실행한다.
 - **완료 증거:** 동시 run 교차 오염이 없고 stale 후속 답변이 일관된 HTTP 결과를 반환하며 repository state가 보존된다.
-- **의존성:** 없음.
+- **의존성:** B-013 완료 및 per-run Context 격리의 focused 검증.
 
 ### Task 2: Web continuation 실제 요청 payload 회귀 검증
 
