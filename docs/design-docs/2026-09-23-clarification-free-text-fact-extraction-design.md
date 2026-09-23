@@ -1,7 +1,8 @@
-# Clarification 자유 문장 fact 추출 설계
+> 작업 ID: `B-015`
+> 상태: `Design`
+> 선행 조건: `B-013` 완료 후
 
-`B-015` 작업의 설계 문서다. `B-013`(per-run Context 경계)이 완료된 뒤 이 설계를
-구현한다.
+# Clarification 자유 문장 fact 추출 설계
 
 ## 배경
 
