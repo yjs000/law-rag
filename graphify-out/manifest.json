@@ -2082,9 +2082,9 @@
     "semantic_hash": "0de0e27ba1ecf229a5e174d9189a172c"
   },
   "AGENTS.md": {
-    "mtime": 1789707069.7536688,
-    "seen": 1789707110.7104402,
-    "ast_hash": "5825c39d8366450b24984176913e13f6",
+    "mtime": 1790158541.6179314,
+    "seen": 1790160595.1810768,
+    "ast_hash": "f1bc8d43884b4232afa919eebbc4c759",
     "semantic_hash": ""
   },
   "ARCHITECTURE.md": {
@@ -2094,9 +2094,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786277857.3181634,
-    "seen": 1789039836.004169,
-    "ast_hash": "15e31bfe7ebcb2a66952b94b18ce1694",
+    "mtime": 1790157035.8650413,
+    "seen": 1790160595.181241,
+    "ast_hash": "38a2e901b84602a71546bafc70efb1f5",
     "semantic_hash": ""
   },
   "README.md": {
@@ -2118,9 +2118,9 @@
     "semantic_hash": "3349aea2307e876ac82ac0598d1f18ed"
   },
   "docs/CURRENT_STATE.md": {
-    "mtime": 1789984321.7014885,
-    "seen": 1789984367.5460372,
-    "ast_hash": "2dbb68aa9423a86fd5b6afa10ca6bff3",
+    "mtime": 1790160247.0564315,
+    "seen": 1790160595.1817167,
+    "ast_hash": "e663289416d096b374a1189f1460af99",
     "semantic_hash": ""
   },
   "docs/DESIGN.md": {
@@ -2166,9 +2166,9 @@
     "semantic_hash": ""
   },
   "docs/ROADMAP.md": {
-    "mtime": 1789984321.7024887,
-    "seen": 1789984367.5469182,
-    "ast_hash": "6f9e2a0430fe98f37ed258640900b94d",
+    "mtime": 1790160247.0564315,
+    "seen": 1790160595.1828034,
+    "ast_hash": "7c1b4c934eaf5fa17d0fc722d55c4e2e",
     "semantic_hash": ""
   },
   "docs/SECURITY.md": {
@@ -2688,9 +2688,9 @@
     "semantic_hash": ""
   },
   "docs/learning/01-system-map.md": {
-    "mtime": 1785818465.3123918,
-    "seen": 1789039836.0043218,
-    "ast_hash": "7593c22f46aafc04667497f19e05f3c3",
+    "mtime": 1790160247.060434,
+    "seen": 1790160595.2069066,
+    "ast_hash": "4e5c0abb1d6078310e6f367d5045bcc4",
     "semantic_hash": ""
   },
   "docs/learning/02-corpus-lifecycle.md": {
@@ -3618,9 +3618,9 @@
     "semantic_hash": ""
   },
   "apps/api/app/adapters/llamaindex_clarification_workflow.py": {
-    "mtime": 1788446116.8473933,
-    "seen": 1789039836.0036302,
-    "ast_hash": "928ac6accddd0a9f952d75cbca8bc9aa",
+    "mtime": 1790160247.0544324,
+    "seen": 1790160595.0935547,
+    "ast_hash": "cbfe8a446a079919b9b6ce526c0dc96d",
     "semantic_hash": ""
   },
   "apps/api/app/adapters/memory_clarification_case.py": {
@@ -3696,9 +3696,9 @@
     "semantic_hash": ""
   },
   "apps/api/tests/test_clarification_workflow.py": {
-    "mtime": 1788446116.8576806,
-    "seen": 1789039836.0038376,
-    "ast_hash": "3c4eaa56b6fab9f1acb3ad2e75936f89",
+    "mtime": 1790160247.055434,
+    "seen": 1790160595.1254814,
+    "ast_hash": "979292905c43757dc75d016d12f360cf",
     "semantic_hash": ""
   },
   "apps/api/tests/test_nvidia_nim_clarification.py": {
@@ -3990,9 +3990,9 @@
     "semantic_hash": ""
   },
   "docs/references/agent-runtime-policy.md": {
-    "mtime": 1789618008.402777,
-    "seen": 1789618067.468736,
-    "ast_hash": "892737ce3e6341db9c64448893f35080",
+    "mtime": 1790158541.61893,
+    "seen": 1790160595.2094495,
+    "ast_hash": "758b592a95113d1c4b5bb5cfb1eecc5b",
     "semantic_hash": ""
   },
   "apps/api/app/runtime_observability.py": {
@@ -4073,12 +4073,6 @@
     "ast_hash": "d67db5eda9b174e3a0f48b3edad9c88e",
     "semantic_hash": ""
   },
-  "docs/exec-plans/todo/0078-clarification-state-conversation-verification.md": {
-    "mtime": 1789632091.851339,
-    "seen": 1789707110.7279928,
-    "ast_hash": "e5e600852160f35ff73745a160fd1f48",
-    "semantic_hash": ""
-  },
   "docs/exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md": {
     "mtime": 1789632368.2657716,
     "seen": 1789707110.7279947,
@@ -4155,6 +4149,48 @@
     "mtime": 1789977482.1446083,
     "seen": 1789984367.5623887,
     "ast_hash": "d7235a8ea68e9dd45d97f733357bf9e5",
+    "semantic_hash": ""
+  },
+  "docs/SDD.md": {
+    "mtime": 1790160257.1663363,
+    "seen": 1790160595.1828063,
+    "ast_hash": "db53d31f6308b3908a3c6e9f6e241c38",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/active/0078-clarification-state-conversation-verification.md": {
+    "mtime": 1790159144.8332546,
+    "seen": 1790160595.1897418,
+    "ast_hash": "f8e1d6a43703b450816e60dd3072b309",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/active/0085-clarification-continuation-cross-layer-regression.md": {
+    "mtime": 1790160247.0584319,
+    "seen": 1790160595.1897442,
+    "ast_hash": "8a2c9368c6644347ce4f12548538d4ce",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/completed/0084-clarification-workflow-context-state-contract.md": {
+    "mtime": 1790160247.0584319,
+    "seen": 1790160595.2007525,
+    "ast_hash": "73f96569bd628ec0fcbc68425626828d",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/todo/0086-clarification-free-text-fact-extraction.md": {
+    "mtime": 1790159158.679679,
+    "seen": 1790160595.203574,
+    "ast_hash": "96feed7b52b48e79854ce0ee2dbf7c6c",
+    "semantic_hash": ""
+  },
+  "docs/exec-plans/todo/0087-clarification-case-grounded-answer-input.md": {
+    "mtime": 1790159159.115886,
+    "seen": 1790160595.203576,
+    "ast_hash": "ee0694e90539d880965ae5991690375a",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md": {
+    "mtime": 1790158410.7341306,
+    "seen": 1790160595.2117515,
+    "ast_hash": "1044a633cc2ff250a42810359aaad520",
     "semantic_hash": ""
   }
 }
