@@ -81,4 +81,4 @@
 - run마다 새 `Context`를 생성하고 임시 상태를 해당 Context에만 보관한다. LlamaIndex 런타임의 내부 메모리 snapshot이 dataclass 상태를 직렬화하므로, 신뢰된 로컬 객체에 한해 `PickleSerializer`를 사용한다. Context를 후속 HTTP 요청이나 execution phase에 보관하지 않는다.
 - 기존 repository의 case 소유권·version·만료 계약과 이벤트 필드를 유지했다. 병행 run, 한 run의 interpreter 실패, 새 Workflow 인스턴스의 저장 case 재조회 회귀를 추가했다.
 - focused API 테스트 69개, 전체 API 테스트 1015개 통과(3개 skip), core 37개와 collector 97개 통과(5개 skip). Ruff, 문서·로드맵 검사와 worktree Web lint(기존 경고 2건)·테스트 147개도 통과했다. `verify.ps1`의 pnpm 단계는 worktree의 외부 의존성 junction을 재설치 대상으로 판단해 중단되었다. 같은 변경되지 않은 Web 소스의 main checkout에서 Turbopack build와 TypeScript 검사는 통과했다. Worktree의 webpack 대체 build와 그 생성 파일을 포함한 TypeScript 검사에서는 `oauthRedirectMessage` export 오류가 재현되므로, worktree의 Web build는 검증 제한으로 남긴다.
-- 잔여 작업: B-014의 stale case conflict/API·Web 회귀, 그 뒤 B-009의 브라우저 acceptance.
+- 잔여 작업: B-015의 자유 문장 fact 추출과 B-016의 원 질문·누적 fact 답변 입력, 그 뒤 B-014의 API·Web 교차 계층 회귀와 B-009의 브라우저 acceptance.

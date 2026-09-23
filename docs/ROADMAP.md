@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 52dfd2dab04cb285c90ad504b740fe7255e702e49c0960af5f10ebc2248e93cc -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: d827574d41f3f6caff1d74792ada6a49e34f975709d4ea505768a17e36281e9f -->
 
 # 프로젝트 로드맵
 
@@ -19,11 +19,13 @@
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
-- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 다음 행동: API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
+- [B-015 · Bug — Clarification 자유 문장 fact 추출](exec-plans/todo/0086-clarification-free-text-fact-extraction.md) — 다음 행동: 자유 문장 continuation을 저장된 미해결 fact에 안전하게 대응시키는 설계를 확정하고 구현 계획을 작성한다.
+- [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
 
 ## Blocked
 
-- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013과 B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
+- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013·B-015·B-016·B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
+- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-013·B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
 
 ## Done
 
