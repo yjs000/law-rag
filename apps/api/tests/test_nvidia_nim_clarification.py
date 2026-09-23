@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from app.adapters.llm_clarification_continuation import LlmClarificationContinuationExtractor
 from app.adapters.nvidia_nim_clarification import NvidiaNimClarificationInterpreter
 from app.adapters.structured_clarification_continuation import (
     StructuredClarificationContinuationExtractor,
@@ -12,6 +13,7 @@ from app.bootstrap import (
     build_nvidia_clarification_interpreter,
     build_structured_clarification_continuation_extractor,
 )
+from app.domain.clarification import RequiredFact
 from app.settings import Settings
 
 
@@ -171,3 +173,100 @@ async def test_continuation_uses_structured_intent_and_fact_extraction_only() ->
     assert judgment.submitted_facts[0].value == "100kW"
     assert judgment.required_facts == ()
     assert not hasattr(_interpreter(), "extract_continuation")
+
+
+def _continuation_extractor() -> LlmClarificationContinuationExtractor:
+    return LlmClarificationContinuationExtractor(
+        api_key="test-key",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3-ultra-550b-a55b",
+        timeout_seconds=8,
+    )
+
+
+def _fact(fact_id: str = "fact-1") -> RequiredFact:
+    return RequiredFact(
+        id=fact_id,
+        label="설비 용량",
+        why_needed="적용 요건을 가릅니다.",
+        blocking=True,
+        group="사업 정보",
+        priority=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_llm_continuation_extractor_returns_submitted_facts_from_guided_json() -> None:
+    extractor = _continuation_extractor()
+    captured: dict[str, object] = {}
+
+    async def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "intent": "provide_facts",
+                                "submitted_facts": [
+                                    {"fact_id": "fact-1", "status": "answered", "value": "100kW"}
+                                ],
+                                "required_facts": [],
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    extractor.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    judgment = await extractor.extract_continuation(
+        original_question="태양광 발전 사업의 허가 요건은 무엇인가요?",
+        unresolved_facts=(_fact(),),
+        user_text="100kW입니다.",
+    )
+
+    assert judgment.intent == "provide_facts"
+    assert judgment.submitted_facts[0].fact_id == "fact-1"
+    assert judgment.submitted_facts[0].value == "100kW"
+    assert captured["extra_body"]["guided_json"]["type"] == "object"
+
+
+@pytest.mark.asyncio
+async def test_llm_continuation_extractor_propagates_provider_failure() -> None:
+    extractor = _continuation_extractor()
+
+    async def create(**kwargs):
+        raise RuntimeError("provider details must stay private")
+
+    extractor.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    with pytest.raises(RuntimeError, match="provider details"):
+        await extractor.extract_continuation(
+            original_question="질문", unresolved_facts=(_fact(),), user_text="답변"
+        )
+
+
+@pytest.mark.asyncio
+async def test_llm_continuation_extractor_propagates_schema_validation_failure() -> None:
+    extractor = _continuation_extractor()
+
+    async def create(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="not-json"))]
+        )
+
+    extractor.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    with pytest.raises(ValidationError):
+        await extractor.extract_continuation(
+            original_question="질문", unresolved_facts=(_fact(),), user_text="답변"
+        )
