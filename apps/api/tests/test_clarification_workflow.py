@@ -1,4 +1,5 @@
 import ast
+import asyncio
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -57,6 +58,24 @@ class _FakeInterpreter:
         return self.continuation
 
 
+class _ConcurrentInterpreter(_FakeInterpreter):
+    def __init__(self, responses: dict[str, ClarificationTurnJudgment | Exception]) -> None:
+        super().__init__(initial=_initial())
+        self.responses = responses
+        self.ready = asyncio.Event()
+
+    async def judge_initial(self, question: str) -> ClarificationTurnJudgment:
+        self.initial_calls += 1
+        if self.initial_calls == 2:
+            self.ready.set()
+        if self.initial_calls <= 2:
+            await self.ready.wait()
+        response = self.responses[question]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
 def _candidate(index: int) -> RequiredFactCandidate:
     return RequiredFactCandidate(
         label=f"사실 {index}",
@@ -72,11 +91,14 @@ def _initial(*candidates: RequiredFactCandidate) -> ClarificationTurnJudgment:
     )
 
 
-def _workflow(interpreter: _FakeInterpreter) -> LlamaIndexClarificationWorkflow:
+def _workflow(
+    interpreter: _FakeInterpreter,
+    repository: MemoryClarificationCaseRepository | None = None,
+) -> LlamaIndexClarificationWorkflow:
     now = datetime(2026, 9, 3, tzinfo=UTC)
     return LlamaIndexClarificationWorkflow(
         ClarificationWorkflowDependencies(
-            repository=MemoryClarificationCaseRepository(now=lambda: now),
+            repository=repository or MemoryClarificationCaseRepository(now=lambda: now),
             initial_judge=interpreter,
             continuation_extractor=interpreter,
             now=lambda: now,
@@ -85,9 +107,14 @@ def _workflow(interpreter: _FakeInterpreter) -> LlamaIndexClarificationWorkflow:
     )
 
 
-def _request(*, case_id=None, user_text: str | None = None) -> ClarificationTurnRequest:
+def _request(
+    *,
+    case_id=None,
+    user_text: str | None = None,
+    question: str = "태양광 발전 사업의 허가 요건은 무엇인가요?",
+) -> ClarificationTurnRequest:
     return ClarificationTurnRequest(
-        question="태양광 발전 사업의 허가 요건은 무엇인가요?",
+        question=question,
         as_of_date=date(2026, 9, 3),
         project_stage="planning",
         case_id=case_id,
@@ -116,6 +143,99 @@ def test_llamaindex_adapter_implements_application_orchestrator_protocol() -> No
     workflow = _workflow(_FakeInterpreter(initial=_initial(_candidate(1))))
 
     assert isinstance(workflow, ClarificationTurnOrchestrator)
+
+
+def test_workflow_has_no_instance_level_turn_state() -> None:
+    workflow = _workflow(_FakeInterpreter(initial=_initial(_candidate(1))))
+
+    assert not hasattr(workflow, "_turns")
+
+
+@pytest.mark.asyncio
+async def test_overlapping_runs_keep_owner_and_facts_separate() -> None:
+    interpreter = _ConcurrentInterpreter(
+        {"질문 A": _initial(_candidate(1)), "질문 B": _initial(_candidate(2))}
+    )
+    workflow = _workflow(interpreter)
+
+    first, second = await asyncio.wait_for(
+        asyncio.gather(
+            workflow.run_turn(
+                _request(question="질문 A"),
+                ClarificationOwner(owner_scope="user:first", capability_hash=None),
+            ),
+            workflow.run_turn(
+                _request(question="질문 B"),
+                ClarificationOwner(owner_scope="user:second", capability_hash=None),
+            ),
+        ),
+        timeout=5,
+    )
+
+    assert first.case is not None and second.case is not None
+    assert first.case.case_id != second.case.case_id
+    assert (first.case.owner_scope, first.case.original_question) == ("user:first", "질문 A")
+    assert (second.case.owner_scope, second.case.original_question) == ("user:second", "질문 B")
+    assert first.case.case.required_facts[0].label == "사실 1"
+    assert second.case.case.required_facts[0].label == "사실 2"
+
+
+@pytest.mark.asyncio
+async def test_failed_overlapping_run_does_not_contaminate_success_or_next_run() -> None:
+    interpreter = _ConcurrentInterpreter(
+        {
+            "민감한 질문": RuntimeError("private user fact"),
+            "정상 질문": _initial(_candidate(2)),
+            "다음 질문": _initial(_candidate(3)),
+        }
+    )
+    workflow = _workflow(interpreter)
+
+    failed, succeeded = await asyncio.wait_for(
+        asyncio.gather(
+            workflow.run_turn(_request(question="민감한 질문"), _owner()),
+            workflow.run_turn(_request(question="정상 질문"), _owner()),
+        ),
+        timeout=5,
+    )
+    following = await workflow.run_turn(_request(question="다음 질문"), _owner())
+
+    assert failed.case is None
+    assert failed.error_code == "clarification_interpreter_unavailable"
+    assert "private user fact" not in failed.error_code
+    assert succeeded.case is not None and following.case is not None
+    assert succeeded.case.original_question == "정상 질문"
+    assert succeeded.case.case.required_facts[0].label == "사실 2"
+    assert following.case.original_question == "다음 질문"
+    assert following.case.case.required_facts[0].label == "사실 3"
+
+
+@pytest.mark.asyncio
+async def test_new_workflow_loads_saved_case_for_continuation() -> None:
+    now = datetime(2026, 9, 3, tzinfo=UTC)
+    repository = MemoryClarificationCaseRepository(now=lambda: now)
+    initial = await _workflow(
+        _FakeInterpreter(initial=_initial(_candidate(1))), repository
+    ).run_turn(_request(question="저장된 원 질문"), _owner())
+    assert initial.case is not None
+    continuation = _FakeInterpreter(
+        initial=_initial(),
+        continuation=ClarificationTurnJudgment(
+            intent="provide_facts",
+            submitted_facts=(FactSubmission("fact-1", "answered", "100kW"),),
+        ),
+    )
+
+    outcome = await _workflow(continuation, repository).run_turn(
+        _request(case_id=initial.case.case_id, question="다른 현재 질문", user_text="100kW"),
+        _owner(),
+    )
+
+    assert outcome.case is not None
+    assert outcome.case.case_id == initial.case.case_id
+    assert outcome.case.original_question == "저장된 원 질문"
+    assert outcome.case.case.required_facts[0].value == "100kW"
+    assert outcome.policy == "full"
 
 
 def test_workflow_events_do_not_carry_private_case_or_fact_payloads() -> None:

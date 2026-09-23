@@ -71,7 +71,7 @@ DB 연결도 용도에 따라 나눈다.
 
 ### 추가 사실을 묻는 질문의 상태 경계
 
-아래는 [B-013 승인 설계](../superpowers/specs/2026-09-23-clarification-context-state-contract-design.md)의 목표 흐름이다. 현재 adapter는 구현 전이므로 Workflow 인스턴스의 `_turns`를 사용한다.
+아래는 [B-013 승인 설계](../superpowers/specs/2026-09-23-clarification-context-state-contract-design.md)에 따라 구현한 흐름이다. Workflow는 매 run마다 새 `Context`를 만들고 PostgreSQL case를 후속 턴의 정본으로 사용한다.
 
 ```mermaid
 flowchart LR

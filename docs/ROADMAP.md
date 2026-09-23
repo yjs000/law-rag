@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00e0f148245a31d06aa4489a09d867c804be58d73e669dc70b0da494ec9ab64d -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 52dfd2dab04cb285c90ad504b740fe7255e702e49c0960af5f10ebc2248e93cc -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/active/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 승인 설계에 맞춰 구체화한 B-013 실행계획을 검토하고 구현 방식을 선택한다.
 
 ## Todo
 
@@ -20,15 +19,14 @@
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
 - [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
 - [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
+- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 다음 행동: API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
 
 ## Blocked
 
 - [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013과 B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
-- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-013 완료 뒤 API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
 
 ## Done
 
-- [E-006 · Experiment — D-10 Gold batch defect 평가·봉인 기록](exec-plans/completed/0069-d10-gold-failure-driven-regression.md) — 다음 행동: none
 - [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
@@ -40,6 +38,7 @@
 - [B-010 · Bug — 공백이 아닌 한 글자 질문도 전송 허용 Implementation Plan](exec-plans/completed/0079-allow-single-character-question-submission.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [OC-001 · Orchestration — OC-001: 우선순위 로드맵 병렬 오케스트레이션](exec-plans/completed/0081-oc001-priority-roadmap-orchestration.md) — 다음 행동: 없음 — 여섯 자식 모두 Done·completed/이고 통합·전체 검증이 완료됨.
 - [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: 없음 — 구조 검증, 프롬프트 계약, provenance와 전체 회귀 검증 완료.
+- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/completed/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 없음 — run별 Context 격리와 관련 회귀 검증 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, Workflow, step
+from workflows.context.serializers import PickleSerializer
 
 from app.application.clarification_workflow import (
     AnswerPolicy,
@@ -63,25 +64,20 @@ class LlamaIndexClarificationWorkflow(Workflow):
     def __init__(self, dependencies: ClarificationWorkflowDependencies) -> None:
         super().__init__()
         self._dependencies = dependencies
-        self._turns: dict[str, _TurnState] = {}
 
     async def run_turn(
         self, request: ClarificationTurnRequest, owner: ClarificationOwner
     ) -> ClarificationOutcome:
         request_id = str(uuid4())
-        self._turns[request_id] = _TurnState(request=request, owner=owner)
-        try:
-            return await self.run(start_event=TurnStarted(request_id=request_id))
-        finally:
-            self._turns.pop(request_id, None)
+        # The workflow runtime snapshots Context state in memory before starting.
+        # Only trusted, locally created turn objects enter this per-run serializer.
+        ctx = Context(self, serializer=PickleSerializer())
+        await ctx.store.set("turn_state", _TurnState(request=request, owner=owner))
+        return await self.run(ctx=ctx, start_event=TurnStarted(request_id=request_id))
 
     @step
     async def load_case(self, ctx: Context, event: TurnStarted) -> CaseLoaded:
-        state = self._state(event.request_id)
-        await ctx.store.set("request_id", event.request_id)
-        await ctx.store.set(
-            "case_id", str(state.request.case_id) if state.request.case_id else None
-        )
+        state: _TurnState = await ctx.store.get("turn_state")
         if state.request.case_id is not None:
             state.record = await self._dependencies.repository.get_owned(
                 state.request.case_id,
@@ -91,8 +87,10 @@ class LlamaIndexClarificationWorkflow(Workflow):
         return CaseLoaded(request_id=event.request_id)
 
     @step
-    async def interpret_turn(self, event: CaseLoaded) -> TurnInterpreted | InterpreterFailed:
-        state = self._state(event.request_id)
+    async def interpret_turn(
+        self, ctx: Context, event: CaseLoaded
+    ) -> TurnInterpreted | InterpreterFailed:
+        state: _TurnState = await ctx.store.get("turn_state")
         try:
             if state.record is None:
                 state.judgment = await self._dependencies.initial_judge.judge_initial(
@@ -110,8 +108,9 @@ class LlamaIndexClarificationWorkflow(Workflow):
         return TurnInterpreted(request_id=event.request_id)
 
     @step
-    async def safe_provider_failure(self, event: InterpreterFailed) -> StopEvent:
-        record = self._state(event.request_id).record
+    async def safe_provider_failure(self, ctx: Context, event: InterpreterFailed) -> StopEvent:
+        state: _TurnState = await ctx.store.get("turn_state")
+        record = state.record
         facts = record.case.remaining_facts() if record is not None else ()
         return StopEvent(
             result=ClarificationOutcome(
@@ -124,7 +123,7 @@ class LlamaIndexClarificationWorkflow(Workflow):
 
     @step
     async def validate_and_merge(self, ctx: Context, event: TurnInterpreted) -> CaseMerged:
-        state = self._state(event.request_id)
+        state: _TurnState = await ctx.store.get("turn_state")
         judgment = state.judgment
         if judgment is None:
             raise RuntimeError("clarification judgment is unavailable")
@@ -149,12 +148,11 @@ class LlamaIndexClarificationWorkflow(Workflow):
             )
         if state.record is None:
             raise RuntimeError("clarification case is unavailable")
-        await ctx.store.set("case_id", str(state.record.case_id))
         return CaseMerged(request_id=event.request_id)
 
     @step
-    async def select_policy(self, event: CaseMerged) -> PolicySelected:
-        state = self._state(event.request_id)
+    async def select_policy(self, ctx: Context, event: CaseMerged) -> PolicySelected:
+        state: _TurnState = await ctx.store.get("turn_state")
         record = state.record
         judgment = state.judgment
         if record is None or judgment is None:
@@ -176,8 +174,9 @@ class LlamaIndexClarificationWorkflow(Workflow):
         return PolicySelected(request_id=event.request_id, policy=policy)
 
     @step
-    async def format_questions(self, event: PolicySelected) -> StopEvent:
-        record = self._state(event.request_id).record
+    async def format_questions(self, ctx: Context, event: PolicySelected) -> StopEvent:
+        state: _TurnState = await ctx.store.get("turn_state")
+        record = state.record
         if record is None:
             raise RuntimeError("clarification case is unavailable")
         next_status = (
@@ -202,9 +201,3 @@ class LlamaIndexClarificationWorkflow(Workflow):
                 next_status=next_status,
             )
         )
-
-    def _state(self, request_id: str) -> _TurnState:
-        try:
-            return self._turns[request_id]
-        except KeyError as exc:
-            raise RuntimeError("clarification request is unavailable") from exc

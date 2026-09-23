@@ -1,11 +1,11 @@
 > 작업 ID: `B-013`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: 없음
-> 다음 행동: 승인 설계에 맞춰 구체화한 B-013 실행계획을 검토하고 구현 방식을 선택한다.
+> 다음 행동: 없음 — run별 Context 격리와 관련 회귀 검증 완료.
 > 참고 범위:
-> - `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 — 현재 `_turns` 상태와 `Context.store` 기록
+> - `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L203 — run별 `Context.store` 상태
 > - `apps/api/tests/test_clarification_workflow.py` L102-L319 — workflow 이벤트·상태 전이 회귀 테스트
 > - `docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md` L1-L60 — 승인된 Context·case·phase 경계 설계
 
@@ -75,3 +75,10 @@
   4. 결과와 잔여 B-014/B-009 경계를 이 계획에 기록한다. 완료 조건이 모두 충족되면 상태를 `Done`으로 바꾸고 동일 파일명을 `completed/`로 이동한 뒤 `.\scripts\run_python.ps1 scripts/render_roadmap.py`, `.\scripts\run_python.ps1 scripts/check_roadmap.py`를 실행하고 staged diff를 확인한다.
 - **완료 증거:** focused 테스트·ruff·문서 검사·대표 검증이 성공하고, 학습 그림과 구현된 phase/state 경계가 일치한다. B-014와 B-009는 각각의 계획에서 이어진다.
 - **의존성:** Task 2의 per-run Context 구현과 focused 검증.
+
+## 결과 및 잔여 작업
+
+- run마다 새 `Context`를 생성하고 임시 상태를 해당 Context에만 보관한다. LlamaIndex 런타임의 내부 메모리 snapshot이 dataclass 상태를 직렬화하므로, 신뢰된 로컬 객체에 한해 `PickleSerializer`를 사용한다. Context를 후속 HTTP 요청이나 execution phase에 보관하지 않는다.
+- 기존 repository의 case 소유권·version·만료 계약과 이벤트 필드를 유지했다. 병행 run, 한 run의 interpreter 실패, 새 Workflow 인스턴스의 저장 case 재조회 회귀를 추가했다.
+- focused API 테스트 69개, 전체 API 테스트 1015개 통과(3개 skip), core 37개와 collector 97개 통과(5개 skip). Ruff, 문서·로드맵 검사와 worktree Web lint(기존 경고 2건)·테스트 147개도 통과했다. `verify.ps1`의 pnpm 단계는 worktree의 외부 의존성 junction을 재설치 대상으로 판단해 중단되었다. 같은 변경되지 않은 Web 소스의 main checkout에서 Turbopack build와 TypeScript 검사는 통과했다. Worktree의 webpack 대체 build와 그 생성 파일을 포함한 TypeScript 검사에서는 `oauthRedirectMessage` export 오류가 재현되므로, worktree의 Web build는 검증 제한으로 남긴다.
+- 잔여 작업: B-014의 stale case conflict/API·Web 회귀, 그 뒤 B-009의 브라우저 acceptance.
