@@ -42,6 +42,45 @@ def test_composition_factory_uses_non_nvidia_continuation_extractor() -> None:
     )
 
 
+def test_build_continuation_extraction_messages_includes_fact_ids_and_user_text() -> None:
+    from app.adapters.nvidia_nim_clarification import build_continuation_extraction_messages
+    from app.domain.clarification import RequiredFact, FactStatus
+
+    facts = (
+        RequiredFact(
+            id="fact-1",
+            label="설비 용량",
+            why_needed="적용 요건을 가릅니다.",
+            blocking=True,
+            group="사업 정보",
+            priority=1,
+        ),
+    )
+
+    messages = build_continuation_extraction_messages(
+        original_question="태양광 발전 사업의 허가 요건은 무엇인가요?",
+        unresolved_facts=facts,
+        user_text="100kW입니다.",
+    )
+
+    assert messages[0]["role"] == "system"
+    assert "신뢰하지 않는" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert "fact-1" in messages[1]["content"]
+    assert "설비 용량" in messages[1]["content"]
+    assert "100kW입니다." in messages[1]["content"]
+
+
+def test_build_continuation_extraction_messages_handles_no_unresolved_facts() -> None:
+    from app.adapters.nvidia_nim_clarification import build_continuation_extraction_messages
+
+    messages = build_continuation_extraction_messages(
+        original_question="질문", unresolved_facts=(), user_text="답변"
+    )
+
+    assert messages[1]["content"].endswith("답변")
+
+
 @pytest.mark.asyncio
 async def test_initial_judgment_uses_configured_ultra_and_structured_fact_candidates() -> None:
     interpreter = _interpreter()
