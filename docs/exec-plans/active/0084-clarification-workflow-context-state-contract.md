@@ -3,38 +3,75 @@
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: 없음
-> 다음 행동: 작성한 per-run Context와 PostgreSQL case 경계 설계 문서에 대한 사용자 검토를 받는다.
+> 다음 행동: 승인 설계에 맞춰 구체화한 B-013 실행계획을 검토하고 구현 방식을 선택한다.
 > 참고 범위:
 > - `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 — 현재 `_turns` 상태와 `Context.store` 기록
 > - `apps/api/tests/test_clarification_workflow.py` L102-L319 — workflow 이벤트·상태 전이 회귀 테스트
-> - `docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md` L1-L39 — 승인 검토할 Context·case·phase 경계 설계
+> - `docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md` L1-L60 — 승인된 Context·case·phase 경계 설계
 
 # LlamaIndex Clarification Context State Contract Implementation Plan
 
-**Goal:** 여러 HTTP 턴의 clarification 정본은 PostgreSQL case에 유지하면서, 한 Workflow run 안에서 step들이 공유하는 요청 상태는 LlamaIndex가 지원하는 Context 계약으로 관리하고 write-only 상태 기록을 남기지 않는다.
+> **For agentic workers:** 구현 시 `superpowers:executing-plans`를 적용한다. 사용자가 별도로 subagent 방식을 선택하면 `superpowers:subagent-driven-development`를 적용한다.
 
-**State boundary:** `ClarificationCaseRepository`는 사용자 추가정보와 case version·소유권·만료를 턴 간 보존한다. LlamaIndex `Context`는 한 run의 request·owner·record·judgment만 격리하며, 별도 승인 없이 HTTP 턴 간 Context를 재사용하거나 직렬화하지 않는다.
+**Goal:** 여러 HTTP 턴의 clarification 정본은 PostgreSQL case에 두고, 한 Workflow run의 임시 상태는 LlamaIndex `Context`에서만 공유한다.
 
-### Task 1: 현재 Context 우회와 동시 run 격리 실패 가능성 재현
+**Architecture:** `run_turn()`마다 `Context(self)`를 새로 만들어 같은 Context를 `Workflow.run(ctx=...)`과 각 step에 전달한다. Workflow 이벤트는 현재의 `request_id`와 공개 정책만 담고, 다음 HTTP 턴은 repository에서 case를 다시 읽는다. `prepare`의 구조화 결과는 기존 question execution snapshot을 거쳐 `core`와 `finalize`로 전달된다.
 
-- **결과:** 같은 Workflow 인스턴스에서 서로 다른 두 turn을 동시에 실행해 state 교차 오염·정리 누락·write-only Context 기록을 관찰하는 RED 또는 characterization 테스트가 생긴다.
-- **대상:** `apps/api/tests/test_clarification_workflow.py` L102-L319 수정 약 55줄, `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L84 검토, 합계 약 55줄.
-- **실행 절차:** `asyncio.gather`로 서로 다른 case·owner·judgment를 동시에 실행하고 각 결과가 자기 입력만 반영하는지, 성공·예외 후 임시 상태가 남지 않는지 검증한다. `ctx.store`에 기록한 값이 어느 step에서도 소비되지 않는 현재 계약을 테스트 이름과 assertion으로 드러낸다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`로 RED 또는 기존 동작의 characterization 결과를 확인한다.
-- **완료 증거:** 재현 테스트가 인스턴스 공유 상태와 Context 상태의 책임 차이를 명시하며, 동시 요청의 결과가 서로 바뀌면 실패한다.
+**Tech Stack:** Python 3.14, LlamaIndex Workflow, pytest, PostgreSQL clarification case repository.
+
+**Spec:** `docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md`
+
+## 전역 제약
+
+- `ClarificationTurnOrchestrator.run_turn(request, owner)`의 application-facing 계약과 기존 case repository의 version·소유권·만료 규칙을 유지한다.
+- 원 질문·사용자 fact 값·capability를 Workflow 이벤트나 로그에 싣지 않는다. Context는 한 run 뒤 보관·직렬화하지 않는다.
+- extractor 의미, Web의 bounded `conversation_context`, answer prompt, execution 10분 수명, `prepare → core → finalize` phase 계약은 바꾸지 않는다.
+- B-014의 stale conflict API 응답과 Web continuation, B-009의 브라우저 acceptance는 이 계획에 넣지 않는다.
+
+## 리뷰 중점
+
+1. 두 소유자의 run이 겹칠 때 각각 자기 case·판정만 사용한다 — Task 1의 동시 실행 테스트.
+2. 한 run의 interpreter가 실패해도 다른 run과 다음 run의 사실·오류가 섞이지 않는다 — Task 1의 실패 병행 테스트.
+3. 두 번째 HTTP 턴이 이전 Context 없이 저장된 case의 원 질문·facts를 읽는다 — Task 1의 후속 턴 테스트.
+4. Workflow 이벤트에는 민감한 case/fact payload가 없다 — 기존 이벤트 필드 테스트와 Task 2 검토.
+5. cancel·즉시 답변 요청·남은 사실 질문의 정책은 refactor 전후 같다 — 기존 workflow 상태 전이 테스트.
+
+---
+
+### Task 1: run 격리와 기존 후속 턴 동작 고정
+
+- **결과:** 두 소유자의 병행 run, 한 run의 interpreter 실패, 저장된 case를 사용하는 다음 run을 재현하는 테스트가 생긴다. 인스턴스에 turn 상태 map을 두지 않는 구조 계약은 현재 코드에서 RED로 확인한다.
+- **대상:** `apps/api/tests/test_clarification_workflow.py` L1-L101의 fake·요청 helper와 L102-L319의 회귀 테스트 수정 약 80줄; `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L84 읽기 전용 확인 0줄. 예상 변경량 합계 약 80줄.
+- **실행 절차:**
+  1. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`로 기존 상태 전이·비공개 이벤트·provider 실패의 GREEN 기준선을 확인한다.
+  2. 서로 다른 질문·owner와 서로 다른 판정을 barrier로 겹치게 하는 fake를 추가하고 `asyncio.gather`로 두 `run_turn()` 결과의 case ID·fact·owner scope가 입력별로 분리되는지 검증한다. 한 interpreter만 실패할 때 다른 결과와 다음 run이 정상이고 실패 결과에 사용자 사실이 없는지도 확인한다.
+  3. 첫 run에서 생성한 case ID로 다음 run을 호출해 저장된 원 질문·남은 fact를 조회하는지 확인한다. 별도 구조 계약 테스트는 Workflow 인스턴스에 요청별 상태 map이 없음을 검사한다.
+  4. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`를 실행해 구조 계약의 RED를 확인한다. 동시성 행동 테스트가 기존 코드에서 이미 통과하면 characterization으로 기록하고 실패를 억지로 만들지 않는다.
+  5. `git diff --check`와 테스트 diff를 확인한다.
+- **완료 증거:** 새 구조 계약 테스트가 현재 `_turns` 때문에 실패하고, 동시성·실패·다음 턴 테스트가 상태 혼합을 발견할 수 있는 서로 다른 입력·결과를 검사한다.
 - **의존성:** 없음.
 
-### Task 2: per-run 상태를 Context 계약으로 정규화
+### Task 2: Workflow 임시 상태를 run별 Context로 이동
 
-- **결과:** step 간 상태는 run별 Context에서 읽고 쓰며, `_turns` 같은 Workflow 인스턴스 공유 mutable map과 사용되지 않는 `ctx.store` 값이 제거된다. PostgreSQL case는 계속 턴 간 정본이다.
-- **대상:** `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 수정 약 50줄, `apps/api/app/application/clarification_workflow.py` L75-L103 필요 시 수정 약 8줄, 합계 최대 약 58줄.
-- **실행 절차:** 민감한 사용자 사실을 이벤트 payload에 넣지 않는 기존 보안 경계를 유지하면서 request·owner·record·judgment를 run별 Context로 전달한다. HTTP 요청 사이에는 Context를 재사용하지 않고 case ID로 repository를 다시 조회한다. Task 1 테스트와 기존 workflow 테스트를 실행하고 `git diff --check`로 변경을 확인한다.
-- **완료 증거:** 모든 step이 동일 run의 Context만 사용하고, 인스턴스 수준 임시 turn map과 읽히지 않는 Context write가 없으며, 기존 상태 전이 결과가 유지된다.
-- **의존성:** Task 1의 재현 테스트.
+- **결과:** `run_turn()`가 새 `Context`를 만들고 모든 step이 해당 Context의 request·owner·record·judgment를 읽고 갱신한다. `_turns`, `_state()`, 읽히지 않는 `case_id` 기록이 사라진다.
+- **대상:** `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 수정 약 65줄; `apps/api/tests/test_clarification_workflow.py` L102-L319 필요한 assertion 보강 약 10줄. 예상 변경량 합계 약 75줄.
+- **실행 절차:**
+  1. Task 1의 RED와 GREEN 결과를 확인한다. 로컬 LlamaIndex 계약은 `Context(workflow)`와 `Workflow.run(ctx=Context, start_event=...)`다.
+  2. `run_turn()`에서 매 호출 새 Context를 만들고 비공개 turn 상태를 `ctx.store`에 넣는다. `load_case`부터 `format_questions`까지 모든 step이 전달된 `ctx`에서 상태를 읽고 변경 뒤 저장하게 한다. 이벤트 필드와 `ClarificationTurnOrchestrator`의 공개 메서드 서명은 유지한다.
+  3. 기존 repository `get_owned`·`create_or_get`·version 조건 `merge` 호출 위치와 interpreter 실패의 안전 결과를 유지한다. Workflow 객체의 `_turns`·`_state()` 및 소비하지 않는 `request_id`/`case_id` Context 기록을 제거한다.
+  4. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py -q`와 `.\scripts\run_python.ps1 -m ruff check apps/api/app/adapters/llamaindex_clarification_workflow.py apps/api/tests/test_clarification_workflow.py`를 실행한다.
+  5. `git diff --check`와 adapter diff를 확인해 민감한 필드가 이벤트·로그·execution phase로 이동하지 않았는지 검토한다.
+- **완료 증거:** Task 1의 구조 계약과 모든 workflow 회귀가 GREEN이고, 동일 Workflow 인스턴스의 병행 run·실패 후 run에서 교차 상태가 없다.
+- **의존성:** Task 1의 동시성·실패·다음 턴 회귀와 구조 계약 RED.
 
-### Task 3: 상태 책임 문서화와 전체 관련 검증
+### Task 3: 실행 경계 문서와 API 회귀 검증
 
-- **결과:** Context와 repository의 책임 경계가 운영·설계 문서에 명시되고 관련 API 회귀가 통과한다.
-- **대상:** `docs/design-docs/`의 clarification 관련 설계 문서 수정 약 12줄, `apps/api/tests/test_clarification_answering.py` L419-L625 검증, 이 계획 결과 기록 약 10줄, `docs/ROADMAP.md` renderer 생성 변경.
-- **실행 절차:** Context는 per-run, repository는 cross-turn이라는 계약과 Context 비직렬화 원칙을 기록한다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `git diff --check`, roadmap renderer와 checker를 실행한다.
-- **완료 증거:** 상태 소유권 문서와 동시 run 회귀 테스트가 일치하고 관련 API 테스트가 모두 통과한다.
-- **의존성:** Task 2 완료.
+- **결과:** 학습 흐름도가 실제 구현과 일치하고 clarification API 경계 및 저장된 execution snapshot의 기존 동작이 통과한다.
+- **대상:** `docs/learning/01-system-map.md` L72-L92의 구현 전 표기 수정 약 2줄; `apps/api/tests/test_clarification_answering.py` L419-L625와 `apps/api/tests/test_v2_question_executions.py` L178-L505 검증 0줄; 이 계획의 결과·잔여 작업 기록 약 10줄; `docs/ROADMAP.md` renderer 산출물. 예상 변경량 합계 약 12줄과 생성된 roadmap 변경.
+- **실행 절차:**
+  1. Task 2 검증을 확인하고 학습 문서의 B-013 목표 흐름 표시를 현재 동작으로 바꾼다. 승인 설계의 `prepare` 안 Context, `core`/`finalize`의 execution snapshot, 다음 HTTP 턴의 case 재조회가 코드와 일치하는지 대조한다.
+  2. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`로 관련 API 회귀를 검증한다.
+  3. `.\scripts\run_python.ps1 -m ruff check apps/api/app/adapters/llamaindex_clarification_workflow.py apps/api/tests/test_clarification_workflow.py`, `.\scripts\run_python.ps1 scripts/check_docs.py`, `.\scripts\run_python.ps1 scripts/check_roadmap.py`와 `git diff --check`를 실행한다. 병합 전 대표 검증은 `powershell -ExecutionPolicy Bypass -File scripts/verify.ps1`로 수행한다.
+  4. 결과와 잔여 B-014/B-009 경계를 이 계획에 기록한다. 완료 조건이 모두 충족되면 상태를 `Done`으로 바꾸고 동일 파일명을 `completed/`로 이동한 뒤 `.\scripts\run_python.ps1 scripts/render_roadmap.py`, `.\scripts\run_python.ps1 scripts/check_roadmap.py`를 실행하고 staged diff를 확인한다.
+- **완료 증거:** focused 테스트·ruff·문서 검사·대표 검증이 성공하고, 학습 그림과 구현된 phase/state 경계가 일치한다. B-014와 B-009는 각각의 계획에서 이어진다.
+- **의존성:** Task 2의 per-run Context 구현과 focused 검증.

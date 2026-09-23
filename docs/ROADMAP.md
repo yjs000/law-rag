@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 72fb5cf91bb249f6546944f46554437462d417a82d9da7ba358286350d680de8 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 00e0f148245a31d06aa4489a09d867c804be58d73e669dc70b0da494ec9ab64d -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/active/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 작성한 per-run Context와 PostgreSQL case 경계 설계 문서에 대한 사용자 검토를 받는다.
+- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/active/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 승인 설계에 맞춰 구체화한 B-013 실행계획을 검토하고 구현 방식을 선택한다.
 
 ## Todo
 
