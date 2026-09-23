@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 5a96c6acb3e88a7c502318b1fc5fac8c106f279357d2a017b442ffff4f5eb595 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 1c7708d2b6719887871ddb69b2d52b1ac336283b84dbc945c7e36e61ee0c9768 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,6 @@
 
 ## Picked Up
 
-- [B-015 · Bug — Clarification 자유 문장 fact 추출 Implementation Plan](exec-plans/active/0086-clarification-free-text-fact-extraction.md) — 다음 행동: Task 1부터 순서대로 구현한다.
 
 ## Todo
 
@@ -29,7 +28,6 @@
 
 ## Done
 
-- [F-009 · Feature — NVIDIA 무료 티어 지연 안내 및 finalize 상단 진행 표시 Implementation Plan](exec-plans/completed/0070-nvidia-free-tier-delay-and-sse-progress.md) — 다음 행동: 없음 — 구현·문서·통합 검증 완료.
 - [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
@@ -41,6 +39,7 @@
 - [OC-001 · Orchestration — OC-001: 우선순위 로드맵 병렬 오케스트레이션](exec-plans/completed/0081-oc001-priority-roadmap-orchestration.md) — 다음 행동: 없음 — 여섯 자식 모두 Done·completed/이고 통합·전체 검증이 완료됨.
 - [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: 없음 — 구조 검증, 프롬프트 계약, provenance와 전체 회귀 검증 완료.
 - [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/completed/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 없음 — run별 Context 격리와 관련 회귀 검증 완료.
+- [B-015 · Bug — Clarification 자유 문장 fact 추출 Implementation Plan](exec-plans/completed/0086-clarification-free-text-fact-extraction.md) — 다음 행동: 없음 — 4개 Task 전부 완료, task-level review·최종 whole-branch review clean, `main`에 로컬 병합 완료.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped

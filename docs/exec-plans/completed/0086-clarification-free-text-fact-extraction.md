@@ -1,9 +1,9 @@
 > 작업 ID: `B-015`
-> 상태: `Picked Up`
+> 상태: `Done`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
 > 선행 조건: `B-013` 완료 후 (완료됨)
-> 다음 행동: Task 1부터 순서대로 구현한다.
+> 다음 행동: 없음 — 4개 Task 전부 완료, task-level review·최종 whole-branch review clean, `main`에 로컬 병합 완료.
 > 참고 범위:
 > - `apps/api/app/adapters/nvidia_nim_clarification.py` L1-L161 — 새 어댑터가 따를 client/에러 처리 템플릿
 > - `apps/api/app/bootstrap.py` L429-L448 — 배선 교체 대상
