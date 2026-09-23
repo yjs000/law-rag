@@ -2,8 +2,8 @@
 > 상태: `Blocked`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `UX`
-> 선행 조건: `B-013` 완료 후
-> 다음 행동: B-013 완료 뒤 API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
+> 선행 조건: `B-013`, `B-015`, `B-016` 완료 후
+> 다음 행동: B-013·B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
 > 참고 범위:
 > - `apps/api/tests/test_v2_question_executions.py` L178-L505 — capability 전달, continuation 호출, case 오류 API 경계
 > - `apps/api/app/adapters/postgres_clarification_case.py` L146-L180 — version 기반 stale case 쓰기 거부
@@ -15,9 +15,9 @@
 
 **Safety contract:** 동시 요청은 서로의 turn state를 읽지 않는다. 같은 case의 stale 답변은 데이터를 덮어쓰지 않고 열거 불가능한 안정적 오류로 끝난다. Web은 capability를 화면·대화 context에 노출하지 않고 continuation 요청에만 전달한다.
 
-**차단 사유:** B-013에서 같은 LlamaIndex Workflow 인스턴스의 run 간 임시 상태 격리와 per-run Context 계약을 먼저 확정·검증해야 API 경계 회귀의 기준이 생긴다.
+**차단 사유:** B-013의 per-run Context 격리와 B-015의 자유 문장 fact 추출, B-016의 원 질문·누적 fact 기반 답변 입력이 완료되어야 실제 사용자 흐름의 회귀 기준이 생긴다.
 
-**재개 조건:** B-013이 `Done`이고 run별 Context 격리의 focused 검증 증거가 기록되어야 한다.
+**재개 조건:** B-013·B-015·B-016이 `Done`이고 각 focused 검증 증거가 기록되어야 한다.
 
 ### Task 1: stale case conflict의 API 응답과 저장 상태 검증
 
@@ -37,8 +37,8 @@
 
 ### Task 3: 최초 질문부터 완료까지 교차 계층 시나리오 고정
 
-- **결과:** 최초 `clarification_required`, 부분 답변, 남은 질문, 전체 답변 또는 현재 정보 답변을 하나의 재현 가능한 시나리오로 검증한다.
+- **결과:** 최초 `clarification_required`, 자유 문장 부분 답변, 남은 질문, 전체 답변 또는 현재 정보 답변을 하나의 재현 가능한 시나리오로 검증한다.
 - **대상:** `apps/api/tests/test_clarification_answering.py` L419-L625 수정 약 65줄, `apps/web/lib/api-client-flow.test.ts` clarification 시나리오 수정 약 55줄, `apps/web/app/page.test.tsx` clarification 사용자 흐름 수정 약 55줄, 이 계획 결과 기록 약 10줄, `docs/ROADMAP.md` renderer 생성 변경, 합계 약 185줄.
-- **실행 절차:** 동일 case ID를 사용해 remaining count가 감소하고 마지막 턴에서 clarification이 사라지는지 API 응답과 Web state를 대조한다. 익명 capability가 공개 응답·화면·conversation context에 없는지 확인한다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `pnpm test:web`, `pnpm lint:web`, `pnpm typecheck`, `git diff --check`를 실행한다.
+- **실행 절차:** 동일 case ID를 사용해 자유 문장 답변의 fact 병합과 remaining count 감소, 원 질문·누적 fact를 사용한 검색·생성, 마지막 턴의 clarification 종료를 API 응답과 Web state에서 대조한다. 익명 capability가 공개 응답·화면·conversation context에 없는지 확인한다. `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_clarification_answering.py apps/api/tests/test_v2_question_executions.py -q`, `pnpm test:web`, `pnpm lint:web`, `pnpm typecheck`, `git diff --check`를 실행한다.
 - **완료 증거:** 첫 질문부터 terminal 응답까지 동일 case의 상태·payload·화면 동작이 자동 회귀 테스트로 재현되고 전체 관련 검증이 통과한다.
 - **의존성:** Task 1과 Task 2 완료.

@@ -9,7 +9,7 @@
 전체 active 계획 목록과 한 줄 상태는 [docs/exec-plans/active/README.md](exec-plans/active/README.md)에
 있다.
 
-현재 `Picked Up` milestone은 [B-013 LlamaIndex clarification Context state 계약](exec-plans/active/0084-clarification-workflow-context-state-contract.md)이다. PostgreSQL cross-turn case와 LlamaIndex per-run Context의 책임 경계를 설계·검증한다. [B-009](exec-plans/active/0078-clarification-state-conversation-verification.md)는 B-013과 B-014 완료 후 최종 acceptance를 실행하도록 차단되어 있다.
+현재 `Picked Up` milestone은 [B-013 LlamaIndex clarification Context state 계약](exec-plans/active/0084-clarification-workflow-context-state-contract.md)이다. PostgreSQL cross-turn case와 LlamaIndex per-run Context의 책임 경계를 설계·검증한다. 후속 [B-015](exec-plans/todo/0086-clarification-free-text-fact-extraction.md)는 자유 문장 fact 추출, [B-016](exec-plans/todo/0087-clarification-case-grounded-answer-input.md)은 원 질문·누적 fact 기반 답변 입력을 다룬다. [B-014](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md)는 이 구현 뒤 교차 계층 회귀를 고정하고, [B-009](exec-plans/active/0078-clarification-state-conversation-verification.md)는 최종 acceptance를 실행한다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
 최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
