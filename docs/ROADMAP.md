@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: d827574d41f3f6caff1d74792ada6a49e34f975709d4ea505768a17e36281e9f -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 979a7503362d1df3b6139919eaf3660e76fb764b437273d4960464ebcc64c924 -->
 
 # 프로젝트 로드맵
 
@@ -25,7 +25,7 @@
 ## Blocked
 
 - [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013·B-015·B-016·B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
-- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-013·B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
+- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
 
 ## Done
 

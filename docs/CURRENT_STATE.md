@@ -12,7 +12,7 @@
 현재 `Picked Up` milestone은 없다. [B-013](exec-plans/completed/0084-clarification-workflow-context-state-contract.md)의 PostgreSQL cross-turn case와 LlamaIndex per-run Context 경계 구현·검증을 마쳤다. 후속 [B-015](exec-plans/todo/0086-clarification-free-text-fact-extraction.md)는 자유 문장 fact 추출, [B-016](exec-plans/todo/0087-clarification-case-grounded-answer-input.md)은 원 질문·누적 fact 기반 답변 입력을 다룬다. [B-014](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md)는 두 작업 뒤 API·Web 교차 계층 회귀를 고정하고, [B-009](exec-plans/active/0078-clarification-state-conversation-verification.md)는 최종 acceptance를 실행한다.
 
 가장 최근 결정은 [ARCHITECTURE.md 결정 기록](../ARCHITECTURE.md#결정-기록)의 최신 날짜 항목들이다.
-최근 완료된 구현은 [V2 Provider Capacity 3 Slots and Busy Notice](exec-plans/completed/0067-provider-capacity-and-busy-notice.md)이다. V2 provider 슬롯 기본값, busy 오류의 클라이언트 처리, 프로덕션 동시 admission을 검증했다.
+최근 완료된 구현은 [B-013 LlamaIndex clarification Context state 계약](exec-plans/completed/0084-clarification-workflow-context-state-contract.md)이다. run별 Context 격리와 저장된 case 재조회를 검증했다.
 
 ## 언제 더 읽어야 하는가
 
