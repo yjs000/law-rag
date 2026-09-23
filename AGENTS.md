@@ -84,7 +84,7 @@ Superpowers workflow 중에도 항상 유지한다.
   2. 필요한 검증 명령의 최신 성공 증거가 있음
   3. 활성 실행계획의 해당 작업에 미완료 항목이 없음
 
-Subagent dispatch 전에만 `docs/references/agent-runtime-policy.md`의 모델·reasoning 절을 읽고 적용한다.
+Codex의 판단 → SPEC → 난이도별 구현 → TEST·SPEC 준수 검토 → 문제 수정 흐름과 GPT-6 모델 배정은 `docs/SDD.md` 6절을 따른다. Subagent dispatch 전에는 해당 절을 읽고 적용한다.
 
 ## 커밋 원칙
 

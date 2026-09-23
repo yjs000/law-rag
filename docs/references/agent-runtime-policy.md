@@ -3,19 +3,9 @@
 이 문서는 항상 읽는 시작 문맥이 아니다. subagent를 dispatch하거나 Windows Python runner가 실패하거나
 GitHub 인증을 확인할 때만 관련 절을 읽는다.
 
-## Subagent 모델과 reasoning
+## Codex 모델 정책 위치
 
-Subagent를 dispatch할 때는 역할에 맞는 `model`과 `reasoning_effort`를 모두 명시하고,
-`fork_turns`는 `none` 또는 필요한 최근 turn 수로 제한한다.
-
-- 명세가 완전한 단일 파일·기계적 구현·작은 scoped re-review: `gpt-5.6-luna`, `max`
-- 일반 구현: `gpt-5.6-luna`, `max`
-- 다중 파일 통합·디버깅·task-level review: `gpt-5.6-terra`, `xhigh`
-- 아키텍처·설계 판단·최종 whole-branch review: `gpt-5.6-sol`, `medium`
-
-Fix-loop escalation은 필요할 때만 한 단계 올린다. `gpt-5.6-sol`은 `medium` 이하만 사용한다. 요청한
-조합을 사용할 수 없으면 조용히 fallback하지 말고 dispatch를 중단해 사용자에게 알린다. 모델을 직접
-지정할 수 없는 내부 guardian은 이 정책의 적용 대상이 아니다.
+Codex 개발 단계와 GPT-6 모델 배정의 정본은 [`docs/SDD.md`](../SDD.md) 6절이다. Subagent dispatch 전에 해당 절을 읽는다.
 
 ## Windows Python 검증
 
