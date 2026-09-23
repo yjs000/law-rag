@@ -69,6 +69,28 @@ DB 연결도 용도에 따라 나눈다.
 핵심은 생성 모델이 법령 저장소나 사용자 권한을 직접 다루지 않는다는 점이다. API가 검색 근거를
 선택하고, 모델은 그 범위 안에서 초안을 만들며, API가 다시 검증한 결과만 사용자에게 보낸다.
 
+### 추가 사실을 묻는 질문의 상태 경계
+
+아래는 [B-013 승인 설계](../superpowers/specs/2026-09-23-clarification-context-state-contract-design.md)의 목표 흐름이다. 현재 adapter는 구현 전이므로 Workflow 인스턴스의 `_turns`를 사용한다.
+
+```mermaid
+flowchart LR
+    A["HTTP 요청<br/>질문 + case ID"] --> P["prepare"]
+    DB[("PostgreSQL<br/>clarification case")] -->|"기존 case 조회"| W
+    P --> W["Clarification Workflow<br/>새 Context 생성"]
+    W -->|"판정 결과"| S[("question execution snapshot")]
+    S --> C["core"]
+    C --> F["finalize"]
+    W -->|"사용자 사실 저장"| DB
+    F -->|"case 상태 전이"| DB
+    F --> R["응답"]
+    R -. "사용자가 이어서 제출" .-> A
+```
+
+`Context`는 `prepare` 안의 한 Workflow run에서만 살아 있다. `core`와 `finalize`는 저장된 question
+execution snapshot을 사용한다. 다음 HTTP 요청은 PostgreSQL case를 다시 읽고 새 `Context`를 만든다.
+사용자 사실과 case version은 PostgreSQL에 남으며, Workflow 이벤트에는 비공개 사실이나 case 전체를 넣지 않는다.
+
 ## 어디가 권위 문서인가
 
 학습 코스는 이유를 빠르게 이해하는 문서다. 변경 전에 다음 권위를 확인한다.

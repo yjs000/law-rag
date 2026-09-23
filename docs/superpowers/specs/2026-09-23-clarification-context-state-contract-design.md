@@ -1,6 +1,6 @@
 # Clarification Workflow Context State Contract
 
-**상태:** 사용자 검토 대기
+**상태:** 승인됨 — 실행계획 작성
 **관련 작업:** B-013, 후속 B-014, 최종 검증 B-009
 **목적:** LlamaIndex Workflow run 안의 임시 상태와 여러 HTTP 턴에 걸친 clarification case의 저장 책임을 분명히 하고, V2 question execution phase와의 경계를 고정한다.
 
@@ -57,4 +57,4 @@ V2 `POST /v2/question-executions`의 prepare handler가 clarification Workflow�
 
 | 날짜 | 결정 | 이유 |
 | --- | --- | --- |
-| 2026-09-23 | 사용자 검토 대기: run별 Context를 Workflow 임시 상태로 사용하고 PostgreSQL clarification case를 cross-turn 정본으로 사용한다. 기존 bounded conversation context와 10분 execution snapshot 수명은 유지한다. | 사용자 facts와 case 구조가 이미 PostgreSQL에 저장되어 재사용 가능하고, 별도 transcript 저장이나 Context 직렬화는 이력 수명·개인정보 범위를 중복 확장한다. |
+| 2026-09-23 | 승인됨: run별 Context를 Workflow 임시 상태로 사용하고 PostgreSQL clarification case를 cross-turn 정본으로 사용한다. 기존 bounded conversation context와 10분 execution snapshot 수명은 유지한다. | 사용자 facts와 case 구조가 이미 PostgreSQL에 저장되어 재사용 가능하고, 별도 transcript 저장이나 Context 직렬화는 이력 수명·개인정보 범위를 중복 확장한다. 사용자가 설계 설명을 확인하고 학습 흐름도와 실행계획 작성을 요청했다. |
