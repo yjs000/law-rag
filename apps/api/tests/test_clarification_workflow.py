@@ -437,3 +437,51 @@ async def test_provider_failure_returns_safe_outcome_without_case_mutation() -> 
     assert outcome.case == initial.case
     assert outcome.error_code == "clarification_interpreter_unavailable"
     assert "user fact" not in outcome.error_code
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_facts_are_excluded_from_submitted_facts_and_stay_unresolved() -> None:
+    interpreter = _FakeInterpreter(
+        initial=_initial(_candidate(1), _candidate(2)),
+        continuation=ClarificationTurnJudgment(
+            intent="provide_facts",
+            submitted_facts=(FactSubmission("fact-1", "answered", "100kW"),),
+            required_facts=(),
+        ),
+    )
+    workflow = _workflow(interpreter)
+    initial = await workflow.run_turn(_request(), _owner())
+    assert initial.case is not None
+
+    outcome = await workflow.run_turn(
+        _request(case_id=initial.case.case_id, user_text="용량은 100kW입니다. 나머지는 잘 모르겠어요."),
+        _owner(),
+    )
+
+    assert outcome.case is not None
+    assert outcome.case.case.fact("fact-1").value == "100kW"
+    assert outcome.case.case.fact("fact-2").status.value == "unanswered"
+    assert tuple(fact.id for fact in outcome.question_format.facts) == ("fact-2",)
+
+
+@pytest.mark.asyncio
+async def test_unknown_fact_id_from_extractor_is_ignored_by_merge() -> None:
+    interpreter = _FakeInterpreter(
+        initial=_initial(_candidate(1)),
+        continuation=ClarificationTurnJudgment(
+            intent="provide_facts",
+            submitted_facts=(FactSubmission("fact-does-not-exist", "answered", "값"),),
+            required_facts=(),
+        ),
+    )
+    workflow = _workflow(interpreter)
+    initial = await workflow.run_turn(_request(), _owner())
+    assert initial.case is not None
+
+    outcome = await workflow.run_turn(
+        _request(case_id=initial.case.case_id, user_text="상관없는 답변"), _owner()
+    )
+
+    assert outcome.case is not None
+    assert outcome.case.case.fact("fact-1").status.value == "unanswered"
+    assert tuple(fact.id for fact in outcome.question_format.facts) == ("fact-1",)
