@@ -8,16 +8,17 @@ Do not duplicate its repository rules here.
 Use the installed Superpowers skills according to their own trigger conditions
 and workflow requirements.
 
-## Subagent 모델 정책
+## Claude 모델 선택 정책
 
-Subagent dispatch 시 역할에 맞는 `model`을 항상 명시한다. 생략해 부모 세션 모델을 암묵적으로
-상속하게 하지 않는다.
+`AGENTS.md`와 그 위임 문서의 작업 절차·승인·검증·위임 규칙을 그대로 따른다. Claude 세션에서는 모델 배정에 한해 이 절을 적용한다. Subagent 사용이 허용된 경우 dispatch마다 아래 모델을 명시하고, 부모 세션 모델을 암묵적으로 상속하지 않는다.
 
-- 명세가 완전한 단일 파일·기계적 작업, 작은 scoped re-review: `haiku`
-- 그 외 모든 작업(일반 구현, 다중 파일 통합, 디버깅, task-level review, 아키텍처·설계 판단,
-  최종 whole-branch review 포함): `sonnet`
+- 명세가 완전한 단일 파일·기계적 작업, 반복적인 형식 수정, 단순 테스트 추가, 작은 범위 재검토: `haiku`
+- 일반 구현, 다중 파일 통합, 기존 설계 안의 리팩터링, 테스트 작성, 일반적인 디버깅, 작업 단위 코드 리뷰 및 수정 루프: `claude-sonnet-5` (Sonnet 5)
+- 요구사항 해석이 어렵거나 선택지가 여러 개인 작업, 아키텍처·설계 판단, 여러 subsystem에 걸친 변경의 구현 계획, 복잡한 장애의 원인 분석, 중요한 최종 whole-branch 리뷰: `claude-opus-5-5` (Opus 5.5)
 
-`opus`는 사용하지 않는다. `sonnet`이 이 저장소 subagent의 최대 모델이다.
+기본 구현 모델은 Sonnet 5다. 선택 우선순위는 `haiku` → 충분하지 않으면 Sonnet 5 → 높은 수준의 판단이 실제로 필요할 때만 Opus 5.5다. Opus 5.5를 일반 구현이나 반복 작업에 배정하지 않는다. 다만 잘못된 설계가 뒤의 구현 비용을 크게 늘릴 수 있으면 처음부터 Opus 5.5로 판단한다. Sonnet 5가 같은 문제에서 반복해서 실패하거나 원인을 특정하지 못한 경우에도 Opus 5.5로 올릴 수 있다.
+
+모델을 사용할 수 없으면 다른 모델로 조용히 대체하지 말고 알려준다.
 
 ## Output Paths
 
