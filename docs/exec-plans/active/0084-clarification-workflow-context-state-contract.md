@@ -3,11 +3,11 @@
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: 없음
-> 다음 행동: PostgreSQL cross-turn state와 LlamaIndex per-run Context의 책임 경계 설계를 승인한다.
+> 다음 행동: 작성한 per-run Context와 PostgreSQL case 경계 설계 문서에 대한 사용자 검토를 받는다.
 > 참고 범위:
 > - `apps/api/app/adapters/llamaindex_clarification_workflow.py` L25-L210 — 현재 `_turns` 상태와 `Context.store` 기록
-> - `apps/api/app/ports/clarification_case.py` L29-L65 — 턴 간 clarification case 영속 계약
 > - `apps/api/tests/test_clarification_workflow.py` L102-L319 — workflow 이벤트·상태 전이 회귀 테스트
+> - `docs/superpowers/specs/2026-09-23-clarification-context-state-contract-design.md` L1-L39 — 승인 검토할 Context·case·phase 경계 설계
 
 # LlamaIndex Clarification Context State Contract Implementation Plan
 

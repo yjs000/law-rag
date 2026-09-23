@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 16607704a56ef7abafa1be817c622613089a6bff8f4ec742fea4a880a31a559f -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 72fb5cf91bb249f6546944f46554437462d417a82d9da7ba358286350d680de8 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/active/0084-clarification-workflow-context-state-contract.md) — 다음 행동: PostgreSQL cross-turn state와 LlamaIndex per-run Context의 책임 경계 설계를 승인한다.
+- [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/active/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 작성한 per-run Context와 PostgreSQL case 경계 설계 문서에 대한 사용자 검토를 받는다.
 
 ## Todo
 

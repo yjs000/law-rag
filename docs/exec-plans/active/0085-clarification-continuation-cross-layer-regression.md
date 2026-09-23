@@ -5,8 +5,8 @@
 > 선행 조건: `B-013` 완료 후
 > 다음 행동: B-013 완료 뒤 API stale case conflict, Web continuation payload, 최초 질문부터 완료까지의 교차 계층 회귀를 고정한다.
 > 참고 범위:
-> - `apps/api/tests/test_clarification_workflow.py` L144-L319 — 최초·부분·전체 clarification 상태 전이 단위 테스트
 > - `apps/api/tests/test_v2_question_executions.py` L178-L505 — capability 전달, continuation 호출, case 오류 API 경계
+> - `apps/api/app/adapters/postgres_clarification_case.py` L146-L180 — version 기반 stale case 쓰기 거부
 > - `apps/web/app/page.tsx` L568-L608 — 다음 요청에 case ID와 capability를 연결하는 제출 경로
 
 # Clarification Continuation Cross-Layer Regression Implementation Plan
@@ -19,12 +19,12 @@
 
 **재개 조건:** B-013이 `Done`이고 run별 Context 격리의 focused 검증 증거가 기록되어야 한다.
 
-### Task 1: workflow 동시 실행과 stale case conflict API 검증
+### Task 1: stale case conflict의 API 응답과 저장 상태 검증
 
-- **결과:** 서로 다른 run의 상태 격리와 같은 case version 충돌의 HTTP 동작이 회귀 테스트로 고정된다.
-- **대상:** `apps/api/tests/test_clarification_workflow.py` L144-L319 수정 약 55줄, `apps/api/tests/test_v2_question_executions.py` L178-L505 수정 약 45줄, `apps/api/app/api/v2/executions.py` L169-L225 필요 시 수정 약 12줄, 합계 최대 약 112줄.
-- **실행 절차:** 서로 다른 owner·case의 동시 run과 동일 case의 중복 후속 답변을 재현한다. optimistic version conflict가 fact를 덮어쓰지 않고 capability·case 존재 여부를 노출하지 않는 응답으로 변환되는지 RED 테스트를 먼저 만든다. 최소 오류 변환만 적용한 뒤 `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_clarification_workflow.py apps/api/tests/test_v2_question_executions.py -q`를 실행한다.
-- **완료 증거:** 동시 run 교차 오염이 없고 stale 후속 답변이 일관된 HTTP 결과를 반환하며 repository state가 보존된다.
+- **결과:** 동일한 이전 case version의 후속 요청 중 하나만 반영되고 stale 요청은 case 존재 여부나 capability를 노출하지 않는 안정된 HTTP conflict로 끝나며 기존 fact를 덮어쓰지 않는다.
+- **대상:** `apps/api/tests/test_v2_question_executions.py` L178-L505 수정 약 55줄, `apps/api/app/api/v2/executions.py` L169-L225 수정 약 15줄, 합계 약 70줄.
+- **실행 절차:** 같은 case ID와 version으로 두 continuation 요청을 경쟁시킨다. repository version guard가 한 쓰기만 반영하는지 확인하고, 나머지 요청의 conflict 변환을 API 테스트에서 먼저 실패시킨다. 안정된 status/code/message가 case 소유권과 capability 존재를 드러내지 않는지 확인한 뒤 `.\scripts\run_python.ps1 -m pytest apps/api/tests/test_v2_question_executions.py -q`를 실행한다. Workflow run 자체의 Context 격리는 선행 B-013 테스트에 맡긴다.
+- **완료 증거:** stale continuation은 일관된 안전 응답을 반환하고 repository에는 유효한 한 번의 병합만 남는다.
 - **의존성:** B-013 완료 및 per-run Context 격리의 focused 검증.
 
 ### Task 2: Web continuation 실제 요청 payload 회귀 검증
