@@ -421,7 +421,7 @@ def _parse_plan(
             if item
         )
     )
-    oc_field_names = {"오케스트레이션", "우선순위", "관리 상태", "선행 작업", "소유 범위"}
+    oc_field_names = {"오케스트레이션", "관리 상태", "선행 작업", "소유 범위"}
     if oc_field_names.intersection(field_positions) and status not in {"Done", "Dropped"}:
         for missing_field in sorted(oc_field_names.difference(field_positions)):
             issues.append(_ParseIssue(missing_field, "OC 자식 메타데이터는 모든 필드가 필요합니다"))
@@ -912,7 +912,6 @@ def validate_registry(
 
         orchestration_values = (
             record.orchestration,
-            record.priority,
             record.management_status,
             record.ownership_scopes,
         )
@@ -934,13 +933,14 @@ def validate_registry(
                 errors.append(_error(record, root_path, field_name, "OC 자식 메타데이터는 모든 필드가 필요합니다"))
         if record.status in {"Done", "Dropped"} and any(
             (
-                record.priority,
                 record.management_status,
                 record.orchestration_dependencies,
                 record.ownership_scopes,
             )
         ):
             errors.append(_error(record, root_path, "관리 상태", "Done 또는 Dropped OC 자식에는 부모 연결 외 관리 필드를 둘 수 없습니다"))
+        if record.status in {"Done", "Dropped"} and record.priority:
+            errors.append(_error(record, root_path, "우선순위", "완료 또는 폐기 계획에는 우선순위를 두지 않습니다"))
         if record.priority and record.priority not in ALLOWED_PRIORITIES:
             errors.append(_error(record, root_path, "우선순위", f"허용 우선순위는 {', '.join(ALLOWED_PRIORITIES)}입니다"))
         if record.management_status and record.management_status not in ALLOWED_MANAGEMENT_STATUSES:

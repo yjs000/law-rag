@@ -1,16 +1,17 @@
 > 작업 ID: `E-002`
-> 상태: `Todo`
+> 상태: `Dropped`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
 > 선행 조건: D-full 일반화·release gate 필요성을 확인하고 대상 문항·인력·외부 호출 비용 상한을 다시 확정해야 한다.
-> 다음 행동: D-full 일반화 판단이 필요해지면 대상 문항·비용 상한을 확정한다.
+> 다음 행동: 없음.
+> 폐기 사유: 2026-10-21 사용자가 대형 Gold 제작 계획을 삭제하기로 결정했다. 현재 가독성 문제의 최소 검증에는 소표본 평가가 적합하다.
 > 참고 범위:
 > - `docs/exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md` L12-L17 — D-10 Gold의 고정 10문항·사용자 adjudication 봉인 경계
 > - `docs/exec-plans/completed/0030-d-10-full-corpus-qrels-adjudication.md` L30-L35 — 나머지 990문항 D-full과 일반 release 주장 제외 범위
 
 # 0029: 필요 시 D-full Gold 제작
 
-상태: `보류 · 미착수`
+상태: `폐기됨 (2026-10-21)` — 과거 보류 판단은 아래에 보존한다.
 
 D-10 10문항만 전수 qrel과 사용자 adjudication 대상으로 만드는 현재 작업은
 [활성 계획 0030](../completed/0030-d-10-full-corpus-qrels-adjudication.md)에서 진행한다. 이 계획은 10문항 밖

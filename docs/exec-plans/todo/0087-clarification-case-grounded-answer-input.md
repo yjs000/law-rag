@@ -1,5 +1,6 @@
 > 작업 ID: `B-016`
 > 상태: `Todo`
+> 우선순위: `P1`
 > 유형: `Bug`
 > 보조 라벨: `Reliability`, `Security`
 > 선행 조건: `B-015` 완료 후

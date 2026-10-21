@@ -198,7 +198,7 @@ uv run python scripts/check_docs.py
 - v1(`d10-gold-20260807t040448957688z`)·v2(`d10-gold-20260807t051714397779z`) draft는 정정 전 상태로
   보존되며 sealed 상태가 아니다 — **최종 Gold는 v3(`d10-gold-20260807t065254073895z`)**다.
 - 잔여 작업: 이 D-10 Gold는 계속 calibration 전용이며 별도 승격 절차가 없다(plan 0025 영구 규칙).
-  나머지 990문항 Gold·D-full held-out은 여전히 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)
+  나머지 990문항 Gold·D-full held-out은 여전히 [예정 작업 0029](../dropped/0029-d-full-gold-on-demand.md)
   보류 상태다. 이 계획의 범위는 여기서 끝나며, 후속 사용(M3~M4)은
   [plan 0025](0025-approved-questions-to-grounded-answer-roadmap.md)가 담당한다.
 

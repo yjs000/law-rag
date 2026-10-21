@@ -100,7 +100,7 @@ data"). 이 로드맵은 모든 문항을 아래 두 계층 중 하나로 명확
 D-10-R1 재정렬 설계에 쓰였으므로([M1.5](#m15--d-10-수동-진단) 참고) 영구히 calibration이며, 이후
 20→50→...→1,000으로 늘려도 D-10을 포함하는 한 그 결과는 튜닝 신호일 뿐 측정값이 아니다. **이
 로드맵(M0~M8)은 전부 튜닝 계층에서만 동작한다.** 측정 계층은 [예정 작업
-0029](../todo/0029-d-full-gold-on-demand.md)가 active로 승격돼 test 800문항이 봉인된 뒤에만 존재하고,
+0029](../dropped/0029-d-full-gold-on-demand.md)가 active로 승격돼 test 800문항이 봉인된 뒤에만 존재하고,
 그때도 E3 결과를 보고 같은 version을 재튜닝하지 않는다 — 필요하면 새 version으로 calibration부터
 다시 시작한다(M6 "보존된 D-full E3" 참고).
 
@@ -225,7 +225,7 @@ database이고, 운영 게시에는 기존 `DIRECT_URL`만 사용한다.
 ## M2 — D-10 10문항 평가 계약 동결 — 완료
 
 2026-08-07 사용자 결정으로 1,000문항 Gold 제작을 필수 선행조건에서 제거했다. D-full 질문은행·승인
-manifest·Gold schema와 runner는 [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)로 보존하며,
+manifest·Gold schema와 runner는 [예정 작업 0029](../dropped/0029-d-full-gold-on-demand.md)로 보존하며,
 일반화·운영 회귀가 실제로 필요할 때만 질문을 현재 corpus에서 다시 검사해 정답 근거를 붙인다.
 
 현재 M2는 `experiments/d_manual/experiment-d-10-m3-frozen-contract.json`에 질문 identity, 사용자 확정
@@ -367,7 +367,7 @@ D-10 Gold를 v1→v2→v3로 고칠 때마다 매번 새 draft·seal·SHA·desig
   한 줄)만 남기고, 그 수정이 이미 발행한 결론(M3 승자, M4 승자 등)을 실제로 뒤집을 때만 해당 결론
   절만 갱신한다.
 - **확정 산출물(release-gate급 무게 유지)**: (1) M4의 `search-context-contract-v1`처럼 이후
-  단계(M5~)가 그대로 가져다 쓰는 동결 계약, (2) [예정 작업 0029](../todo/0029-d-full-gold-on-demand.md)의
+  단계(M5~)가 그대로 가져다 쓰는 동결 계약, (2) [예정 작업 0029](../dropped/0029-d-full-gold-on-demand.md)의
   D-full held-out(test) 단계. 이 두 곳만 seal·SHA 결박·decision log 수준을 유지한다.
 - D-10 Gold 자체(v3)는 계속 calibration 데이터이므로, 앞으로 추가 오류를 발견해도 v4 seal
   라운드를 새로 만들지 않는다 — draft judgments를 가볍게 고치고 changelog만 남긴다.

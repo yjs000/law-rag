@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 1c7708d2b6719887871ddb69b2d52b1ac336283b84dbc945c7e36e61ee0c9768 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 10971df5bce8766aa7aa5313182f9542775dde37178f716822103905dc3ad9bb -->
 
 # 프로젝트 로드맵
 
@@ -10,21 +10,20 @@
 
 ## Todo
 
-- [F-002 · Feature — 실행 취소 범위·완료조건 감사 계획](exec-plans/todo/0012-distributed-question-cancellation.md) — 다음 행동: 현재 V1·V2 실행 취소 경로와 테스트를 대조해 지원 범위와 목표 충족 여부를 판정한다.
-- [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](exec-plans/todo/0029-d-full-gold-on-demand.md) — 다음 행동: D-full 일반화 판단이 필요해지면 대상 문항·비용 상한을 확정한다.
-- [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
-- [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
-- [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](exec-plans/todo/0033-traffic-based-routing-calibration-review.md) — 다음 행동: 오분류 또는 인증 표본이 누적되면 현재 router 정책을 재검토한다.
-- [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
-- [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/todo/0050-query-format-edge-case-regression-bank.md) — 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
-- [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
-- [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
-- [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
+- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/todo/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 실제 답변 5~10건의 읽기 어려운 표현과 화면 순서를 기록하고, 결론 우선·쉬운 말·근거 보존 기준을 확정한다.
+- [P1] [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
+- [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
+- [P2] [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
+- [P2] [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
+- [P3] [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
+- [P3] [E-004 · Experiment — 0033: 트래픽 축적 후 라우팅·관측 재검토 묶음](exec-plans/todo/0033-traffic-based-routing-calibration-review.md) — 다음 행동: 오분류 또는 인증 표본이 누적되면 현재 router 정책을 재검토한다.
+- [P3] [E-005 · Experiment — 0058: v2 청킹 ablation — 현재 조문 노드 vs LlamaIndex 하위 청킹](exec-plans/todo/0058-v2-chunking-ablation-d10.md) — 다음 행동: 청킹 파라미터·비용 상한·실험 DB 권한을 확정한다.
+- [P3] [E-007 · Experiment — LlamaIndex 임베딩·검색 단일 tool화와 선택 호출 가능성 검증](exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md) — 다음 행동: 현재 conditional search 기준선과 단일 retrieval tool의 입력·출력·호출 금지 계약을 먼저 고정한다.
 
 ## Blocked
 
-- [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013·B-015·B-016·B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
-- [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
+- [P1] [B-009 · Bug — clarification_required 상태·대화 연결 검증 Implementation Plan](exec-plans/active/0078-clarification-state-conversation-verification.md) — 재개 조건: B-013·B-015·B-016·B-014 완료 후 최초 추가 질문부터 최종 답변까지 통합 acceptance를 실행한다.
+- [P1] [B-014 · Bug — Clarification Continuation Cross-Layer Regression Implementation Plan](exec-plans/active/0085-clarification-continuation-cross-layer-regression.md) — 재개 조건: B-015·B-016 완료 뒤 API stale case conflict, Web continuation payload, 자유 문장 답변부터 최종 답변까지의 교차 계층 회귀를 고정한다.
 
 ## Done
 
@@ -44,7 +43,10 @@
 
 ## Dropped
 
+- [F-002 · Feature — 실행 취소 범위·완료조건 감사 계획](exec-plans/dropped/0012-distributed-question-cancellation.md) — 폐기 사유: 2026-10-21 사용자가 현재 우선순위에서 이 감사 계획을 삭제하기로 결정했다. 실제 취소 실패가 관찰되면 새 계획으로 범위를 다시 정한다.
+- [E-002 · Experiment — 0029: 필요 시 D-full Gold 제작](exec-plans/dropped/0029-d-full-gold-on-demand.md) — 폐기 사유: 2026-10-21 사용자가 대형 Gold 제작 계획을 삭제하기로 결정했다. 현재 가독성 문제의 최소 검증에는 소표본 평가가 적합하다.
 - [F-003 · Feature — 0042: 재순위를 실제 검색 경로에 연결](exec-plans/dropped/0042-wire-reranking-into-live-search-path.md) — 폐기 사유: 사용자가 라이브 검색 재순위를 진행하지 않기로 결정했다.
 - [F-004 · Feature — 0044: 공급자 중립 답변 모델 선택 계약](exec-plans/dropped/0044-provider-neutral-answer-model-selection.md) — 폐기 사유: 사용자가 provider 중립 모델 선택 계약을 진행하지 않기로 결정했다.
+- [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/dropped/0050-query-format-edge-case-regression-bank.md) — 폐기 사유: 2026-10-21 사용자가 광범위한 엣지케이스 뱅크 계획을 삭제하기로 결정했다. 실제 발견 사례는 해당 기능의 좁은 회귀 테스트로 다룬다.
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격 구현 계획](exec-plans/dropped/0055-v3-langgraph-agent-foundation.md) — 폐기 사유: 사용자가 V3를 아직 진행하지 않기로 결정했다.
 - [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 폐기 사유: `routing_unavailable` 이후 LLM이 최종 안내를 생성하는 현재 동작과 출력 변동을 허용하기로 결정했다. 이 질문의 기대 route는 `external_document_required`가 맞지만, 이는 별도의 확장 가능한 routing 개발 calibration pool에서 다룰 평가 항목이며 이 버그 계획으로 재현·수정하지 않는다.

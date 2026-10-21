@@ -1,9 +1,10 @@
 > 작업 ID: `F-002`
-> 상태: `Todo`
+> 상태: `Dropped`
 > 유형: `Feature`
 > 보조 라벨: `Reliability`
 > 선행 조건: 없음
-> 다음 행동: 현재 V1·V2 실행 취소 경로와 테스트를 대조해 지원 범위와 목표 충족 여부를 판정한다.
+> 다음 행동: 없음.
+> 폐기 사유: 2026-10-21 사용자가 현재 우선순위에서 이 감사 계획을 삭제하기로 결정했다. 실제 취소 실패가 관찰되면 새 계획으로 범위를 다시 정한다.
 > 참고 범위:
 > - `apps/api/app/application/distributed_question_cancellation.py` L109-L209 — 취소 상태 전이와 실행 태스크 중단 경계
 > - `apps/api/app/api/v2/executions.py` L230-L251 — V2 실행 취소 API와 소유권 경계

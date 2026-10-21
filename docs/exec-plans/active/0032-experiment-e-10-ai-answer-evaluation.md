@@ -1,5 +1,6 @@
 > 작업 ID: `E-001`
 > 상태: `Todo`
+> 우선순위: `P2`
 > 유형: `Experiment`
 > 보조 라벨: `Evaluation`
 > 선행 조건: E-10 base 결과가 기록되어 있고, 재개 전 품질 원인 진단 범위를 선택해야 한다.
@@ -36,8 +37,8 @@ D-010(0057)이 현재 런타임 계약이다. 질문은 단일 NVIDIA `QuestionR
 [D-10 10문항 Gold(0030)](../completed/0030-d-10-full-corpus-qrels-adjudication.md) 기준으로
 소표본 평가한다. E-10은 **사용자 확인 진단**이며 일반 release gate가 아니다(0025 M6). D-full
 (pilot 50/calibration 200/held-out 800) 규모 평가는
-[0029(D-full Gold)](../todo/0029-d-full-gold-on-demand.md)가 먼저 활성화돼야 하며, 0029는 현재
-`보류 · 미착수` 상태라 이 계획의 범위 밖이다.
+[0029(D-full Gold)](../dropped/0029-d-full-gold-on-demand.md)가 선행돼야 했으나,
+2026-10-21 사용자가 해당 계획을 폐기했다. 대형 평가는 이 계획의 범위 밖이다.
 
 ## 범위
 

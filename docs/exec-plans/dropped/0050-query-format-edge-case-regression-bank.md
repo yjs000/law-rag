@@ -1,17 +1,18 @@
 > 작업 ID: `B-002`
-> 상태: `Todo`
+> 상태: `Dropped`
 > 유형: `Bug`
 > 보조 라벨: `Evaluation`
 > 선행 조건: 사용자가 우선 조사할 엣지케이스 범위를 확정해야 한다.
-> 다음 행동: 우선 조사할 질의 형식 엣지케이스 범위를 확정한다.
+> 다음 행동: 없음.
+> 폐기 사유: 2026-10-21 사용자가 광범위한 엣지케이스 뱅크 계획을 삭제하기로 결정했다. 실제 발견 사례는 해당 기능의 좁은 회귀 테스트로 다룬다.
 > 참고 범위:
 > - `docs/exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md` L17-L26 — 실제 재질문 중복·누적 재현과 채워진 항목을 다시 묻지 않는 목표
 
 # 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축
 
-상태: `제안됨 (2026-08-10)`
+상태: `폐기됨 (2026-10-21)` — 제안 당시 기록은 아래에 보존한다.
 
-제안 출처: 사용자가 [0047](0047-clarification-loop-dedup-and-unanswered-handling.md),
+제안 출처: 사용자가 [0047](../todo/0047-clarification-loop-dedup-and-unanswered-handling.md),
 `0048`(article subclause query-only returns parent article),
 `0049`(abbreviated article reference routes to search-only)와 같은 실제 fetch
 로그 기반 버그를 연달아 보고한 뒤, 이런 종류의 질의 형식 엣지케이스를 개별 제보에
@@ -45,7 +46,7 @@
 
 - 조사한 엣지케이스 목록과 각 항목의 현재 동작·기대 동작이 문서로 정리된다.
 - 목록의 각 항목이 실행 가능한 회귀 테스트로 등록되어 CI에서 반복 검증된다.
-- [0047](0047-clarification-loop-dedup-and-unanswered-handling.md),
+- [0047](../todo/0047-clarification-loop-dedup-and-unanswered-handling.md),
   `0048`(article subclause query-only returns parent article),
   `0049`(abbreviated article reference routes to search-only)에서 정의한 재현
   시나리오가 이 뱅크에 포함된다.

@@ -1,5 +1,6 @@
 > 작업 ID: `E-004`
 > 상태: `Todo`
+> 우선순위: `P3`
 > 유형: `Experiment`
 > 보조 라벨: `Performance`, `Evaluation`
 > 선행 조건: 단일 QuestionRouter 오분류 또는 D-10 수준 인증 표본이 실제로 누적되거나 사용자가 재검토를 요청해야 한다.

@@ -63,6 +63,8 @@ worktree가 바뀌거나 외부 작업으로 `HEAD`가 이동하면 계획 실�
 - 유형은 `Feature`, `Bug`, `Tech Debt`, `Experiment`, `Operations`, `Documentation`, `Orchestration` 중 정확히 하나다.
 - 보조 라벨은 선택 사항이며 `Security`, `Reliability`, `Performance`, `Data`, `UX`, `Evaluation`만
   사용한다. 새 보조 라벨은 필요한 실제 분류가 생겼을 때 이 문서를 먼저 갱신해 추가한다.
+- 미완료 계획의 `우선순위`는 선택 사항이며 `P0`(지금), `P1`(다음), `P2`(후순위), `P3`(관찰 후 재검토)를 쓴다.
+  로드맵은 같은 상태 안에서 우선순위 순으로 표시한다. `Done`·`Dropped`에는 우선순위를 남기지 않는다.
 - 작업 ID는 유형별 독립 시퀀스이며 접두사는 다음과 같다.
   - `Feature`: `F-001`
   - `Bug`: `B-001`

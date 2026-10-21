@@ -706,6 +706,19 @@ class RoadmapRegistryFixtures(unittest.TestCase):
             self.assertNotIn("선행 조건", row)
             self.assertTrue("다음 행동:" in row or "재개 조건:" in row)
 
+    def test_standalone_priorities_order_todo_without_orchestration_fields(self) -> None:
+        self._write_plan(
+            number="0001", task_id="F-001", extra_fields=["> 우선순위: `P3`"],
+        )
+        self._write_plan(
+            number="0002", task_id="F-002", extra_fields=["> 우선순위: `P0`"],
+        )
+
+        records = load_registry(self.root)
+        self.assertEqual(self._errors(records), [])
+        todo = render_roadmap.render_roadmap(records).split("## Todo", 1)[1].split("## Blocked", 1)[0]
+        self.assertLess(todo.index("[P0] [F-002"), todo.index("[P3] [F-001"))
+
     def test_renderer_groups_orchestration_children_and_renders_dropped_history(self) -> None:
         self._write_plan(
             number="0001",

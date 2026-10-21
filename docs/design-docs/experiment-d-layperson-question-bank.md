@@ -9,7 +9,7 @@
 
 2026-08-07 현재는 1,000문항 전체를 Gold로 승격하지 않는다. 사용자 확인 D-10 10문항으로 소표본
 calibration을 진행하고, 일반화·운영 회귀가 실제로 필요할 때만 필요한 질문을 현재 corpus에서 다시
-검사해 [예정 작업 0029](../exec-plans/todo/0029-d-full-gold-on-demand.md)로 승격한다.
+검사해 [예정 작업 0029](../exec-plans/dropped/0029-d-full-gold-on-demand.md)로 승격한다.
 
 ## 현재 산출물의 역할
 

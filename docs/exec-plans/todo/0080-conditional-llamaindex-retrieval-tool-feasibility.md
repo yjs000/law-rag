@@ -1,5 +1,6 @@
 > 작업 ID: `E-007`
 > 상태: `Todo`
+> 우선순위: `P3`
 > 유형: `Experiment`
 > 보조 라벨: `Performance`, `UX`, `Evaluation`
 > 선행 조건: 실제 모델 tool-calling 평가는 NVIDIA 개발 credential·network 실행 승인과 읽기 전용 검색 DB 접근 승인이 필요하다.

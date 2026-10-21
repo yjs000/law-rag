@@ -41,8 +41,9 @@ def _record_row(record: PlanRecord) -> str:
     title = record.title or "<제목 없음>"
     action = record.next_action or "<다음 행동 없음>"
     label = "재개 조건" if record.status == "Blocked" else "다음 행동"
+    priority = f"[{record.priority}] " if record.priority else ""
     return (
-        f"- [{task_id} · {plan_type} — {title}]"
+        f"- {priority}[{task_id} · {plan_type} — {title}]"
         f"({_roadmap_link(record)}) — {label}: {action}"
     )
 
@@ -108,6 +109,11 @@ def render_roadmap(records: Iterable[PlanRecord]) -> str:
             section_records = [
                 record for record in section_records if record.task_id not in orchestration_child_ids
             ]
+        if section_name in {"Todo", "Blocked"}:
+            section_records = sorted(
+                section_records,
+                key=lambda record: (record.priority or "P9", record.plan_number or 0),
+            )
         if section_name == "Done":
             section_records = section_records[-_DONE_LIMIT:]
         row_renderer = _dropped_row if section_name == "Dropped" else _record_row

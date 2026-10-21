@@ -8,7 +8,7 @@
 gold를 만들거나 Recall·MRR을 계산하지 않으며, D-full 계약과 기존 1,000문항 자산은 변경하지 않는다.
 
 2026-08-07 사용자 결정으로 전체 Gold 제작은 현재 필수 경로에서 제외됐다. 질문은행·승인 manifest·
-schema·runner는 보존하고, [예정 작업 0029](../exec-plans/todo/0029-d-full-gold-on-demand.md)의 승격 조건이
+schema·runner는 보존하고, [예정 작업 0029](../exec-plans/dropped/0029-d-full-gold-on-demand.md)의 승격 조건이
 충족될 때만 현재 corpus와 기준일을 다시 검사해 이 계약을 실행한다.
 
 ## 목적

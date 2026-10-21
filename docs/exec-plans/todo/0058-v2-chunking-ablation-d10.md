@@ -1,5 +1,6 @@
 > 작업 ID: `E-005`
 > 상태: `Todo`
+> 우선순위: `P3`
 > 유형: `Experiment`
 > 보조 라벨: `Data`, `Evaluation`
 > 선행 조건: parser·chunk_size·overlap·호출 비용 상한·실험 DB 권한을 확정하고 입력 artifact와 운영 색인 격리 경로를 검증해야 한다.
