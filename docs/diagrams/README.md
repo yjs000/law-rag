@@ -5,6 +5,8 @@
 - [현재 law-rag 파이프라인](law-rag-current-pipeline.html): 질문 요청부터 조건별 분기·검색·생성·응답까지
   연결한 흐름도. RouteDecision의 출처와 추가 질문의 반복 흐름을 별도 그림으로 제공한다.
   확인: 2026-10-27, 코드 기준: `b17af60`.
+- [Context · case DB · execution snapshot 비교](state-context-case-execution.md): 역할·저장 위치·수명·ID·동시성,
+  한 턴과 여러 턴의 관계, 프로젝트 설명 시 주의할 현재 구현 경계.
 - [과거 v1 → v2 → v3 비교](../learning/diagrams/v1-v2-v3-pipeline-evolution.html): 역사 자료.
   tier1/tier2와 v3 표현을 현재 구현으로 해석하지 않는다.
 

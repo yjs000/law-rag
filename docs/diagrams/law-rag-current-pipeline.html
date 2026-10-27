@@ -34,7 +34,7 @@ details{margin:18px 0}summary{cursor:pointer;font-weight:600}li{margin:6px 0}
 <h1>law-rag · 질문에서 답변까지</h1>
 <p>질문 하나를 넣었을 때 어떤 조건으로 분기하고, 어디서 검색·생성·응답하는지 현재 코드대로 따라가는 흐름도.</p>
 <p class="muted">확인: 2026-10-27 · 코드 기준: b17af60 · v2 질문 API 기준 / 운영 배포 확인 아님</p>
-<nav aria-label="흐름도 목차"><a href="#question-flow">① 질문 → 응답</a><a href="#decision-origin">② RouteDecision의 출처</a><a href="#clarification-loop">③ 추가 질문 반복</a><a href="README.md">다이어그램 색인</a></nav>
+<nav aria-label="흐름도 목차"><a href="#question-flow">① 질문 → 응답</a><a href="#decision-origin">② RouteDecision의 출처</a><a href="#clarification-loop">③ 추가 질문 반복</a><a href="state-context-case-execution.md">Context·case·execution 비교</a><a href="README.md">다이어그램 색인</a></nav>
 <div class="legend"><span style="border-color:#8caed6">프로젝트 로직 / NVIDIA 직접 호출</span><span style="border-color:#7bb7a6">LlamaIndex</span><span style="border-color:#b69ace">저장된 상태</span><span style="border-color:#cfaa79">안전 응답 / 현재 한계</span></div>
 <section id="question-flow">
 <h2>① 질문 요청 → 라우팅 → 검색 → 생성·검증 → 응답</h2>
