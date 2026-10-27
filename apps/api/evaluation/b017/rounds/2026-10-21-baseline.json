@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "source": "b017-live-raw-2026-10-21.json",
+  "source": "../raw/2026-10-21-api.json",
   "code_head": "1cc269cb57c93077850b5fd8bbfa1c40c015c280",
   "method": "현재 checkout의 app.main /v1/questions를 TestClient로 실행. 개발 DB와 NVIDIA 모델 사용.",
   "attempted": 6,

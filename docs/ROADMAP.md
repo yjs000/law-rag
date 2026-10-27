@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: af110a240a937a6c50ee7f8aa0c612cce468ce78e91909c98c255b2327b451e2 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: c84e511c6b01a66ace19448737f469d961161b88fb72df362c9ca87ff686af81 -->
 
 # 프로젝트 로드맵
 
@@ -10,7 +10,7 @@
 
 ## Todo
 
-- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/todo/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 실제 답변 5~10건의 읽기 어려운 표현과 화면 순서를 기록하고, 결론 우선·쉬운 말·근거 보존 기준을 확정한다.
+- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/todo/0088-answer-readability-and-evidence-layout.md) — 다음 행동: `apps/api/evaluation/b017/review.json`의 7개 질문·9개 답변을 기준으로 웹 화면과 인용을 확인하고, 사람 판정 후 최소 수정 범위를 확정한다.
 - [P1] [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
 - [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
 - [P2] [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
