@@ -1,12 +1,56 @@
 # V2: LlamaIndex 프레임워크 파이프라인 개편 설계
 
-상태: 승인, 구현 전
+상태: 승인 범위 조정 완료 — 2026-10-27 현재 구현 기준
 결정일: 2026-08-27
 
 이 문서는 [V2 LlamaIndex 검색 파이프라인 Phase 1](v2-llamaindex-retrieval-pipeline-design.md)의
-구현 결과를 다음 단계로 개편하는 권위 설계다. Phase 1 문서와 충돌하면 이 문서를 따른다. 아직 코드는
-이 설계를 구현하지 않았으며, 구체적인 파일별 작업 순서와 명령은 사용자 검토 뒤 별도 실행계획에서
-확정한다.
+구현 결과를 개편하는 권위 설계다. Phase 1 문서와 충돌하면 이 문서를 따른다. 아래의 2026-10-27
+범위 조정이 과거 원안과 충돌하면 최신 범위 조정을 따른다.
+
+## 0. 승인된 구현 범위 정정 (2026-10-27)
+
+사용자가 신규 기능 없이 F-005의 전환 경계를 현재 구현에 맞추는 안을 승인했다.
+원래 원안의 모든 프레임워크 클래스를 구현했다는 뜻이 아니다. F-005의 `Done`은 아래 조정된
+완료 범위에 한정하며, 과거 Task의 미선택 클래스·예시·검증 절차는 미완료 기능 목록으로 사용하지 않는다.
+
+| 책임 | 채택한 현재 구현 | 판정 |
+| --- | --- | --- |
+| canonical 원문 조회 | `DatabaseProvisionReader` / SQLAlchemy → `ProvisionRecord` | LlamaIndex DatabaseReader 전환을 추가하지 않음 |
+| 노드·임베딩·검색 | `IngestionPipeline`, `PGVectorStore`, `VectorStoreIndex` retriever | LlamaIndex 사용 |
+| generation·execution | immutable generation, active pointer, 근거 동결, prepare/core/finalize | 프로젝트가 수명·상태·실패 계약 소유 |
+| route 판정 | `QuestionRouter` / `NvidiaNimQuestionRouter` / `RouteDecision` | 프로젝트 계약과 NVIDIA 직접 호출 유지 |
+| 추가 질문 한 턴 조정 | `LlamaIndexClarificationWorkflow` / run별 새 Context | 후속 작업에서 도입된 현재 구현; F-005 최초 산출물로 소급하지 않음 |
+| 답변 생성·검증 | 프로젝트 answerer, `V2QuestionExecutionService`, grounding validators | QueryEngine / ResponseSynthesizer 전환을 추가하지 않음 |
+
+현재 실제 검색 경로는 하나이며 다른 route는 사용자 사실 요청 또는 capability 안내다.
+`LegalRouteSelector`, `LegalRouterQueryEngine`, `QueryEngineTool`과 custom Synthesizer를 덧씌워도
+새 검색 능력이 생기지 않고 기존 route metadata·구조화 출력·인용·phase 복구를 다시 연결해야 한다.
+따라서 프레임워크 클래스 수를 늘리기 위한 신규 기능은 열지 않는다. 여러 독립 검색 engine을 선택해야 하는
+실제 요구가 생기면 그 요구를 기준으로 별도 설계한다.
+
+기존 후속 작업은 그대로 유지한다. [B-016](../exec-plans/todo/0087-clarification-case-grounded-answer-input.md)은
+원 질문·누적 fact를 검색·답변 입력까지 전달하고,
+[B-014](../exec-plans/active/0085-clarification-continuation-cross-layer-regression.md)와
+[B-009](../exec-plans/active/0078-clarification-state-conversation-verification.md)는 교차 계층 회귀·acceptance를
+소유한다. [E-007](../exec-plans/todo/0080-conditional-llamaindex-retrieval-tool-feasibility.md)은 독립적인 retrieval
+tool 실험이며 Router 전환의 미완료분이 아니다. 해당 작업들을 이 문서 정정으로 착수·완료 처리하지 않는다.
+
+코드 근거:
+[원문 reader](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/ingestion/source_reader.py),
+[ingestion](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/ingestion/transform.py),
+[검색](../../apps/law-rag-llamaindex/src/law_rag_llamaindex/query/retriever.py),
+[라우팅](../../apps/api/app/domain/routing.py),
+[phase 서비스](../../apps/api/app/application/v2/phase_service.py),
+[clarification Workflow](../../apps/api/app/adapters/llamaindex_clarification_workflow.py).
+확인 기준은 로컬 코드 `52ddedf`이며 운영 배포·부하 검증을 뜻하지 않는다.
+
+### 권한과 변경 범위
+
+| Boundary | Destination or resource | Operation | Data/credential involved | Mutation/retention | Purpose | Status and date | Runtime gate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 문서·로컬 Git | 이 설계, F-005 완료 기록, 설계 색인·그림 | 읽기·정정·로컬 commit | 로컬 코드·문서; credential 없음 | 문서 변경만 | 승인된 범위와 구현 일치 | Approved — 2026-10-27 사용자 승인 및 F-005 번호 확인 | sandbox 쓰기·Git gate 유지 |
+| 제품·외부 서비스 | API·DB·NVIDIA·배포 | 실행하지 않음 | 전송 없음 | 상태·보존기간 변경 없음 | 구현 변경 없는 정정 | Not required | 새 구현·외부 작업은 별도 범위 |
+| Graphify | 통합 main의 graphify-out | 로컬 graphify update . | repository content; 외부 LLM 사용 안 함 | graph 산출물 | 사용자가 요청한 graph 갱신 | Approved — 2026-10-27 요청 | 별도 정책·runtime gate 적용 |
 
 ## 1. 목적
 
@@ -15,9 +59,9 @@
 상위 흐름에서 LlamaIndex 표준 객체가 드러나지 않고, 질문 embedding 중복과 단일 vector table의 부분
 갱신 위험이 남아 있다.
 
-이번 개편은 `DatabaseReader`, `IngestionPipeline`, `PGVectorStore`, `VectorStoreIndex`,
-`RouterQueryEngine`, `QueryEngineTool`, QueryEngine, `ResponseSynthesizer`를 실제 책임에 맞게 연결하면서도,
-법률 답변의 출처·기준일·grounding·fail-closed 계약은 프로젝트가 계속 통제한다.
+채택한 개편은 `IngestionPipeline`, `PGVectorStore`, `VectorStoreIndex`를 데이터 처리 경계에 사용한다.
+라우팅·답변 생성·실행 상태와 법률 답변의 출처·기준일·grounding·fail-closed 계약은 프로젝트가 통제한다.
+DatabaseReader·Router·QueryEngine·ResponseSynthesizer 전면 연결 원안은 §0의 승인 범위로 대체한다.
 
 ## 2. 현재 목표와 다음 목표
 
@@ -27,9 +71,9 @@
 - 외부 원문 수집, v2 색인 구축, 요청 시 검색·답변을 서로 다른 실행 단위로 분리한다.
 - v2 색인을 generation별 물리 table로 만들고 검증 뒤 active pointer를 전환한다.
 - `IngestionPipeline`은 청크와 embedding 계산에 사용하되 vector 저장과 `UPSERTS`를 맡기지 않는다.
-- 조회는 `VectorStoreIndex`와 QueryEngine을 사용하고 질문 embedding 중복 생성을 제거한다.
-- LlamaIndex Router를 route 선택과 QueryEngine dispatch에 사용한다.
-- LlamaIndex `ResponseSynthesizer`가 생성 stream을 제공하되 raw token은 생성 계층 내부에서만 소비한다.
+- 조회는 `VectorStoreIndex` retriever를 사용하고 질문 embedding 중복 생성을 제거한다.
+- route 선택과 분기는 typed `QuestionRouter` 및 프로젝트 서비스가 담당한다.
+- 생성·검증은 프로젝트 answerer와 phase 서비스가 담당하며 raw token은 그대로 공개하지 않는다.
 - 기존 `/v2/questions`는 제거하고 `question_execution`을 공유하는 준비 JSON, 핵심 SSE, 최종 SSE의 세
   endpoint로 교체한다. 각 생성 phase는 별도 Vercel invocation을 사용한다.
 - 원자적인 법률 주장 단위로 grounding을 통과한 summary, section, checklist만 SSE로 공개한다.
@@ -94,7 +138,7 @@ Collector 성공 후 index builder를 실행하는 순서는 OS scheduler나 명
 
 API는 문서 embedding을 읽어 `Document`를 다시 만드는 계층이 아니다. 요청 시 질문 embedding만 만들고,
 pgvector가 저장된 문서 vector와 비교한다. `PGVectorStore`가 검색된 text와 metadata를 node로 복원하면
-QueryEngine, `ResponseSynthesizer`, grounding 계층이 답변을 만든다.
+프로젝트 answerer와 phase 서비스의 grounding 계층이 답변을 만든다.
 
 ## 4. 의존성 주입과 DB engine
 
@@ -131,6 +175,10 @@ index = VectorStoreIndex.from_vector_store(store, embed_model=embedding)
 ## 5. Generation 기반 ingestion
 
 ### 5.1 원문 읽기와 검증 경계
+
+> 아래 DatabaseReader 예시는 과거 원안이다. §0의 승인 정정에 따라 현재는 프로젝트의
+> DatabaseProvisionReader가 ProvisionRecord를 읽고 build_nodes → IngestionPipeline로 전달한다.
+> 이 예시를 추가 구현 의무나 현재 사용 코드로 해석하지 않는다.
 
 조문(`provision`) 하나를 source 변경 단위로 사용한다. LlamaIndex `DatabaseReader.load_data()`가 canonical
 DB query 결과를 곧바로 `Document`로 만든다. SQL alias와 reader 설정이 document ID, text, metadata를
@@ -222,40 +270,24 @@ pin을 추적한다. cleanup은 pin이 해제되기 전에 해당 물리 table�
 postprocessor에서 기준일·공식 출처를 다시 확인한다. 검색 metadata가 유효하지 않은 node는 답변 근거에서
 제외한다. direct-path, keyword fallback, BM25와 RRF는 이번 v2 경로에 추가하지 않는다.
 
-### 6.2 LlamaIndex Router
+### 6.2 질문 라우팅과 조건부 검색
 
-LlamaIndex `RouterQueryEngine`과 `QueryEngineTool`을 사용한다. 다만 표준 selector 결과만으로는 현재 route
-계약을 표현할 수 없으므로 NVIDIA structured output을 사용하는 `LegalRouteSelector`와 얇은
-`LegalRouterQueryEngine`을 둔다.
+2026-10-27 승인 범위 조정으로 LlamaIndex Router 원안을 대체한다.
+`NvidiaNimQuestionRouter`가 `QuestionRouter` 계약을 구현하고 NVIDIA structured output을
+`RouteDecision`으로 변환한다. 정상 route는 `legal_search`, `clarification_required`,
+`realtime_required`, `external_document_required`이며 예외는 서버가 `routing_unavailable`로 처리한다.
 
-정상 route는 다음 네 개뿐이다.
+HTTP 앞 단계의 `_prepare_clarification_turn`이 새 질문을 이미 판정했다면 prepare의 `_route`는
+그 결과를 재사용한다. 이는 같은 요청의 중복 모델 호출 방지이며 이전 답변 cache가 아니다.
+terra 외 모드는 legal_search를 사용한다. 후속 case 요청은 앞 단계의 최초 판정을 건너뛰고 Workflow를
+실행하며, 서비스에 판정이 전달되지 않으면 현재 입력 문장을 다시 판정한다.
 
-- `legal_search`
-- `clarification_required`
-- `realtime_required`
-- `external_document_required`
+서비스는 legal_search에서만 pinned `VectorStoreIndex` retriever로 검색하고, 다른 route는 embedding·근거
+검색 없이 안전 안내를 구성한다. active generation 조회·execution 저장은 별도 수행한다.
+case policy가 route를 자동 변경하지 않는다. 후속 fact를 답변에 연결하는 문제는 §0의 B-016 범위다.
 
-`routing_unavailable`은 모델이 선택할 수 없다. selector timeout, provider 오류, schema 실패 때만 프로젝트
-코드가 만든다. route decision은 tool index, route, reason code, confidence, explanation, missing fields를
-보존한다. 선택 결과는 전역 mutable state가 아니라 execution별 `RouteExecutionContext`로 선택된 engine에
-전달한다.
-
-```python
-# [LlamaIndex + LlamaIndex Custom]
-router = LegalRouterQueryEngine(
-    selector=LegalRouteSelector(...),
-    tools=[legal_tool, clarification_tool, realtime_tool, document_tool],
-    context=request_context,
-)
-```
-
-`legal_search`는 active `VectorStoreIndex`의 retriever, `LegalEvidencePostprocessor`, custom QueryEngine,
-`GroundedStreamingResponseSynthesizer`를 연결한다. 나머지 세 route는 검색·embedding을 실행하지 않는
-교체 가능한 QueryEngine이다. 이번 구현에서 clarification은 missing fields와 재질문 안내를, realtime과
-external document는 필요한 capability를 알리는 안전 응답을 반환한다.
-
-향후 human-in-the-loop, 웹검색, 첨부문서 검색을 도입할 때 Router와 상위 서비스는 유지하고 해당
-`QueryEngineTool` 구현만 교체한다.
+`LegalRouteSelector`, `LegalRouterQueryEngine` 또는 4개 `QueryEngineTool` 조립은
+현재 채택하지 않는다. 답변 생성도 custom Synthesizer 클래스를 새로 만들지 않고 기존 phase 계약을 유지한다.
 
 ## 7. SSE와 문장별 grounding
 
@@ -300,8 +332,8 @@ prepare JSON -- next_action=generate_core --> core SSE
                                       +-- complete -----------> 같은 core stream에서 complete
 ```
 
-LlamaIndex는 POST/GET이나 HTTP 전송을 결정하지 않는다. `ResponseSynthesizer`는 async 생성 stream을
-제공하고 FastAPI가 SSE를 담당한다. raw LlamaIndex token stream은 생성 계층 내부에서만 소비하며 HTTP와
+LlamaIndex는 POST/GET이나 HTTP 전송을 결정하지 않는다. 현재는 프로젝트 answerer와 phase 서비스가
+생성과 검증을 수행하고 FastAPI가 SSE를 담당한다. ResponseSynthesizer 연결 원안은 §0으로 대체한다. raw LlamaIndex token stream은 생성 계층 내부에서만 소비하며 HTTP와
 직결하지 않는다.
 
 ```python
@@ -380,6 +412,10 @@ grounding, repair 필요 여부, 생성 우선순위와 최종 답변 확정은 
 추측해 진행하지 않고 protocol error로 중단한다.
 
 ### 7.3 생성·검증·repair
+
+> 아래의 GroundedStreamingResponseSynthesizer 명칭은 과거 설계 역할명이다. 현재 클래스가 아니며
+> 그 책임은 프로젝트 answerer·V2QuestionExecutionService·grounding validators가 수행한다.
+> component별 stream·수치와 상세 repair 절차는 원안이며, 현재 완료 판정은 §0과 실제 phase 코드에 한정한다.
 
 prepare phase가 검색 근거와 `CitationRegistry`를 동결한다. core phase의 custom
 `GroundedStreamingResponseSynthesizer`는 Ultra raw stream을 내부에서 소비해 summary candidate만 만들고,
@@ -647,7 +683,8 @@ finalize가 admission에서 거부되면 검증된 core를 유지하고 같은 e
 
 ## 8. 추상화와 모듈 경계
 
-상위 application service는 구체 SDK가 아니라 다음 port를 생성자로 받는다.
+상위 application service는 구체 SDK가 아니라 주입된 의존성 계약을 받는다. 아래 표는 과거 설계의
+역할 분해이며 실제 클래스 존재 목록이 아니다. 현재 채택 경계는 §0이 우선한다.
 
 | Port/객체 | 책임 | 기본 adapter |
 |---|---|---|
@@ -818,3 +855,11 @@ v2는 다음 호환성 변경을 의도적으로 수용한다.
 - 2026-08-28: v1/v2 transport 분리, composition root의 명시적 의존성 주입, LlamaIndex의
   generation·ingestion·query stage package는 가독성을 위한 모듈 경계다. 기존 v1/v2 HTTP 계약과
   파이프라인 동작을 바꾸지 않으며, v1은 계속 LlamaIndex와 generation table을 직접 사용하지 않는다.
+
+## 2026-10-27 결정 기록 보완
+
+- 사용자가 신규 기능을 열지 않고 현재 구현 경계로 F-005를 정정하는 안을 승인했다.
+  LlamaIndex는 데이터 처리·검색과 후속 clarification Workflow에 사용하고 도메인 라우팅·답변·검증은
+  프로젝트가 소유한다. 원안의 Router/QueryEngine/Synthesizer·DatabaseReader 연결은 미채택으로 정정한다.
+- F-005의 Done은 조정된 generation·검색·execution·phase API 범위에 한정한다. 2026-08-28의 모든
+  원안 클래스 구현을 소급 인정하지 않는다. 새로운 기능 ID를 생성하거나 기존 후속 작업을 중복 등록하지 않는다.

@@ -3,19 +3,24 @@
 > 유형: `Feature`
 > 보조 라벨: `Data`, `Reliability`, `Security`, `Performance`
 > 선행 조건: 없음
+> 다음 행동: 없음 — 2026-10-27 승인 범위 정정 완료; 프레임워크 클래스 추가 구현 없음.
 > 참고 범위:
-> - `docs/design-docs/v2-llamaindex-framework-redesign.md` §5~§11 — generation, execution, phase API 정본 계약
-> - `apps/api/app/main.py` L58-L132, L272-L308 — 현 v2 구성과 단일 `/v2/questions` 경계
-> - `apps/law-rag-llamaindex/src/law_rag_llamaindex/` — 기존 ingestion/retrieval adapter
-> - `apps/web/lib/api-client.ts` L107-L114 — 교체할 v2 transport
+> - `docs/design-docs/v2-llamaindex-framework-redesign.md` L10-L60 — 승인된 현재 구현 범위·미채택 항목·후속 작업
+> - `apps/api/app/application/v2/phase_service.py` L752-L780 — typed route 재사용과 legal_search 조건부 검색
+> - `apps/law-rag-llamaindex/src/law_rag_llamaindex/query/retriever.py` L45-L60 — pinned VectorStoreIndex 검색 adapter
 
 # V2 LlamaIndex 프레임워크 파이프라인 개편 구현 계획
+
+> **현재 완료 범위:** 2026-10-27 사용자 승인으로 generation·검색·execution·phase API의 구현 범위에
+> 한정한다. 원안의 Router/QueryEngine/Synthesizer·DatabaseReader 연결은 미채택이다.
+> 아래 Task 체크박스·파일명·명령은 당시 실행계획의 역사 기록이며 재착수 목록이 아니다.
+> 최신 판정은 이 문서 마지막의 범위 정정과 [설계 §0](../../design-docs/v2-llamaindex-framework-redesign.md)을 따른다.
 
 > **에이전트 작업자를 위한 안내:** 필수 서브스킬: 이 계획을 태스크 단위로 구현하려면 superpowers:subagent-driven-development(권장) 또는 superpowers:executing-plans를 사용하세요. 각 단계는 체크박스(`- [ ]`) 문법으로 진행 상황을 추적합니다.
 
 **목표:** generation으로 격리된 LlamaIndex 색인과 서버 정본 `question_execution`을 도입하고, 기존 v2 단일 질문 API를 prepare/core/finalize phase API와 검증된 SSE로 교체한다.
 
-**아키텍처:** `apps/law-rag-llamaindex`는 generation catalog, source fingerprint, active index cache 및 LlamaIndex ingestion/query/synthesis adapter를 소유한다. `apps/api`의 domain/application은 execution 상태 전이, frozen citation, grounding, issue ledger, DB capacity lease와 final response를 결정하며 FastAPI는 JSON/SSE transport로만 노출한다. 웹은 닫힌 `next_action`만 따라 호출하고 마지막 `complete.response`로 화면 상태를 교체한다.
+**아키텍처:** `apps/law-rag-llamaindex`는 generation catalog, source fingerprint, active index cache와 LlamaIndex ingestion/retrieval adapter를 소유한다. `apps/api`는 typed router·answerer·grounding과 execution 상태 전이, frozen citation, issue ledger, DB capacity lease와 final response를 결정하며 FastAPI는 JSON/SSE transport를 담당한다. 웹은 닫힌 `next_action`만 따라 호출하고 마지막 `complete.response`로 화면 상태를 교체한다.
 
 **기술 스택:** Python 3.14, FastAPI, SQLAlchemy async, Alembic, PostgreSQL/pgvector, LlamaIndex, NVIDIA NIM, Next.js/React/TypeScript, pytest/pytest-asyncio, Vitest.
 
@@ -69,6 +74,9 @@
 - [ ] Commit: `git add apps/law-rag-llamaindex && git commit -m "feat(llamaindex): publish verified retrieval generations"`.
 
 ### Task 3: Pinned active index and router/query-engine adapter
+
+> 2026-10-27 정정: pinned retrieval만 채택했다. 아래 router.py/query_engine.py·selector/engine 구현
+> 항목은 미채택이며 새 기능으로 열지 않는다. provider 실패 no-search 계약은 프로젝트 router·phase가 유지한다.
 
 **Files:** Modify `retriever.py`, `store.py`, `__init__.py`; create `active_index.py`, `router.py`, `query_engine.py`, `tests/test_active_index.py`, `tests/test_router.py`.
 
@@ -179,7 +187,26 @@
 
 ## 완료 기록 (2026-08-28)
 
+> 아래는 당시 기록이다. “Milestone 1~4 완료”를 원안의 모든 클래스를 구현했다는 의미로 사용하지 않는다.
+> 구현과 원안의 불일치는 다음 2026-10-27 정정으로 해소한다. 당시 테스트 수치는 당시 증거로만 보존한다.
+
 - Milestone 1~4를 구현하고 generation active pointer, execution 저장소·멱등성, prepare/core/finalize SSE, 웹 상태기계와 재연결·admission 계약을 완료했다.
 - 최종 보정은 generation 근거와 C번호의 동결, verified core 보존형 degraded 완료, 전송 단절/재연결의 authoritative task 소유권, lease 정리, 웹 즉시 인용 표시를 포함한다.
 - 검증: API `677 passed, 3 skipped`; LlamaIndex `69 passed, 2 skipped`; 웹 `95 passed`; 각 API·LlamaIndex Ruff, 웹 lint/typecheck 통과. hosted NVIDIA·운영 DB·실제 100 동시성은 승인된 환경이 없어 미검증으로 유지한다.
 - 독립 코드 리뷰에서 남은 Critical/High 없음 확인. 잔여 운영 검증은 배포 전 별도 Operations 범위에서 수행한다.
+
+## 완료 범위 정정 (2026-10-27)
+
+- 사용자 승인: 신규 기능 없이 현재 구현 경계로 F-005를 정정하고 기능별 로컬 commit을 남기도록 승인했다.
+- 채택: generation별 색인·active pointer, IngestionPipeline, PGVectorStore, VectorStoreIndex retriever,
+  execution 저장·근거 동결·멱등성, prepare/core/finalize와 검증된 SSE·웹 next_action.
+- 유지: 프로젝트 DatabaseProvisionReader, QuestionRouter/NvidiaNimQuestionRouter, answerer와 phase/grounding.
+- 미채택: LegalRouteSelector, LegalRouterQueryEngine, QueryEngineTool 기반 dispatch, QueryEngine 및
+  ResponseSynthesizer adapter 전환. 현재 검색 경로 하나와 안전 안내 route에 추가 wrapper를 만드는 비용을 피한다.
+- 후속 clarification Workflow는 현재 LlamaIndex 사용 범위지만 F-005 최초 구현의 성과로 소급하지 않는다.
+- 잔여 연결 문제는 기존 B-016(원 질문·누적 fact), B-014(교차 계층 회귀), B-009(acceptance)에 유지한다.
+  E-007 retrieval tool 실험을 Router 전환 미완료로 바꾸지 않는다. 새로운 기능 ID나 미완료 Task를 추가하지 않는다.
+- 이 정정은 원안 전체가 구현됐다는 판정이 아니라 사용자가 승인한 범위 조정이다. F-005 Done은 이 범위에 한정한다.
+- 검증 범위: 문서·링크·로드맵과 로컬 코드 대조. 제품 동작·DB·보존기간·배포는 변경하지 않는다.
+  과거 hosted/부하 미검증 항목을 이번 정정으로 통과 처리하지 않는다.
+- 작업 위치: C:/development/git/law-rag, main. 별도 구현 worktree 없이 문서만 정정한다.
