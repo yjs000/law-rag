@@ -4,6 +4,8 @@
 
 **[서비스 사용하기](https://law-rag-web.vercel.app/)** · [아키텍처](ARCHITECTURE.md) · [제품 명세](docs/product-specs/grounded-legal-qa.md) · [신뢰성 목표](docs/RELIABILITY.md)
 
+구현 흐름을 그림으로 보려면 [다이어그램 색인](docs/diagrams/README.md)의 [현재 파이프라인](docs/diagrams/law-rag-current-pipeline.html)을 확인합니다.
+
 > 법령을 그럴듯하게 설명하는 것보다, 어떤 원문을 근거로 답했는지 확인할 수 있는 것을 우선합니다.
 
 ## 왜 만들었나
