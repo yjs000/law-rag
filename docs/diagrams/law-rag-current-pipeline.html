@@ -1,62 +1,354 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>law-rag 현재 파이프라인 · 라우팅과 추가 질문</title>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>law-rag · 질문에서 답변까지의 현재 분기 흐름</title>
 <style>
-:root{--ink:#17263d;--muted:#516078;--line:#d4ddea;--blue:#235a97;--bluebg:#edf4ff;--teal:#096b61;--tealbg:#e9f7f2;--purple:#70429a;--purplebg:#f4eefa;--amber:#925015;--amberbg:#fff5e6}
-*{box-sizing:border-box}body{margin:0;background:#f5f7fb;color:var(--ink);font:16px/1.65 "Segoe UI","Malgun Gothic",sans-serif}main{max-width:1240px;margin:auto;padding:44px 28px 80px}h1{font-size:32px;line-height:1.35;margin:10px 0}h2{font-size:24px;margin:0 0 12px}p{margin:8px 0 14px}a{color:#245d9c;text-underline-offset:3px}code{font:.88em Consolas,monospace;overflow-wrap:anywhere}.eyebrow{color:var(--blue);font-size:13px;font-weight:700;letter-spacing:.1em}.meta,.caption{color:var(--muted);font-size:14px}.legend,nav{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}.tag{padding:5px 12px;border-radius:6px;font-size:13px;font-weight:600}.project{background:var(--bluebg);color:var(--blue)}.llama{background:var(--tealbg);color:var(--teal)}.db{background:var(--purplebg);color:var(--purple)}.gap{background:var(--amberbg);color:var(--amber)}section{background:white;border:1px solid var(--line);border-radius:14px;padding:26px;margin-top:24px;scroll-margin-top:16px}.notice{border-left:4px solid var(--amber);background:var(--amberbg);padding:15px 18px;margin:18px 0}.flow{display:flex;align-items:stretch;gap:10px;margin:20px 0}.node{flex:1;border:1px solid var(--line);border-radius:9px;padding:14px;min-width:0}.node strong{display:block;margin-bottom:5px}.node p{font-size:14px;margin:4px 0}.arrow{align-self:center;color:var(--muted);font-size:23px;flex:none}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.wide{overflow:auto}svg{display:block;width:100%;min-width:920px;height:auto}svg text{font-family:"Segoe UI","Malgun Gothic",sans-serif;fill:var(--ink)}svg .small{font-size:13px;fill:var(--muted)}svg .label{font-size:15px;font-weight:600}svg .box{fill:var(--bluebg);stroke:#9bb9dd}svg .store{fill:var(--purplebg);stroke:#bba0d2}svg .lib{fill:var(--tealbg);stroke:#8bbdb4}svg .warn{fill:var(--amberbg);stroke:#d4af7e}svg .edge{fill:none;stroke:#71839b;stroke-width:1.6;marker-end:url(#arrow)}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:12px 10px}th{background:#f5f7fb}li{margin:6px 0}details{margin-top:18px}summary{cursor:pointer;font-weight:600}footer{margin-top:28px;color:var(--muted);font-size:13px}a:focus-visible,summary:focus-visible{outline:3px solid #235a97;outline-offset:4px}@media(max-width:760px){main{padding:24px 16px 50px}h1{font-size:26px}section{padding:20px 16px}.flow{flex-direction:column}.arrow{transform:rotate(90deg)}.grid,.grid.two{grid-template-columns:1fr}}@media print{body{background:white}main{max-width:none;padding:0}section{break-inside:avoid}nav{display:none}}
-</style></head><body><main>
-<div class="eyebrow">LAW-RAG / IMPLEMENTATION MAP</div><h1>현재 질문 처리 파이프라인</h1>
-<p>질문이 어디서 분기하고, 무엇이 저장되며, LlamaIndex가 어느 부분을 담당하는가.</p>
-<p class="meta">확인: 2026-10-27 · 코드 기준: <code>5b274002</code> · 로컬 소스 기준이며 운영 배포 상태를 뜻하지 않음</p>
-<nav aria-label="목차"><a href="#overview">전체 구조</a><a href="#routing">라우팅</a><a href="#clarification">추가 질문</a><a href="#gaps">설계 차이</a><a href="#v3">v3</a><a href="README.md">색인</a></nav>
-<div class="legend"><span class="tag project">파랑 · 프로젝트 로직 / 직접 모델 호출</span><span class="tag llama">초록 · LlamaIndex</span><span class="tag db">보라 · 영속 상태</span><span class="tag gap">주황 · 제한 / 미완료 / 비활성</span></div>
-
-<section id="overview"><h2>01 · 전체 구조와 v2 실행 단계</h2>
-<p>웹 질문 transport는 v2 execution API를 사용한다. v1 API도 남아 있다. v2는 프로젝트 서비스가 <code>prepare → core → finalize</code>를 조정한다.</p>
-<div class="flow"><div class="node project"><strong>공식 법령 데이터</strong><p>국가법령정보 공동활용 Open API<br>수집·버전·출처 관리</p></div><span class="arrow" aria-hidden="true">→</span><div class="node llama"><strong>v2 색인 준비</strong><p>LlamaIndex ingestion<br>노드·embedding·vector store</p></div><span class="arrow" aria-hidden="true">→</span><div class="node db"><strong>generation 공개</strong><p>검증 후 active pointer 선택<br>요청마다 해당 generation 고정</p></div></div>
-<div class="wide"><svg viewBox="0 0 1120 360" role="img" aria-labelledby="overview-title overview-desc">
-<title id="overview-title">v2 prepare core finalize 실행 흐름</title><desc id="overview-desc">prepare에서 라우팅과 조건부 검색 후 근거를 저장한다. core와 finalize는 같은 근거로 답변을 생성·검증하고 SSE로 반환한다.</desc>
-<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#71839b"/></marker></defs>
-<rect class="box" x="10" y="15" width="160" height="95" rx="10"/><text class="label" x="25" y="42">웹 / v2 transport</text><text class="small" x="25" y="68">질문·기준일·case ID</text><text class="small" x="25" y="90">next_action 따라 호출</text>
-<path class="edge" d="M170 63H204"/><rect class="box" x="205" y="15" width="260" height="95" rx="10"/><text class="label" x="220" y="42">prepare</text><text class="small" x="220" y="68">소유권 / clarification / 라우팅</text><text class="small" x="220" y="90">quota·기준일 / 멱등 실행 조회</text>
-<path class="edge" d="M465 63H499"/><rect class="lib" x="500" y="15" width="260" height="95" rx="10"/><text class="label" x="515" y="42">legal_search일 때만 검색</text><text class="small" x="515" y="68">active VectorStoreIndex retriever</text><text class="small" x="515" y="90">embedding·유효일 / 출처 필터</text>
-<path class="edge" d="M760 63H794"/><rect class="store" x="795" y="15" width="310" height="95" rx="10"/><text class="label" x="810" y="42">question execution 저장</text><text class="small" x="810" y="68">route·generation·hits·인용 동결</text><text class="small" x="810" y="90">private snapshot / 상태·멱등성</text>
-<path class="edge" d="M950 110V177H761"/><text class="small" x="810" y="147">이후 재검색하지 않음</text>
-<rect class="box" x="500" y="140" width="260" height="95" rx="10"/><text class="label" x="515" y="167">core · SSE</text><text class="small" x="515" y="193">핵심 생성 / 인용 검증</text><text class="small" x="515" y="215">검증 결과·phase event 저장</text>
-<path class="edge" d="M500 187H466"/><rect class="box" x="205" y="140" width="260" height="95" rx="10"/><text class="label" x="220" y="167">finalize · SSE</text><text class="small" x="220" y="193">상세 생성·검증 / core 보정</text><text class="small" x="220" y="215">검증된 core 보존 / case 상태 반영</text>
-<path class="edge" d="M205 187H171"/><rect class="box" x="10" y="140" width="160" height="95" rx="10"/><text class="label" x="25" y="167">최종 화면</text><text class="small" x="25" y="193">complete.response</text><text class="small" x="25" y="215">답변·근거·보완 질문</text>
-<rect class="warn" x="10" y="265" width="1095" height="75" rx="10"/><text class="label" x="25" y="292">검색·생성은 조건부 실행</text><text class="small" x="25" y="317">비 legal route는 검색 없이 안전 안내. 검색 전용 / AI 불가 시 생성 대신 검색 기반 응답. 실패·취소·만료·복구 상태는 execution이 관리.</text>
-</svg></div>
-<p class="caption">active generation 조회는 비 legal route에서도 수행된다. “검색 안 함”은 embedding·근거 검색을 하지 않는다는 뜻이다. 원시 모델 토큰을 그대로 공개하지 않는다.</p>
-<details><summary>근거 코드</summary><ul><li><a href="../../apps/web/lib/v2-execution.ts">웹 v2 transport</a></li><li><a href="../../apps/api/app/api/v2/executions.py">prepare HTTP / pinned retrieval</a></li><li><a href="../../apps/api/app/application/v2/phase_service.py">V2QuestionExecutionService</a></li><li><a href="../../apps/law-rag-llamaindex/src/law_rag_llamaindex/query/retriever.py">LlamaIndex retriever</a></li><li><a href="../../apps/api/app/domain/question_execution.py">execution 상태·next_action</a></li></ul></details></section>
-
-<section id="routing"><h2>02 · RouteDecision을 먼저 확인하는 이유</h2>
-<p><code>QuestionRouter</code>는 판정 인터페이스, <code>NvidiaNimQuestionRouter</code>는 직접 NVIDIA NIM을 호출하는 구현체, <code>RouteDecision</code>은 판정 결과다. v1/v2가 같은 구현 클래스를 별도 인스턴스로 사용한다. LlamaIndex Router가 아니다.</p>
-<div class="flow"><div class="node project"><strong>HTTP 앞 단계</strong><p>Workflow 활성 + 새 질문이면<br>_prepare_clarification_turn에서 router 호출</p></div><span class="arrow" aria-hidden="true">→</span><div class="node project"><strong>PrepareQuestion</strong><p>계산한 route_decision을 내부 인자로 전달<br>클라이언트가 route를 지정하는 기능이 아님</p></div><span class="arrow" aria-hidden="true">→</span><div class="node project"><strong>서비스 _route</strong><p>terra 외 모드 → legal_search<br>판정 있음 → 재사용<br>판정 없음 → router 호출</p></div></div>
-<div class="notice"><strong>같은 요청에서 LLM을 두 번 호출하지 않기 위한 재사용이다.</strong> 이전 답변의 판정을 캐시하는 분기가 아니다. 후속 case 요청은 앞 단계의 최초 라우터를 건너뛰지만, 서비스에는 RouteDecision이 전달되지 않아 terra 모드에서 현재 문장으로 router를 다시 호출한다.</div>
-<div class="grid"><div class="node llama"><strong>legal_search</strong><p>LlamaIndex 검색 → 근거 동결 → 프로젝트 생성·검증</p></div><div class="node project"><strong>clarification_required</strong><p>앞 단계 Workflow에서 case 처리<br>서비스 route는 검색 없는 안내</p></div><div class="node project"><strong>realtime_required</strong><p>실시간 정보 필요 안내<br>웹 검색 실행 안 함</p></div><div class="node project"><strong>external_document_required</strong><p>외부 문서 필요 안내<br>문서 자동 수집 안 함</p></div><div class="node gap"><strong>routing_unavailable</strong><p>timeout·provider 예외 시 서버가 생성<br>검색 없이 안전 응답</p></div><div class="node db"><strong>판정 저장</strong><p>execution에 route·missing_fields<br>core/finalize는 저장된 분기 사용</p></div></div>
-<p class="caption">Workflow 비활성이면 앞 단계는 판정하지 않고 서비스에서 router를 호출한다. 서비스 _route는 terra 외 모드에서 전달된 판정보다 legal_search를 우선한다.</p>
-<details><summary>근거 코드</summary><ul><li><a href="../../apps/api/app/domain/routing.py">QuestionRouter / RouteDecision</a></li><li><a href="../../apps/api/app/adapters/nvidia_nim_route_classifier.py">NVIDIA 라우터</a></li><li><a href="../../apps/api/app/api/v2/executions.py">_prepare_clarification_turn</a></li><li><a href="../../apps/api/app/application/v2/phase_service.py">_route / _retrieve_if_legal</a></li><li><a href="../../apps/api/app/bootstrap.py">구성 코드</a></li></ul></details></section>
-
-<section id="clarification"><h2>03 · 추가 질문: 한 턴의 Workflow와 여러 턴의 case</h2>
-<p><strong>Context는 턴마다 새로 만든다.</strong> 다음 HTTP 요청이 같은 clarification_case_id로 저장된 case를 읽어 대화를 이어간다.</p>
-<div class="grid two"><div class="node project"><strong>첫 질문</strong><p>router → clarification_required → 초기 judge가 필요한 사실 후보 추출 → 서버 fact ID 부여 → case 생성.</p></div><div class="node project"><strong>후속 질문</strong><p>case ID + 사용자 문장 → 소유권·capability·만료 확인 → 원 질문과 미해결 facts로 continuation extractor 호출 → 검증한 fact 병합.</p></div></div>
-<div class="flow"><div class="node llama"><strong>load_case</strong><p>새 Context<br>기존 case 조회</p></div><span class="arrow" aria-hidden="true">→</span><div class="node llama"><strong>interpret_turn</strong><p>초기 judge / 후속<br>fact·의도 추출</p></div><span class="arrow" aria-hidden="true">→</span><div class="node llama"><strong>validate_and_merge</strong><p>fact ID·값 검증<br>version으로 병합 보호</p></div><span class="arrow" aria-hidden="true">→</span><div class="node llama"><strong>select_policy</strong><p>interim / full / conditional<br>또는 취소</p></div><span class="arrow" aria-hidden="true">→</span><div class="node llama"><strong>format_questions</strong><p>남은 facts 그룹화<br>Outcome 반환</p></div></div>
-<div class="grid"><div class="node project"><strong>interim</strong><p>필수 사실 남음 → 추가 질문 유지<br>다음 상태: waiting_for_user</p></div><div class="node project"><strong>full</strong><p>blocking facts 모두 answered<br>다음 상태: completed</p></div><div class="node project"><strong>conditional</strong><p>사용자가 지금 답변 요청<br>조건부 정책 / 다음 상태: completed</p></div></div>
-<div class="flow"><div class="node db"><strong>clarification_cases</strong><p>원 질문·기준일·사업 단계·fact 값/상태<br>소유자·version·만료·case 상태<br>PostgreSQL 구성 / memory 대체 구현</p></div><span class="arrow" aria-hidden="true">→</span><div class="node db"><strong>execution snapshot</strong><p>정책·fact ID/상태/blocking만 동결<br>fact 값은 복사하지 않음<br>다음 case 상태 전이 정보 저장</p></div><span class="arrow" aria-hidden="true">→</span><div class="node project"><strong>finalize</strong><p>응답 생성·검증 후 waiting/completed 반영<br>case ID·후속 질문 반환<br>다음 턴은 새 HTTP 요청</p></div></div>
-<p class="caption">취소·새 질문 의도는 기존 case를 cancelled로 만든다. 만료 상태는 expired. interpreter 실패는 interim 안전 오류 결과로 종료한다. policy는 상태 판단이며 full/conditional이 정상 답변 성공을 보장하지는 않는다.</p>
-<div class="notice"><strong>현재 연결의 빈틈 · B-016 / B-014 / B-009</strong><br>후속 fact 추출에는 원 질문을 사용하지만 이후 검색은 현재 요청 문장을 사용한다. 답변용 snapshot에는 누적 fact 값이 없다. Outcome policy가 서비스 route를 자동으로 legal_search로 바꾸지도 않는다. 따라서 “모든 사실 입력 → 원 질문에 적용한 최종 답변”이 완성됐다고 표시하지 않는다.</div>
-<details><summary>근거 코드와 남은 작업</summary><ul><li><a href="../../apps/api/app/adapters/llamaindex_clarification_workflow.py">LlamaIndex Workflow</a></li><li><a href="../../apps/api/app/application/clarification_workflow.py">계약 / fact 검증·병합</a></li><li><a href="../../apps/api/app/adapters/llm_clarification_continuation.py">자유 문장 fact 추출</a></li><li><a href="../../apps/api/app/ports/clarification_case.py">case 상태·저장소</a></li><li><a href="../../apps/api/app/application/v2/grounding.py">snapshot 계약</a></li><li><a href="../exec-plans/todo/0087-clarification-case-grounded-answer-input.md">B-016 원 질문·누적 사실 입력</a></li><li><a href="../ROADMAP.md">B-014 / B-009 회귀·acceptance</a></li></ul></details></section>
-
-<section id="gaps"><h2>04 · LlamaIndex 전환: 설계와 코드의 경계</h2>
-<div class="wide"><table><thead><tr><th>책임</th><th>현재 코드</th><th>판정</th></tr></thead><tbody><tr><td>질문 route 선택</td><td>QuestionRouter + NVIDIA 직접 호출</td><td>LlamaIndex Router 아님</td></tr><tr><td>검색</td><td>VectorStoreIndex retriever / PGVectorStore</td><td>LlamaIndex 사용</td></tr><tr><td>추가 질문 단계 조정</td><td>LlamaIndex Workflow + run별 Context</td><td>모델 호출은 프로젝트 adapter</td></tr><tr><td>답변·grounding·phase</td><td>V2QuestionExecutionService + answerer / validators</td><td>QueryEngineTool·ResponseSynthesizer 전환으로 표시하지 않음</td></tr><tr><td>LegalRouteSelector / LegalRouterQueryEngine</td><td>해당 클래스·RouterQueryEngine·QueryEngineTool의 Python 사용을 찾지 못함</td><td>설계 §6.2와 F-005 Task 3 / Milestone 3에 기재</td></tr></tbody></table></div>
-<p><a href="../design-docs/v2-llamaindex-framework-redesign.md">승인 설계 §6.2</a>는 selector·router와 4개 QueryEngineTool을 명시한다. 연결된 <a href="../exec-plans/completed/0061-v2-llamaindex-framework-pipeline.md">F-005 / 0061 계획</a>은 Done이지만 현재 <a href="../ROADMAP.md">로드맵</a>에 router 미구현 차이를 추적하는 별도 Todo는 없다.</p>
-<div class="notice">확인한 것은 <strong>설계·완료 기록과 코드의 불일치</strong>다. 의도적인 설계 변경인지 구현 누락인지는 확정하지 않는다. E-007은 단일 retrieval tool 실험으로 이 Router 전환과 동일한 항목이 아니다.</div></section>
-
-<section id="v3"><h2>05 · v3: 폐기된 패키지·테스트·의존성 제거</h2>
-<p>2026-10-27 사용자 요청으로 apps/law-rag-agent의 LangGraph 소스·테스트와 workspace 등록·전용 의존성을 제거했다. 이전 구현은 Git 이력에만 보존한다.</p>
-<div class="flow"><div class="node gap"><strong>v3 전용 패키지</strong><p>삭제 · 현재 실행 경로 없음</p></div><span class="arrow" aria-hidden="true">→</span><div class="node db"><strong>migration 0014</strong><p>후속 0015의 부모 revision이므로 유지<br>실제 DB 삭제·downgrade 실행 안 함</p></div></div>
-<p><a href="../exec-plans/dropped/0055-v3-langgraph-agent-foundation.md">F-001 / 0055: V3 LangGraph 에이전트 기본 골격</a>은 <a href="../ROADMAP.md">로드맵 Dropped</a>에 “사용자가 V3를 아직 진행하지 않기로 결정”으로 기록되어 있다. /v3/threads·run·state API와 checkpoint 대화 영속화가 목표였으나 현재 API 조립에는 /v3와 agent 연결이 없다.</p>
-<p class="caption"><a href="../design-docs/v3-langgraph-agent-foundation-design.md">v3 설계</a>도 폐기 상태로 정정했다. v1/v2 동작은 변경하지 않았다.</p></section>
-<footer>파이프라인 코드 기준 5b274002. 2026-10-27 후속 요청에 따라 v3 제거 상태 반영. 근거는 링크한 로컬 소스. 운영 DB 접근 없음.</footer>
+:root{--ink:#1a293d;--muted:#536279;--line:#d7e0ec}
+*{box-sizing:border-box}
+body{margin:0;padding:36px 24px 64px;background:#fff;color:var(--ink);font:16px/1.6 "Segoe UI","Malgun Gothic",sans-serif}
+main{max-width:1480px;margin:auto}
+h1{font-size:28px;margin:0 0 8px}h2{font-size:21px;margin:0 0 8px}
+p{margin:8px 0 16px}.muted,figcaption{color:var(--muted);font-size:14px}
+nav,.legend{display:flex;flex-wrap:wrap;gap:12px 22px;margin:20px 0}
+a{color:#245b96;text-underline-offset:3px}a:focus-visible{outline:3px solid #245b96;outline-offset:4px}
+.legend span{border-left:12px solid;padding-left:8px;font-size:14px}
+section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px;scroll-margin-top:20px}
+figure{margin:18px 0 0}.canvas{overflow:auto;border:1px solid var(--line);border-radius:10px;padding:14px 0;background:#fbfcfe}
+svg{display:block;width:100%;height:auto;min-width:1080px}
+svg text{font-family:"Segoe UI","Malgun Gothic",sans-serif;fill:var(--ink)}
+.title{font-size:18px;font-weight:600}.sub{font-size:15px;fill:var(--muted)}
+.project{fill:#eaf2fd;stroke:#8caed6}.llama{fill:#e5f6f0;stroke:#7bb7a6}
+.store{fill:#f2eafa;stroke:#b69ace}.warning{fill:#fff2e2;stroke:#cfaa79}
+.decision{fill:white;stroke:#7289a6;stroke-width:1.6}
+.edge{fill:none;stroke:#718198;stroke-width:1.8;marker-end:var(--arrow)}
+.dashed{stroke-dasharray:7 5}.edge-label{font-size:14px;fill:#465a76;paint-order:stroke;stroke:#fbfcfe;stroke-width:5px;stroke-linejoin:round}
+figcaption{margin-top:12px}.note{padding:14px 18px;background:#fff5e8;border-left:4px solid #bd874b}
+details{margin:18px 0}summary{cursor:pointer;font-weight:600}li{margin:6px 0}
+@media(max-width:700px){body{padding:24px 14px}h1{font-size:24px}.canvas{border-radius:6px}}
+@media print{nav{display:none}.canvas{overflow:visible;border:0}svg{min-width:0}section{break-before:page}section:first-of-type{break-before:auto}}
+</style>
+</head>
+<body><main>
+<h1>law-rag · 질문에서 답변까지</h1>
+<p>질문 하나를 넣었을 때 어떤 조건으로 분기하고, 어디서 검색·생성·응답하는지 현재 코드대로 따라가는 흐름도.</p>
+<p class="muted">확인: 2026-10-27 · 코드 기준: b17af60 · v2 질문 API 기준 / 운영 배포 확인 아님</p>
+<nav aria-label="흐름도 목차"><a href="#question-flow">① 질문 → 응답</a><a href="#decision-origin">② RouteDecision의 출처</a><a href="#clarification-loop">③ 추가 질문 반복</a><a href="README.md">다이어그램 색인</a></nav>
+<div class="legend"><span style="border-color:#8caed6">프로젝트 로직 / NVIDIA 직접 호출</span><span style="border-color:#7bb7a6">LlamaIndex</span><span style="border-color:#b69ace">저장된 상태</span><span style="border-color:#cfaa79">안전 응답 / 현재 한계</span></div>
+<section id="question-flow">
+<h2>① 질문 요청 → 라우팅 → 검색 → 생성·검증 → 응답</h2>
+<p class="muted">마름모는 조건, 화살표의 글씨는 선택한 분기다. RouteDecision은 같은 요청의 앞 단계에서 계산한 결과이며 이전 답변 캐시가 아니다.</p>
+<figure><div class="canvas"><svg viewBox="0 0 1480 2000" role="img" aria-labelledby="main-title main-desc">
+<title id="main-title">질문 요청부터 응답까지의 현재 v2 분기</title>
+<desc id="main-desc">HTTP 앞 단계, AI 모드, 기존 RouteDecision, router 호출, 다섯 route, 조건부 검색과 생성, core 및 finalize 분기를 화살표로 표시한다.</desc>
+<defs>
+<marker id="main-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+<path d="M0 0L9 4.5L0 9Z" fill="#718198"/>
+</marker>
+</defs>
+<g style="--arrow:url(#main-arrow)">
+<g>
+<rect class="project" x="600" y="20" width="280" height="80" rx="11"/>
+<text class="title" x="740" y="49" text-anchor="middle">v2 질문 요청</text>
+<text class="sub" x="740" y="75" text-anchor="middle">질문 · 기준일 · 선택적 case ID</text>
+</g>
+<path class="edge" d="M740 100V132"/>
+<g>
+<rect class="project" x="535" y="133" width="410" height="92" rx="11"/>
+<text class="title" x="740" y="162" text-anchor="middle">HTTP 앞 단계</text>
+<text class="sub" x="740" y="188" text-anchor="middle">clarification 처리 / 최초 route 판정</text>
+<text class="sub" x="740" y="211" text-anchor="middle">상세: 아래 그림 ②</text>
+</g>
+<path class="edge" d="M740 225V260"/>
+<g>
+<path class="decision" d="M740 260L895 320L740 380L585 320Z"/>
+<text class="title" x="740" y="326" text-anchor="middle">terra AI 모드?</text>
+</g>
+<path class="edge" d="M585 320H185V820"/>
+<text class="edge-label" x="205" y="304">아니오 · legal_search</text>
+<path class="edge" d="M740 380V405"/>
+<text class="edge-label" x="758" y="397">예</text>
+<g>
+<path class="decision" d="M740 405L910 465L740 525L570 465Z"/>
+<text class="title" x="740" y="471" text-anchor="middle">RouteDecision 존재?</text>
+</g>
+<path class="edge" d="M570 465H465V700H600"/>
+<text class="edge-label" x="285" y="448">예 · 이미 계산한 판정</text>
+<path class="edge" d="M740 525V555"/>
+<text class="edge-label" x="759" y="547">아니오</text>
+<g>
+<rect class="project" x="600" y="555" width="280" height="80" rx="11"/>
+<text class="title" x="740" y="584" text-anchor="middle">QuestionRouter 호출</text>
+<text class="sub" x="740" y="610" text-anchor="middle">NVIDIA NIM 직접 호출</text>
+</g>
+<path class="edge" d="M740 635V665"/>
+<text class="edge-label" x="758" y="654">성공</text>
+<g>
+<rect class="project" x="600" y="665" width="280" height="80" rx="11"/>
+<text class="title" x="740" y="694" text-anchor="middle">판정 결과로 분기</text>
+<text class="sub" x="740" y="720" text-anchor="middle">route + missing_fields</text>
+</g>
+<path class="edge" d="M880 595H1180"/>
+<text class="edge-label" x="1015" y="578">예외</text>
+<g>
+<rect class="warning" x="1180" y="550" width="260" height="100" rx="11"/>
+<text class="title" x="1310" y="579" text-anchor="middle">routing_unavailable</text>
+<text class="sub" x="1310" y="605" text-anchor="middle">서버가 만드는 실패 route</text>
+<text class="sub" x="1310" y="628" text-anchor="middle">모델의 정상 선택지 아님</text>
+</g>
+<path class="edge" d="M880 705H1100V625H1180"/>
+<text class="edge-label" x="910" y="690">전달된 판정이 실패 route</text>
+<path class="edge" d="M740 745V780H185V820"/>
+<path class="edge" d="M740 780H515V820"/>
+<path class="edge" d="M740 780H845V820"/>
+<path class="edge" d="M740 780H1175V820"/>
+<g>
+<rect class="llama" x="45" y="820" width="280" height="105" rx="11"/>
+<text class="title" x="185" y="849" text-anchor="middle">legal_search</text>
+<text class="sub" x="185" y="875" text-anchor="middle">법령 근거로 설명 가능한 질문</text>
+</g>
+<g>
+<rect class="project" x="375" y="820" width="280" height="105" rx="11"/>
+<text class="title" x="515" y="849" text-anchor="middle">clarification_required</text>
+<text class="sub" x="515" y="875" text-anchor="middle">사용자 사실이 더 필요한 질문</text>
+</g>
+<g>
+<rect class="project" x="705" y="820" width="280" height="105" rx="11"/>
+<text class="title" x="845" y="849" text-anchor="middle">realtime_required</text>
+<text class="sub" x="845" y="875" text-anchor="middle">실시간·계정 상태 정보 필요</text>
+</g>
+<g>
+<rect class="project" x="1035" y="820" width="280" height="105" rx="11"/>
+<text class="title" x="1175" y="849" text-anchor="middle">external_document_required</text>
+<text class="sub" x="1175" y="875" text-anchor="middle">특정 계약서 등 외부 문서 필요</text>
+</g>
+<path class="edge" d="M185 925V1000"/>
+<g>
+<rect class="llama" x="45" y="1000" width="280" height="105" rx="11"/>
+<text class="title" x="185" y="1029" text-anchor="middle">LlamaIndex 근거 검색</text>
+<text class="sub" x="185" y="1055" text-anchor="middle">active generation의 index 고정</text>
+<text class="sub" x="185" y="1078" text-anchor="middle">embedding · 기준일 / 출처 필터</text>
+</g>
+<path class="edge" d="M515 925V960H975V1000"/>
+<path class="edge" d="M845 925V960"/>
+<path class="edge" d="M1175 925V960H975"/>
+<path class="edge" d="M1310 650H1445V1053H1330"/>
+<g>
+<rect class="warning" x="620" y="1000" width="710" height="105" rx="11"/>
+<text class="title" x="975" y="1029" text-anchor="middle">검색 없이 route별 안전 응답 경로</text>
+<text class="sub" x="975" y="1055" text-anchor="middle">추가 사실 요청 / 실시간 정보 필요 안내 / 외부 문서 필요 안내</text>
+<text class="sub" x="975" y="1078" text-anchor="middle">clarification case·policy 처리 상세: 아래 그림 ③</text>
+</g>
+<path class="edge" d="M185 1105V1160"/>
+<path class="edge" d="M975 1105V1160"/>
+<g>
+<rect class="store" x="45" y="1160" width="1285" height="105" rx="11"/>
+<text class="title" x="687.5" y="1189" text-anchor="middle">question execution 저장</text>
+<text class="sub" x="687.5" y="1215" text-anchor="middle">route · active generation · 검색 hits · frozen citations · case 전이 정보</text>
+<text class="sub" x="687.5" y="1238" text-anchor="middle">core / finalize는 이 snapshot을 사용하며 다시 검색하지 않음</text>
+</g>
+<path class="edge" d="M740 1265V1305"/>
+<g>
+<path class="decision" d="M740 1305L960 1385L740 1465L520 1385Z"/>
+<text class="title" x="740" y="1380" text-anchor="middle">AI 생성 경로인가?</text>
+<text class="sub" x="740" y="1404" text-anchor="middle">legal_search + terra + AI 사용 가능</text>
+</g>
+<path class="edge" d="M520 1385H260V1475"/>
+<text class="edge-label" x="341" y="1367">아니오</text>
+<g>
+<rect class="warning" x="85" y="1475" width="350" height="105" rx="11"/>
+<text class="title" x="260" y="1504" text-anchor="middle">생성 대신 안전 응답 구성</text>
+<text class="sub" x="260" y="1530" text-anchor="middle">비 legal → route별 안내</text>
+<text class="sub" x="260" y="1553" text-anchor="middle">검색 전용 / AI 불가 → 검색 기반 응답</text>
+</g>
+<path class="edge" d="M740 1465V1495"/>
+<text class="edge-label" x="758" y="1485">예</text>
+<g>
+<rect class="project" x="600" y="1495" width="280" height="95" rx="11"/>
+<text class="title" x="740" y="1524" text-anchor="middle">core · 핵심 생성·검증</text>
+<text class="sub" x="740" y="1550" text-anchor="middle">고정 근거로 생성 / 인용 검증</text>
+<text class="sub" x="740" y="1573" text-anchor="middle">검증된 결과만 SSE 공개</text>
+</g>
+<path class="edge" d="M740 1590V1610"/>
+<g>
+<path class="decision" d="M740 1610L905 1670L740 1730L575 1670Z"/>
+<text class="title" x="740" y="1676" text-anchor="middle">서버 next_action?</text>
+</g>
+<path class="edge" d="M905 1670H1225V1755"/>
+<text class="edge-label" x="990" y="1651">generate_detail / repair_core</text>
+<g>
+<rect class="project" x="1060" y="1755" width="330" height="95" rx="11"/>
+<text class="title" x="1225" y="1784" text-anchor="middle">finalize · 상세 / core 보정</text>
+<text class="sub" x="1225" y="1810" text-anchor="middle">생성·검증 후 case 상태 반영</text>
+<text class="sub" x="1225" y="1833" text-anchor="middle">실패 시 검증된 core 보존</text>
+</g>
+<path class="edge" d="M740 1730V1875"/>
+<text class="edge-label" x="756" y="1802">complete</text>
+<path class="edge" d="M1225 1850V1922H920"/>
+<path class="edge" d="M260 1580V1922H560"/>
+<g>
+<rect class="project" x="560" y="1875" width="360" height="95" rx="11"/>
+<text class="title" x="740" y="1904" text-anchor="middle">최종 응답 · complete.response</text>
+<text class="sub" x="740" y="1930" text-anchor="middle">답변 · 원문 근거 · 필요한 추가 질문</text>
+</g>
+</g>
+</svg></div><figcaption>비 legal route도 active generation 조회와 execution 저장을 거친다. 검색 생략은 embedding·근거 검색을 실행하지 않는다는 뜻이다. 준비 상태·quota·기준일·인증 실패는 HTTP 오류로 종료하며, 취소·만료·phase 복구 필요 상태는 별도 execution 상태기계가 관리한다.</figcaption></figure>
+</section>
+<section id="decision-origin"><h2>② 전달된 RouteDecision은 어디서 오는가</h2>
+<p class="muted">그림 ①의 HTTP 앞 단계를 펼친 흐름. clarification Workflow가 켜져 있으면 새 질문은 서비스 진입 전에 이미 route를 판정한다.</p>
+<figure><div class="canvas"><svg viewBox="0 0 1480 550" role="img" aria-labelledby="upstream-title upstream-desc">
+<title id="upstream-title">RouteDecision이 만들어지는 HTTP 앞 단계</title>
+<desc id="upstream-desc">Workflow 비활성, 새 질문, 후속 case 요청을 구분한다. 새 질문 판정은 전달되고 후속 case에서는 서비스가 다시 판정한다.</desc>
+<defs>
+<marker id="upstream-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+<path d="M0 0L9 4.5L0 9Z" fill="#718198"/>
+</marker>
+</defs>
+<g style="--arrow:url(#upstream-arrow)">
+<g>
+<rect class="project" x="40" y="90" width="250" height="95" rx="11"/>
+<text class="title" x="165" y="119" text-anchor="middle">HTTP prepare 요청</text>
+<text class="sub" x="165" y="145" text-anchor="middle">인증 · owner_scope 확인</text>
+</g>
+<path class="edge" d="M290 137H335"/>
+<g>
+<path class="decision" d="M505 72L675 137L505 202L335 137Z"/>
+<text class="title" x="505" y="143" text-anchor="middle">Workflow 활성?</text>
+</g>
+<path class="edge" d="M505 202V530H1450V460H1430"/>
+<text class="edge-label" x="535" y="549">아니오 · 앞 단계 판정 없음</text>
+<path class="edge" d="M675 137H715"/>
+<text class="edge-label" x="686" y="119">예</text>
+<g>
+<path class="decision" d="M885 72L1055 137L885 202L715 137Z"/>
+<text class="title" x="885" y="143" text-anchor="middle">후속 case ID 있음?</text>
+</g>
+<path class="edge" d="M885 202V260"/>
+<text class="edge-label" x="904" y="245">아니오 · 새 질문</text>
+<g>
+<rect class="project" x="740" y="260" width="290" height="100" rx="11"/>
+<text class="title" x="885" y="289" text-anchor="middle">QuestionRouter 최초 판정</text>
+<text class="sub" x="885" y="315" text-anchor="middle">실패하면 routing_unavailable</text>
+<text class="sub" x="885" y="338" text-anchor="middle">성공하면 네 정상 route 중 하나</text>
+</g>
+<path class="edge" d="M1055 137H1210V260"/>
+<text class="edge-label" x="1090" y="119">예</text>
+<g>
+<rect class="llama" x="1080" y="260" width="310" height="100" rx="11"/>
+<text class="title" x="1235" y="289" text-anchor="middle">clarification Workflow</text>
+<text class="sub" x="1235" y="315" text-anchor="middle">case 조회 → 후속 fact 추출</text>
+<text class="sub" x="1235" y="338" text-anchor="middle">새 Context / case 저장소 사용</text>
+</g>
+<path class="edge dashed" d="M1030 310H1080"/>
+<text class="edge-label" x="1035" y="391">clarification_required</text>
+<path class="edge" d="M885 360V455H1080"/>
+<text class="edge-label" x="730" y="482">그 외 route · 기존 판정 전달</text>
+<path class="edge" d="M1235 360V410"/>
+<g>
+<rect class="store" x="1080" y="410" width="350" height="100" rx="11"/>
+<text class="title" x="1255" y="439" text-anchor="middle">PrepareQuestion → 서비스 _route</text>
+<text class="sub" x="1255" y="465" text-anchor="middle">새 질문: 계산한 RouteDecision 재사용</text>
+<text class="sub" x="1255" y="488" text-anchor="middle">후속 case: 판정 없음 → 현재 문장 재판정</text>
+</g>
+</g>
+</svg></div><figcaption>새 질문의 clarification_required만 초기 Workflow를 실행한다. 다른 route는 판정을 그대로 전달한다. 후속 case 요청은 Workflow를 먼저 실행하지만 RouteDecision은 만들지 않아 서비스에서 현재 문장으로 다시 판정한다. 판정 예외도 routing_unavailable 결과로 전달한다.</figcaption></figure>
+</section>
+<section id="clarification-loop"><h2>③ 추가 질문 → 사용자 답변 → case 업데이트</h2>
+<p class="muted">LlamaIndex Context는 한 턴의 임시 상태, case 저장소는 여러 턴의 원 질문·누적 사실의 정본이다.</p>
+<figure><div class="canvas"><svg viewBox="0 0 1480 710" role="img" aria-labelledby="case-title case-desc">
+<title id="case-title">추가 질문의 반복 흐름</title>
+<desc id="case-desc">각 HTTP 턴마다 새 Context로 case를 읽고 facts를 병합해 정책을 선택한다. waiting 응답은 사용자 입력으로 이어지며 현재 연결의 빈틈도 표시한다.</desc>
+<defs>
+<marker id="case-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+<path d="M0 0L9 4.5L0 9Z" fill="#718198"/>
+</marker>
+</defs>
+<g style="--arrow:url(#case-arrow)">
+<g>
+<rect class="project" x="40" y="30" width="290" height="95" rx="11"/>
+<text class="title" x="185" y="59" text-anchor="middle">새 질문 / 후속 사용자 입력</text>
+<text class="sub" x="185" y="85" text-anchor="middle">후속 입력에는 같은 case ID</text>
+</g>
+<path class="edge" d="M330 77H380"/>
+<g>
+<rect class="llama" x="380" y="30" width="290" height="95" rx="11"/>
+<text class="title" x="525" y="59" text-anchor="middle">새 Context · case 로드</text>
+<text class="sub" x="525" y="85" text-anchor="middle">소유권 · capability · 만료 확인</text>
+</g>
+<path class="edge" d="M670 77H720"/>
+<g>
+<rect class="llama" x="720" y="30" width="290" height="95" rx="11"/>
+<text class="title" x="865" y="59" text-anchor="middle">fact · 의도 판단</text>
+<text class="sub" x="865" y="85" text-anchor="middle">초기 judge / continuation extractor</text>
+</g>
+<path class="edge" d="M1010 77H1060"/>
+<g>
+<rect class="llama" x="1060" y="30" width="360" height="95" rx="11"/>
+<text class="title" x="1240" y="59" text-anchor="middle">검증 · 병합 · 정책 선택</text>
+<text class="sub" x="1240" y="85" text-anchor="middle">서버 fact ID / optimistic version</text>
+<text class="sub" x="1240" y="108" text-anchor="middle">facts는 case 저장소에 보존</text>
+</g>
+<path class="edge" d="M1240 125V175H245V215"/>
+<path class="edge" d="M1240 175H735V215"/>
+<path class="edge" d="M1240 175H1225V215"/>
+<g>
+<rect class="project" x="75" y="215" width="340" height="100" rx="11"/>
+<text class="title" x="245" y="244" text-anchor="middle">interim</text>
+<text class="sub" x="245" y="270" text-anchor="middle">필수 사실 남음</text>
+<text class="sub" x="245" y="293" text-anchor="middle">다음 상태: waiting_for_user</text>
+</g>
+<g>
+<rect class="project" x="565" y="215" width="340" height="100" rx="11"/>
+<text class="title" x="735" y="244" text-anchor="middle">full</text>
+<text class="sub" x="735" y="270" text-anchor="middle">blocking facts 모두 answered</text>
+<text class="sub" x="735" y="293" text-anchor="middle">다음 상태: completed</text>
+</g>
+<g>
+<rect class="project" x="1055" y="215" width="340" height="100" rx="11"/>
+<text class="title" x="1225" y="244" text-anchor="middle">conditional</text>
+<text class="sub" x="1225" y="270" text-anchor="middle">사용자가 지금 답변 요청</text>
+<text class="sub" x="1225" y="293" text-anchor="middle">다음 상태: completed</text>
+</g>
+<path class="edge" d="M245 315V365H735V410"/>
+<path class="edge" d="M735 315V410"/>
+<path class="edge" d="M1225 315V365H735"/>
+<g>
+<rect class="store" x="525" y="410" width="420" height="100" rx="11"/>
+<text class="title" x="735" y="439" text-anchor="middle">Outcome → execution snapshot</text>
+<text class="sub" x="735" y="465" text-anchor="middle">정책 · fact ID / 상태만 전달</text>
+<text class="sub" x="735" y="488" text-anchor="middle">fact 값과 원 질문은 자동 전달되지 않음</text>
+</g>
+<path class="edge" d="M735 510V565"/>
+<g>
+<rect class="project" x="525" y="565" width="420" height="100" rx="11"/>
+<text class="title" x="735" y="594" text-anchor="middle">응답 생성·검증 후 finalize</text>
+<text class="sub" x="735" y="620" text-anchor="middle">waiting / completed 반영</text>
+<text class="sub" x="735" y="643" text-anchor="middle">waiting이면 case ID와 추가 질문 반환</text>
+</g>
+<path class="edge dashed" d="M525 615H25V77H40"/>
+<text class="edge-label" x="45" y="592">다음 HTTP 턴</text>
+<g>
+<rect class="warning" x="1005" y="410" width="425" height="180" rx="11"/>
+<text class="title" x="1217.5" y="439" text-anchor="middle">현재 연결의 빈틈 · B-016</text>
+<text class="sub" x="1217.5" y="465" text-anchor="middle">검색은 현재 입력 문장을 사용</text>
+<text class="sub" x="1217.5" y="488" text-anchor="middle">답변 snapshot에 누적 fact 값 없음</text>
+<text class="sub" x="1217.5" y="511" text-anchor="middle">policy가 legal_search를 강제하지 않음</text>
+<text class="sub" x="1217.5" y="534" text-anchor="middle">상태 판정 ≠ 최종 답변 성공</text>
+</g>
+</g>
+</svg></div><figcaption>이 그림은 case 정책·저장 흐름이다. 그림 ①의 route 판단을 대체하지 않는다. 취소·새 질문 의도는 기존 case를 cancelled로 만들고, interpreter 실패는 안전한 interim 결과로 종료한다. PostgreSQL 구성 시 case를 영속 저장하며 memory 대체 구현도 있다.</figcaption></figure>
+<p class="note">현재 구현에서 원 질문·누적 fact를 검색과 생성에 연결하는 보완은 기존 B-016이며, 이 HTML 변경으로 제품 동작을 수정하지 않았다.</p>
+</section>
+<details><summary>코드 근거와 설계 경계</summary><ul>
+<li><a href="../../apps/api/app/api/v2/executions.py">HTTP prepare / _prepare_clarification_turn / pinned retrieval</a></li>
+<li><a href="../../apps/api/app/application/v2/phase_service.py">서비스 _route / 조건부 검색 / core / finalize</a></li>
+<li><a href="../../apps/api/app/domain/routing.py">QuestionRouter 인터페이스와 RouteDecision</a></li>
+<li><a href="../../apps/api/app/adapters/nvidia_nim_route_classifier.py">NVIDIA 라우터 구현</a></li>
+<li><a href="../../apps/api/app/adapters/llamaindex_clarification_workflow.py">LlamaIndex clarification Workflow</a></li>
+<li><a href="../../apps/api/app/application/v2/grounding.py">clarification snapshot 계약</a></li>
+<li><a href="../exec-plans/todo/0087-clarification-case-grounded-answer-input.md">B-016 원 질문·누적 사실 입력</a></li>
+<li><a href="../design-docs/v2-llamaindex-framework-redesign.md">F-005 설계</a>에는 LegalRouteSelector / LegalRouterQueryEngine이 있으나 현재 Python 구현에는 없다. 새 기능 또는 문서 범위 변경은 승인 대기이며 이 그림은 현재 코드만 표시한다.</li>
+<li>v3 전용 소스·테스트·의존성은 제거되었다. <a href="../exec-plans/dropped/0055-v3-langgraph-agent-foundation.md">F-001은 Dropped</a>이며 migration 0014만 연결 이력을 위해 보존한다.</li>
+</ul></details>
 </main></body></html>

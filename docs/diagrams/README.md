@@ -2,9 +2,9 @@
 
 현재 구현 그림의 첫 진입점이다. 그림에 확인 날짜·코드 기준·근거 파일을 표시하고 설계와 실제 구현을 구분한다.
 
-- [현재 law-rag 파이프라인](law-rag-current-pipeline.html): v1/v2 경계, v2 prepare/core/finalize,
-  라우팅, clarification 상태 흐름, 설계와 구현 차이, v3 제거 상태.
-  확인: 2026-10-27, 파이프라인 코드 기준: `5b274002`; v3 제거는 사용자 후속 요청 반영.
+- [현재 law-rag 파이프라인](law-rag-current-pipeline.html): 질문 요청부터 조건별 분기·검색·생성·응답까지
+  연결한 흐름도. RouteDecision의 출처와 추가 질문의 반복 흐름을 별도 그림으로 제공한다.
+  확인: 2026-10-27, 코드 기준: `b17af60`.
 - [과거 v1 → v2 → v3 비교](../learning/diagrams/v1-v2-v3-pipeline-evolution.html): 역사 자료.
   tier1/tier2와 v3 표현을 현재 구현으로 해석하지 않는다.
 
