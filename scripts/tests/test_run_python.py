@@ -46,11 +46,11 @@ def test_runner_uses_workspace_python_and_source_roots() -> None:
         {
             (REPO_ROOT / "apps/api").resolve(),
             (REPO_ROOT / "apps/collector/src").resolve(),
-            (REPO_ROOT / "apps/law-rag-agent/src").resolve(),
             (REPO_ROOT / "apps/law-rag-llamaindex/src").resolve(),
             (REPO_ROOT / "packages/law-rag-core/src").resolve(),
         }
     )
+    assert (REPO_ROOT / "apps/law-rag-agent/src").resolve() not in configured_paths
 
 
 def test_runner_propagates_python_exit_code() -> None:

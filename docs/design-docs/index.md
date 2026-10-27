@@ -44,12 +44,12 @@
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
 | [Dropped 수명주기와 병렬 오케스트레이션](roadmap-dropped-and-orchestration.md) | 승인 | 폐기 계획 보존, OC-001 자식 상태·의존성·파일 소유와 병렬 실행 계약 |
 | [에이전트 제어면 단순화](agent-control-plane-simplification.md) | 승인 | workflow·skill·hook·worktree 수명주기의 단일 책임과 부작용 없는 자동화 |
-| [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 승인 | LangGraph StateGraph·Postgres 체크포인터 대화 영속화·스레드/run API, F-005 호환 run/evidence/grounding 경계와 M1~M5 구현 순서 |
+| [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 폐기 | F-001 Dropped; 2026-10-27 전용 소스·테스트·의존성 제거. 설계는 역사 기록으로 보존 |
 
 ## 버전 표기
 
-v1(기존 운영 파이프라인)·v2(LlamaIndex 검색, `law-rag-llamaindex`)·v3(LangGraph 에이전트,
-`law-rag-agent`)가 병행 운영되는 동안, 버전 전용 설계 문서는 폴더를 나누지 않고 같은
+v1(기존 파이프라인)·v2(LlamaIndex, `law-rag-llamaindex`)와 폐기된 v3의
+버전 전용 설계 문서는 폴더를 나누지 않고 같은
 `docs/design-docs/`에 두되 파일명과 제목 앞에 `v2`/`V2`, `v3`/`V3` 접두어를 붙여
 구분한다(날짜 없이, 예: `v3-...-design.md`, 제목 `V3: ...`). v1에도 공통 적용되거나
 버전 구분이 필요 없는 문서는 접두어를 붙이지 않는다. 각 버전의 실제 구현 개요와

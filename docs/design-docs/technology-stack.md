@@ -68,10 +68,10 @@ role에 직접 접근하지 않는다.
 |---|---|---|---|
 | v1 | FastAPI, SQLAlchemy, pgvector, PGroonga, 자체 도메인 계층 | 현재 법령 수집·검색·답변 API | 현재 구현 |
 | v2 | LlamaIndex Core, NVIDIA 임베딩 연동, PostgreSQL vector store | v1과 독립된 `law-rag-llamaindex` 검색 파이프라인과 `/v2` 경로 | 구현 중 |
-| v3 | LangGraph, LangGraph PostgreSQL checkpointer, LangChain NVIDIA endpoint 연동 | v1/v2를 재사용하지 않는 에이전트 라우팅·생성·검증 골격 | 제안됨 |
+| v3 | 과거 LangGraph 제안 | F-001 Dropped에 따라 전용 패키지·테스트·의존성 제거. migration 0014는 이력 보존 | 폐기 |
 
-따라서 LlamaIndex와 LangGraph는 저장소 의존성에 포함돼 있어도 v1의 기본 검색·답변 경로를 대체하지
-않는다. v1의 핵심 검색·인용 계약은 대형 프레임워크 뒤에 숨기지 않는다.
+LlamaIndex는 v2에서 사용하며 v1의 기본 검색·답변 경로를 대체하지 않는다.
+v1의 핵심 검색·인용 계약은 대형 프레임워크 뒤에 숨기지 않는다.
 
 ## 의도적으로 하지 않는 선택
 
@@ -85,10 +85,14 @@ role에 직접 접근하지 않는다.
 - Web 의존성: [`apps/web/package.json`](../../apps/web/package.json)
 - API 의존성·런타임: [`apps/api/pyproject.toml`](../../apps/api/pyproject.toml)
 - collector 의존성: [`apps/collector/pyproject.toml`](../../apps/collector/pyproject.toml)
-- v2·v3 의존성: [`apps/law-rag-llamaindex/pyproject.toml`](../../apps/law-rag-llamaindex/pyproject.toml), [`apps/law-rag-agent/pyproject.toml`](../../apps/law-rag-agent/pyproject.toml)
+- v2 의존성: [`apps/law-rag-llamaindex/pyproject.toml`](../../apps/law-rag-llamaindex/pyproject.toml)
 - 시스템 경계와 검색 계약: [`ARCHITECTURE.md`](../../ARCHITECTURE.md)
 
 ## 결정 기록
+
+- 2026-10-27: 사용자가 F-001 Dropped에 따른 v3 코드 삭제를 요청했다. 전용 패키지·테스트와
+  workspace·runner·lock 의존성에서 제거한다. migration 0014는 0015의 부모 revision이므로 보존하며
+  기존 DB 테이블 삭제나 downgrade는 실행하지 않는다.
 
 - 2026-07-13: 초기에는 등록 IP 수집 job을 `law-rag-ingestion` self-hosted runner로 계획했으나,
   독립 collector·OS 스케줄러로 대체했다. 일반 CI는 공용 runner를 유지한다.

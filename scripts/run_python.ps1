@@ -14,7 +14,6 @@ if (-not (Test-Path -LiteralPath $workspacePython -PathType Leaf)) {
 $sourceRoots = @(
     (Join-Path $repoRoot "apps\api")
     (Join-Path $repoRoot "apps\collector\src")
-    (Join-Path $repoRoot "apps\law-rag-agent\src")
     (Join-Path $repoRoot "apps\law-rag-llamaindex\src")
     (Join-Path $repoRoot "packages\law-rag-core\src")
 )

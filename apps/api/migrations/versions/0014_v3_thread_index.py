@@ -1,6 +1,9 @@
 """v3 LangGraph 에이전트의 (user_id, thread_id) 최소 인덱스.
 
 Revision ID: 0014
+
+Historical migration retained after v3 source removal (2026-10-27).
+Revision 0015 depends on 0014; do not rewrite applied migration history.
 """
 
 from alembic import op
