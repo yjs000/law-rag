@@ -22,6 +22,7 @@
 | [실험 D 일반 사용자 질문은행](experiment-d-layperson-question-bank.md) | 질문 승인·Gold 보류 | 보존된 자연어 질문 후보와 필요 시 독립 Gold 승격 경계 |
 | [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
 | [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
+| [데이터베이스 ERD](../diagrams/database-erd.drawio) | 초안 | Alembic 마이그레이션 0001–0017 기준의 전체 스키마(36개 프로젝트 테이블), PK·FK·UQ 포함 |
 | [Vercel·Supabase 운영 전환](vercel-supabase-deployment.md) | 승인 | FastAPI 전환 조건, 외부 선행 입력, Preview 프록시와 운영 책임 |
 | [Google OAuth·Supabase Auth 연결](google-oauth-supabase-flow.md) | 승인 전 초안 | Google·Supabase·Next.js·FastAPI의 표준 OAuth/OIDC 역할과 프로젝트별 URI |
 | [시간 효력 모델](temporal-validity.md) | 승인 | 공포일·시행일·기준일 계약 |
