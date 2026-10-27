@@ -4,23 +4,106 @@
   "updated_at_kst": "2026-10-27",
   "status": "baseline_review; 수정 전후 사용자 판정은 아직 없음",
   "rounds": [
-    {"date_kst": "2026-10-21", "review": "rounds/2026-10-21-baseline.json", "raw": "raw/2026-10-21-api.json", "attempted": 6, "successful_answers": 5, "failed_requests": 1, "distinct_questions": 6},
-    {"date_kst": "2026-10-27", "review": "rounds/2026-10-27-db-baseline.json", "raw": "raw/2026-10-27-db-observations.json", "attempted": 4, "successful_answers": 4, "failed_requests": 0, "distinct_questions": 1, "note": "같은 질문 4회 반복"}
+    {
+      "date_kst": "2026-10-21",
+      "review": "rounds/2026-10-21-baseline.json",
+      "raw": "raw/2026-10-21-api.json",
+      "attempted": 6,
+      "successful_answers": 5,
+      "failed_requests": 1,
+      "distinct_questions": 6
+    },
+    {
+      "date_kst": "2026-10-27",
+      "review": "rounds/2026-10-27-db-baseline.json",
+      "raw": "raw/2026-10-27-db-observations.json",
+      "attempted": 4,
+      "successful_answers": 4,
+      "failed_requests": 0,
+      "distinct_questions": 1,
+      "note": "같은 질문 4회 반복"
+    }
   ],
-  "totals": {"attempted": 10, "successful_answers": 9, "failed_requests": 1, "distinct_questions": 7},
+  "totals": {
+    "attempted": 10,
+    "successful_answers": 9,
+    "failed_requests": 1,
+    "distinct_questions": 7
+  },
   "recurring_findings": [
-    {"issue": "질문의 핵심보다 다른 설명이 먼저 나옴", "evidence": ["2026-10-21 permit·report·applicability", "2026-10-27 direct_answer"], "decision": "B-017에 포함: 결론 우선과 쉬운 이유의 직접 대상"},
-    {"issue": "C번호가 사용자 문장에 노출", "evidence": ["2026-10-21 effective_date", "2026-10-27 jargon_and_internal_ids"], "decision": "B-017에 포함: 구조화 인용은 보존하고 자연어의 내부 ID를 제거"},
-    {"issue": "설명 없는 약어와 전문용어", "evidence": ["2026-10-21 문제 정의", "2026-10-27 jargon_and_internal_ids"], "decision": "B-017에 포함: NFTC/NFPC를 포함한 첫 등장 용어를 쉬운 말로 설명"}
+    {
+      "issue": "질문의 핵심보다 다른 설명이 먼저 나옴",
+      "evidence": [
+        "2026-10-21 report",
+        "2026-10-27 direct_answer"
+      ],
+      "decision": "B-017에 포함: 결론 우선과 쉬운 이유의 직접 대상"
+    },
+    {
+      "issue": "C번호가 사용자 문장에 노출",
+      "evidence": [
+        "2026-10-21 effective_date",
+        "2026-10-27 jargon_and_internal_ids"
+      ],
+      "decision": "B-017에 포함: 구조화 인용은 보존하고 자연어의 내부 ID를 제거"
+    },
+    {
+      "issue": "설명 없는 약어와 전문용어",
+      "evidence": [
+        "2026-10-21 문제 정의",
+        "2026-10-27 jargon_and_internal_ids"
+      ],
+      "decision": "B-017에 포함: NFTC/NFPC를 포함한 첫 등장 용어를 쉬운 말로 설명"
+    }
   ],
   "scope_decisions": [
-    {"topic": "답변 화면에서 원문 근거와 한계가 쉬운 설명보다 앞에 표시됨", "decision": "B-017 유지", "reason": "현재 화면 순서가 읽기 흐름을 방해하며 기존 계획의 명시적 완료 조건이다.", "evidence": "2026-10-21 review의 code_change_proposal 및 apps/web/app/answer-view.tsx"},
-    {"topic": "구체적인 기준 이름 누락, 빈 sections와 일반적인 C1 체크리스트", "decision": "B-017 출력 품질 판정에 포함", "reason": "결론·이유·다음 행동이 사용자에게 전달되는지 직접 좌우한다. 생성 경로 확인 후 검색 문제가 원인이면 별도 작업으로 분리한다.", "evidence": "2026-10-27 round의 direct_answer·empty_sections"},
-    {"topic": "3천kW 대 3kW 불일치와 22m·9m의 관련성", "decision": "B-017의 안전 검증으로 추적; 기능 범위 확장 보류", "reason": "표현 수정 전에 수치와 인용을 확인해야 하지만 현재 기록만으로 검색·코퍼스 결함을 확정할 수 없다.", "evidence": "2026-10-21 permit 및 2026-10-27 numeric_claims"},
-    {"topic": "지시 대상 없는 '이 기준'·'이 규정'에 임의 답변", "decision": "답변의 근거 부족 표현은 B-017; 질문 해석·clarification 경로 변경은 별도 판단", "reason": "읽기 쉬운 불확실성 표현은 현재 완료 조건이며 라우팅 변경은 기존 계획의 검색 변경 제외 경계 밖이다.", "evidence": "2026-10-21 effective_date·applicability"},
-    {"topic": "후속 질문에 답변을 연결하는 상태 계약", "decision": "B-016으로 분리", "reason": "원 질문·누적 사실 전달은 이미 B-016의 소유 범위다. B-017에서는 사용자에게 보이는 질문 문장만 판정한다.", "evidence": "2026-10-21 clarification 및 docs/CURRENT_STATE.md"},
-    {"topic": "503 생성 실패", "decision": "B-017 확장 보류", "reason": "읽을 답변이 없고 실패 원인이 미확인이다. 재시도와 진단 후 신뢰성 작업 여부를 결정한다.", "evidence": "2026-10-21 insufficient_evidence"}
+    {
+      "topic": "답변 화면에서 원문 근거와 한계가 쉬운 설명보다 앞에 표시됨",
+      "decision": "B-017 유지",
+      "reason": "현재 화면 순서가 읽기 흐름을 방해하며 기존 계획의 명시적 완료 조건이다.",
+      "evidence": "2026-10-21 review의 code_change_proposal 및 apps/web/app/answer-view.tsx"
+    },
+    {
+      "topic": "구체적인 기준 이름 누락, 빈 sections와 일반적인 C1 체크리스트",
+      "decision": "B-017 출력 품질 판정에 포함",
+      "reason": "결론·이유·다음 행동이 사용자에게 전달되는지 직접 좌우한다. 생성 경로 확인 후 검색 문제가 원인이면 별도 작업으로 분리한다.",
+      "evidence": "2026-10-27 round의 direct_answer·empty_sections"
+    },
+    {
+      "topic": "C5의 3천킬로와트와 체크리스트의 3kW 불일치",
+      "decision": "B-018로 분리",
+      "reason": "사용자 확인대로 요약의 수치는 C5와 일치하고 체크리스트 예시가 다르다. 현행 V1 검증은 인용 ID 구조만 확인하며 수치 대조 보조 함수는 호출하지 않는다. 과거 의미 검사 오탐을 피할 좁은 수치 검증이 필요하다.",
+      "evidence": "2026-10-21 raw permit·C5, apps/api/tests/test_grounding_gate.py L81-L101"
+    },
+    {
+      "topic": "이전 대화를 가리키는 '이 기준'·'이 규정'",
+      "decision": "B-017에서 보류; 대화 맥락 전달 경계에서 확인",
+      "reason": "사용자는 이전 대화의 후속 질문이었다고 확인했다. 2026-10-21 원자료에는 이전 턴·conversation 식별자가 없어 실제 전달 여부는 판정할 수 없다. B-016은 clarification case의 원 질문·fact에 한정되므로 일반 대화 맥락까지 해결한다고 단정하지 않는다. 저장 응답의 C1은 두 사례에서 서로 다른 문서(화재안전기술기준과 전기사업법 시행규칙)를 가리키므로 C1 번호나 후속 sections만으로 이전 claim을 이어받았다고 볼 수 없다.",
+      "evidence": "2026-10-21 effective_date·applicability 및 B-016 계획"
+    },
+    {
+      "topic": "후속 질문 연결 안내",
+      "decision": "B-017에서 제외; continuation 작업에서 검토",
+      "reason": "사용자가 이 사례를 후속 질문 연결 문제로 판정했다. 원 질문·누적 사실 전달은 B-016의 소유 범위다.",
+      "evidence": "2026-10-21 clarification"
+    },
+    {
+      "topic": "503 생성 실패",
+      "decision": "B-017에서 제외",
+      "reason": "읽을 답변이 없고 실패 원인이 미확인이다. 별도 신뢰성 진단이 필요하다.",
+      "evidence": "2026-10-21 insufficient_evidence"
+    },
+    {
+      "topic": "10월 27일 응답의 22m·9m 조건",
+      "decision": "B-017 문제 목록에서 제외",
+      "reason": "사용자가 이 질문에 필요한 조건이라고 확인했다. 법적 수치의 원문 일치 여부는 이 review에서 별도로 검증하지 않았다.",
+      "evidence": "2026-10-27 numeric_claims 및 2026-10-27 사용자 판정"
+    }
   ],
-  "next_round": ["같은 대표 질문의 변경 전후 답변과 화면 순서를 기록한다.", "각 주장에 연결된 인용 위치와 수치를 원문과 대조한다.", "사람이 결론·이유·다음 행동·근거 표시를 각각 판정하고 미달 사례만 최소 수정한다."],
+  "next_round": [
+    "B-017에 남은 답변의 직접성·쉬운 말·화면 순서·내부 ID 노출·빈 설명 본문을 같은 질문의 변경 전후로 비교한다.",
+    "숫자 불일치 재현은 B-018로 넘긴다.",
+    "사람이 결론·이유·다음 행동·근거 표시를 각각 판정하고 미달 사례만 최소 수정한다."
+  ],
   "human_acceptance": "미판정"
 }
