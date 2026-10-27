@@ -1,0 +1,533 @@
+{
+  "schema_version": "1",
+  "collected_at_utc": "2026-10-21T07:48:03.202127+00:00",
+  "source": "current app.main /v1/questions TestClient",
+  "cases": [
+    {
+      "question": "태양광 발전사업을 하려면 허가를 받아야 하나요?",
+      "http_status": 200,
+      "response": {
+        "request_id": "65830a72-2c2f-435f-a188-39997d10f11d",
+        "mode": "ai",
+        "summary": "태양광 발전사업을 하려면 전기사업법에 따라 허가를 받아야 한다. 다만, 발전설비용량이 3천킬로와트 이하인 경우 사업허가증을 별도로 발급받는 절차가 간소화될 수 있다.",
+        "scope": "사업유형 및 시설유형이 미제공된 상태이며, 기준일 2026-10-21의 최신 법령을 기준으로 검토한다.",
+        "sections": [
+          {
+            "claim": "전기사업법에 따라 태양광 발전사업을 하려면 허가를 받아야 한다.",
+            "explanation": "전기사업법 제7조에 따르면 전기사업을 하려는 자는 기후에너지환경부장관 또는 시·도지사(허가권자)의 허가를 받아야 한다. 태양광 발전사업은 전기사업에 해당하므로 허가 대상이 된다.",
+            "citation_ids": [
+              "C2"
+            ]
+          },
+          {
+            "claim": "3천킬로와트 이하 규모의 태양광 발전사업은 사업허가증 발급 절차가 적용될 수 있다.",
+            "explanation": "전기사업법 시행규칙 제6조에 따르면 발전설비용량이 3천킬로와트 이하인 경우 기후에너지환경부장관 또는 시·도지사가 허가를 하는 경우 별도의 사업허가증을 발급한다.",
+            "citation_ids": [
+              "C5"
+            ]
+          }
+        ],
+        "checklist": [
+          {
+            "label": "태양광 발전설비의 용량을 확인하세요. (예: 3kW 이하 여부)",
+            "status": "required",
+            "citation_ids": [
+              "C5"
+            ]
+          }
+        ],
+        "citations": [
+          {
+            "id": "C1",
+            "provision_id": "6801166d-1204-54f0-95f9-15587528e204",
+            "document_title": "전기사업법",
+            "version_label": "MST 283981",
+            "path": "제7조의3/항①",
+            "quote": "① 시ㆍ도지사가 제98조제1항에 따라 전기사업의 허가 권한을 위임받거나 시ㆍ도지사가 허가권자인 태양광 발전사업(「신에너지 및 재생에너지 개발ㆍ이용ㆍ보급 촉진법」 제2조제2호가목의 태양에너지 중 태양광을 이용하는 발전사업을 말한다. 이하 같다)에 대하여 제7조에 따른 전기사업의 허가 또는 변경허가를 하는 경우 시ㆍ도지사가 다음 각 호의 인가ㆍ허가ㆍ승인ㆍ면허ㆍ협의ㆍ해제ㆍ신고 또는 심사 등(이하 \"인ㆍ허가등\"이라 한다)에 관하여 인ㆍ허가등의 관계 행정기관의 장과 미리 협의한 사항에 대해서는 그 인ㆍ허가등을 받은 것으로 본다. <개정 2021.7.20, 2022.12.27, 2026.3.10>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=001854&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          },
+          {
+            "id": "C2",
+            "provision_id": "471dab54-74f6-5abb-8140-dafbea143180",
+            "document_title": "전기사업법",
+            "version_label": "MST 283981",
+            "path": "제7조/항①",
+            "quote": "① 전기사업을 하려는 자는 대통령령으로 정하는 바에 따라 전기사업의 종류별 또는 규모별로 기후에너지환경부장관 또는 시ㆍ도지사(이하 \"허가권자\"라 한다)의 허가를 받아야 한다. 허가받은 사항 중 기후에너지환경부령으로 정하는 중요 사항을 변경하려는 경우에도 또한 같다. <개정 2013.3.23, 2020.2.18, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=001854&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          },
+          {
+            "id": "C3",
+            "provision_id": "9fc4a62e-c358-5d55-94e3-d363236240fa",
+            "document_title": "전기사업법",
+            "version_label": "MST 283981",
+            "path": "제10조/항①",
+            "quote": "① 다음 각 호의 어느 하나에 해당하는 자는 기후에너지환경부령으로 정하는 바에 따라 허가권자의 인가를 받아야 한다. <개정 2014.10.15, 2016.1.27, 2019.4.23, 2020.2.18, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=001854&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          },
+          {
+            "id": "C4",
+            "provision_id": "553d5497-cc11-56a5-bfe9-cea1a2588835",
+            "document_title": "전기사업법",
+            "version_label": "MST 283981",
+            "path": "제61조/항①",
+            "quote": "① 전기사업자는 전기사업용전기설비의 설치공사 또는 변경공사로서 기후에너지환경부령으로 정하는 공사를 하려는 경우에는 그 공사계획에 대하여 기후에너지환경부장관의 인가를 받아야 한다. 인가받은 사항을 변경하려는 경우에도 또한 같다. <개정 2013.3.23, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=001854&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          },
+          {
+            "id": "C5",
+            "provision_id": "f78a6aa0-1d83-53b2-b2b6-c5786060151a",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제6조",
+            "quote": "제6조(사업허가증) 기후에너지환경부장관 또는 시ㆍ도지사(발전설비용량이 3천킬로와트 이하인 발전사업의 경우로 한정한다)는 법 제7조제1항에 따른 전기사업에 대한 허가(변경허가를 포함한다)를 하는 경우에는 별지 제4호서식 또는 별지 제5호서식의 사업허가증을 발급하여야 한다. <개정 2013.3.23, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          }
+        ],
+        "limitations": [
+          "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다.",
+          "이 서비스는 법률 자문을 대체하지 않습니다."
+        ],
+        "corpus_as_of": "2026-09-03T08:55:14.028556Z",
+        "result_status": "results",
+        "fallback_reason": null,
+        "action": "partially_answerable",
+        "route": "legal_search"
+      }
+    },
+    {
+      "question": "소규모 태양광 설비는 신고만 하면 되나요?",
+      "http_status": 200,
+      "response": {
+        "request_id": "e1f40a71-f860-4fcf-9876-d44e5c6f6d11",
+        "mode": "ai",
+        "summary": "소규모 태양광 설비는 신고만 하면 되는지 여부는 설비 규모와 거래 방식에 따라 달라집니다. 3천kW 이하인 경우 사업개시신고가 필요하며, 연간 총생산량 30% 미만으로 전력을 거래하는 경우 신고 요건이 완화될 수 있습니다. 구체적인 적용 여부는 설비 용량과 거래 규모를 확인해야 합니다.",
+        "scope": "기준일 2026-10-21, 사업단계 planning, 시설유형 미제공",
+        "sections": [
+          {
+            "claim": "3천kW 이하 태양광 설비는 사업개시신고가 필요합니다.",
+            "explanation": "전기사업법 시행규칙 제8조에 따라 사업개시의 신고를 하려는 자는 사업개시를 증명할 수 있는 서류를 첨부하여 기후에너지환경부장관 또는 시·도지사에게 제출해야 합니다. 이 경우 발전시설용량이 3천킬로와트 이하인 발전사업의 경우 시·도지사에게 제출합니다.",
+            "citation_ids": [
+              "C3"
+            ]
+          },
+          {
+            "claim": "연간 총생산량 30% 미만으로 전력을 거래하는 경우 신고 요건이 적용될 수 있습니다.",
+            "explanation": "전기사업법 시행령 제19조 제2항 제2호에 따르면 태양광 설비를 제외한 설비 중 연간 총생산량의 30퍼센트 미만의 범위에서 전력을 거래하는 경우 특정 요건이 적용됩니다. 태양광 설비의 경우 이 조항의 직접 적용 여부는 추가 확인이 필요합니다.",
+            "citation_ids": [
+              "C4"
+            ]
+          },
+          {
+            "claim": "자가용 전기설비 설치·변경 시 시·도지사에게 신고해야 합니다.",
+            "explanation": "전기안전관리법 제8조 제2항에 따르면 제1항에 따라 인가를 받아야 하는 공사 외의 자가용전기설비의 설치 또는 변경공사로서 기후에너지환경부령으로 정하는 공사를 하려는 자는 공사를 시작하기 전에 시·도지사에게 신고해야 합니다.",
+            "citation_ids": [
+              "C5"
+            ]
+          }
+        ],
+        "checklist": [
+          {
+            "label": "설비 용량(킬로와트 단위)을 확인하세요.",
+            "status": "required",
+            "citation_ids": [
+              "C3"
+            ]
+          },
+          {
+            "label": "연간 전력 거래량(총생산량 30% 기준)을 확인하세요.",
+            "status": "required",
+            "citation_ids": [
+              "C4"
+            ]
+          },
+          {
+            "label": "사업개시 예정일을 확인하세요.",
+            "status": "required",
+            "citation_ids": [
+              "C3"
+            ]
+          }
+        ],
+        "citations": [
+          {
+            "id": "C1",
+            "provision_id": "03e64d83-801f-57fe-a5a5-a83e43c64c1b",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제21조",
+            "quote": "제21조(전기설비의 시설계획 및 전기공급계획의 신고) 법 제26조에 따라 전기설비의 시설계획 및 전기공급계획의 신고를 하려는 전기사업자는 별지 제14호서식의 전기설비시설계획 신고서 및 별지 제15호서식의 전기공급계획 신고서에 다음 각 호의 구분에 따른 서류를 첨부하여 기후에너지환경부장관에게 제출하여야 한다. <개정 2013.3.23, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          },
+          {
+            "id": "C2",
+            "provision_id": "fcf5e4f4-0d11-5894-bdda-d8c70988fb55",
+            "document_title": "전기사업법",
+            "version_label": "MST 283981",
+            "path": "제26조",
+            "quote": "제26조(전기설비의 시설계획 등의 신고) 전기사업자는 대통령령으로 정하는 바에 따라 전기설비의 시설계획 및 전기공급계획을 작성하여 기후에너지환경부장관에게 신고하여야 한다. 신고한 사항을 변경하는 경우에도 또한 같다. <개정 2013.3.23, 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=001854&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          },
+          {
+            "id": "C3",
+            "provision_id": "ed58a98c-455c-54ac-9f41-581c2b35f043",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제8조",
+            "quote": "제8조(사업개시신고) 법 제9조제4항에 따라 사업개시의 신고를 하려는 자는 별지 제6호서식의 사업개시신고서에 사업개시를 증명할 수 있는 서류(발전사업자의 경우에는 최초로 전력거래를 한 사실을 증명할 수 있는 서류를 말한다)를 첨부하여 기후에너지환경부장관 또는 시ㆍ도지사(발전시설용량이 3천킬로와트 이하인 발전사업의 경우로 한정한다)에게 제출해야 한다. 이 경우 「산지관리법」 제39조제2항에 따른 중간복구명령(이에 따른 복구준공검사를 포함한다)을 받은 발전사업자는 법 제31조의2제1항에 따라 이를 전력거래 전에 완료하였음을 증명하는 서류를 함께 제출해야 한다. <개정 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          },
+          {
+            "id": "C4",
+            "provision_id": "85a4a1f5-cdac-5335-8c41-aa26e5e967aa",
+            "document_title": "전기사업법 시행령",
+            "version_label": "MST 281207",
+            "path": "제19조/항②/호2.",
+            "quote": "2. 태양광 설비 외의 설비(석탄을 에너지원으로 이용하는 설비는 2017년 2월 28일까지 「전기안전관리법」 제8조제1항 전단 또는 같은 조 제2항 전단에 따른 설치공사ㆍ변경공사의 공사계획의 인가 신청 또는 신고를 한 경우로 한정한다)를 설치한 자가 해당 설비를 통하여 생산한 전력의 연간 총생산량의 30퍼센트 미만의 범위에서 전력을 거래하는 경우",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=004692&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0007"
+          },
+          {
+            "id": "C5",
+            "provision_id": "4e893375-79da-57be-b009-33a901b87d28",
+            "document_title": "전기안전관리법",
+            "version_label": "MST 268805",
+            "path": "제8조/항②",
+            "quote": "② 제1항에 따라 인가를 받아야 하는 공사 외의 자가용전기설비의 설치 또는 변경공사로서 기후에너지환경부령으로 정하는 공사를 하려는 자는 공사를 시작하기 전에 시ㆍ도지사에게 신고하여야 한다. 신고한 사항을 변경하려는 경우에도 또한 같다. <개정 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=013718&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0002"
+          }
+        ],
+        "limitations": [
+          "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다.",
+          "이 서비스는 법률 자문을 대체하지 않습니다."
+        ],
+        "corpus_as_of": "2026-09-03T08:55:14.028556Z",
+        "result_status": "results",
+        "fallback_reason": null,
+        "action": "partially_answerable",
+        "route": "legal_search"
+      }
+    },
+    {
+      "question": "이 기준은 언제부터 적용되나요?",
+      "http_status": 200,
+      "response": {
+        "request_id": "5b8572c9-baac-446e-81fb-f994320f6eb3",
+        "mode": "ai",
+        "summary": "2024년 7월 1일부터 시행되는 전기저장시설 화재안전기술기준(C1)은 소방시설 설치·관리에 적용(C4, C5)되며, 기존에 신청·착공한 대상은 종전 기준을 따르나 유리한 경우 새 기준을 적용할 수 있다(C3).",
+        "scope": "기준일: 2026-10-21, 사업단계: planning, 사업유형: 미제공, 시설유형: 미제공",
+        "sections": [
+          {
+            "claim": "이 기준은 2024년 7월 1일부터 시행된다.",
+            "explanation": "기준1.3에 따르면 이 기준은 2024년 7월 1일부터 시행한다.",
+            "citation_ids": [
+              "C1"
+            ]
+          },
+          {
+            "claim": "기준 적용 대상은 전기저장시설의 소방시설 설치·관리이다.",
+            "explanation": "기준1.1에 따라 이 기준은 소방시설 설치·관리에 적용된다.",
+            "citation_ids": [
+              "C4"
+            ]
+          },
+          {
+            "claim": "기준 시행 전에 신고·착공한 대상은 종전 기준을 따르나 유리한 경우 새 기준을 선택할 수 있다.",
+            "explanation": "기준1.5에 따르면 종전의 전기저장시설 화재안전기준을 적용하되, 새 기준이 관계인에게 유리하면 새 기준을 따를 수 있다.",
+            "citation_ids": [
+              "C3"
+            ]
+          },
+          {
+            "claim": "이 기준은 법 제2조제1항제6호나목에 따른 기술기준으로서 효력을 가진다.",
+            "explanation": "기준1.2에 따라 이 기준은 법에 따른 소방시설 기술기준으로서 효력을 가지며, 적합하면 NFPC 607을 충족한 것으로 본다.",
+            "citation_ids": [
+              "C5"
+            ]
+          }
+        ],
+        "checklist": [
+          {
+            "label": "기준 적용일을 확인하세요.",
+            "status": "check",
+            "citation_ids": [
+              "C1"
+            ]
+          },
+          {
+            "label": "기존 신고·착공 여부를 대조하세요.",
+            "status": "check",
+            "citation_ids": [
+              "C3"
+            ]
+          },
+          {
+            "label": "새 기준이 관계인에게 유리한지 확인하세요.",
+            "status": "check",
+            "citation_ids": [
+              "C3"
+            ]
+          }
+        ],
+        "citations": [
+          {
+            "id": "C1",
+            "provision_id": "8ab2d75e-e779-5d32-b6cf-386ab07f64a7",
+            "document_title": "전기저장시설의 화재안전기술기준(NFTC 607)",
+            "version_label": "MST 2100000243402",
+            "path": "기준1.3",
+            "quote": "1.3 기준의 시행1.3.1 이 기준은 2024년 7월 1일부터 시행한다. <개정 2024.7.1.>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000243402&OC=%5Bredacted%5D",
+            "source_kind": "administrative_rule",
+            "law_type_code": "B0004"
+          },
+          {
+            "id": "C2",
+            "provision_id": "d632f9ea-5005-5839-9732-63634b7faf93",
+            "document_title": "전기사업법 시행령",
+            "version_label": "MST 281207",
+            "path": "제4조/항③",
+            "quote": "③ 법 제7조제5항제6호에서 \"대통령령으로 정하는 기준\"이란 발전사업에 있어서 다음 각 호의 기준을 말한다. <개정 2016.7.28, 2020.9.29, 2022.3.25>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=004692&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0007"
+          },
+          {
+            "id": "C3",
+            "provision_id": "2f518db2-97af-5909-a50d-267d1c7779c1",
+            "document_title": "전기저장시설의 화재안전기술기준(NFTC 607)",
+            "version_label": "MST 2100000243402",
+            "path": "기준1.5",
+            "quote": "1.5 경과조치1.5.1 이 기준 시행 전에 건축허가 등의 신청 또는 신고를 하거나 소방시설공사의 착공신고를 한 특정소방대상물에 대해서는 종전의 「전기저장시설의 화재안전기준(NFSC 607)」에 따른다.1.5.2 이 기준 시행 전에 1.5.1에 따른 신청 또는 신고를 한 경우라도 제정 기준이 종전의 기준에 비하여 관계인에게 유리한 경우에는 제정 기준에 따를 수 있다.",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000243402&OC=%5Bredacted%5D",
+            "source_kind": "administrative_rule",
+            "law_type_code": "B0004"
+          },
+          {
+            "id": "C4",
+            "provision_id": "7ecd243e-6139-5972-96f7-d24c589ca1c5",
+            "document_title": "전기저장시설의 화재안전기술기준(NFTC 607)",
+            "version_label": "MST 2100000243402",
+            "path": "기준1.1",
+            "quote": "1. 일반사항 1.1 적용범위1.1.1 이 기준은 「소방시설 설치 및 관리에 관한 법률 시행령」(이하 \"영\"이라 한다) 제11조제1항에 따라 전기저장시설에 설치해야 하는 소방시설 등의 설치 및 관리에 대해 적용한다.",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000243402&OC=%5Bredacted%5D",
+            "source_kind": "administrative_rule",
+            "law_type_code": "B0004"
+          },
+          {
+            "id": "C5",
+            "provision_id": "aa0e2700-de63-5866-97b0-69aa53af4c4b",
+            "document_title": "전기저장시설의 화재안전기술기준(NFTC 607)",
+            "version_label": "MST 2100000243402",
+            "path": "기준1.2",
+            "quote": "1.2 기준의 효력1.2.1 이 기준은 「소방시설 설치 및 관리에 관한 법률」(이하 \"법\"이라 한다) 제2조제1항제6호나목에 따라 전기저장시설에 설치하는 소방시설 등의 기술기준으로서의 효력을 가진다.1.2.2 이 기준에 적합한 경우에는 법 제2조제1항제6호나목에 따라 「전기저장시설의 화재안전성능기준(NFPC 607)」 을 충족하는 것으로 본다.",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000243402&OC=%5Bredacted%5D",
+            "source_kind": "administrative_rule",
+            "law_type_code": "B0004"
+          }
+        ],
+        "limitations": [
+          "검색된 근거와 제공된 사실만으로 확인 가능한 범위의 답변입니다.",
+          "이 서비스는 법률 자문을 대체하지 않습니다."
+        ],
+        "corpus_as_of": "2026-09-03T08:55:14.028556Z",
+        "result_status": "results",
+        "fallback_reason": null,
+        "action": "partially_answerable",
+        "route": "legal_search"
+      }
+    },
+    {
+      "question": "저희 발전소도 이 규정의 적용 대상인가요?",
+      "http_status": 200,
+      "response": {
+        "request_id": "80ea6761-97fc-4583-82b9-200541b9227c",
+        "mode": "ai",
+        "summary": "제공된 근거만으로는 질문하신 발전소가 이 규정의 적용 대상인지 판단하기 어렵습니다. 사업유형과 시설유형이 제공되지 않아 적용 여부를 확인할 수 없기 때문입니다.",
+        "scope": "기준일 2026-10-21, 사업단계 planning",
+        "sections": [
+          {
+            "claim": "사업유형과 시설유형이 제공되지 않아 적용 여부를 확인할 수 없습니다.",
+            "explanation": "규정 적용 여부는 사업유형과 시설유형에 따라 달라지므로, 이 두 가지 정보가 있어야 판단할 수 있습니다.",
+            "citation_ids": [
+              "C1",
+              "C2",
+              "C3",
+              "C4",
+              "C5"
+            ]
+          },
+          {
+            "claim": "C1 조문은 '터빈 및 보일러와 같은 목에 따른 발전기계통설비 중 발전기를 모두 변경하는 경우'만 해당한다고 규정합니다.",
+            "explanation": "C1 [라]호에 따르면, 별표 5 제1호나목에 따른 발전설비 중 터빈과 보일러에 해당하는 발전기계통설비 중 발전기를 모두 변경하는 경우에만 적용된다고 명시되어 있습니다.",
+            "citation_ids": [
+              "C1"
+            ]
+          },
+          {
+            "claim": "C2 조문은 '차액계약의 적용 대상'을 정의하고 있습니다.",
+            "explanation": "C2에 따르면 법 제34조제2항 본문에서 정하는 '대통령령으로 정하는 기준에 해당하는 발전사업자와 전력구매자'의 범위가 구분되어 있습니다.",
+            "citation_ids": [
+              "C2"
+            ]
+          },
+          {
+            "claim": "C3 조문은 '집단에너지사업자의 전기공급에 대한 특례'를 규정하고 있습니다.",
+            "explanation": "C3에 따르면 「집단에너지사업법」 제2조제3호에 따른 사업자로서 50만킬로와트 이하의 발전설비용량을 갖춘 자를 '대통령령으로 정하는 발전설비용량을 갖춘 자'로 봅니다.",
+            "citation_ids": [
+              "C3"
+            ]
+          },
+          {
+            "claim": "C4 조문은 '구역전기사업자에 대한 준용'을 규정하고 있습니다.",
+            "explanation": "C4에 따르면 구역전기사업자에 관하여 제13조부터 제17조까지의 규정이 준용되며, '전기판매사업자'는 '구역전기사업자'로 본다고 명시되어 있습니다.",
+            "citation_ids": [
+              "C4"
+            ]
+          },
+          {
+            "claim": "C5 조문은 '도시가스사업장, 액화석유가스사업장, 고압가스 제조소 및 저장소'를 나열하고 있습니다.",
+            "explanation": "C5에 따르면 도시가스사업법, 액화석유가스 안전관리법, 고압가스 안전관리법에 해당하는 사업장 등이 목록에 포함되어 있습니다.",
+            "citation_ids": [
+              "C5"
+            ]
+          }
+        ],
+        "checklist": [
+          {
+            "label": "사업유형을 확인하세요 (예: 신재생에너지, 집단에너지, 일반 발전 등)",
+            "status": "required",
+            "citation_ids": [
+              "C1",
+              "C2",
+              "C3"
+            ]
+          },
+          {
+            "label": "시설유형(터빈, 보일러 등)을 확인하세요",
+            "status": "required",
+            "citation_ids": [
+              "C1"
+            ]
+          },
+          {
+            "label": "발전설비용량을 확인하세요 (50만킬로와트 이하 여부)",
+            "status": "required",
+            "citation_ids": [
+              "C3"
+            ]
+          }
+        ],
+        "citations": [
+          {
+            "id": "C1",
+            "provision_id": "b7d3c3b1-c15d-5a1a-b698-ba7c309fb9c1",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제5조/항①/호3./목라.",
+            "quote": "라. 별표 5 제1호나목에 따른 발전설비[별표 5 제1호나목에 따른 원동력설비 중 터빈(높은 압력의 액체ㆍ기체를 날개바퀴의 날개에 부딪히게 함으로써 회전하는 힘을 얻는 기계를 말한다) 및 보일러와 같은 목에 따른 발전기계통설비 중 발전기를 모두 변경하는 경우만 해당한다]",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          },
+          {
+            "id": "C2",
+            "provision_id": "24c5ced2-2e29-52b1-9472-8c6db4c27590",
+            "document_title": "전기사업법 시행령",
+            "version_label": "MST 281207",
+            "path": "제20조의2",
+            "quote": "제20조의2(차액계약의 적용 대상) 법 제34조제2항 본문에서 \"대통령령으로 정하는 기준에 해당하는 발전사업자와 전력구매자\"란 다음 각 호의 구분에 따른 발전사업자와 전력구매자를 말한다. <개정 2025.10.1>",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=004692&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0007"
+          },
+          {
+            "id": "C3",
+            "provision_id": "0c0073e6-8e40-515a-8492-09e2101fd30c",
+            "document_title": "전기사업법 시행령",
+            "version_label": "MST 281207",
+            "path": "제59조의2",
+            "quote": "제59조의2(집단에너지사업자의 전기공급에 대한 특례) 법 제92조의2제1항에서 \"대통령령으로 정하는 발전설비용량을 갖춘 자\"란 「집단에너지사업법」 제2조제3호에 따른 사업자로서 50만킬로와트 이하의 발전설비용량을 갖춘 자를 말한다.",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=004692&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0007"
+          },
+          {
+            "id": "C4",
+            "provision_id": "7c2885f4-39cd-5b9b-a0df-8247cf3ef724",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제19조의2",
+            "quote": "제19조의2(구역전기사업자에 대한 준용) 구역전기사업자에 관하여는 제13조부터 제17조까지의 규정을 준용한다. 이 경우 \"전기판매사업자\"는 \"구역전기사업자\"로 본다.",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          },
+          {
+            "id": "C5",
+            "provision_id": "81919045-b307-54e5-89d9-ca749ef0ffec",
+            "document_title": "전기사업법 시행규칙",
+            "version_label": "MST 278987",
+            "path": "제3조/항②/호2./목다.",
+            "quote": "다. 「도시가스사업법」에 따른 도시가스사업장, 「액화석유가스의 안전관리 및 사업법」에 따른 액화석유가스의 저장ㆍ충전 및 판매사업장 또는 「고압가스 안전관리법」에 따른 고압가스의 제조소 및 저장소",
+            "source_url": "https://www.law.go.kr/DRF/lawService.do?target=eflaw&ID=008038&OC=%5Bredacted%5D",
+            "source_kind": "law",
+            "law_type_code": "A0114"
+          }
+        ],
+        "limitations": [
+          "이 서비스는 법률 자문을 대체하지 않습니다."
+        ],
+        "corpus_as_of": "2026-09-03T08:55:14.028556Z",
+        "result_status": "results",
+        "fallback_reason": null,
+        "action": "unanswerable",
+        "route": "legal_search"
+      }
+    },
+    {
+      "question": "계약서상 위약금 조항이 유효한가요?",
+      "http_status": 503,
+      "error": "AI 답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요."
+    },
+    {
+      "question": "제 설비 용량에 맞는 절차는 무엇인가요?",
+      "http_status": 200,
+      "response": {
+        "request_id": "1f3c7f52-7f91-464a-a07a-15d2078be4f3",
+        "mode": "ai",
+        "summary": "정확한 절차를 확인하려면 추가 정보가 필요합니다.\n다음 메시지에는 아래 내용을 전체 복사한 뒤 [ ]를 채워 한 번에 보내주세요.\n추가 정보만 따로 보내지 마세요.\n\n질문: 제 설비 용량에 맞는 절차는 무엇인가요?\n추가 정보:\n- 설비용량: 발전설비의 용량은 얼마인가요? (예: 50kW): [ ]",
+        "scope": "질문에 답하려면 추가 정보가 필요합니다.",
+        "sections": [],
+        "checklist": [],
+        "citations": [],
+        "limitations": [
+          "이 서비스는 법률 자문을 대체하지 않습니다."
+        ],
+        "corpus_as_of": null,
+        "result_status": "results",
+        "fallback_reason": null,
+        "action": "clarification_required",
+        "route": "clarification_required"
+      }
+    }
+  ]
+}

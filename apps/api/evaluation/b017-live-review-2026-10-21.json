@@ -1,0 +1,78 @@
+{
+  "schema_version": "1",
+  "source": "b017-live-raw-2026-10-21.json",
+  "code_head": "1cc269cb57c93077850b5fd8bbfa1c40c015c280",
+  "method": "현재 checkout의 app.main /v1/questions를 TestClient로 실행. 개발 DB와 NVIDIA 모델 사용.",
+  "attempted": 6,
+  "successful_answers": 5,
+  "failed_requests": 1,
+  "note": "실제 현재 코드 실행 결과다. 웹 화면의 시각적 렌더링은 확인하지 않았다. 모델 출력은 비결정적이다.",
+  "cases": [
+    {
+      "id": "permit",
+      "status": 200,
+      "problem": "허가 필요 여부와 허가증 발급 절차가 섞였다. 요약은 3천kW, 체크리스트 예시는 3kW로 불일치한다.",
+      "cause_hypothesis": "생성된 문장의 숫자와 절차 구분에 대한 일관성 검사가 부족하다.",
+      "example_after_evidence_check": "발전사업에는 허가가 필요한 것으로 확인됩니다. 허가가 필요한지와 허가증을 받는 절차는 구분해야 합니다. 설비 용량을 확인하세요.",
+      "decision": "표현 변경 전에 숫자와 인용 근거를 검증한다."
+    },
+    {
+      "id": "report",
+      "status": 200,
+      "problem": "첫 문장이 질문을 반복한다. 사업개시신고와 허가·신고 구분이 섞이고 30% 거래 조건의 관련성이 불확실하다.",
+      "cause_hypothesis": "여러 검색 규정을 요약하면서 질문의 핵심 구분이 약해졌다.",
+      "example_after_evidence_check": "신고만 하면 되는지는 지금 정보로 정할 수 없습니다. 설비 용량과 전기를 어떻게 사용할지 먼저 확인하세요.",
+      "decision": "30% 조건의 관련성과 근거를 먼저 확인한 뒤 요약을 줄인다."
+    },
+    {
+      "id": "effective_date",
+      "status": 200,
+      "problem": "'이 기준'이 무엇인지 없는데 특정 화재안전기준을 골라 날짜를 답했다. C번호가 본문에 드러났다.",
+      "cause_hypothesis": "지시 대상이 없는 질문도 검색으로 진행됐고 생성 문장에 내부 인용 ID가 포함됐다.",
+      "example_after_evidence_check": "어떤 기준을 말씀하시는지 알려주세요. 기준 이름을 알면 시행일을 확인할 수 있습니다.",
+      "decision": "지시 대상 확인 경로를 조사한다. C번호는 문장 대신 인용 연결에만 둔다."
+    },
+    {
+      "id": "applicability",
+      "status": 200,
+      "problem": "요약은 판단 불가를 밝히지만 뒤에 C1~C5의 여러 다른 조문 설명이 붙는다.",
+      "cause_hypothesis": "unanswerable 응답에도 관련성이 낮은 sections가 남았다.",
+      "example_after_evidence_check": "어떤 규정인지와 발전소의 종류를 몰라 적용 대상인지 판단할 수 없습니다. 규정 이름과 발전소 정보를 알려주세요.",
+      "decision": "관련성 낮은 sections를 비우고 필요한 질문만 남기는 경로를 조사한다."
+    },
+    {
+      "id": "insufficient_evidence",
+      "status": 503,
+      "problem": "생성 실패로 가독성 답변을 얻지 못했다.",
+      "cause_hypothesis": "미확인",
+      "example_after_evidence_check": null,
+      "decision": "재시도와 실패 원인 확인 전에는 문장 코드를 바꾸지 않는다."
+    },
+    {
+      "id": "clarification",
+      "status": 200,
+      "problem": "설비용량 하나를 묻기 위해 전체 질문 복사와 빈칸 작성을 요구한다.",
+      "cause_hypothesis": "후속 입력 계약을 위한 안내 문구가 사용자에게 길게 노출된다.",
+      "example_after_evidence_check": "설비 용량을 알려주세요. 몇 kW인지 알면 적용 절차를 확인할 수 있습니다.",
+      "decision": "짧은 후속 답변이 실제 연결되는지 먼저 확인한다."
+    }
+  ],
+  "code_change_proposal": [
+    {
+      "problem": "쉬운 설명과 다음 행동보다 전체 원문 근거가 먼저 나온다.",
+      "cause": "apps/web/app/answer-view.tsx의 현재 렌더링 순서가 summary, citations, limitations, sections, checklist다.",
+      "solution": "summary 다음에 sections와 checklist를 두고 전체 근거·한계를 뒤로 옮긴다. 주장별 인용 링크는 유지한다."
+    },
+    {
+      "problem": "C번호가 자연어 문장에 남는다.",
+      "cause": "현재 생성 출력의 summary가 구조화된 citation_ids 외에 내부 ID를 직접 썼다.",
+      "solution": "생성 지침과 출력 검사에서 자연어 필드의 내부 ID를 제한하되 인용 연결은 보존한다."
+    },
+    {
+      "problem": "지시 대상이 없는 질문에 임의 규정을 적용한다.",
+      "cause": "'이 기준'과 '이 규정'의 지시 대상이 없는데도 검색이 진행됐다.",
+      "solution": "대상이 불명확하면 먼저 무엇을 뜻하는지 묻는 경로를 조사한다."
+    }
+  ],
+  "remaining_checks": ["503 사례 재시도", "인용 위치와 실제 법령 내용 검증", "웹 화면 순서 검증", "수정 전후 동일 질문 비교"]
+}
