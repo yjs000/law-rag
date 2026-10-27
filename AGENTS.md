@@ -171,13 +171,14 @@ Windows Python runner 오류나 GitHub 인증 확인이 필요할 때만
 
 ## graphify
 
-Graphify skill은 implicit invocation을 금지한다. 사용자가 `/graphify` 또는 `$graphify`를 명시했을 때만
-호출하고, 읽기 전용 검토·기능 worktree에서는 자동 갱신 가능 CLI를 실행하지 않는다. 기존 graph가
-필요하면 추적된 `graphify-out/graph.json`을 직접 읽는다. 갱신과 산출물 commit은 소스 통합 뒤 통합
-대상 branch가 한 번만 소유하며, 자세한 실행·hook·rollback 절차는
+Graphify는 기본적으로 끄고, 에이전트가 모듈 간 의존성·영향 범위 조사에 실익이 있다고 판단할 때만
+사용한다. 사용자 명시 호출은 필수가 아니며 필요 이유와 `graph_mode`를 먼저 선언한다. 단순 수정이나
+일반 검색은 `rg`를 우선한다. 읽기 전용 검토·기능 worktree에서는 자동 갱신 가능 CLI를 실행하지 않고,
+기존 graph가 필요하면 추적된 `graphify-out/graph.json`을 직접 읽는다. 갱신과 산출물 commit은 필요할 때
+통합 대상 branch가 한 번만 소유하며, 자세한 실행·hook·rollback 절차는
 [`docs/references/worktree-policy.md`](docs/references/worktree-policy.md)를 따른다.
 
-예외적으로 통합 대상 branch에서 소스 통합을 마친 뒤 실행하는 정확한 명령 `graphify update .`와 그
-Windows 권한 상승은 사용자가 2026-09-17 지속 승인했다. 에이전트는 이 범위에 대해 별도 승인을 다시
-묻지 않고 실행한다. 이 승인은 기능 worktree 실행, `graphify label`, 외부 LLM/API 사용, 예상 밖 파일
+통합 대상 branch에서 필요한 graph 갱신을 위한 정확한 명령 `graphify update .`와 그 Windows 권한 상승은
+2026-09-17 지속 승인 및 2026-10-27 필요성 판단 위임 범위다. 매 변경마다 자동 실행하지 않으며, 필요할 때
+별도 승인을 다시 묻지 않고 실행한다. 이 승인은 기능 worktree 실행, `graphify label`, 외부 LLM/API 사용, 예상 밖 파일
 변경의 수용에는 적용되지 않으며 플랫폼이 강제하는 runtime approval을 우회하지 않는다.

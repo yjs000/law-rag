@@ -42,7 +42,7 @@ graph_mode=<off|read-only|integration-update>
 - `graphify update`와 자동 갱신 가능성이 있는 `graphify query`, `graphify path`, `graphify explain`
 
 Graphify가 필요한 읽기 전용 검토에서는 기존 `graphify-out/graph.json`을 직접 읽는 traversal만 사용한다.
-Graphify CLI 갱신은 통합 대상 branch에서 소스 통합 뒤 한 번만 실행한다. 명령이 예상 밖 파일을 바꾸면
+Graphify CLI 갱신은 필요성이 확인된 경우에만 통합 대상 branch에서 한 번 실행한다. 명령이 예상 밖 파일을 바꾸면
 추가 복구 명령을 연쇄 실행하지 말고, 시작 snapshot과 현재 상태를 비교해 현재 task가 만든 파일만
 식별한다. 다른 task가 같은 checkout을 변경 중이면 즉시 쓰기를 중단한다.
 
@@ -110,10 +110,11 @@ hook만 대상으로 한다. 사용자 명령이 앞뒤에 있는 복합 hook은
 검사한 뒤 변경하므로 중간 상태를 남기지 않으며, 기존 backup과 내용이 다르면 덮어쓰지 않고 실패한다.
 복구할 때는 활성 hook 이름이 비어 있고 backup의 marker가 맞는지 확인한 뒤 원래 이름으로 되돌린다.
 
-Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합 뒤에만 실행한다. 기능 worktree에서는
+Graphify는 기본 off이며, 명시 요청 또는 에이전트가 모듈 간 의존성·영향 범위 조사에 필요하다고 판단할 때만
+사용한다. 판단 이유와 graph_mode를 먼저 선언하고, 단순 수정·일반 검색에는 rg를 우선한다. 기능 worktree에서는
 `graphify update/query/path/explain`을 실행하지 않고, 필요 시 추적된 JSON을 직접 읽는다.
-통합 branch에서 소스 통합 직후 실행하는 정확한 명령 `graphify update .`와 필요한 Windows 권한 상승은
-지속 승인 범위다. 에이전트는 다시 묻지 않고 실행하되, 기능 worktree·`graphify label`·외부 LLM/API·
+통합 branch에서 필요한 갱신을 위한 정확한 명령 `graphify update .`와 필요한 Windows 권한 상승은
+지속 승인 범위다. 매 통합마다 자동 갱신하지 않는다. 필요할 때 다시 묻지 않고 실행하되, 기능 worktree·`graphify label`·외부 LLM/API·
 예상 밖 파일 변경은 이 승인에 포함하지 않는다. 플랫폼 runtime gate가 표시되면 저장소 문서로 우회하지
 않고 해당 gate를 그대로 따른다.
 
@@ -125,12 +126,16 @@ Graphify CLI는 사용자의 명시 요청 또는 통합 branch의 소스 통합
 | 정책 작성 | `AGENTS.md`, `docs/PLANS.md`, 이 문서 | 문서 생성·수정 | 없음 | repository 문서 변경 | 운영 계약 고정 | Approved — 2026-09-17 사용자 요청 | 저장소 검증과 diff 확인 |
 | 읽기 전용 Graphify | `graphify-out/graph.json` | 직접 읽기 | 코드·문서 graph metadata | 없음 | 구조 질의 | Approved — 2026-09-17 사용자 요청 범위 | CLI 자동 갱신 금지 |
 | Graphify 자동 hook 비활성화 | common Git hooks directory | marker hook 백업·비활성화 | repository content metadata | local hook 이름 변경 | 읽기·commit 부작용 제거 | Approved — 2026-09-17 사용자 요청 | marker와 backup 충돌 검사 |
-| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | `graphify update .` 및 필요한 Windows 권한 상승 | repository content | 추적 산출물 변경 | 통합 후 graph 일치 | Approved — 2026-09-17 사용자 지속 승인 | 소스 통합 직후 1회, 기능 worktree·label·외부 LLM 제외, platform gate 유지 |
+| Graphify 갱신 | 통합 대상 branch의 `graphify-out/` | `graphify update .` 및 필요한 Windows 권한 상승 | repository content | 추적 산출물 변경 | 필요한 구조·영향 조사와 graph 일치 | Approved — 2026-09-17 지속 승인, 2026-10-27 필요성 판단 위임 | 필요할 때 1회, 기능 worktree·label·외부 LLM 제외, platform gate 유지 |
 | worktree 제거·prune | 승인된 정확한 local path | 등록 해제·디렉터리 제거 | local files | 파괴적, 복구 비용 있음 | 불필요 worktree 정리 | Approved — 2026-09-17 사용자 요청 | clean·merged·inactive 후보만 |
 | branch 삭제 | 승인된 정확한 local branch | ref 삭제 | commit history | 미병합 시 손실 가능 | 종료 branch 정리 | Not required — 현재 정책 작업 | worktree 제거와 별도 승인 |
 | 외부 네트워크·서비스 | 없음 | 없음 | 없음 | 없음 | 정책 작성에 불필요 | Not required — 2026-09-17 | 사용하지 않음 |
 
 ## 결정 기록
+
+- 2026-10-27: 사용자가 Graphify를 에이전트 판단으로 필요할 때만 켜도록 요청했다. 기본 off,
+  필요 이유·graph_mode 선행 선언, rg 우선, 통합 branch 단일 갱신을 채택한다. 명시 호출만 허용하던
+  제한은 대체하되 읽기 전용·기능 worktree의 자동 갱신 금지와 외부 LLM/API 별도 승인은 유지한다.
 
 - 2026-09-17: 사용자가 현재 worktree를 명시하고 불필요 worktree의 안전한 제거 정책을 만들며,
   읽기 전용 검토에서 Graphify 자동 갱신으로 복구 시간이 발생하지 않게 해 달라고 요청했다. 이에 따라
