@@ -207,6 +207,7 @@ flowchart LR
 
 ## 더 읽기
 
+- [전체 문서 안내](docs/README.md)
 - [제품 목적과 사용자 가치](docs/PRODUCT_SENSE.md)
 - [시스템 아키텍처](ARCHITECTURE.md)
 - [제품 명세](docs/product-specs/index.md)
