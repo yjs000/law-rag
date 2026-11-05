@@ -1,4 +1,4 @@
-# 파이프라인 다이어그램
+# 시스템 다이어그램
 
 현재 구현 그림의 첫 진입점이다. 그림에 확인 날짜·코드 기준·근거 파일을 표시하고 설계와 실제 구현을 구분한다.
 
@@ -7,6 +7,8 @@
   확인: 2026-10-27, 코드 기준: `b17af60`.
 - [Context · case DB · execution snapshot 비교](state-context-case-execution.md): 역할·저장 위치·수명·ID·동시성,
   한 턴과 여러 턴의 관계, 프로젝트 설명 시 주의할 현재 구현 경계.
+- [데이터베이스 ERD 초안](database-erd.drawio): Alembic 마이그레이션 0001–0017 기준 테이블과 키 관계.
+  컬럼과 제약 조건의 세부 정보는 [생성된 DB 스키마](../generated/db-schema.md)를 참고합니다.
 - [과거 v1 → v2 → v3 비교](../learning/diagrams/v1-v2-v3-pipeline-evolution.html): 역사 자료.
   tier1/tier2와 v3 표현을 현재 구현으로 해석하지 않는다.
 

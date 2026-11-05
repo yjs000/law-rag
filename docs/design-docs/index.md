@@ -2,12 +2,44 @@
 
 설계 문서는 `왜 이 구조인가`를 설명한다. 현재 동작만 나열하는 문서는 코드나 생성 문서에 둔다.
 
-## 문서
+## 공통 원칙과 기술 선택
 
 | 문서 | 상태 | 설명 |
 |---|---|---|
 | [핵심 신념](core-beliefs.md) | 승인 전 초안 | 모든 구현 판단에 적용할 원칙 |
+| [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
+| [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
+| [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
+
+## 법령 수집과 검색
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
 | [RAG 파이프라인](rag-pipeline.md) | 승인 전 초안 | 수집, 색인, 검색, 답변 검증 |
+| [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
+| [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
+| [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
+| [데이터베이스 ERD](../diagrams/database-erd.drawio) | 초안 | Alembic 마이그레이션 0001–0017 기준의 전체 스키마(36개 프로젝트 테이블), PK·FK·UQ 포함 |
+| [시간 효력 모델](temporal-validity.md) | 승인 | 공포일·시행일·기준일 계약 |
+| [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 범위 정정 | 2026-10-27: LlamaIndex ingestion/retrieval·후속 Workflow, 프로젝트 router/answerer·execution/grounding 유지. Router·QueryEngine·Synthesizer 전환은 미채택 |
+
+## 질문 라우팅과 답변
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
+| [분산 질문 취소](distributed-question-cancellation.md) | 제안 | sticky routing 없는 영속 취소 신호와 상태 계약 |
+| [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
+| [답변 근거 검증](answer-grounding-validation.md) | 승인 | `DraftAnswer.action` 구조화 신호와 `validate_draft` 검증 강도 분기 |
+| [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) | 승인 | 단일 NVIDIA 라우터, `routing_unavailable` 안전 fallback, 법령 답변·안내 생성 경계 |
+| [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
+| [clarification missing_information 구조적 검증](clarification-missing-information-structural-validation.md) | 승인·구현 완료 | 고정 필드 allowlist를 자유형 질문·예시 프롬프트와 구조 검증으로 대체 |
+| [V2 질문 응답 표시 계약](v2-question-response-presentation-contract.md) | 승인 | 백엔드 소유 답변·오류 문구의 Core/Finalize 점진 표시와 Web 치환 금지 |
+| [자유 문장 추가 답변의 사실 추출](2026-09-23-clarification-free-text-fact-extraction-design.md) | 구현 완료 기록 | B-015의 추출 입력과 검증 경계 |
+
+## 평가와 실험
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
 | [평가 전략](evaluation-strategy.md) | 승인 전 초안 | 검색과 답변의 오프라인/온라인 평가 |
 | [실험 C 키워드 결합 검색](experiment-c-keyword-retrieval-options.md) | 제안·보류 | dense 기준선 이후 lexical·RRF를 비교할 후속 설계 |
 | [실험 D-10 수동 검색·문맥 진단](experiment-d-10-manual-review.md) | 완료 | 현재 DB corpus의 정답 없는 10문항 수동 진단과 사용자 확인 gate |
@@ -16,35 +48,34 @@
 | [실험 D-10 전수 qrel과 사용자 adjudication](experiment-d-10-gold-adjudication.md) | draft 완료·사용자 검토 대기 | 10문항×3,066 전수 판정, qrel·reference 제안과 사용자 seal gate |
 | [실험 D-10 end-to-end 실패-회귀 평가](experiment-d-10-end-to-end-failure-regression.md) | 승인 전 초안 | 고정 10문항의 routing·retrieval·answer·citation·guardrail 순차 회귀 |
 | [실험 P 질문 API 성능 병목 진단·개선](experiment-p-load-capacity.md) | 승인 전 초안·방향 승인 | 로컬 통제 환경의 가설·증거·개선·동일 조건 재측정 실험 |
-| [근거 우선 검색 품질](evidence-first-retrieval-quality.md) | 실험 C·D 적용 | corpus 검증, 법률 계층 복원, 근거 부족 게이트와 검색 알고리즘 채택 기준 |
-| [검색 인덱스와 임베딩 계보](retrieval-index-storage.md) | 구현 기준 | 벡터 저장·계보, exhaustive exact dense 계약과 BM25 확장 경계 |
 | [실험 D-full 1,000문항 평가](experiment-d-1000-evaluation.md) | 보류·필요 시 재검사 | D-10 밖 일반화가 필요할 때만 여는 qrels·reference·adjudication 계약 |
 | [실험 D 일반 사용자 질문은행](experiment-d-layperson-question-bank.md) | 질문 승인·Gold 보류 | 보존된 자연어 질문 후보와 필요 시 독립 Gold 승격 경계 |
-| [Open API 수집 계약](open-law-api-ingestion.md) | 승인 | JSON 우선·XML 폴백과 허용 목록 |
-| [기술 스택 ADR](technology-stack.md) | 승인 | 런타임, 데이터, AI, 배포 결정 |
-| [데이터베이스 ERD](../diagrams/database-erd.drawio) | 초안 | Alembic 마이그레이션 0001–0017 기준의 전체 스키마(36개 프로젝트 테이블), PK·FK·UQ 포함 |
+
+## 배포와 보안, 운영 관측
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
 | [Vercel·Supabase 운영 전환](vercel-supabase-deployment.md) | 승인 | FastAPI 전환 조건, 외부 선행 입력, Preview 프록시와 운영 책임 |
 | [Google OAuth·Supabase Auth 연결](google-oauth-supabase-flow.md) | 승인 전 초안 | Google·Supabase·Next.js·FastAPI의 표준 OAuth/OIDC 역할과 프로젝트별 URI |
-| [시간 효력 모델](temporal-validity.md) | 승인 | 공포일·시행일·기준일 계약 |
-| [분산 질문 취소](distributed-question-cancellation.md) | 제안 | sticky routing 없는 영속 취소 신호와 상태 계약 |
-| [AI 차별화](ai-differentiation.md) | 승인 | 생성 활용과 인용 안전 게이트 |
-| [답변 근거 검증](answer-grounding-validation.md) | 승인 | `DraftAnswer.action` 구조화 신호와 `validate_draft` 검증 강도 분기 |
-| [질문 사전 라우팅](pre-retrieval-question-routing.md) | 대체됨 | 0028의 tier1/tier2 라우팅 근거와 한계를 보존한 역사 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
-| [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) | 승인 | 단일 NVIDIA 라우터, `routing_unavailable` 안전 fallback, 법령 답변·안내 생성 경계 |
 | [NVIDIA provider 시도별 관측과 실패 분류](provider-attempt-observability.md) | 승인 | 모든 NVIDIA 호출의 시도별 Vercel 구조화 로그와 provider 소진·grounding 실패 분리 |
 | [런타임 오류 관측과 환경 스코프 분리](runtime-error-observability-and-environment-scopes.md) | 승인 | 로컬 raw·운영 redacted stack trace, NVIDIA 3.5 모델 주입과 Vercel Production·Preview 변수 분리 |
 | [위협 모델](threat-model.md) | 승인 | 신뢰 경계, 주요 위협과 출시 전 통제 |
-| [의사결정 기록 템플릿](decision-record-template.md) | 사용 가능 | 중요한 기술 결정 기록 형식 |
-| [일반인 답변 계약 v2](layperson-answer-contract-v2.md) | 승인 전 초안 | 초보자용 프롬프트 v2, 별도 generation profile, 가독성 rubric, 원문 링크 UI |
-| [clarification missing_information 구조적 검증](clarification-missing-information-structural-validation.md) | 승인·구현 완료 | 고정 필드 allowlist를 자유형 질문·예시 프롬프트와 구조 검증으로 대체 |
-| [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 대체됨 | 역사적 tier1/tier2·`search_only` 설계 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
-| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 대체됨 | 구현된 Phase 1의 역사 기록; 현재 개편 계약은 아래 후속 설계 |
-| [V2: LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) | 승인 범위 정정 | 2026-10-27: LlamaIndex ingestion/retrieval·후속 Workflow, 프로젝트 router/answerer·execution/grounding 유지. Router·QueryEngine·Synthesizer 전환은 미채택 |
-| [V2 질문 응답 표시 계약](v2-question-response-presentation-contract.md) | 승인 | 백엔드 소유 답변·오류 문구의 Core/Finalize 점진 표시와 Web 치환 금지 |
-| [Python docstring 정책](python-docstring-policy.md) | 승인 | 공개 API와 복잡한 내부 경계의 docstring, 이유 중심 주석, Ruff `D` 규칙의 점진 적용 범위 |
+
+## 개발 작업 운영
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
 | [작업 관리 메타데이터와 얇은 로드맵](task-management-metadata-and-roadmap.md) | 승인 | 실행계획 라벨·유형별 ID·참고 줄 범위와 상태별 링크 색인 규칙 |
 | [Dropped 수명주기와 병렬 오케스트레이션](roadmap-dropped-and-orchestration.md) | 승인 | 폐기 계획 보존, OC-001 자식 상태·의존성·파일 소유와 병렬 실행 계약 |
 | [에이전트 제어면 단순화](agent-control-plane-simplification.md) | 승인 | workflow·skill·hook·worktree 수명주기의 단일 책임과 부작용 없는 자동화 |
+
+## 대체되거나 폐기된 설계
+
+| 문서 | 상태 | 설명 |
+|---|---|---|
+| [질문 사전 라우팅](pre-retrieval-question-routing.md) | 대체됨 | 0028의 tier1/tier2 라우팅 근거와 한계를 보존한 역사 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
+| [terra 모드 search_only 폴백 제거](always-generate-answer.md) | 대체됨 | 역사적 tier1/tier2·`search_only` 설계 기록; 현재 계약은 [단일 단계 라우터와 라우터 불가 응답](single-stage-router-and-failure-response.md) |
+| [V2: LlamaIndex 기반 검색 파이프라인(Phase 1)](v2-llamaindex-retrieval-pipeline-design.md) | 대체됨 | 구현된 Phase 1의 역사 기록. 현재 계약은 [LlamaIndex 프레임워크 파이프라인 개편](v2-llamaindex-framework-redesign.md) |
 | [V3: LangGraph 에이전트 기본 골격](v3-langgraph-agent-foundation-design.md) | 폐기 | F-001 Dropped; 2026-10-27 전용 소스·테스트·의존성 제거. 설계는 역사 기록으로 보존 |
 
 ## 버전 표기
