@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 81d3a41b2d9e4041cc9b75d87b0bbbfce114ea72886125210d5f65d12a35f9b7 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 535c6b72bbc2ce9a2a71c60c82307836b9f8387fe82e3d5bf4b0e618a78dd9df -->
 
 # 프로젝트 로드맵
 
@@ -16,7 +16,6 @@
 - [P1] [B-018 · Bug — V1 인용 수치와 체크리스트 수치 불일치 검증](exec-plans/todo/0090-v1-cited-quantity-consistency.md) — 다음 행동: V1 답변 검증에서 C5의 `3천킬로와트`와 체크리스트의 `3kW` 불일치를 재현하고, 오탐을 늘리지 않는 최소 수치 검증 경계를 확정한다.
 - [P1] [B-019 · Bug — V2 답변의 인용 근거와 적용 대상·수치 불일치](exec-plans/todo/0091-v2-cited-claim-consistency.md) — 다음 행동: V2 최종 답변의 적용 대상 반전과 수치·단위 불일치 두 건을 재현하고, 게시 전 검증의 최소 범위를 확정한다.
 - [P1] [B-021 · Bug — 공식 별지 서식을 답변 근거로 수록](exec-plans/todo/0093-official-statutory-form-evidence.md) — 다음 행동: 국가법령정보 Open API가 전기사업법 시행규칙 별지 제1호·제3호의 서식명과 원문을 어떻게 제공하는지 확인한다.
-- [P1] [B-022 · Bug — 자가용 설비와 방화구획의 참조 규칙 수록](exec-plans/todo/0094-referenced-safety-rules-corpus.md) — 다음 행동: 개발 환경에서 확인된 두 규칙을 수록하고 V2 검증용 색인에 반영한다.
 - [P2] [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
 - [P2] [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
 - [P3] [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
@@ -54,3 +53,4 @@
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/dropped/0050-query-format-edge-case-regression-bank.md) — 폐기 사유: 2026-10-21 사용자가 광범위한 엣지케이스 뱅크 계획을 삭제하기로 결정했다. 실제 발견 사례는 해당 기능의 좁은 회귀 테스트로 다룬다.
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격 구현 계획](exec-plans/dropped/0055-v3-langgraph-agent-foundation.md) — 폐기 사유: 사용자가 V3를 아직 진행하지 않기로 결정했다.
 - [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 폐기 사유: `routing_unavailable` 이후 LLM이 최종 안내를 생성하는 현재 동작과 출력 변동을 허용하기로 결정했다. 이 질문의 기대 route는 `external_document_required`가 맞지만, 이는 별도의 확장 가능한 routing 개발 calibration pool에서 다룰 평가 항목이며 이 버그 계획으로 재현·수정하지 않는다.
+- [B-022 · Bug — 자가용 설비와 방화구획의 참조 규칙 수록](exec-plans/dropped/0094-referenced-safety-rules-corpus.md) — 폐기 사유: 사용자 결정에 따라 참조 규칙 수집 대신 현재 확인된 근거의 범위와 공식 원문 확인 방법을 안내한다.

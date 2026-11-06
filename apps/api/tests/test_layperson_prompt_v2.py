@@ -254,3 +254,9 @@ def test_v2_core_summary_covers_named_evidence_and_points_to_details() -> None:
     assert "근거에 있는 정식 명칭과 구체적인 서류명" in text
     assert "먼저 할 확인이나 준비를 요약에도" in text
     assert "어느 원문에서 확인할 수 있는지" in text
+
+def test_v2_names_unavailable_references_without_guessing() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "현재 제공된 근거에서 확인할 수 없다고" in text
+    assert "공식 원문에서 직접 확인하도록" in text
+    assert "법령 자체에 없다고 단정하지 않는다" in text

@@ -24,8 +24,6 @@ MVP_CATALOG: tuple[CatalogEntry, ...] = (
     CatalogEntry("전기안전관리법", SourceKind.LAW, 7),
     CatalogEntry("전기저장시설의 화재안전성능기준(NFPC 607)", SourceKind.ADMIN_RULE, 8),
     CatalogEntry("전기저장시설의 화재안전기술기준(NFTC 607)", SourceKind.ADMIN_RULE, 9),
-    CatalogEntry("전기안전관리법 시행규칙", SourceKind.LAW, 10),
-    CatalogEntry("건축물의 피난ㆍ방화구조 등의 기준에 관한 규칙", SourceKind.LAW, 11),
 )
 
 CATALOG_BY_TITLE = {entry.title: entry for entry in MVP_CATALOG}
