@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -37,9 +38,35 @@ from app.runtime_observability import ErrorLogMode
 # it isn't worth starting.
 _MIN_RETRY_SECONDS = 3.0
 _NON_RETRYABLE_STATUS_CODES = {402, 429}
+_SUMMARY_DUTY_SENTENCE = re.compile(
+    r"""
+    ^[ \t]*>[^\n]*
+    | "[^"]*(?:"|\Z) | '[^']*(?:'|\Z)
+    | “[^”]*(?:”|\Z) | ‘[^’]*(?:’|\Z)
+    | 「[^」]*(?:」|\Z) | 『[^』]*(?:』|\Z)
+    | (?P<leading>^|(?<=[.!?\n])[ \t]*)
+      (?P<condition>[^.!?\n"'“”‘’「」『』,:;()\[\]]+?)하려는[ ]자는[ ]
+      (?P<duty>[^.!?\n"'“”‘’「」『』,:;()\[\]]+?야)[ ](?:한다|합니다)
+      (?=\.(?:\s|\Z)|\n|\s*\Z)
+    """,
+    re.VERBOSE | re.MULTILINE,
+)
+_SUMMARY_CLAUSE_BREAK = re.compile(r"(?:면|경우|거나|며|고|되|도|지만|면서)\s")
 
 MessageBuilder = Callable[[QuestionRequest, list[SearchHit]], list[dict[str, str]]]
 StructuredAnswer = TypeVar("StructuredAnswer", bound=BaseModel)
+
+
+def _plain_core_summary(summary: str) -> str:
+    """Rewrite simple duty sentences while consuming quoted passages unchanged."""
+
+    def replace(match: re.Match[str]) -> str:
+        condition, duty = match["condition"], match["duty"]
+        if condition is None or _SUMMARY_CLAUSE_BREAK.search(f"{condition} {duty}"):
+            return match[0]
+        return f"{match['leading']}{condition}하려면 {duty} 합니다"
+
+    return _SUMMARY_DUTY_SENTENCE.sub(replace, summary)
 
 
 class NvidiaNimAnswerer:
@@ -110,7 +137,13 @@ class NvidiaNimAnswerer:
             "clarification" if clarification is not None else "answer_core"
         )
         with provider_attempt_scope():
-            return await self._generate(messages, schema, operation=operation)
+            draft = await self._generate(messages, schema, operation=operation)
+        if clarification is not None or draft.action not in {
+            "fully_answerable",
+            "partially_answerable",
+        }:
+            return draft
+        return draft.model_copy(update={"summary": _plain_core_summary(draft.summary)})
 
     async def answer_blocked_route(
         self, request: QuestionRequest, route: QuestionRoute, reason: str | None

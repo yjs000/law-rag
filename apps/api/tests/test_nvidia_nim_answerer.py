@@ -92,6 +92,44 @@ def test_nvidia_answerer_uses_a_fresh_client_in_each_event_loop() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["fully_answerable", "unanswerable"])
+async def test_nvidia_core_plain_summary_preserves_citations_and_scope(action: str) -> None:
+    original = (
+        "전기사업을 하려는 자는 허가를 받아야 한다.\n"
+        "시설을 설치하려는 자는 서류를 내야 합니다. "
+        "법령에는 “적용 범위입니다. 사업을 하려는 자는 허가를 받아야 한다.”라고 적혀 있습니다. "
+        "사업을 하려는 자는 예외가 없으면, 허가를 받아야 한다. "
+        "변경하려는 자는 신고해야 하며 서류도 내야 한다. "
+        "사업을 하려는 자는 예외 사유가 없어도 허가를 받고 신고해야 한다.\n"
+        "사업을 하려는 자는 허가를 받아야 하되 신고도 해야 한다.\n"
+        "> 사업을 하려는 자는 허가를 받아야 한다.\n"
+        "담당 기관에 확인하세요."
+    )
+    expected = original.replace(
+        "전기사업을 하려는 자는 허가를 받아야 한다.",
+        "전기사업을 하려면 허가를 받아야 합니다.",
+    ).replace(
+        "시설을 설치하려는 자는 서류를 내야 합니다.",
+        "시설을 설치하려면 서류를 내야 합니다.",
+    )
+    answerer = _answerer()
+    citation_ids = ["C1"] if action == "fully_answerable" else []
+
+    async def create(**kwargs):
+        payload = {"summary": original, "citation_ids": citation_ids, "action": action}
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    answerer.client = _client(create)
+    draft = await answerer.answer_core(QuestionRequest(question="전기사업 근거"), [_hit()])
+
+    assert draft.summary == (expected if action == "fully_answerable" else original)
+    assert draft.citation_ids == citation_ids
+    assert draft.action == action
+
+
+@pytest.mark.asyncio
 async def test_nvidia_nim_uses_guided_schema_and_validates_answer() -> None:
     answerer = _answerer()
     captured: dict[str, object] = {}

@@ -349,6 +349,17 @@ def build_core_messages(
     """Build the first v2 generation prompt without requesting unpublished detail."""
     messages = build_messages_v2(request, hits, clarification=clarification)
     system = messages[0]["content"]
+    if clarification is None:
+        system = (
+            "요약 작성 규칙. 공개 summary는 처음부터 끝까지 독자에게 설명하는 짧은 문장으로 "
+            "쓰고, 모든 문장을 '~합니다', '~받아야 합니다', '~할 수 있습니다'처럼 끝낸다. "
+            "말투 예시만 참고한다. '장비를 사용하려는 자는 덮개를 닫아야 한다'는 "
+            "'장비를 쓰려면 덮개를 닫아야 합니다.'로 표현한다. 예시의 사실은 사용하지 않는다. "
+            "원문에 없는 사람, 기업, 직업이나 자격을 새 주어로 넣지 않는다. "
+            "원문이 누구에게나 해당하면 그 범위를 좁히지 않는다. 실제 근거의 행동, 의무 강도, "
+            "조건·예외, 권한 주체는 보존한다. 둘 이상의 의무나 조건이 답에 필요하면 짧은 "
+            "문장으로 나눈다. " + system
+        )
     messages[0] = {
         "role": "system",
         "content": (
