@@ -246,3 +246,5 @@ def test_v2_core_answers_the_exact_question_in_the_first_sentence() -> None:
     assert "첫 문장에서 질문에 직접 답한다" in text
     assert "신고만으로 충분한지" in text
     assert "C번호는 citation_ids에만" in text
+    assert "두 절차가 각각 무엇을 위한 것인지" in text
+    assert "제외 대상을 적용 대상으로 바꾸지 않는다" in text

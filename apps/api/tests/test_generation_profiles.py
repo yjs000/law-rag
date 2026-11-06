@@ -39,7 +39,7 @@ def test_sha256_changes_when_a_sampling_value_changes() -> None:
 
 
 def test_v2_profile_uses_v2_prompt_and_unchanged_schema() -> None:
-    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.prompt_version == "answer-system-prompt-v2.3"
+    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.prompt_version == "answer-system-prompt-v2.4"
     assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.schema_version == "draft-answer-v1"
     assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.profile_version == "2"
 
