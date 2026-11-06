@@ -4,7 +4,7 @@
 > 유형: `Bug`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: 없음.
-> 다음 행동: 1회차 실제 답변 6건 중 사용자 담당 3건의 기대 답변과 필요한 근거를 판정받는다.
+> 다음 행동: 1회차 나머지 3건의 Codex 판정을 사용자에게 확인받는다.
 > 참고 범위:
 > - `apps/api/evaluation/b017/rounds/local-v2-recheck-aa64e51.json` L1-L19 — 기존 실제 V2 평가 형식과 한계
 
@@ -29,4 +29,4 @@
 
 ## 진행 기록
 
-- 1회차 실제 답변 6건 수집과 3+3 배정 완료. [판정 회차](../../../apps/api/evaluation/b020/rounds/round-01.json)의 사용자 판정을 기다린다.
+- 1회차 실제 답변 6건 수집과 3+3 배정 완료. [판정 회차](../../../apps/api/evaluation/b020/rounds/round-01.json)에 사용자 3건과 Codex 3건의 판정을 기록했고, Codex 판정에 대한 사용자 확인을 기다린다.

@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 396b7d1721d7b73d07ba3375e26dab421be7cd2c31b18f919f78b5e0465abbd7 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f6b5e2533872b4b7d5288a082846281ee7782b3fd69f2f9359fdaef7926440c0 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 1회차 실제 답변 6건 중 사용자 담당 3건의 기대 답변과 필요한 근거를 판정받는다.
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 1회차 나머지 3건의 Codex 판정을 사용자에게 확인받는다.
 
 ## Todo
 
