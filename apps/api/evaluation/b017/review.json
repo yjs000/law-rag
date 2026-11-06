@@ -23,5 +23,6 @@
     {"topic": "10월 27일 응답의 22m·9m 조건", "decision": "B-017 문제 목록에서 제외", "reason": "사용자가 이 질문에 필요한 조건이라고 확인했다. 법적 수치의 원문 일치 여부는 이 review에서 별도로 검증하지 않았다.", "evidence": "2026-10-27 numeric_claims 및 2026-10-27 사용자 판정"}
   ],
   "next_round": ["B-017에 남은 답변의 직접성·쉬운 말·화면 순서·내부 ID 노출·빈 설명 본문을 같은 질문의 변경 전후로 비교한다.", "숫자 불일치 재현은 B-018로 넘긴다.", "사람이 결론·이유·다음 행동·근거 표시를 각각 판정하고 미달 사례만 최소 수정한다."],
-  "human_acceptance": "미판정"
+  "human_acceptance": "미판정",
+  "selected_baseline": "rounds/local-readability-baseline-25c0458.json"
 }
