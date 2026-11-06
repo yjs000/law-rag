@@ -56,3 +56,5 @@
 
 - 요약 지침 수정 `e997079`의 API 회귀 78개 통과. [실제 V2 재실행](../../../apps/api/evaluation/b020/raw/summary-recheck-e997079.json)에서 사업개시신고 요약은 최초 전력거래 증명 서류를 명시했다. 체크리스트와 상세 인용 안내의 충족은 별도 판정한다.
 - 같은 회차에서 화재안전 질문은 `grounding_failed`를 반환했다. 기준명·행동·인용 안내가 실제로 전달되는 계약은 아직 미충족이다. 검증을 완화하지 않고 어느 문장과 근거 연결이 거부됐는지 좁힌다.
+
+코퍼스 보완은 [B-021 별지 서식](../todo/0093-official-statutory-form-evidence.md)과 [B-022 참조 규칙](../todo/0094-referenced-safety-rules-corpus.md)으로 분리한다. 이미 색인된 하위 호 검색과 요약 검증은 B-020에서 계속한다. 인용과 적용 대상·수치 불일치는 [B-019](../todo/0091-v2-cited-claim-consistency.md)로 연결한다.

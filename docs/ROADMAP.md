@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 2dd11c4995b337b81a14f22736ea9cce4cb57893d01431d0f19443d06ae19a99 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: fdbfe2bc689c04285f9eb60339e36c05dcbe0478a69c84541969b62ea3b42be2 -->
 
 # 프로젝트 로드맵
 
@@ -15,6 +15,8 @@
 - [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
 - [P1] [B-018 · Bug — V1 인용 수치와 체크리스트 수치 불일치 검증](exec-plans/todo/0090-v1-cited-quantity-consistency.md) — 다음 행동: V1 답변 검증에서 C5의 `3천킬로와트`와 체크리스트의 `3kW` 불일치를 재현하고, 오탐을 늘리지 않는 최소 수치 검증 경계를 확정한다.
 - [P1] [B-019 · Bug — V2 답변의 인용 근거와 적용 대상·수치 불일치](exec-plans/todo/0091-v2-cited-claim-consistency.md) — 다음 행동: V2 최종 답변의 적용 대상 반전과 수치·단위 불일치 두 건을 재현하고, 게시 전 검증의 최소 범위를 확정한다.
+- [P1] [B-021 · Bug — 공식 별지 서식을 답변 근거로 수록](exec-plans/todo/0093-official-statutory-form-evidence.md) — 다음 행동: 국가법령정보 Open API가 전기사업법 시행규칙 별지 제1호·제3호의 서식명과 원문을 어떻게 제공하는지 확인한다.
+- [P1] [B-022 · Bug — 자가용 설비와 방화구획의 참조 규칙 수록](exec-plans/todo/0094-referenced-safety-rules-corpus.md) — 다음 행동: 자가용 전기설비와 배터리실 방화구획에 필요한 참조 규칙을 공식 API 목록과 현행 수집 목록에서 대조한다.
 - [P2] [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
 - [P2] [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
 - [P3] [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
