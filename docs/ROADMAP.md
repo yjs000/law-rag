@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 87250a2dd0e17bbe56d96328bbbfc96b46cca87b94bf32fd953ed8cbf62c3eeb -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 08e9783c828dfedb0b6a31d644a4c8d228d06f2c9de84086c097f95672029225 -->
 
 # 프로젝트 로드맵
 
@@ -7,10 +7,10 @@
 
 ## Picked Up
 
+- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/active/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 같은 질문 5건의 최신 웹 V2 답변을 재판정하고, 인용과 내용이 일치하는지 확인한다.
 
 ## Todo
 
-- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/todo/0088-answer-readability-and-evidence-layout.md) — 다음 행동: B-017에 해당하는 실제 답변만 선별해 결론·쉬운 이유·다음 행동·근거 표시의 실패 기준을 고정하고, 화면 순서부터 최소 수정한다.
 - [P1] [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
 - [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
 - [P1] [B-018 · Bug — V1 인용 수치와 체크리스트 수치 불일치 검증](exec-plans/todo/0090-v1-cited-quantity-consistency.md) — 다음 행동: V1 답변 검증에서 C5의 `3천킬로와트`와 체크리스트의 `3kW` 불일치를 재현하고, 오탐을 늘리지 않는 최소 수치 검증 경계를 확정한다.
