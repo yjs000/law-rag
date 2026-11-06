@@ -45,7 +45,7 @@ def build_nvidia_answer_profile_v2(
         model=model,
         # B-011, 2026-09-21: clarification missing_information을 자유형 질문+예시로 바꾸고
         # 구조 검증을 적용했다. schema·context·sampling은 그대로다.
-        prompt_version="answer-system-prompt-v2.2",
+        prompt_version="answer-system-prompt-v2.6",
         schema_version="draft-answer-v1",
         context_version="m4-frozen-r1-a",
         temperature=0.3,
@@ -66,7 +66,7 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
     provider="nvidia_nim",
     model="nvidia/nemotron-3-ultra-550b-a55b",
     # B-011은 V1 공용 prompt에도 같은 clarification 질문+예시 계약을 적용한다.
-    prompt_version="answer-system-prompt-v1.1",  # openai_answerer.build_messages()
+    prompt_version="answer-system-prompt-v1.2",  # openai_answerer.build_messages()
     schema_version="draft-answer-v1",  # openai_answerer.DraftAnswer
     context_version="m4-frozen-r1-a",  # 0025 M4 winner: R1+A
     temperature=0.3,

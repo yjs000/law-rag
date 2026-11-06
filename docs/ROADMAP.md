@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: af110a240a937a6c50ee7f8aa0c612cce468ce78e91909c98c255b2327b451e2 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 535c6b72bbc2ce9a2a71c60c82307836b9f8387fe82e3d5bf4b0e618a78dd9df -->
 
 # 프로젝트 로드맵
 
@@ -7,12 +7,15 @@
 
 ## Picked Up
 
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 화재안전 기준 요약이 근거 검증에서 거부된 원인을 확인하고 색인된 첨부서류 검색 회귀를 확정한다.
 
 ## Todo
 
-- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/todo/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 실제 답변 5~10건의 읽기 어려운 표현과 화면 순서를 기록하고, 결론 우선·쉬운 말·근거 보존 기준을 확정한다.
 - [P1] [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
 - [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
+- [P1] [B-018 · Bug — V1 인용 수치와 체크리스트 수치 불일치 검증](exec-plans/todo/0090-v1-cited-quantity-consistency.md) — 다음 행동: V1 답변 검증에서 C5의 `3천킬로와트`와 체크리스트의 `3kW` 불일치를 재현하고, 오탐을 늘리지 않는 최소 수치 검증 경계를 확정한다.
+- [P1] [B-019 · Bug — V2 답변의 인용 근거와 적용 대상·수치 불일치](exec-plans/todo/0091-v2-cited-claim-consistency.md) — 다음 행동: V2 최종 답변의 적용 대상 반전과 수치·단위 불일치 두 건을 재현하고, 게시 전 검증의 최소 범위를 확정한다.
+- [P1] [B-021 · Bug — 공식 별지 서식을 답변 근거로 수록](exec-plans/todo/0093-official-statutory-form-evidence.md) — 다음 행동: 국가법령정보 Open API가 전기사업법 시행규칙 별지 제1호·제3호의 서식명과 원문을 어떻게 제공하는지 확인한다.
 - [P2] [E-001 · Experiment — 0032: 실험 E-10 — AI 답변 소표본 평가 (0025 M6)](exec-plans/active/0032-experiment-e-10-ai-answer-evaluation.md) — 다음 행동: 재개할 품질 원인 진단 범위를 선택한다.
 - [P2] [B-001 · Bug — 0047: 추가 정보 재질문 루프 중복 제거 및 미답변 처리](exec-plans/todo/0047-clarification-loop-dedup-and-unanswered-handling.md) — 다음 행동: v2 clarification 루프 설계의 입력으로 재현 조건을 유지한다.
 - [P3] [E-003 · Experiment — 0031: 실험 D 평가 harness 통합 — machine-readable rubric, conflict detector, 통합 CLI](exec-plans/todo/0031-eval-harness-consolidation.md) — 다음 행동: 대량 판정 반복의 재발 근거를 확인한 뒤 착수 범위를 확정한다.
@@ -27,7 +30,6 @@
 
 ## Done
 
-- [B-005 · Bug — V2 Question Response Passthrough Implementation Plan](exec-plans/completed/0071-v2-question-response-passthrough.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-006 · Bug — NVIDIA Provider Attempt Observability Implementation Plan](exec-plans/completed/0072-provider-attempt-observability.md) — 다음 행동: none
 - [DOC-003 · Documentation — 0073: 에이전트 제어면 단순화 실행 계획](exec-plans/completed/0073-agent-control-plane-simplification.md) — 다음 행동: 완료되어 잔여 작업이 없습니다.
 - [B-007 · Bug — Runtime Error Observability and Environment Contract Implementation Plan](exec-plans/completed/0074-runtime-error-observability-and-env-contract.md) — 다음 행동: 없음 — 구현·문서·전체 검증 완료.
@@ -39,6 +41,7 @@
 - [B-011 · Bug — 0082: clarification 응답의 missing_information이 사용자에게 빈 값으로 전달되는 문제](exec-plans/completed/0082-clarification-missing-information-allowlist-drops-fields.md) — 다음 행동: 없음 — 구조 검증, 프롬프트 계약, provenance와 전체 회귀 검증 완료.
 - [B-013 · Bug — LlamaIndex Clarification Context State Contract Implementation Plan](exec-plans/completed/0084-clarification-workflow-context-state-contract.md) — 다음 행동: 없음 — run별 Context 격리와 관련 회귀 검증 완료.
 - [B-015 · Bug — Clarification 자유 문장 fact 추출 Implementation Plan](exec-plans/completed/0086-clarification-free-text-fact-extraction.md) — 다음 행동: 없음 — 4개 Task 전부 완료, task-level review·최종 whole-branch review clean, `main`에 로컬 병합 완료.
+- [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/completed/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 없음 — V2 근거 불일치는 B-019에서 추적한다.
 - [완료 계획 색인](exec-plans/completed/README.md)
 
 ## Dropped
@@ -50,3 +53,4 @@
 - [B-002 · Bug — 0050: 질의 형식 엣지케이스 조사 및 회귀 테스트 뱅크 구축](exec-plans/dropped/0050-query-format-edge-case-regression-bank.md) — 폐기 사유: 2026-10-21 사용자가 광범위한 엣지케이스 뱅크 계획을 삭제하기로 결정했다. 실제 발견 사례는 해당 기능의 좁은 회귀 테스트로 다룬다.
 - [F-001 · Feature — V3 LangGraph 에이전트 기본 골격 구현 계획](exec-plans/dropped/0055-v3-langgraph-agent-foundation.md) — 폐기 사유: 사용자가 V3를 아직 진행하지 않기로 결정했다.
 - [B-012 · Bug — 0083: insufficient_evidence 질문이 routing_unavailable일 때 프롬프트 순응이 비결정적인 문제](exec-plans/dropped/0083-routing-unavailable-non-deterministic-prompt-compliance.md) — 폐기 사유: `routing_unavailable` 이후 LLM이 최종 안내를 생성하는 현재 동작과 출력 변동을 허용하기로 결정했다. 이 질문의 기대 route는 `external_document_required`가 맞지만, 이는 별도의 확장 가능한 routing 개발 calibration pool에서 다룰 평가 항목이며 이 버그 계획으로 재현·수정하지 않는다.
+- [B-022 · Bug — 자가용 설비와 방화구획의 참조 규칙 수록](exec-plans/dropped/0094-referenced-safety-rules-corpus.md) — 폐기 사유: 사용자 결정에 따라 참조 규칙 수집 대신 현재 확인된 근거의 범위와 공식 원문 확인 방법을 안내한다.

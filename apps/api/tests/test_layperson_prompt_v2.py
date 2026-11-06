@@ -131,9 +131,12 @@ def test_v2_core_decision_limitations_are_never_persisted() -> None:
     assert "decision_limitations" not in draft.model_dump(mode="json")
 
 
-def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:
+def test_v1_prompt_has_its_own_plain_language_contract() -> None:
     v1_text = build_messages(_request(), _hits())[0]["content"]
-    assert "최대 3문장" not in v1_text
+    assert "첫 문장에서 질문에 직접 답한다" in v1_text
+    assert "처음 나오는 전문용어와 약어" in v1_text
+    assert "사용자가 먼저 할 수 있는 구체적인 행동" in v1_text
+    assert "C번호는 citation_ids에만" in v1_text
     assert "제공된 근거만 사용" in v1_text
 
 
@@ -236,3 +239,24 @@ def test_nvidia_clarification_judgment_prompt_uses_plain_language_contract() -> 
     assert "쉬운 말을 먼저" in text
     assert "법률 용어 바로 뒤에 쉬운 뜻을 붙인다" in text
     assert "간단한 예시 값" in text
+
+
+def test_v2_core_answers_the_exact_question_in_the_first_sentence() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "첫 문장에서 질문에 직접 답한다" in text
+    assert "신고만으로 충분한지" in text
+    assert "C번호는 citation_ids에만" in text
+    assert "두 절차가 각각 무엇을 위한 것인지" in text
+    assert "제외 대상을 적용 대상으로 바꾸지 않는다" in text
+
+def test_v2_core_summary_covers_named_evidence_and_points_to_details() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "근거에 있는 정식 명칭과 구체적인 서류명" in text
+    assert "먼저 할 확인이나 준비를 요약에도" in text
+    assert "어느 원문에서 확인할 수 있는지" in text
+
+def test_v2_names_unavailable_references_without_guessing() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "현재 제공된 근거에서 확인할 수 없다고" in text
+    assert "공식 원문에서 직접 확인하도록" in text
+    assert "법령 자체에 없다고 단정하지 않는다" in text

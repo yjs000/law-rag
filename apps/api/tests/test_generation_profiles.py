@@ -39,13 +39,13 @@ def test_sha256_changes_when_a_sampling_value_changes() -> None:
 
 
 def test_v2_profile_uses_v2_prompt_and_unchanged_schema() -> None:
-    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.prompt_version == "answer-system-prompt-v2.2"
+    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.prompt_version == "answer-system-prompt-v2.6"
     assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.schema_version == "draft-answer-v1"
     assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE_V2.profile_version == "2"
 
 
 def test_v1_profile_tracks_freeform_clarification_prompt_revision() -> None:
-    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.prompt_version == "answer-system-prompt-v1.1"
+    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.prompt_version == "answer-system-prompt-v1.2"
 
 
 def test_v2_profile_sha256_differs_from_v1() -> None:
