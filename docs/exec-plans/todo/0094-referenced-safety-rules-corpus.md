@@ -4,7 +4,7 @@
 > 유형: `Bug`
 > 보조 라벨: `Data`
 > 선행 조건: 없음.
-> 다음 행동: 자가용 전기설비와 배터리실 방화구획에 필요한 참조 규칙을 공식 API 목록과 현행 수집 목록에서 대조한다.
+> 다음 행동: 개발 환경에서 확인된 두 규칙을 수록하고 V2 검증용 색인에 반영한다.
 
 > 참고 범위:
 > - `packages/law-rag-core/src/law_rag_core/domain/catalog.py` L17-L28 — 법령 수집 목록
@@ -23,3 +23,5 @@ B-020 평가의 전기안전관리법 시행규칙 및 건축물의 피난·방�
 
 - 수집 목록을 갱신한다. 대상은 `packages/law-rag-core/src/law_rag_core/domain/catalog.py` L17-L29에 2줄 추가다. 기존 법령 수집 경로에서 두 제목을 선택할 수 있는지 확인하고, `cd apps/api; ..\..\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/test_answer_quality_contract.py`와 `git diff --check`를 실행한다. 완료 증거는 두 제목이 법령으로 등록되고 기존 근거 계약 테스트를 통과하는 것이다.
 - 개발 환경에 반영하기 전 수집 대상 두 제목, 저장소와 DB, 활성 V2 색인 변경을 확인한다. 조문 수록과 별표 수록은 각각 확인한다.
+
+수집 목록에 두 제목을 추가한 커밋은 93e5a7a다. 실제 Open API JSON을 현행 파서로 읽어 전기안전관리법 시행규칙 331개와 건축물 피난·방화구조 규칙 460개의 조항 단위를 얻었다. 답변 계약 테스트 11개를 통과했다. 이 검증은 메모리에서 수행했고 DB·Storage·활성 색인에는 쓰지 않았다.
