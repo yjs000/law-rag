@@ -1,0 +1,24 @@
+{
+  "schema_version": "1",
+  "source": "../raw/round-01.json",
+  "selected": 6,
+  "failed": 0,
+  "status": "awaiting_user_judgment",
+  "user_cases": [
+    "permit-docs",
+    "ess-fire",
+    "start-docs"
+  ],
+  "codex_cases": [
+    "permit-change",
+    "ess-compartment",
+    "private-install"
+  ],
+  "rubric": [
+    "질문에 필요한 구체 항목을 답했는가",
+    "각 항목을 뒷받침하는 근거가 있는가",
+    "어떤 경우에 추가 사실이 필요한가"
+  ],
+  "user_judgments": [],
+  "codex_judgments": []
+}

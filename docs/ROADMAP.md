@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 1b4a91ec7bc38203b2418f1298fb3f68d07cf5c9876831a666a08919a3a5c590 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 396b7d1721d7b73d07ba3375e26dab421be7cd2c31b18f919f78b5e0465abbd7 -->
 
 # 프로젝트 로드맵
 
@@ -7,10 +7,10 @@
 
 ## Picked Up
 
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 1회차 실제 답변 6건 중 사용자 담당 3건의 기대 답변과 필요한 근거를 판정받는다.
 
 ## Todo
 
-- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/todo/0092-v2-question-directed-evidence.md) — 다음 행동: 웹 V2 실제 답변 6건을 수집하고 첫 3건의 기대 답변과 필요한 근거를 사용자에게 판정받는다.
 - [P1] [B-016 · Bug — Clarification 원 질문·누적 사실 기반 답변 입력](exec-plans/todo/0087-clarification-case-grounded-answer-input.md) — 다음 행동: 저장된 원 질문·누적 fact를 검색과 답변에 전달할 최소 데이터 경계 및 보존 방식을 설계하고 구현 계획을 작성한다.
 - [P1] [O-002 · Operations — dev 브랜치 Vercel Preview 환경](exec-plans/todo/0089-dev-vercel-preview-environment.md) — 다음 행동: 기존 웹·API Vercel 프로젝트의 Preview 브랜치 설정과 dev 전용 API·인증·데이터 연결을 설계한다.
 - [P1] [B-018 · Bug — V1 인용 수치와 체크리스트 수치 불일치 검증](exec-plans/todo/0090-v1-cited-quantity-consistency.md) — 다음 행동: V1 답변 검증에서 C5의 `3천킬로와트`와 체크리스트의 `3kW` 불일치를 재현하고, 오탐을 늘리지 않는 최소 수치 검증 경계를 확정한다.
