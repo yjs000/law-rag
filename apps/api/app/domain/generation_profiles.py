@@ -66,7 +66,7 @@ NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE = GenerationProfile(
     provider="nvidia_nim",
     model="nvidia/nemotron-3-ultra-550b-a55b",
     # B-011은 V1 공용 prompt에도 같은 clarification 질문+예시 계약을 적용한다.
-    prompt_version="answer-system-prompt-v1.1",  # openai_answerer.build_messages()
+    prompt_version="answer-system-prompt-v1.2",  # openai_answerer.build_messages()
     schema_version="draft-answer-v1",  # openai_answerer.DraftAnswer
     context_version="m4-frozen-r1-a",  # 0025 M4 winner: R1+A
     temperature=0.3,

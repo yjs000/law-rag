@@ -131,9 +131,12 @@ def test_v2_core_decision_limitations_are_never_persisted() -> None:
     assert "decision_limitations" not in draft.model_dump(mode="json")
 
 
-def test_v1_prompt_text_is_unchanged_by_v2_addition() -> None:
+def test_v1_prompt_has_its_own_plain_language_contract() -> None:
     v1_text = build_messages(_request(), _hits())[0]["content"]
-    assert "최대 3문장" not in v1_text
+    assert "첫 문장에서 질문에 직접 답한다" in v1_text
+    assert "처음 나오는 전문용어와 약어" in v1_text
+    assert "사용자가 먼저 할 수 있는 구체적인 행동" in v1_text
+    assert "C번호는 citation_ids에만" in v1_text
     assert "제공된 근거만 사용" in v1_text
 
 

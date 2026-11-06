@@ -45,7 +45,7 @@ def test_v2_profile_uses_v2_prompt_and_unchanged_schema() -> None:
 
 
 def test_v1_profile_tracks_freeform_clarification_prompt_revision() -> None:
-    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.prompt_version == "answer-system-prompt-v1.1"
+    assert NVIDIA_NEMOTRON_ULTRA_ANSWER_PROFILE.prompt_version == "answer-system-prompt-v1.2"
 
 
 def test_v2_profile_sha256_differs_from_v1() -> None:
