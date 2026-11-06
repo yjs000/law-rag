@@ -58,7 +58,7 @@ describe("AnswerView", () => {
     expect(html.indexOf("summary")).toBeLessThan(html.indexOf("answer-meta"));
   });
 
-  it("renders finalized sections and checklist after core fields without progress ellipsis", () => {
+  it("renders explanation and checklist before sources and limitations without progress ellipsis", () => {
     const html = renderToStaticMarkup(<AnswerView
       {...requiredProps}
       response={{
@@ -78,9 +78,10 @@ describe("AnswerView", () => {
     expect(html).not.toContain('class="detail-progress"');
     expect(html).not.toContain("내보내기");
     expect(html).not.toContain("export-controls");
-    expect(html.indexOf("limitations")).toBeLessThan(html.indexOf("백엔드 주장"));
+    expect(html.indexOf("최종 백엔드 요약")).toBeLessThan(html.indexOf("백엔드 주장"));
     expect(html.indexOf("백엔드 주장")).toBeLessThan(html.indexOf("확인 체크리스트"));
-    expect(html.indexOf("백엔드 요약")).toBeLessThan(html.indexOf("answer-meta"));
+    expect(html.indexOf("확인 체크리스트")).toBeLessThan(html.indexOf("원문 근거"));
+    expect(html.indexOf("원문 근거")).toBeLessThan(html.indexOf("범위와 한계"));
     expect(html.indexOf("확인 체크리스트")).toBeLessThan(html.indexOf("answer-meta"));
   });
 

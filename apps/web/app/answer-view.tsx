@@ -21,24 +21,6 @@ export function AnswerView({
   const citations = filterCitations(response.citations, documentKinds);
   return <>
       <p className="summary"><SafeText>{response.summary}</SafeText></p>
-      {citations.length > 0 && (
-        <section className="sources">
-          <h2>원문 근거 <span>{citations.length}건</span></h2>
-          {citations.map((citation) => <CitationCard
-            citation={citation}
-            htmlId={`citation-${messageId}-${citation.id}`}
-            key={citation.id}
-            open={selectedCitationId === `${messageId}:${citation.id}`}
-          />)}
-        </section>
-      )}
-      {(response.scope || response.limitations.length > 0) && (
-        <section className="limitations">
-          <h2>범위와 한계</h2>
-          {response.scope && <p><SafeText>{response.scope}</SafeText></p>}
-          {response.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}
-        </section>
-      )}
       {response.sections.map((section, index) => (
         <section className="claim" key={`${section.claim}-${index}`}>
           <h2><SafeText>{section.claim}</SafeText></h2>
@@ -68,6 +50,24 @@ export function AnswerView({
               </p>
             </div>
           ))}
+        </section>
+      )}
+      {citations.length > 0 && (
+        <section className="sources">
+          <h2>원문 근거 <span>{citations.length}건</span></h2>
+          {citations.map((citation) => <CitationCard
+            citation={citation}
+            htmlId={`citation-${messageId}-${citation.id}`}
+            key={citation.id}
+            open={selectedCitationId === `${messageId}:${citation.id}`}
+          />)}
+        </section>
+      )}
+      {(response.scope || response.limitations.length > 0) && (
+        <section className="limitations">
+          <h2>범위와 한계</h2>
+          {response.scope && <p><SafeText>{response.scope}</SafeText></p>}
+          {response.limitations.map((item, index) => <p key={`${item}-${index}`}>· <SafeText>{item}</SafeText></p>)}
         </section>
       )}
       <div className="answer-meta">
