@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: f6b5e2533872b4b7d5288a082846281ee7782b3fd69f2f9359fdaef7926440c0 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: d44afdea663b76ccbe0714a4f9ff631e92927c52d27c0e157885c71e3f475d78 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 1회차 나머지 3건의 Codex 판정을 사용자에게 확인받는다.
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 승인된 6건에서 필요한 근거가 코퍼스·검색·생성·최종 답변 중 어디에서 빠지는지 확인한다.
 
 ## Todo
 

@@ -3,7 +3,7 @@
   "source": "../raw/round-01.json",
   "selected": 6,
   "failed": 0,
-  "status": "awaiting_codex_judgment_approval",
+  "status": "approved",
   "user_cases": [
     "permit-docs",
     "ess-fire",
@@ -55,5 +55,6 @@
       "evidence": "C2·C3은 두 범주 모두 부령에 위임한다. 자가용 설비에 적용되는 부령의 조항·별표를 확인해야 한다. C4의 별표는 전기사업용 설비를 대상으로 한다. C8의 갈음은 부령으로 정하는 저압에 한정된다.",
       "verdict": "미달"
     }
-  ]
+  ],
+  "approval": "사용자가 Codex 담당 3건 판정에 통과라고 응답함."
 }
