@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 08e9783c828dfedb0b6a31d644a4c8d228d06f2c9de84086c097f95672029225 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 4aace932a8fbf845d292198c03bd4074f4e652d9f6b003d9e745072feeef9807 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/active/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 같은 질문 5건의 최신 웹 V2 답변을 재판정하고, 인용과 내용이 일치하는지 확인한다.
+- [P0] [B-017 · Bug — 답변의 결론 우선·쉬운 말·근거 표시 개선](exec-plans/active/0088-answer-readability-and-evidence-layout.md) — 다음 행동: 최신 V2 표본에서 재현한 적용 대상·수치 불일치의 검증 경계를 확정한 뒤 같은 질문을 재판정한다.
 
 ## Todo
 
