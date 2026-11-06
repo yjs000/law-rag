@@ -4,7 +4,7 @@
 > 유형: `Bug`
 > 보조 라벨: `Evaluation`, `Reliability`
 > 선행 조건: 없음.
-> 다음 행동: 검색에서 누락된 참조 조항과 서식의 코퍼스 수록 여부를 확인하고, 생성 누락과 분리해 회귀 계약을 확정한다.
+> 다음 행동: 화재안전 기준 요약이 근거 검증에서 거부된 원인을 확인하고 색인된 첨부서류 검색 회귀를 확정한다.
 > 참고 범위:
 > - `apps/api/evaluation/b017/rounds/local-v2-recheck-aa64e51.json` L1-L19 — 기존 실제 V2 평가 형식과 한계
 
@@ -53,3 +53,6 @@
 
 1. **검색 근거가 있는 질문의 요약 계약.** 결과는 V2 첫 요약이 근거에 있는 정식 기준명과 구체 서류를 우선 쓰고, 확인할 행동을 요약에도 담되 상세 체크리스트를 유지하며, 생략한 관련 내용이 어느 원문에 있는지 안내하는 것이다. 대상은 `apps/api/app/adapters/openai_answerer.py` L218-L232 약 5~9줄, `apps/api/app/domain/generation_profiles.py` L48 1줄, `apps/api/tests/test_layperson_prompt_v2.py` L244-L250 약 6~10줄, `apps/api/tests/test_generation_profiles.py` L42 1줄이다. 최종화가 검증된 core 요약을 유지하므로 core 지침에 기대 동작을 넣는다. 존재하지 않는 인용이나 서류를 추정하지 않으며 요약과 상세 체크리스트의 구조를 유지한다. 순서는 core 프롬프트 회귀 실패, 최소 수정, `cd apps/api; ..\..\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider tests/test_layperson_prompt_v2.py tests/test_generation_profiles.py tests/test_answer_quality_contract.py tests/test_v2_question_executions.py`, `git diff --check`다. 완료 증거는 해당 회귀와 기존 검증 통과 및 2·3번 질문의 실제 V2 재실행 결과다.
 2. **색인된 첨부서류 검색의 별도 검증.** 검색 결과에 부모 항과 일부 호만 들어올 때 같은 문서 버전의 직접 하위 호를 모을 수 있는지 현재 검색 계약을 조사한다. 원인 확인 후 허가 서류의 호를 가져오는 실패 회귀, 최대 근거 수, 출처 추적과 다른 문서 혼입 방지 기준을 이 문서에 별도 확정한다. 별지 원문과 부령의 추가 수집 여부는 현재 코퍼스와 공식 원자료를 대조한 후 결정한다.
+
+- 요약 지침 수정 `e997079`의 API 회귀 78개 통과. [실제 V2 재실행](../../../apps/api/evaluation/b020/raw/summary-recheck-e997079.json)에서 사업개시신고 요약은 최초 전력거래 증명 서류를 명시했다. 체크리스트와 상세 인용 안내의 충족은 별도 판정한다.
+- 같은 회차에서 화재안전 질문은 `grounding_failed`를 반환했다. 기준명·행동·인용 안내가 실제로 전달되는 계약은 아직 미충족이다. 검증을 완화하지 않고 어느 문장과 근거 연결이 거부됐는지 좁힌다.

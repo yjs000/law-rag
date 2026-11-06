@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: ca95074419a56151585cde4e5dd9fb12e22f14694503f9498a2a026d25c6fb12 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: 2dd11c4995b337b81a14f22736ea9cce4cb57893d01431d0f19443d06ae19a99 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 검색에서 누락된 참조 조항과 서식의 코퍼스 수록 여부를 확인하고, 생성 누락과 분리해 회귀 계약을 확정한다.
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 화재안전 기준 요약이 근거 검증에서 거부된 원인을 확인하고 색인된 첨부서류 검색 회귀를 확정한다.
 
 ## Todo
 
