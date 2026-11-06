@@ -239,3 +239,10 @@ def test_nvidia_clarification_judgment_prompt_uses_plain_language_contract() -> 
     assert "쉬운 말을 먼저" in text
     assert "법률 용어 바로 뒤에 쉬운 뜻을 붙인다" in text
     assert "간단한 예시 값" in text
+
+
+def test_v2_core_answers_the_exact_question_in_the_first_sentence() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "첫 문장에서 질문에 직접 답한다" in text
+    assert "신고만으로 충분한지" in text
+    assert "C번호는 citation_ids에만" in text

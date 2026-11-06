@@ -45,7 +45,7 @@ def build_nvidia_answer_profile_v2(
         model=model,
         # B-011, 2026-09-21: clarification missing_information을 자유형 질문+예시로 바꾸고
         # 구조 검증을 적용했다. schema·context·sampling은 그대로다.
-        prompt_version="answer-system-prompt-v2.2",
+        prompt_version="answer-system-prompt-v2.3",
         schema_version="draft-answer-v1",
         context_version="m4-frozen-r1-a",
         temperature=0.3,
