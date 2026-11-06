@@ -248,3 +248,9 @@ def test_v2_core_answers_the_exact_question_in_the_first_sentence() -> None:
     assert "C번호는 citation_ids에만" in text
     assert "두 절차가 각각 무엇을 위한 것인지" in text
     assert "제외 대상을 적용 대상으로 바꾸지 않는다" in text
+
+def test_v2_core_summary_covers_named_evidence_and_points_to_details() -> None:
+    text = build_core_messages(_request(), _hits())[0]["content"]
+    assert "근거에 있는 정식 명칭과 구체적인 서류명" in text
+    assert "먼저 할 확인이나 준비를 요약에도" in text
+    assert "어느 원문에서 확인할 수 있는지" in text
