@@ -1,4 +1,4 @@
-<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: d44afdea663b76ccbe0714a4f9ff631e92927c52d27c0e157885c71e3f475d78 -->
+<!-- 생성 명령: python scripts/render_roadmap.py; 입력 메타데이터 digest: ca95074419a56151585cde4e5dd9fb12e22f14694503f9498a2a026d25c6fb12 -->
 
 # 프로젝트 로드맵
 
@@ -7,7 +7,7 @@
 
 ## Picked Up
 
-- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 승인된 6건에서 필요한 근거가 코퍼스·검색·생성·최종 답변 중 어디에서 빠지는지 확인한다.
+- [P0] [B-020 · Bug — V2가 질문에 필요한 구체 근거를 찾아 답하도록 개선](exec-plans/active/0092-v2-question-directed-evidence.md) — 다음 행동: 검색에서 누락된 참조 조항과 서식의 코퍼스 수록 여부를 확인하고, 생성 누락과 분리해 회귀 계약을 확정한다.
 
 ## Todo
 
